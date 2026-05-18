@@ -117,15 +117,30 @@ def resolve_openai_voice_model(
     return value
 
 
+def _provider_from_values(values: Mapping[str, str] | None = None) -> str:
+    value, _source = env_value_with_source("HELPER_PROVIDER", "codex", values)
+    return (value or "codex").strip().lower()
+
+
 def model_compatibility_warnings(values: Mapping[str, str] | None = None) -> list[str]:
     warnings: list[str] = []
-    checks = (
-        ("HELPER_AGENT_MODEL", CODEX_MODEL_DEFAULT, "Codex computer-use"),
-        ("HELPER_REASONING_MODEL", CODEX_MODEL_DEFAULT, "Codex chat"),
+    provider = _provider_from_values(values)
+    # Gemini values are only invalid for the Codex OAuth path. When the user
+    # picked HELPER_PROVIDER=gemini we expect gemini-* model names.
+    if provider == "codex":
+        for name, fallback, label in (
+            ("HELPER_AGENT_MODEL", CODEX_MODEL_DEFAULT, "Codex computer-use"),
+            ("HELPER_REASONING_MODEL", CODEX_MODEL_DEFAULT, "Codex chat"),
+        ):
+            value, source = env_value_with_source(name, fallback, values)
+            if source and _is_gemini_model(value):
+                warnings.append(
+                    f"{source}={value} is not valid for {label}; using {fallback} instead."
+                )
+    for name, fallback, label in (
         ("HELPER_STT_MODEL", STT_MODEL_DEFAULT, "OpenAI speech-to-text"),
         ("HELPER_TTS_MODEL", TTS_MODEL_DEFAULT, "OpenAI text-to-speech"),
-    )
-    for name, fallback, label in checks:
+    ):
         value, source = env_value_with_source(name, fallback, values)
         if source and _is_gemini_model(value):
             warnings.append(
@@ -177,6 +192,71 @@ USE_ROUTE_CLASSIFIER = bool_env("HELPER_ROUTE_CLASSIFIER", True)
 API_BASE_URL = env_value("HELPER_API_BASE_URL", "").strip().rstrip("/")
 API_KEY = env_value("HELPER_API_KEY", "").strip()
 API_MODEL = env_value("HELPER_API_MODEL", "").strip()
+
+PROVIDER = env_value("HELPER_PROVIDER", "codex").strip().lower() or "codex"
+ANTHROPIC_API_KEY = env_value("HELPER_ANTHROPIC_API_KEY", "").strip()
+GEMINI_API_KEY = env_value("HELPER_GEMINI_API_KEY", "").strip()
+
+
+def _float_env(name: str, default: float, *, lo: float, hi: float) -> float:
+    raw = env_value(name, str(default)).strip()
+    try:
+        v = float(raw)
+    except ValueError:
+        return default
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
+
+
+def _int_env(name: str, default: int, *, lo: int, hi: int) -> int:
+    raw = env_value(name, str(default)).strip()
+    try:
+        v = int(float(raw))
+    except ValueError:
+        return default
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
+
+
+TEMPERATURE = _float_env("HELPER_TEMPERATURE", 0.7, lo=0.0, hi=2.0)
+MAX_TOKENS = _int_env("HELPER_MAX_TOKENS", 4096, lo=1, hi=200_000)
+
+_theme_raw = env_value("HELPER_THEME", "light").strip().lower()
+THEME = "dark" if _theme_raw == "dark" else "light"
+
+
+# Curated model menus per provider. openai_compat stays free-text — the user
+# brings their own endpoint and model. Codex defaults map to the existing
+# CODEX_MODEL_DEFAULT family. Anthropic/Gemini lists are conservative; users
+# can still type a custom value into the editable dropdown.
+PROVIDER_MODELS: dict[str, list[str]] = {
+    "codex": ["gpt-5.5", "gpt-5", "gpt-4.1", "o3", "o3-mini"],
+    "openai_compat": [],
+    "anthropic": [
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+    ],
+    "gemini": [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+    ],
+}
+
+
+PROVIDER_LABELS: dict[str, str] = {
+    "codex": "Codex (ChatGPT sign-in)",
+    "openai_compat": "OpenAI-compatible",
+    "anthropic": "Anthropic Claude",
+    "gemini": "Google Gemini",
+}
 
 
 def custom_api_enabled() -> bool:

@@ -13,8 +13,10 @@ from config import (
     AGENT_MODEL,
     AGENT_TIMEOUT_SEC,
     MAX_AGENT_STEPS,
+    MAX_TOKENS,
     OPENAI_API_KEY,
     REASONING_MODEL,
+    TEMPERATURE,
     USE_ROUTE_CLASSIFIER,
 )
 from fast_actions import (
@@ -543,9 +545,21 @@ class HelplerAgent:
         messages = session.history.build_messages()
         started = time.monotonic()
         if route == "computer_use":
-            result = self._client.computer_use_step(messages, model=model, system_prompt=system_prompt)
+            result = self._client.computer_use_step(
+                messages,
+                model=model,
+                system_prompt=system_prompt,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+            )
         else:
-            result = self._client.chat(messages, model=model, system_prompt=system_prompt)
+            result = self._client.chat(
+                messages,
+                model=model,
+                system_prompt=system_prompt,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+            )
         elapsed_sec = time.monotonic() - started
 
         self._record_response(session, result)

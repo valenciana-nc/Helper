@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QObject, QSize, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QCloseEvent, QFont, QPixmap
+from PyQt6.QtGui import QCloseEvent, QColor, QFont, QFontDatabase, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -21,6 +22,8 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
+    QSlider,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -29,6 +32,7 @@ from PyQt6.QtWidgets import (
 
 import oauth_codex
 import config
+import theme
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
 
@@ -40,17 +44,32 @@ SettingsSchema = list[tuple[str, list[tuple[str, str, str, Any, bool]]]]
 
 def _default_schema() -> SettingsSchema:
     return [
-        ("Hotkey & mode", [
+        ("Providers & models", [
+            ("HELPER_PROVIDER", "Provider", "provider", "codex", True),
+            ("HELPER_AGENT_MODEL", "Computer-use model", "model", "gpt-5.5", True),
+            ("HELPER_REASONING_MODEL", "Reasoning model", "model", "gpt-5.5", True),
+            ("HELPER_API_BASE_URL", "OpenAI-compat base URL", "text", "", True),
+            ("HELPER_API_KEY", "OpenAI-compat API key", "password", "", True),
+            ("HELPER_ANTHROPIC_API_KEY", "Anthropic API key", "password", "", True),
+            ("HELPER_GEMINI_API_KEY", "Gemini API key", "password", "", True),
+            ("HELPER_STT_MODEL", "Speech-to-text (OpenAI)", "text", "whisper-1", True),
+            ("HELPER_TTS_MODEL", "Text-to-speech (OpenAI)", "text", "gpt-4o-mini-tts", True),
+            ("HELPER_TTS_VOICE", "TTS voice", "text", "alloy", True),
+            ("HELPER_SPEAK_TYPED_CHAT", "Speak typed chat replies", "toggle", False, True),
+        ]),
+        ("Generation", [
+            ("HELPER_TEMPERATURE", "Temperature", "slider_float", 0.7, False),
+            ("HELPER_MAX_TOKENS", "Max output tokens", "int", 4096, False),
+        ]),
+        ("Agent", [
             ("HELPER_HOTKEY", "Hotkey", "text", "ctrl+shift+space", True),
             ("HELPER_DEFAULT_MODE", "Default mode", "choice", ["help", "active"], True),
-        ]),
-        ("Models", [
-            ("HELPER_AGENT_MODEL", "Computer-use model", "text", "gpt-5.5", True),
-            ("HELPER_REASONING_MODEL", "Reasoning model", "text", "gpt-5.5", True),
-            ("HELPER_STT_MODEL", "Speech-to-text", "text", "whisper-1", True),
-            ("HELPER_TTS_MODEL", "Text-to-speech", "text", "gpt-4o-mini-tts", True),
-            ("HELPER_TTS_VOICE", "TTS voice", "text", "alloy", True),
-            ("HELPER_SPEAK_TYPED_CHAT", "Speak typed chat replies", "choice", ["false", "true"], True),
+            ("HELPER_ROUTE_CLASSIFIER", "Use LLM route classifier", "toggle", True, True),
+            ("HELPER_MAX_AGENT_STEPS", "Max steps per task", "int", 25, True),
+            ("HELPER_AGENT_TIMEOUT_SEC", "Task timeout (s)", "int", 180, True),
+            ("HELPER_SCREENSHOT_MAX_EDGE", "Screenshot max edge", "int", 1280, True),
+            ("HELPER_HISTORY_MAX_TURNS", "History max turns", "int", 12, True),
+            ("HELPER_HISTORY_MAX_TOKENS", "History max tokens", "int", 12000, True),
         ]),
         ("Audio", [
             ("HELPER_AUDIO_SAMPLE_RATE", "Sample rate (Hz)", "int", 16000, True),
@@ -60,21 +79,28 @@ def _default_schema() -> SettingsSchema:
             ("HELPER_AUDIO_MIN_SECONDS", "Minimum seconds", "float", 0.25, True),
             ("HELPER_AUDIO_TRIM_PAD_MS", "Trim pad (ms)", "int", 150, True),
         ]),
-        ("Agent limits", [
-            ("HELPER_MAX_AGENT_STEPS", "Max steps per task", "int", 25, True),
-            ("HELPER_AGENT_TIMEOUT_SEC", "Task timeout (s)", "int", 180, True),
-            ("HELPER_SCREENSHOT_MAX_EDGE", "Screenshot max edge", "int", 1280, True),
-            ("HELPER_HISTORY_MAX_TURNS", "History max turns", "int", 12, True),
-            ("HELPER_HISTORY_MAX_TOKENS", "History max tokens", "int", 12000, True),
+        ("Appearance", [
+            ("HELPER_THEME", "Theme", "theme", "light", True),
         ]),
     ]
 
 
+# Section heading icons. First entry = Segoe Fluent Icons / MDL2 codepoint
+# (used when the icon font is present), second = plain-Unicode fallback.
+_SECTION_GLYPHS: dict[str, tuple[str, str]] = {
+    "Providers & models": ("", "◆"),   # ServerNetwork → diamond
+    "Generation":         ("", "✦"),   # Lightbulb → spark
+    "Agent":              ("", "⚙"),   # Settings gear
+    "Audio":              ("", "♪"),   # Volume → note
+    "Appearance":         ("", "◐"),   # Color → half-circle
+}
+
+
 def _env_value(env_values: dict[str, str], key: str, default: str) -> str:
-    if key in {"HELPER_AGENT_MODEL", "HELPER_REASONING_MODEL"}:
-        return config.resolve_codex_model(key, default, env_values)
-    if key in {"HELPER_STT_MODEL", "HELPER_TTS_MODEL"}:
-        return config.resolve_openai_voice_model(key, default, env_values)
+    # Model fields used to silently fall back when the value looked invalid
+    # for the Codex OAuth path; that breaks the new multi-provider UI because
+    # a user typing "claude-..." would see "gpt-5.5" reappear. We now return
+    # whatever the user saved verbatim; validation happens at request time.
     if key in env_values and env_values[key] != "":
         return env_values[key]
     if key.startswith("HELPER_"):
@@ -85,262 +111,163 @@ def _env_value(env_values: dict[str, str], key: str, default: str) -> str:
     return default
 
 
-# --- Codex-inspired light-glass palette ---------------------------------------
-# Surfaces
-_COLOR_BG_WINDOW = "rgb(255, 255, 255)"
-_COLOR_BG_SIDEBAR = "rgb(248, 249, 251)"
-_COLOR_BG_TOPBAR = "rgb(252, 252, 253)"
-_COLOR_BG_CARD = "rgb(255, 255, 255)"
-_COLOR_BG_SUBTLE = "rgb(248, 250, 252)"
-_COLOR_BG_HOVER = "rgb(243, 244, 246)"
-_COLOR_BG_NAV_SELECTED = "rgb(229, 231, 235)"
+# --- Palette + QSS sourced from theme.py --------------------------------------
+# These names are kept for backwards-compat with the rest of this module. All
+# values are derived from the active palette (config.THEME) at module load.
 
-# Borders
-_COLOR_BORDER_LIGHT = "rgb(229, 231, 235)"
-_COLOR_BORDER_MID = "rgb(209, 213, 219)"
-
-# Text
-_COLOR_TEXT_PRIMARY = "rgb(17, 24, 39)"
-_COLOR_TEXT_SECONDARY = "rgb(75, 85, 99)"
-_COLOR_TEXT_MUTED = "rgb(107, 114, 128)"
-_COLOR_TEXT_PLACEHOLDER = "rgb(156, 163, 175)"
-
-# Accent
-_COLOR_ACCENT = "rgb(37, 99, 235)"
-_COLOR_ACCENT_HOVER = "rgb(29, 78, 216)"
-_COLOR_ACCENT_SUBTLE = "rgb(239, 246, 255)"
+_PALETTE = theme.active_palette()
 
 
-_FRAME_QSS = f"""
-#MainFrame {{
-    background: {_COLOR_BG_WINDOW};
-    border-radius: 0px;
-    border: 1px solid {_COLOR_BORDER_LIGHT};
-}}
-"""
+def _c(token: str) -> str:
+    return _PALETTE[token]
 
-_STATUS_CARD_QSS = (
-    f"background: {_COLOR_BG_CARD}; "
-    f"border: 1px solid {_COLOR_BORDER_LIGHT}; "
-    "border-radius: 12px;"
-)
 
-_ACCOUNT_CARD_QSS = (
-    f"background: {_COLOR_BG_CARD}; "
-    f"border: 1px solid {_COLOR_BORDER_LIGHT}; "
-    "border-radius: 12px;"
-)
+_COLOR_BG_WINDOW = _c("bg_window")
+_COLOR_BG_SIDEBAR = _c("bg_sidebar")
+_COLOR_BG_TOPBAR = _c("bg_topbar")
+_COLOR_BG_CARD = _c("bg_card")
+_COLOR_BG_SUBTLE = _c("bg_subtle")
+_COLOR_BG_HOVER = _c("bg_hover")
+_COLOR_BG_NAV_SELECTED = _c("bg_nav_selected")
 
-_VOICE_CARD_QSS = (
-    f"background: {_COLOR_BG_CARD}; "
-    f"border: 1px solid {_COLOR_BORDER_LIGHT}; "
-    "border-radius: 12px;"
-)
+_COLOR_BORDER_LIGHT = _c("border_light")
+_COLOR_BORDER_MID = _c("border_mid")
 
-_SIDEBAR_QSS = f"""
-#Sidebar {{
-    background: {_COLOR_BG_SIDEBAR};
-    border-right: 1px solid {_COLOR_BORDER_LIGHT};
-}}
-QLabel#SidebarBrand {{
-    color: {_COLOR_TEXT_PRIMARY};
-    background: transparent;
-    border: none;
-}}
-QLabel#SidebarSubtitle {{
-    color: {_COLOR_TEXT_MUTED};
-    background: transparent;
-    border: none;
-}}
-QLabel#SidebarFootChip {{
-    color: {_COLOR_TEXT_SECONDARY};
-    background: rgba(17, 24, 39, 6);
-    border: 1px solid {_COLOR_BORDER_LIGHT};
-    border-radius: 10px;
-    padding: 8px 10px;
-}}
-"""
+_COLOR_TEXT_PRIMARY = _c("text_primary")
+_COLOR_TEXT_SECONDARY = _c("text_secondary")
+_COLOR_TEXT_MUTED = _c("text_muted")
+_COLOR_TEXT_PLACEHOLDER = _c("text_placeholder")
 
-_NAV_BUTTON_QSS = f"""
-QPushButton {{
-    background: transparent;
-    color: {_COLOR_TEXT_PRIMARY};
-    border: none;
-    border-radius: 8px;
-    padding: 9px 12px 9px 14px;
-    margin: 1px 2px;
-    text-align: left;
-    font-family: 'Segoe UI';
-    font-size: 10pt;
-}}
-QPushButton:hover {{
-    background: rgba(17, 24, 39, 9);
-    color: {_COLOR_TEXT_PRIMARY};
-}}
-QPushButton:checked {{
-    background: {_COLOR_BG_NAV_SELECTED};
-    color: {_COLOR_TEXT_PRIMARY};
-    font-weight: 600;
-}}
-"""
+_COLOR_ACCENT = _c("accent")
+_COLOR_ACCENT_HOVER = _c("accent_hover")
+_COLOR_ACCENT_SUBTLE = _c("accent_subtle")
 
-_BACK_BUTTON_QSS = f"""
-QPushButton {{
-    background: transparent;
-    color: {_COLOR_TEXT_SECONDARY};
-    border: none;
-    border-radius: 6px;
-    padding: 4px 6px;
-    text-align: left;
-    font-family: 'Segoe UI';
-    font-size: 9pt;
-}}
-QPushButton:hover {{
-    background: rgba(17, 24, 39, 8);
-    color: {_COLOR_TEXT_PRIMARY};
-}}
-"""
 
-_INPUT_QSS = f"""
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
-    background: {_COLOR_BG_CARD};
-    border: 1px solid {_COLOR_BORDER_MID};
-    border-radius: 8px;
-    padding: 7px 11px;
-    color: {_COLOR_TEXT_PRIMARY};
-    font-family: 'Segoe UI';
-    font-size: 10pt;
-    min-height: 18px;
-    selection-background-color: {_COLOR_ACCENT};
-    selection-color: white;
-}}
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
-    border: 1px solid {_COLOR_ACCENT};
-    background: {_COLOR_BG_CARD};
-}}
-QComboBox QAbstractItemView {{
-    background: {_COLOR_BG_CARD};
-    color: {_COLOR_TEXT_PRIMARY};
-    selection-background-color: {_COLOR_BG_HOVER};
-    selection-color: {_COLOR_TEXT_PRIMARY};
-    border: 1px solid {_COLOR_BORDER_LIGHT};
-    border-radius: 8px;
-}}
-"""
-
-_BUTTON_QSS = f"""
-QPushButton {{
-    background: {_COLOR_TEXT_PRIMARY};
-    border: 1px solid {_COLOR_TEXT_PRIMARY};
-    border-radius: 8px;
-    padding: 8px 16px;
-    color: white;
-    font-family: 'Segoe UI';
-    font-size: 10pt;
-}}
-QPushButton:hover {{
-    background: rgb(31, 41, 55);
-    border: 1px solid rgb(31, 41, 55);
-}}
-QPushButton:pressed {{
-    background: rgb(55, 65, 81);
-}}
-QPushButton:disabled {{
-    color: rgba(255, 255, 255, 145);
-    background: rgb(156, 163, 175);
-    border: 1px solid rgb(156, 163, 175);
-}}
-"""
-
-_GHOST_BUTTON_QSS = f"""
-QPushButton {{
-    background: {_COLOR_BG_CARD};
-    border: 1px solid {_COLOR_BORDER_MID};
-    border-radius: 8px;
-    padding: 8px 16px;
-    color: {_COLOR_TEXT_PRIMARY};
-    font-family: 'Segoe UI';
-    font-size: 10pt;
-}}
-QPushButton:hover {{
-    background: {_COLOR_BG_HOVER};
-}}
-QPushButton:pressed {{
-    background: {_COLOR_BG_NAV_SELECTED};
-}}
-"""
-
-_SCROLL_QSS = """
-QScrollArea {
-    border: none;
-    background-color: transparent;
-}
-QScrollBar:vertical {
-    border: none;
-    background: transparent;
-    width: 10px;
-    margin: 8px 4px 8px 0px;
-}
-QScrollBar::handle:vertical {
-    background: rgba(17, 24, 39, 38);
-    min-height: 24px;
-    border-radius: 5px;
-}
-QScrollBar::handle:vertical:hover {
-    background: rgba(17, 24, 39, 70);
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    border: none;
-    background: none;
-}
-"""
-
-_LOG_QSS = f"""
-QPlainTextEdit {{
-    background: rgb(17, 24, 39);
-    color: rgb(243, 244, 246);
-    border: 1px solid {_COLOR_BORDER_LIGHT};
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-family: 'Consolas';
-    font-size: 9pt;
-}}
-"""
-
-_CONVO_ROW_QSS = f"""
-QPushButton#ConvoRow {{
-    background: {_COLOR_BG_CARD};
-    border: 1px solid {_COLOR_BORDER_LIGHT};
-    border-radius: 10px;
-    padding: 12px 16px;
-    text-align: left;
-    color: {_COLOR_TEXT_PRIMARY};
-    font-family: 'Segoe UI';
-    font-size: 10pt;
-}}
-QPushButton#ConvoRow:hover {{
-    background: {_COLOR_BG_HOVER};
-    border: 1px solid {_COLOR_BORDER_MID};
-}}
-QPushButton#ConvoRow:pressed {{
-    background: {_COLOR_BG_NAV_SELECTED};
-}}
-"""
-
-_STAT_CARD_QSS = (
-    f"background: {_COLOR_BG_CARD}; "
-    f"border: 1px solid {_COLOR_BORDER_LIGHT}; "
-    "border-radius: 12px;"
-)
+_FRAME_QSS = theme.qss(theme.FRAME_QSS, _PALETTE)
+_SIDEBAR_QSS = theme.qss(theme.SIDEBAR_QSS, _PALETTE)
+_NAV_BUTTON_QSS = theme.qss(theme.NAV_BUTTON_QSS, _PALETTE)
+_BACK_BUTTON_QSS = theme.qss(theme.BACK_BUTTON_QSS, _PALETTE)
+_INPUT_QSS = theme.qss(theme.INPUT_QSS, _PALETTE)
+_BUTTON_QSS = theme.qss(theme.BUTTON_QSS, _PALETTE)
+_GHOST_BUTTON_QSS = theme.qss(theme.GHOST_BUTTON_QSS, _PALETTE)
+_SEGMENTED_BUTTON_QSS = theme.qss(theme.SEGMENTED_BUTTON_QSS, _PALETTE)
+_SCROLL_QSS = theme.qss(theme.SCROLL_QSS, _PALETTE)
+_LOG_QSS = theme.qss(theme.LOG_QSS, _PALETTE)
+_CONVO_ROW_QSS = theme.qss(theme.CONVO_ROW_QSS, _PALETTE)
+_STAT_CARD_QSS = theme.qss(theme.STAT_CARD_QSS, _PALETTE)
+_CARD_QSS = theme.qss(theme.CARD_QSS, _PALETTE)
+_STATUS_CARD_QSS = _CARD_QSS
+_ACCOUNT_CARD_QSS = _CARD_QSS
+_VOICE_CARD_QSS = _CARD_QSS
+_FOOTER_BAR_QSS = theme.qss(theme.FOOTER_BAR_QSS, _PALETTE)
+_PILL_QSS = theme.qss(theme.PILL_QSS, _PALETTE)
 
 
 def _section_card_qss(section_name: str) -> str:
-    del section_name  # all sections share the same minimal white card now
-    return (
-        f"background: {_COLOR_BG_CARD}; "
-        f"border: 1px solid {_COLOR_BORDER_LIGHT}; "
-        "border-radius: 12px;"
-    )
+    del section_name  # all sections share the same card style now
+    return _CARD_QSS
+
+
+# Pick the best available Windows icon font once at module load. Segoe Fluent
+# Icons ships with Windows 11; Segoe MDL2 Assets is on Windows 10. Both share
+# the same Private Use Area codepoints we use below, so a single lookup table
+# works for either. Fallback is plain Unicode glyphs in Segoe UI.
+def _pick_icon_font() -> str | None:
+    families = set(QFontDatabase.families())
+    for candidate in ("Segoe Fluent Icons", "Segoe MDL2 Assets"):
+        if candidate in families:
+            return candidate
+    return None
+
+
+_ICON_FONT: str | None = None
+_ICON_FONT_PROBED = False
+
+
+def _icon_font() -> str | None:
+    """Resolve the Windows icon font after QApplication exists."""
+    global _ICON_FONT, _ICON_FONT_PROBED
+    if not _ICON_FONT_PROBED:
+        _ICON_FONT = _pick_icon_font()
+        _ICON_FONT_PROBED = True
+    return _ICON_FONT
+
+# Codepoints from Segoe Fluent Icons / MDL2 Assets.
+_NAV_ICON_GLYPHS: dict[str, str] = {
+    "conversations": "",  # Comment / chat
+    "settings": "",        # Settings gear
+    "status": "",          # Health / status pulse
+    "account": "",         # Contact / person
+}
+
+# Plain-Unicode fallback if the icon font isn't installed. Chosen so all four
+# glyphs render at a comparable visual weight in Segoe UI.
+_NAV_ICON_FALLBACK: dict[str, str] = {
+    "conversations": "▢",
+    "settings": "⚙",
+    "status": "◉",
+    "account": "◌",
+}
+
+
+def _render_icon(glyph: str, size: int, color_hex: str, *, use_icon_font: bool) -> QIcon:
+    """Render a text glyph into a transparent QIcon of (size, size)."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+    icon_font = _icon_font()
+    if use_icon_font and icon_font:
+        font = QFont(icon_font, max(8, size - 4))
+    else:
+        font = QFont("Segoe UI", max(8, size - 4))
+    painter.setFont(font)
+
+    # color_hex is an rgb(...) string; pull it apart for QColor.
+    painter.setPen(QPen(_qcolor_from_token(color_hex)))
+    painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+    painter.end()
+    return QIcon(pix)
+
+
+def _qcolor_from_token(spec: str) -> QColor:
+    """Parse the 'rgb(r, g, b)' / 'rgba(r, g, b, a)' strings used in the palette."""
+    s = spec.strip()
+    if s.startswith("rgb"):
+        inner = s[s.find("(") + 1 : s.rfind(")")]
+        parts = [p.strip() for p in inner.split(",")]
+        try:
+            r, g, b = (int(parts[0]), int(parts[1]), int(parts[2]))
+            a = int(parts[3]) if len(parts) > 3 else 255
+            return QColor(r, g, b, a)
+        except (ValueError, IndexError):
+            return QColor(0, 0, 0)
+    return QColor(s)
+
+
+def _nav_icon(key: str, color_token: str = "text_secondary") -> QIcon:
+    icon_font = _icon_font()
+    glyph = _NAV_ICON_GLYPHS.get(key) if icon_font else None
+    if not glyph:
+        glyph = _NAV_ICON_FALLBACK.get(key, "•")
+    return _render_icon(glyph, 18, _c(color_token), use_icon_font=bool(icon_font and _NAV_ICON_GLYPHS.get(key) == glyph))
+
+
+# Curated provider menu used by the new provider/model dropdowns.
+_PROVIDER_KEYS: tuple[str, ...] = ("codex", "openai_compat", "anthropic", "gemini")
+
+
+def _provider_label(key: str) -> str:
+    return config.PROVIDER_LABELS.get(key, key)
+
+
+def _provider_key_from_label(label: str) -> str:
+    for k in _PROVIDER_KEYS:
+        if config.PROVIDER_LABELS.get(k, k) == label:
+            return k
+    return label  # treat as raw key
 
 
 def _date_group_label(when: float) -> str:
@@ -546,6 +473,11 @@ class DashboardWindow(QWidget):
         self._field_widgets: dict[str, QWidget] = {}
         self._field_restart: dict[str, bool] = {}
         self._original_values: dict[str, str] = {}
+        self._field_label_widgets: dict[str, QLabel] = {}
+        self._field_row_widgets: dict[str, QWidget] = {}
+        self._field_password_toggles: dict[str, QPushButton] = {}
+        self._section_pills: dict[str, QLabel] = {}
+        self._provider_pill: QLabel | None = None
         self._nav_buttons: dict[str, QPushButton] = {}
         self._page_index: dict[str, int] = {}
         self._last_rendered_signature: tuple[Any, ...] | None = None
@@ -604,40 +536,56 @@ class DashboardWindow(QWidget):
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
         sidebar.setStyleSheet(_SIDEBAR_QSS)
-        sidebar.setFixedWidth(232)
+        sidebar.setFixedWidth(240)
 
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(14, 16, 14, 14)
+        layout.setContentsMargins(
+            theme.SPACING.MD, theme.SPACING.LG, theme.SPACING.MD, theme.SPACING.MD
+        )
         layout.setSpacing(2)
 
         brand_row = QHBoxLayout()
-        brand_row.setContentsMargins(4, 0, 4, 0)
-        brand_row.setSpacing(10)
+        brand_row.setContentsMargins(theme.SPACING.SM, 0, theme.SPACING.SM, 0)
+        brand_row.setSpacing(theme.SPACING.MD)
 
         logo_path = Path(__file__).parent / "assets" / "helper_logo.png"
+        logo_label = QLabel()
+        logo_label.setFixedSize(28, 28)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_label.setStyleSheet("background: transparent; border: none;")
+        loaded_pixmap = False
         if logo_path.exists():
-            logo_label = QLabel()
             pix = QPixmap(str(logo_path))
             if not pix.isNull():
                 pix = pix.scaled(
-                    QSize(24, 24),
+                    QSize(28, 28),
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 logo_label.setPixmap(pix)
-            logo_label.setStyleSheet("background: transparent; border: none;")
-            brand_row.addWidget(logo_label)
+                loaded_pixmap = True
+        if not loaded_pixmap:
+            # Render a clean accent-colored mark when there's no logo file.
+            icon_font = _icon_font()
+            mark_glyph = "" if icon_font else "◆"
+            logo_label.setText(mark_glyph)
+            font = QFont(icon_font, 16) if icon_font else QFont("Segoe UI", 16, QFont.Weight.DemiBold)
+            logo_label.setFont(font)
+            logo_label.setStyleSheet(
+                f"color: {_COLOR_ACCENT}; background: transparent; border: none;"
+            )
+        brand_row.addWidget(logo_label)
 
         brand_text = QVBoxLayout()
         brand_text.setContentsMargins(0, 0, 0, 0)
-        brand_text.setSpacing(0)
+        brand_text.setSpacing(-2)
 
         brand = QLabel("Helper")
         brand.setObjectName("SidebarBrand")
-        brand.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        brand.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
         brand_text.addWidget(brand)
 
-        brand_sub = QLabel("Dashboard")
+        brand_sub = QLabel("Desktop assistant")
         brand_sub.setObjectName("SidebarSubtitle")
         brand_sub.setFont(QFont("Segoe UI", 8))
         brand_text.addWidget(brand_sub)
@@ -646,21 +594,31 @@ class DashboardWindow(QWidget):
         brand_row.addStretch()
         layout.addLayout(brand_row)
 
-        layout.addSpacing(16)
+        layout.addSpacing(theme.SPACING.LG)
 
         nav_group = QButtonGroup(sidebar)
         nav_group.setExclusive(True)
 
-        for key, label, icon in (
-            (self.NAV_CONVERSATIONS, "Conversations", "◇"),
-            (self.NAV_SETTINGS, "Settings", "⚙"),
-            (self.NAV_STATUS, "Status", "◐"),
-            (self.NAV_ACCOUNT, "Account", "◯"),
+        for key, label, icon_key in (
+            (self.NAV_CONVERSATIONS, "Conversations", "conversations"),
+            (self.NAV_SETTINGS, "Settings", "settings"),
+            (self.NAV_STATUS, "Status", "status"),
+            (self.NAV_ACCOUNT, "Account", "account"),
         ):
-            btn = QPushButton(f"  {icon}    {label}")
+            btn = QPushButton(label)
+            btn.setObjectName("NavButton")
             btn.setCheckable(True)
             btn.setStyleSheet(_NAV_BUTTON_QSS)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setIcon(_nav_icon(icon_key, "text_secondary"))
+            btn.setIconSize(QSize(18, 18))
+            btn.setMinimumHeight(34)
+            btn.setProperty("nav_icon_key", icon_key)
+            btn.toggled.connect(
+                lambda checked, b=btn, k=icon_key: b.setIcon(
+                    _nav_icon(k, "text_primary" if checked else "text_secondary")
+                )
+            )
             btn.clicked.connect(lambda _checked=False, target=key: self._select_nav(target))
             nav_group.addButton(btn)
             self._nav_buttons[key] = btn
@@ -668,11 +626,17 @@ class DashboardWindow(QWidget):
 
         layout.addStretch()
 
-        self._sidebar_foot_chip = QLabel("Not signed in")
-        self._sidebar_foot_chip.setObjectName("SidebarFootChip")
-        self._sidebar_foot_chip.setFont(QFont("Segoe UI", 9))
-        self._sidebar_foot_chip.setWordWrap(True)
-        layout.addWidget(self._sidebar_foot_chip)
+        self._sidebar_foot_pill = self._make_status_pill("Not signed in", "warning")
+        self._sidebar_foot_pill.setWordWrap(True)
+        self._sidebar_foot_pill.setMaximumHeight(80)
+        self._sidebar_foot_pill.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
+        layout.addWidget(self._sidebar_foot_pill)
+
+        # Keep the legacy attribute name available so existing _refresh_status
+        # code paths that reference it don't NameError.
+        self._sidebar_foot_chip = self._sidebar_foot_pill
 
         version_label = QLabel("Helper · local build")
         version_label.setFont(QFont("Segoe UI", 8))
@@ -938,10 +902,14 @@ class DashboardWindow(QWidget):
         body = QWidget()
         body.setStyleSheet("background: transparent;")
         body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(28, 28, 28, 20)
-        body_layout.setSpacing(18)
+        body_layout.setContentsMargins(
+            theme.SPACING.XL + 4, theme.SPACING.XL + 4, theme.SPACING.XL + 4, theme.SPACING.LG
+        )
+        body_layout.setSpacing(theme.SPACING.LG)
 
-        body_layout.addWidget(self._build_page_heading("Settings", "Hotkeys, models, audio"))
+        body_layout.addWidget(
+            self._build_page_heading("Settings", "Providers, generation, agent behavior, audio, appearance")
+        )
 
         env_values = read_env(self._env_path)
 
@@ -953,7 +921,121 @@ class DashboardWindow(QWidget):
         outer.addWidget(scroll, 1)
 
         outer.addWidget(self._build_footer())
+
+        # Hook provider → model + API-key visibility wiring once all fields
+        # are in the registry.
+        self._wire_provider_dependencies()
         return container
+
+    # ------------------------------------------------------------------
+    # Provider <-> model + API key visibility wiring.
+
+    def _wire_provider_dependencies(self) -> None:
+        provider_widget = self._field_widgets.get("HELPER_PROVIDER")
+        if not isinstance(provider_widget, QComboBox):
+            return
+
+        # Cache the section pill for the provider section so we can flip it on/off.
+        self._provider_pill = self._section_pills.get("Providers & models")
+
+        def _on_provider_changed(_idx: int = 0) -> None:
+            self._refresh_provider_dependents()
+
+        provider_widget.currentIndexChanged.connect(_on_provider_changed)
+
+        # Also refresh whenever an API-key field changes, since validation
+        # depends on whether the right one is populated.
+        for key in (
+            "HELPER_API_BASE_URL",
+            "HELPER_API_KEY",
+            "HELPER_ANTHROPIC_API_KEY",
+            "HELPER_GEMINI_API_KEY",
+        ):
+            widget = self._field_widgets.get(key)
+            if isinstance(widget, QLineEdit):
+                widget.textChanged.connect(lambda _t: self._refresh_provider_dependents())
+
+        self._refresh_provider_dependents()
+
+    def _current_provider_key(self) -> str:
+        widget = self._field_widgets.get("HELPER_PROVIDER")
+        if isinstance(widget, QComboBox):
+            data = widget.currentData()
+            if isinstance(data, str) and data:
+                return data
+        return "codex"
+
+    def _refresh_provider_dependents(self) -> None:
+        provider_key = self._current_provider_key()
+        models = config.PROVIDER_MODELS.get(provider_key, [])
+
+        # Repopulate model combos for both agent + reasoning fields.
+        for model_key in ("HELPER_AGENT_MODEL", "HELPER_REASONING_MODEL"):
+            combo = self._field_widgets.get(model_key)
+            if not isinstance(combo, QComboBox):
+                continue
+            current_text = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(models)
+            if current_text:
+                combo.setEditText(current_text)
+            elif models:
+                combo.setCurrentIndex(0)
+            combo.blockSignals(False)
+
+        # API-key visibility per provider.
+        visibility = {
+            "HELPER_API_BASE_URL": provider_key == "openai_compat",
+            "HELPER_API_KEY": provider_key == "openai_compat",
+            "HELPER_ANTHROPIC_API_KEY": provider_key == "anthropic",
+            "HELPER_GEMINI_API_KEY": provider_key == "gemini",
+        }
+        for env_key, visible in visibility.items():
+            self._set_field_visible(env_key, visible)
+
+        # Pill: report sign-in / API-key readiness for the chosen provider.
+        if self._provider_pill is None:
+            return
+
+        if provider_key == "codex":
+            if oauth_codex.is_signed_in():
+                self._set_pill(self._provider_pill, "Signed in", "success")
+            else:
+                self._set_pill(self._provider_pill, "Sign-in required", "warning")
+        elif provider_key == "openai_compat":
+            base = self._field_value("HELPER_API_BASE_URL")
+            key = self._field_value("HELPER_API_KEY")
+            if base and key:
+                self._set_pill(self._provider_pill, "Ready", "success")
+            else:
+                self._set_pill(self._provider_pill, "Base URL + key required", "warning")
+        elif provider_key == "anthropic":
+            if self._field_value("HELPER_ANTHROPIC_API_KEY"):
+                self._set_pill(self._provider_pill, "Ready", "success")
+            else:
+                self._set_pill(self._provider_pill, "API key required", "warning")
+        elif provider_key == "gemini":
+            if self._field_value("HELPER_GEMINI_API_KEY"):
+                self._set_pill(self._provider_pill, "Ready", "success")
+            else:
+                self._set_pill(self._provider_pill, "API key required", "warning")
+        else:
+            self._set_pill(self._provider_pill, "", "neutral")
+
+    def _set_field_visible(self, env_key: str, visible: bool) -> None:
+        label = self._field_label_widgets.get(env_key)
+        row_widget = self._field_row_widgets.get(env_key)
+        if label is None or row_widget is None:
+            return
+        label.setVisible(visible)
+        row_widget.setVisible(visible)
+
+    def _field_value(self, env_key: str) -> str:
+        widget = self._field_widgets.get(env_key)
+        if widget is None:
+            return ""
+        return self._widget_value(widget)
 
     def _build_page_heading(self, title: str, subtitle: str = "") -> QWidget:
         wrap = QWidget()
@@ -987,24 +1069,67 @@ class DashboardWindow(QWidget):
         section = QFrame()
         section.setStyleSheet(_section_card_qss(section_name))
         outer = QVBoxLayout(section)
-        outer.setContentsMargins(14, 12, 14, 14)
-        outer.setSpacing(10)
+        outer.setContentsMargins(
+            theme.SPACING.LG, theme.SPACING.MD, theme.SPACING.LG, theme.SPACING.LG
+        )
+        outer.setSpacing(theme.SPACING.MD)
+
+        heading_row = QHBoxLayout()
+        heading_row.setContentsMargins(0, 0, 0, 0)
+        heading_row.setSpacing(8)
+
+        glyph_pair = _SECTION_GLYPHS.get(section_name)
+        if glyph_pair:
+            primary, fallback = glyph_pair
+            icon_font = _icon_font()
+            if icon_font and primary:
+                glyph_label = QLabel(primary)
+                glyph_label.setFont(QFont(icon_font, 14))
+            else:
+                glyph_label = QLabel(fallback)
+                glyph_label.setFont(QFont("Segoe UI", 12))
+            glyph_label.setFixedWidth(20)
+            glyph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            glyph_label.setStyleSheet(
+                f"color: {_COLOR_ACCENT}; background: transparent; border: none;"
+            )
+            heading_row.addWidget(glyph_label)
 
         heading = QLabel(section_name)
         heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         heading.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; border: none; background: transparent;"
         )
-        outer.addWidget(heading)
+        heading_row.addWidget(heading)
+        heading_row.addStretch(1)
+
+        # Section-level status pill (e.g. provider readiness). The actual text
+        # is set later by the dependency wiring; default to hidden.
+        section_pill = self._make_status_pill("", "neutral")
+        section_pill.setVisible(False)
+        heading_row.addWidget(section_pill)
+        self._section_pills[section_name] = section_pill
+
+        outer.addLayout(heading_row)
+
+        # Subtle divider under the heading for visual rhythm.
+        divider = QFrame()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet(
+            f"background: {_COLOR_BORDER_LIGHT}; border: none;"
+        )
+        outer.addWidget(divider)
 
         form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(10)
+        form.setContentsMargins(0, theme.SPACING.SM, 0, 0)
+        form.setHorizontalSpacing(theme.SPACING.LG)
+        form.setVerticalSpacing(theme.SPACING.MD)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         for env_key, label, kind, default, requires_restart in fields:
             fallback = str(default) if not isinstance(default, list) else default[0]
+            if isinstance(default, bool):
+                fallback = "true" if default else "false"
             current = _env_value(env_values, env_key, fallback)
             widget = self._make_widget(kind, default, current)
             self._field_widgets[env_key] = widget
@@ -1016,16 +1141,73 @@ class DashboardWindow(QWidget):
                 f"color: {_COLOR_TEXT_SECONDARY}; background: transparent; border: none;"
             )
             label_widget.setFont(QFont("Segoe UI", 9))
-            form.addRow(label_widget, widget)
+
+            # Password fields get a small "Show" toggle next to them.
+            if widget.property("kind") == "password":
+                row_widget = self._wrap_password_row(env_key, widget)
+            else:
+                row_widget = widget
+            form.addRow(label_widget, row_widget)
+            self._field_label_widgets[env_key] = label_widget
+            self._field_row_widgets[env_key] = row_widget
 
         outer.addLayout(form)
         return section
+
+    def _wrap_password_row(self, env_key: str, line: QLineEdit) -> QWidget:
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        row = QHBoxLayout(wrap)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(theme.SPACING.SM)
+        row.addWidget(line, 1)
+        show_btn = QPushButton("Show")
+        show_btn.setCheckable(True)
+        show_btn.setStyleSheet(_GHOST_BUTTON_QSS)
+        show_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def _toggle(checked: bool, w: QLineEdit = line, b: QPushButton = show_btn) -> None:
+            w.setEchoMode(
+                QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+            )
+            b.setText("Hide" if checked else "Show")
+
+        show_btn.toggled.connect(_toggle)
+        row.addWidget(show_btn)
+        self._field_password_toggles[env_key] = show_btn
+        return wrap
+
+    def _make_status_pill(self, text: str, kind: str) -> QLabel:
+        pill = QLabel(text)
+        pill.setObjectName("StatusPill")
+        pill.setProperty("kind", kind)
+        pill.setStyleSheet(_PILL_QSS)
+        pill.setFont(QFont("Segoe UI", 9))
+        pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pill.setMaximumHeight(22)
+        return pill
+
+    def _set_pill(self, pill: QLabel, text: str, kind: str) -> None:
+        pill.setText(text)
+        pill.setProperty("kind", kind)
+        # Re-apply the stylesheet so the new "kind" property selector takes effect.
+        pill.setStyleSheet(_PILL_QSS)
+        pill.setVisible(bool(text))
 
     def _make_widget(self, kind: str, default: Any, current: str) -> QWidget:
         if kind == "text":
             w = QLineEdit()
             w.setStyleSheet(_INPUT_QSS)
             w.setText(current)
+            return w
+        if kind == "password":
+            w = QLineEdit()
+            w.setStyleSheet(_INPUT_QSS)
+            w.setEchoMode(QLineEdit.EchoMode.Password)
+            w.setText(current)
+            # Stash echo-mode behavior on the widget so the section can wire
+            # up a "Show" button next to it without keeping its own state.
+            w.setProperty("kind", "password")
             return w
         if kind == "int":
             w = QSpinBox()
@@ -1047,6 +1229,59 @@ class DashboardWindow(QWidget):
             except ValueError:
                 w.setValue(float(default))
             return w
+        if kind == "slider_float":
+            # Compound widget: slider + spinbox, kept in sync. The outer
+            # QWidget exposes a `spin` property so _widget_value can read it.
+            wrap = QWidget()
+            wrap.setStyleSheet("background: transparent;")
+            row = QHBoxLayout(wrap)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(theme.SPACING.SM)
+
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(0, 200)
+            slider.setSingleStep(5)
+            slider.setPageStep(10)
+            slider.setMinimumWidth(140)
+
+            spin = QDoubleSpinBox()
+            spin.setStyleSheet(_INPUT_QSS)
+            spin.setRange(0.0, 2.0)
+            spin.setDecimals(2)
+            spin.setSingleStep(0.05)
+
+            try:
+                value = float(current)
+            except (TypeError, ValueError):
+                value = float(default)
+            value = max(0.0, min(2.0, value))
+            spin.setValue(value)
+            slider.setValue(int(round(value * 100)))
+
+            slider.valueChanged.connect(lambda v, s=spin: s.setValue(v / 100.0))
+            spin.valueChanged.connect(lambda v, s=slider: s.setValue(int(round(v * 100))))
+
+            row.addWidget(slider, 1)
+            row.addWidget(spin, 0)
+            wrap.setProperty("spin", spin)
+            wrap.setProperty("kind", "slider_float")
+            return wrap
+        if kind == "toggle":
+            w = QCheckBox()
+            w.setStyleSheet(
+                "QCheckBox { color: " + _COLOR_TEXT_SECONDARY + "; spacing: 8px; }"
+                "QCheckBox::indicator { width: 16px; height: 16px;"
+                " border: 1px solid " + _COLOR_BORDER_MID + ";"
+                " border-radius: 4px; background: " + _COLOR_BG_CARD + "; }"
+                "QCheckBox::indicator:checked { background: " + _COLOR_ACCENT + ";"
+                " border: 1px solid " + _COLOR_ACCENT + "; }"
+            )
+            truthy = str(current).strip().lower() in {"1", "true", "yes", "on"}
+            if not current:
+                truthy = bool(default) if isinstance(default, bool) else False
+            w.setChecked(truthy)
+            w.setProperty("kind", "toggle")
+            return w
         if kind == "choice":
             w = QComboBox()
             w.setStyleSheet(_INPUT_QSS)
@@ -1055,10 +1290,86 @@ class DashboardWindow(QWidget):
             if current in choices:
                 w.setCurrentIndex(choices.index(current))
             return w
+        if kind == "provider":
+            w = QComboBox()
+            w.setStyleSheet(_INPUT_QSS)
+            for key in _PROVIDER_KEYS:
+                w.addItem(_provider_label(key), userData=key)
+            target = (current or default or "codex").strip().lower() or "codex"
+            idx = max(0, _PROVIDER_KEYS.index(target) if target in _PROVIDER_KEYS else 0)
+            w.setCurrentIndex(idx)
+            w.setProperty("kind", "provider")
+            return w
+        if kind == "model":
+            # Editable combo populated dynamically by the provider's selection.
+            w = QComboBox()
+            w.setStyleSheet(_INPUT_QSS)
+            w.setEditable(True)
+            w.lineEdit().setPlaceholderText("Select or type a model name…")
+            if current:
+                w.setEditText(current)
+            elif default:
+                w.setEditText(str(default))
+            w.setProperty("kind", "model")
+            return w
+        if kind == "theme":
+            wrap = QWidget()
+            wrap.setStyleSheet("background: transparent;")
+            row = QHBoxLayout(wrap)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(0)
+            group = QButtonGroup(wrap)
+            group.setExclusive(True)
+
+            chosen = (current or default or "light").strip().lower()
+            if chosen not in ("light", "dark"):
+                chosen = "light"
+
+            for option in ("light", "dark"):
+                btn = QPushButton(option.capitalize())
+                btn.setCheckable(True)
+                btn.setStyleSheet(_SEGMENTED_BUTTON_QSS)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setProperty("themeKey", option)
+                if option == chosen:
+                    btn.setChecked(True)
+                group.addButton(btn)
+                row.addWidget(btn)
+            row.addStretch(1)
+            wrap.setProperty("kind", "theme")
+            wrap.setProperty("group", group)
+            return wrap
         raise ValueError(f"Unknown field kind: {kind}")
 
     @staticmethod
     def _widget_value(widget: QWidget) -> str:
+        kind = widget.property("kind") if widget is not None else None
+        if kind == "slider_float":
+            spin = widget.property("spin")
+            if isinstance(spin, QDoubleSpinBox):
+                return f"{spin.value():g}"
+            return ""
+        if kind == "toggle":
+            assert isinstance(widget, QCheckBox)
+            return "true" if widget.isChecked() else "false"
+        if kind == "provider":
+            assert isinstance(widget, QComboBox)
+            data = widget.currentData()
+            if isinstance(data, str) and data:
+                return data
+            return _provider_key_from_label(widget.currentText())
+        if kind == "model":
+            assert isinstance(widget, QComboBox)
+            return widget.currentText().strip()
+        if kind == "theme":
+            group = widget.property("group")
+            if group is not None:
+                checked = group.checkedButton()
+                if checked is not None:
+                    key = checked.property("themeKey")
+                    if isinstance(key, str):
+                        return key
+            return "light"
         if isinstance(widget, QLineEdit):
             return widget.text().strip()
         if isinstance(widget, QSpinBox):
@@ -1071,13 +1382,12 @@ class DashboardWindow(QWidget):
 
     def _build_footer(self) -> QFrame:
         footer = QFrame()
-        footer.setStyleSheet(
-            f"background-color: {_COLOR_BG_SUBTLE}; "
-            f"border-top: 1px solid {_COLOR_BORDER_LIGHT}; border-radius: 0px;"
+        footer.setStyleSheet(_FOOTER_BAR_QSS)
+        layout = QHBoxLayout(footer)
+        layout.setContentsMargins(
+            theme.SPACING.XL, theme.SPACING.MD, theme.SPACING.XL, theme.SPACING.MD
         )
-        layout = QVBoxLayout(footer)
-        layout.setContentsMargins(20, 12, 20, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(theme.SPACING.MD)
 
         hint = QLabel("Fields marked * require a restart to take effect.")
         hint.setFont(QFont("Segoe UI", 8))
@@ -1086,29 +1396,24 @@ class DashboardWindow(QWidget):
         )
         layout.addWidget(hint)
 
-        buttons = QHBoxLayout()
-        buttons.setSpacing(8)
+        layout.addStretch(1)
 
-        self._save_status = QLabel("")
-        self._save_status.setFont(QFont("Segoe UI", 9))
-        self._save_status.setStyleSheet(
-            f"color: {_COLOR_TEXT_SECONDARY}; background: transparent; border: none;"
-        )
-        buttons.addWidget(self._save_status, 1)
+        self._save_status = self._make_status_pill("", "neutral")
+        self._save_status.setVisible(False)
+        layout.addWidget(self._save_status)
 
         save_button = QPushButton("Save")
         save_button.setStyleSheet(_GHOST_BUTTON_QSS)
         save_button.setCursor(Qt.CursorShape.PointingHandCursor)
         save_button.clicked.connect(self._save_settings)
-        buttons.addWidget(save_button)
+        layout.addWidget(save_button)
 
         restart_button = QPushButton("Save & restart")
         restart_button.setStyleSheet(_BUTTON_QSS)
         restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
         restart_button.clicked.connect(self._save_and_restart)
-        buttons.addWidget(restart_button)
+        layout.addWidget(restart_button)
 
-        layout.addLayout(buttons)
         return footer
 
     def _save_settings(self) -> tuple[dict[str, str], bool]:
@@ -1121,25 +1426,70 @@ class DashboardWindow(QWidget):
                 if self._field_restart.get(env_key, False):
                     needs_restart = True
 
+        # Preflight validation — block obvious provider misconfigurations.
+        validation_error = self._validate_settings(updates)
+        if validation_error is not None:
+            self._set_pill(self._save_status, validation_error, "danger")
+            return {}, False
+
         if not updates:
-            self._save_status.setText("No changes.")
+            self._set_pill(self._save_status, "No changes", "neutral")
             return updates, False
 
         try:
             write_env(self._env_path, updates)
         except Exception as exc:
             log.exception("Saving .env failed")
-            self._save_status.setText(f"Save failed: {exc}")
+            self._set_pill(self._save_status, f"Save failed: {exc}", "danger")
             return updates, False
 
         for env_key in updates:
             self._original_values[env_key] = updates[env_key]
 
-        message = f"Saved {len(updates)} change(s)."
+        message = f"Saved {len(updates)} change{'s' if len(updates) != 1 else ''}"
+        kind = "success"
         if needs_restart:
-            message += " Restart to apply."
-        self._save_status.setText(message)
+            message += " · restart to apply"
+            kind = "info"
+        self._set_pill(self._save_status, message, kind)
         return updates, needs_restart
+
+    def _validate_settings(self, _updates: dict[str, str]) -> str | None:
+        """Return an error message if the *current* form state is invalid."""
+        provider = self._current_provider_key()
+
+        if provider == "openai_compat":
+            base = self._field_value("HELPER_API_BASE_URL")
+            key = self._field_value("HELPER_API_KEY")
+            if not base or not key:
+                return "OpenAI-compatible needs base URL + API key"
+        elif provider == "anthropic":
+            if not self._field_value("HELPER_ANTHROPIC_API_KEY"):
+                return "Anthropic provider needs an API key"
+        elif provider == "gemini":
+            if not self._field_value("HELPER_GEMINI_API_KEY"):
+                return "Gemini provider needs an API key"
+
+        # Generation bounds (clamped on read in config.py, but flag here too).
+        temp_raw = self._field_value("HELPER_TEMPERATURE")
+        if temp_raw:
+            try:
+                temp = float(temp_raw)
+                if temp < 0.0 or temp > 2.0:
+                    return "Temperature must be between 0.0 and 2.0"
+            except ValueError:
+                return "Temperature must be a number"
+
+        max_tokens_raw = self._field_value("HELPER_MAX_TOKENS")
+        if max_tokens_raw:
+            try:
+                mt = int(float(max_tokens_raw))
+                if mt < 1 or mt > 200_000:
+                    return "Max tokens must be between 1 and 200000"
+            except ValueError:
+                return "Max tokens must be a number"
+
+        return None
 
     def _save_and_restart(self) -> None:
         _, _ = self._save_settings()
@@ -1246,12 +1596,16 @@ class DashboardWindow(QWidget):
         else:
             self._status_labels["log_path"].setText("—")
 
-        if hasattr(self, "_sidebar_foot_chip"):
+        if hasattr(self, "_sidebar_foot_pill"):
             if snapshot.get("signed_in"):
                 email = oauth_codex.account_email() or "ChatGPT"
-                self._sidebar_foot_chip.setText(f"Signed in\n{email}")
+                self._set_pill(self._sidebar_foot_pill, f"Signed in · {email}", "success")
             else:
-                self._sidebar_foot_chip.setText("Not signed in.\nOpen Account to sign in.")
+                self._set_pill(
+                    self._sidebar_foot_pill,
+                    "Not signed in — open Account to sign in",
+                    "warning",
+                )
 
     def _update_log_view(self, log_path: Path) -> None:
         if not log_path.exists():
@@ -1625,9 +1979,40 @@ class DashboardWindow(QWidget):
         env_values = read_env(self._env_path)
         for env_key, widget in self._field_widgets.items():
             value = _env_value(env_values, env_key, "")
-            if not value:
-                continue
-            if isinstance(widget, QLineEdit):
+            if value == "":
+                # Boolean/toggle fields legitimately serialize as "false";
+                # don't skip them just because they're falsy.
+                if widget.property("kind") not in ("toggle",):
+                    continue
+            kind = widget.property("kind") if widget is not None else None
+            if kind == "slider_float":
+                spin = widget.property("spin")
+                if isinstance(spin, QDoubleSpinBox):
+                    try:
+                        spin.setValue(float(value))
+                    except ValueError:
+                        pass
+            elif kind == "toggle":
+                assert isinstance(widget, QCheckBox)
+                widget.setChecked(str(value).strip().lower() in {"1", "true", "yes", "on"})
+            elif kind == "provider":
+                assert isinstance(widget, QComboBox)
+                target = (value or "codex").strip().lower()
+                for i in range(widget.count()):
+                    if widget.itemData(i) == target:
+                        widget.setCurrentIndex(i)
+                        break
+            elif kind == "model":
+                assert isinstance(widget, QComboBox)
+                widget.setEditText(value)
+            elif kind == "theme":
+                group = widget.property("group")
+                if group is not None:
+                    for btn in group.buttons():
+                        if btn.property("themeKey") == value:
+                            btn.setChecked(True)
+                            break
+            elif isinstance(widget, QLineEdit):
                 widget.setText(value)
             elif isinstance(widget, QSpinBox):
                 try:
@@ -1644,6 +2029,8 @@ class DashboardWindow(QWidget):
                 if idx >= 0:
                     widget.setCurrentIndex(idx)
             self._original_values[env_key] = self._widget_value(widget)
+        if hasattr(self, "_field_widgets") and self._field_widgets:
+            self._refresh_provider_dependents()
         if hasattr(self, "_api_key_input"):
             self._api_key_input.setText(env_values.get("OPENAI_API_KEY", ""))
         if hasattr(self, "_custom_api_base_input"):
@@ -1651,7 +2038,7 @@ class DashboardWindow(QWidget):
             self._custom_api_key_input.setText(env_values.get("HELPER_API_KEY", ""))
             self._custom_api_model_input.setText(env_values.get("HELPER_API_MODEL", ""))
         if hasattr(self, "_save_status"):
-            self._save_status.setText("")
+            self._set_pill(self._save_status, "", "neutral")
         if hasattr(self, "_api_key_status"):
             self._api_key_status.setText("")
         if hasattr(self, "_custom_api_status"):

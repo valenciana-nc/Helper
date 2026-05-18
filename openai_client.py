@@ -230,18 +230,35 @@ class OpenAIClient:
         *,
         optional_api_key: str | None = None,
         codex_provider: "CodexProvider | None" = None,
-        custom_provider: "ChatCompletionsProvider | None" = None,
+        custom_provider: Any | None = None,
         custom_model: str | None = None,
     ) -> None:
         self._api_key = optional_api_key or None
         self._session = requests.Session()
+        # `_custom` is any provider that implements chat/computer_use_step/
+        # classify_route — ChatCompletionsProvider, AnthropicProvider, or
+        # GeminiProvider. When set, it bypasses the Codex OAuth path entirely.
         self._custom = custom_provider
         self._custom_model = (custom_model or "").strip() or None
         self._codex = codex_provider or CodexProvider(self._session)
 
-    def chat(self, messages: list[dict[str, Any]], *, model: str, system_prompt: str | None = None) -> ChatResult:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: str,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatResult:
         if self._custom is not None:
-            return self._custom.chat(messages, model=self._custom_model or model, system_prompt=system_prompt)
+            return self._custom.chat(
+                messages,
+                model=self._custom_model or model,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         model = self._codex_model(model)
         body = {
             "model": model,
@@ -259,10 +276,16 @@ class OpenAIClient:
         *,
         model: str,
         system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> ChatResult:
         if self._custom is not None:
             return self._custom.computer_use_step(
-                messages, model=self._custom_model or model, system_prompt=system_prompt
+                messages,
+                model=self._custom_model or model,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         model = self._codex_model(model)
         body = {
@@ -670,11 +693,17 @@ class ChatCompletionsProvider:
         *,
         model: str,
         system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> ChatResult:
-        body = {
+        body: dict[str, Any] = {
             "model": model,
             "messages": _to_chat_completions_messages(messages, system_prompt),
         }
+        if temperature is not None:
+            body["temperature"] = float(temperature)
+        if max_tokens is not None:
+            body["max_tokens"] = int(max_tokens)
         payload = self._post(body)
         return _parse_chat_completions(payload)
 
@@ -684,13 +713,19 @@ class ChatCompletionsProvider:
         *,
         model: str,
         system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> ChatResult:
-        body = {
+        body: dict[str, Any] = {
             "model": model,
             "messages": _to_chat_completions_messages(messages, system_prompt),
             "tools": _chat_completions_tools(COMPUTER_USE_TOOLS),
             "tool_choice": "auto",
         }
+        if temperature is not None:
+            body["temperature"] = float(temperature)
+        if max_tokens is not None:
+            body["max_tokens"] = int(max_tokens)
         payload = self._post(body)
         return _parse_chat_completions(payload)
 
@@ -895,19 +930,72 @@ def make_openai_client(
     *,
     optional_api_key: str | None = None,
 ) -> OpenAIClient:
-    """Build an OpenAIClient honoring HELPER_API_BASE_URL / HELPER_API_KEY config.
+    """Build a client honoring HELPER_PROVIDER and the legacy custom-API config.
 
-    When both are set, chat / reasoning / computer-use route through the custom
-    OpenAI-compatible endpoint; otherwise the ChatGPT/Codex OAuth path is used.
-    The optional_api_key is still passed through so Whisper / TTS keep working.
+    Dispatch:
+      - codex          -> Codex OAuth path via OpenAIClient defaults
+      - openai_compat  -> ChatCompletionsProvider on any /v1 endpoint
+      - anthropic      -> AnthropicProvider
+      - gemini         -> GeminiProvider
+
+    For backwards-compat: if HELPER_PROVIDER is unset but HELPER_API_BASE_URL +
+    HELPER_API_KEY are both set, behave as if openai_compat were selected.
+
+    optional_api_key is still forwarded so Whisper / TTS (OpenAI-only) keep
+    working regardless of which provider serves chat.
     """
     import config
 
-    if config.custom_api_enabled():
-        provider = ChatCompletionsProvider(config.API_BASE_URL, config.API_KEY)
-        return OpenAIClient(
-            optional_api_key=optional_api_key,
-            custom_provider=provider,
-            custom_model=config.API_MODEL,
-        )
+    provider_name = (getattr(config, "PROVIDER", "codex") or "codex").strip().lower()
+
+    # Legacy fallback — users who set the custom-API fields before
+    # HELPER_PROVIDER existed should keep working.
+    if provider_name == "codex" and config.custom_api_enabled():
+        provider_name = "openai_compat"
+
+    if provider_name == "openai_compat":
+        if not config.custom_api_enabled():
+            log.warning(
+                "HELPER_PROVIDER=openai_compat but base URL / API key are not set; falling back to Codex."
+            )
+        else:
+            provider = ChatCompletionsProvider(config.API_BASE_URL, config.API_KEY)
+            log.info("Chat provider: openai_compat (%s)", config.API_BASE_URL)
+            return OpenAIClient(
+                optional_api_key=optional_api_key,
+                custom_provider=provider,
+                custom_model=config.API_MODEL,
+            )
+
+    if provider_name == "anthropic":
+        if not config.ANTHROPIC_API_KEY:
+            log.warning(
+                "HELPER_PROVIDER=anthropic but HELPER_ANTHROPIC_API_KEY is empty; falling back to Codex."
+            )
+        else:
+            from anthropic_client import AnthropicProvider
+
+            log.info("Chat provider: anthropic")
+            return OpenAIClient(
+                optional_api_key=optional_api_key,
+                custom_provider=AnthropicProvider(config.ANTHROPIC_API_KEY),
+                custom_model=config.API_MODEL or None,
+            )
+
+    if provider_name == "gemini":
+        if not config.GEMINI_API_KEY:
+            log.warning(
+                "HELPER_PROVIDER=gemini but HELPER_GEMINI_API_KEY is empty; falling back to Codex."
+            )
+        else:
+            from gemini_client import GeminiProvider
+
+            log.info("Chat provider: gemini")
+            return OpenAIClient(
+                optional_api_key=optional_api_key,
+                custom_provider=GeminiProvider(config.GEMINI_API_KEY),
+                custom_model=config.API_MODEL or None,
+            )
+
+    log.info("Chat provider: codex (ChatGPT OAuth)")
     return OpenAIClient(optional_api_key=optional_api_key)
