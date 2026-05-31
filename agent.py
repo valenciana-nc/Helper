@@ -168,8 +168,10 @@ Never include click_at, type_text_at, drag_and_drop, click_control. Clicking is 
 Rules:
 - ONE decision per turn. Do not list future steps.
 - Coordinates are normalized 0-1000 over the provided screenshot.
-- If the correct visible target is in the provided Visible clickable controls list, set target_id to that exact id
-  AND include the same tight target rectangle from that list.
+- Visible clickable control IDs expire after each screenshot. Use only IDs from the latest Visible clickable
+  controls list, never IDs remembered from earlier turns.
+- If the correct visible target is in the latest Visible clickable controls list, set target_id to that exact id
+  AND include the same tight target rectangle from that latest list.
 - Only choose a target_id when the listed control's label, role, or screen position clearly matches your instruction.
 - If no listed control is the correct target but the target is clearly visible in the screenshot, leave target_id empty
   and provide a tight target rectangle.
@@ -359,8 +361,7 @@ class LiveHelpDecision:
     @property
     def history_text(self) -> str:
         if self.kind == "step":
-            suffix = f" (target_id={self.target_id})" if self.target_id else ""
-            return f"Suggested step: {self.instruction}{suffix}"
+            return f"Suggested step: {self.instruction}"
         if self.kind == "done":
             return f"Walkthrough complete: {self.message}"
         return f"Note: {self.message}"

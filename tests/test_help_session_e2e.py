@@ -258,6 +258,11 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         followup_text = agent.calls[1]["messages"][-1][1]
         self.assertIn("The user clicked the highlighted target.", followup_text)
         self.assertIn('Expected visible change: "A saved confirmation appears".', followup_text)
+        assistant_history = [
+            text for role, text in agent.calls[1]["messages"] if role == "assistant"
+        ]
+        self.assertTrue(assistant_history)
+        self.assertFalse(any("target_id=" in text for text in assistant_history))
 
     def test_help_session_revalidates_current_screen_before_emitting_highlight(self) -> None:
         app = _qt_app()

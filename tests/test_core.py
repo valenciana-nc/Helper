@@ -478,6 +478,23 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(any("image_png" in part for part in latest_parts))
         self.assertIn("Visible clickable controls", prompt_text)
         self.assertIn("c001", prompt_text)
+        self.assertIn("valid only for this screenshot", prompt_text)
+
+    def test_live_help_history_text_does_not_persist_target_ids(self) -> None:
+        from agent import LiveHelpDecision
+
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Save.",
+            target_id="c001",
+            target_norm_x=100,
+            target_norm_y=100,
+            target_norm_width=50,
+            target_norm_height=30,
+        )
+
+        self.assertEqual(decision.history_text, "Suggested step: Click Save.")
+        self.assertNotIn("target_id", decision.history_text)
 
 
 class ComputerControlTests(unittest.TestCase):
