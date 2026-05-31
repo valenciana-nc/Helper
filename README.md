@@ -84,3 +84,15 @@ Useful settings:
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 .\.venv\Scripts\python.exe -m pip check
 ```
+
+Help-mode target precision checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m help_highlight_qa --artifacts logs/help_qa/latest
+.\.venv\Scripts\python.exe -m help_live_probe --capture primary --artifacts logs/help_live_probe/primary
+```
+
+`help_highlight_qa` runs model-free synthetic scenarios and writes failure
+artifacts when a target resolves incorrectly. `help_live_probe` captures the
+desktop, collects Windows UI Automation candidates, and draws their rectangles
+over the screenshot so monitor/DPI alignment can be inspected.
