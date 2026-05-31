@@ -90,9 +90,13 @@ Help-mode target precision checks:
 ```powershell
 .\.venv\Scripts\python.exe -m help_highlight_qa --artifacts logs/help_qa/latest
 .\.venv\Scripts\python.exe -m help_live_probe --capture primary --artifacts logs/help_live_probe/primary
+.\.venv\Scripts\python.exe -m help_precision_selftest --artifacts logs/help_precision_selftest/latest
 ```
 
 `help_highlight_qa` runs model-free synthetic scenarios and writes failure
 artifacts when a target resolves incorrectly. `help_live_probe` captures the
 desktop, collects Windows UI Automation candidates, and draws their rectangles
 over the screenshot so monitor/DPI alignment can be inspected.
+`help_precision_selftest` opens a known local test window, captures it, resolves
+the Save button through the same Help targeting pipeline, and writes pass/fail
+artifacts.
