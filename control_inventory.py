@@ -123,6 +123,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 
 ForegroundHandleProvider = Callable[[], int | None]
+TopmostHandleProvider = Callable[[int, int], int | None]
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,7 @@ def collect_control_candidates(
     *,
     desktop_factory: Any = None,
     foreground_handle_provider: ForegroundHandleProvider | None = None,
+    topmost_handle_provider: TopmostHandleProvider | None = None,
     timeout_ms: int = DEFAULT_TIMEOUT_MS,
     limit: int = MAX_CANDIDATES,
 ) -> list[ControlCandidate]:
@@ -181,6 +183,9 @@ def collect_control_candidates(
         windows,
         _safe_foreground_handle(foreground_handle_provider or _foreground_window_handle),
     )
+    topmost_provider = topmost_handle_provider
+    if topmost_provider is None and desktop_factory is None:
+        topmost_provider = _topmost_window_handle_at_point
 
     for window_index, top in enumerate(windows):
         if time.monotonic() >= deadline:
@@ -203,6 +208,7 @@ def collect_control_candidates(
                 and _is_enabled(control)
                 and _is_visible(control)
                 and _acceptable_bounds(rect, capture_rect, ctype)
+                and _is_candidate_topmost(top_handle, rect, topmost_provider)
             ):
                 raw.append(
                     ControlCandidate(
@@ -299,6 +305,15 @@ def _foreground_window_handle() -> int | None:
     return hwnd
 
 
+def _topmost_window_handle_at_point(x: int, y: int) -> int | None:
+    try:
+        point = wintypes.POINT(int(x), int(y))
+        hwnd = int(ctypes.windll.user32.WindowFromPoint(point))
+    except Exception:
+        return None
+    return hwnd or None
+
+
 def _is_own_process_window(hwnd: int) -> bool:
     pid = wintypes.DWORD()
     try:
@@ -306,6 +321,64 @@ def _is_own_process_window(hwnd: int) -> bool:
     except Exception:
         return False
     return int(pid.value) == os.getpid()
+
+
+def _is_candidate_topmost(
+    top_handle: int | None,
+    rect: tuple[int, int, int, int],
+    topmost_handle_provider: TopmostHandleProvider | None,
+) -> bool:
+    if top_handle is None or topmost_handle_provider is None:
+        return True
+    expected_root = _root_window_handle(top_handle)
+    if expected_root is None:
+        return True
+    checked = False
+    for x, y in _sample_points(rect):
+        actual = _safe_topmost_handle(topmost_handle_provider, x, y)
+        if actual is None:
+            continue
+        checked = True
+        actual_root = _root_window_handle(actual)
+        if actual_root == expected_root:
+            return True
+    return not checked
+
+
+def _safe_topmost_handle(
+    provider: TopmostHandleProvider,
+    x: int,
+    y: int,
+) -> int | None:
+    try:
+        handle = provider(x, y)
+    except Exception:
+        return None
+    if not handle:
+        return None
+    try:
+        return int(handle)
+    except Exception:
+        return None
+
+
+def _root_window_handle(hwnd: int) -> int | None:
+    try:
+        root = int(ctypes.windll.user32.GetAncestor(int(hwnd), 2))
+    except Exception:
+        root = 0
+    return root or int(hwnd)
+
+
+def _sample_points(rect: tuple[int, int, int, int]) -> tuple[tuple[int, int], ...]:
+    x, y, width, height = rect
+    right = x + max(1, width) - 1
+    bottom = y + max(1, height) - 1
+    return (
+        (x + max(1, width) // 2, y + max(1, height) // 2),
+        (x + min(6, max(0, width - 1)), y + min(6, max(0, height - 1))),
+        (right - min(6, max(0, width - 1)), bottom - min(6, max(0, height - 1))),
+    )
 
 
 def _foreground_window_index(windows: list[object], foreground_handle: int | None) -> int | None:

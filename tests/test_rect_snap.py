@@ -625,6 +625,31 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual([candidate.text for candidate in candidates], ["Save changes"])
         self.assertEqual(candidates[0].window_title, "Editor")
 
+    def test_collect_skips_occluded_background_window_candidates(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        save = _make_button("Save changes", 40, 40, 120, 30)
+        background = _make_window("Background Editor", 0, 0, 240, 140, [save], handle=101)
+        dismiss = _make_button("Dismiss", 50, 45, 100, 30)
+        foreground = _make_window("Blocking Dialog", 20, 20, 220, 120, [dismiss], handle=202)
+        desktop = _FakeDesktop([background, foreground])
+
+        def topmost_at(x: int, y: int) -> int:
+            if 20 <= x < 240 and 20 <= y < 140:
+                return 202
+            return 101
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            topmost_handle_provider=topmost_at,
+            timeout_ms=2000,
+        )
+
+        labels = [candidate.text for candidate in candidates]
+        self.assertIn("Dismiss", labels)
+        self.assertNotIn("Save changes", labels)
+
     def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
