@@ -26,6 +26,7 @@ CANDIDATE_SNAP_FLOOR = 0.50
 CANDIDATE_SNAP_MARGIN_PX = 60
 MIN_VISIBLE_FRACTION = 0.20
 UNLABELED_COMPETITOR_MARGIN_PX = 96
+FOREGROUND_RANK_BONUS = 0.10
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -474,6 +475,7 @@ def resolve_candidate_target(
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
         score = _text_match_score(instruction, candidate, model_rect)
+        score += _foreground_rank_bonus(candidate, candidates)
         if score > 0:
             ranked.append((score, candidate))
 
@@ -846,6 +848,7 @@ def _target_id_ambiguity(
         _geometry_agreement(selected.rect, model_rect) if model_rect is not None else 0.0
     )
     selected_score = selected_text + 0.30 * selected_geometry
+    selected_score += _foreground_rank_bonus(selected, candidates)
     closest_gap = 1.0
     for candidate in candidates:
         if candidate is selected or candidate.id == selected.id:
@@ -860,13 +863,24 @@ def _target_id_ambiguity(
             _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
         )
         score = text_score + 0.30 * geometry
+        score += _foreground_rank_bonus(candidate, candidates)
         gap = selected_score - score
         closest_gap = min(closest_gap, gap)
-        if model_rect is None and abs(gap) < TEXT_MATCH_GAP:
+        if model_rect is None and gap < TEXT_MATCH_GAP:
             return True, gap
         if model_rect is not None and gap < TEXT_MATCH_GAP:
             return True, gap
     return False, closest_gap
+
+
+def _foreground_rank_bonus(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> float:
+    ranks = {item.window_rank for item in candidates}
+    if len(ranks) < 2:
+        return 0.0
+    return FOREGROUND_RANK_BONUS if candidate.window_rank == min(ranks) else 0.0
 
 
 def _has_semantic_alternative(

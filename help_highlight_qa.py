@@ -90,6 +90,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "background_duplicate_target_id_recovers_to_foreground",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+                {"rect": [280, 210, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 80, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+                {
+                    "id": "c002",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [280, 210, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [280, 210, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "ambiguous_candidate_snap_rejects_overlay",
             "capture": {"width": 420, "height": 220},
             "draw": [
@@ -434,6 +471,7 @@ def _candidate(item: dict[str, Any]) -> ControlCandidate:
         rect=tuple(int(v) for v in item.get("rect", (0, 0, 0, 0))),
         automation_id=str(item.get("automation_id") or ""),
         window_title=str(item.get("window_title") or ""),
+        window_rank=int(item.get("window_rank") or 0),
     )
 
 

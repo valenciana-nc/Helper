@@ -439,6 +439,59 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (300, 10, 60, 30))
 
+    def test_target_id_foreground_duplicate_without_geometry_is_accepted(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30), window_rank=0),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.target_id, "c002")
+
+    def test_target_id_background_duplicate_without_geometry_is_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30), window_rank=0),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
+    def test_text_match_prefers_foreground_duplicate_across_windows(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30), window_rank=0),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c002")
+
     def test_unlabeled_target_id_with_nearby_unlabeled_competitor_is_rejected(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
