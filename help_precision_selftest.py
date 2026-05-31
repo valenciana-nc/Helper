@@ -156,6 +156,11 @@ def _run_resolution_cases(
     title: str,
 ) -> list[dict[str, Any]]:
     duplicate_candidates = _find_candidates_by_text(candidates, "Duplicate", title=title)
+    icon_candidates = _find_candidates_by_automation_ids(
+        candidates,
+        {"helperPrecisionIconA", "helperPrecisionIconB"},
+        title=title,
+    )
     cases = [
         _run_resolution_case(
             name="save_target_id_uses_candidate_rect",
@@ -193,16 +198,35 @@ def _run_resolution_cases(
                 expect_rejected_reason="target_id ambiguous",
             )
         )
-    else:
         cases.append(
-            {
-                "name": "duplicate_label_without_geometry_rejects",
-                "passed": False,
-                "failures": ["duplicate controls not found"],
-                "overlay_rect": None,
-                "diagnostic": None,
-            }
+            _run_resolution_case(
+                name="duplicate_model_rect_ambiguous_candidate_snap_rejects",
+                decision=_decision_duplicate_ambiguous_snap(capture, duplicate_candidates[:2]),
+                capture=capture,
+                candidates=candidates,
+                expected_candidate=None,
+                expect_overlay=False,
+                expect_rejected_reason="ambiguous candidate snap",
+            )
         )
+    else:
+        cases.append(_missing_case("duplicate_label_without_geometry_rejects", "duplicate controls not found"))
+        cases.append(_missing_case("duplicate_model_rect_ambiguous_candidate_snap_rejects", "duplicate controls not found"))
+
+    if len(icon_candidates) >= 2:
+        cases.append(
+            _run_resolution_case(
+                name="icon_only_target_id_ambiguous_unlabeled_rejects",
+                decision=_decision_icon_target_id(icon_candidates[0]),
+                capture=capture,
+                candidates=candidates,
+                expected_candidate=None,
+                expect_overlay=False,
+                expect_rejected_reason="target_id ambiguous unlabeled control",
+            )
+        )
+    else:
+        cases.append(_missing_case("icon_only_target_id_ambiguous_unlabeled_rejects", "icon controls not found"))
     return cases
 
 
@@ -431,6 +455,34 @@ def _decision_duplicate_without_rect(candidate: ControlCandidate):
     return _parse_live_help_decision(json.dumps(payload))
 
 
+def _decision_duplicate_ambiguous_snap(
+    capture: Capture,
+    candidates: list[ControlCandidate],
+):
+    union = _union_rect([candidate.rect for candidate in candidates])
+    norm = _norm_rect(union, capture)
+    payload = {
+        "kind": "step",
+        "instruction": "Click this button.",
+        "target": {
+            "x": norm[0],
+            "y": norm[1],
+            "width": norm[2],
+            "height": norm[3],
+        },
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_icon_target_id(candidate: ControlCandidate):
+    payload = {
+        "kind": "step",
+        "instruction": "Click this icon.",
+        "target_id": candidate.id,
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
 def _norm_rect(
     rect: tuple[int, int, int, int],
     capture: Capture,
@@ -446,6 +498,14 @@ def _norm_rect(
         max(1, min(1000, norm_width)),
         max(1, min(1000, norm_height)),
     )
+
+
+def _union_rect(rects: list[tuple[int, int, int, int]]) -> tuple[int, int, int, int]:
+    left = min(rect[0] for rect in rects)
+    top = min(rect[1] for rect in rects)
+    right = max(rect[0] + rect[2] for rect in rects)
+    bottom = max(rect[1] + rect[3] for rect in rects)
+    return (left, top, right - left, bottom - top)
 
 
 def _find_target_candidate(
@@ -475,6 +535,31 @@ def _find_candidates_by_text(
         if needle in candidate.descriptor.lower():
             out.append(candidate)
     return out
+
+
+def _find_candidates_by_automation_ids(
+    candidates: list[ControlCandidate],
+    automation_ids: set[str],
+    *,
+    title: str = "",
+) -> list[ControlCandidate]:
+    out: list[ControlCandidate] = []
+    for candidate in candidates:
+        if title and title not in candidate.window_title:
+            continue
+        if candidate.automation_id in automation_ids:
+            out.append(candidate)
+    return out
+
+
+def _missing_case(name: str, failure: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "passed": False,
+        "failures": [failure],
+        "overlay_rect": None,
+        "diagnostic": None,
+    }
 
 
 def _write_artifacts(

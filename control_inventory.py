@@ -827,6 +827,10 @@ def _candidate_identity_tokens(candidate: ControlCandidate) -> set[str]:
     return _tokens_from_text(text)
 
 
+def _candidate_visible_text_tokens(candidate: ControlCandidate) -> set[str]:
+    return _tokens_from_text(candidate.text)
+
+
 def _target_id_ambiguity(
     *,
     instruction_tokens: set[str],
@@ -955,7 +959,7 @@ def _has_nearby_unlabeled_competitor(
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    if _candidate_identity_tokens(selected):
+    if _candidate_visible_text_tokens(selected):
         return False
     search_rect = _expand_rect(selected.rect, UNLABELED_COMPETITOR_MARGIN_PX)
     for candidate in candidates:
@@ -963,7 +967,7 @@ def _has_nearby_unlabeled_competitor(
             continue
         if candidate.control_type != selected.control_type:
             continue
-        if _candidate_identity_tokens(candidate):
+        if _candidate_visible_text_tokens(candidate):
             continue
         if _intersects(candidate.rect, search_rect):
             return True

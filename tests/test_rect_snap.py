@@ -456,6 +456,23 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id ambiguous unlabeled control")
 
+    def test_icon_only_target_id_with_nearby_icon_ignores_automation_ids_for_ambiguity(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click this icon.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (100, 10, 32, 32), automation_id="helperPrecisionIconA"),
+                ControlCandidate("c002", "", "button", (140, 10, 32, 32), automation_id="helperPrecisionIconB"),
+            ],
+            model_rect=(140, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "target_id ambiguous unlabeled control")
+
     def test_resolve_text_match_beats_nearby_wrong_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
