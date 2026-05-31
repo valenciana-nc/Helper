@@ -708,6 +708,7 @@ class HelplerDesktopApp(QObject):
     caption_changed = pyqtSignal(str)
     overlay_highlight_requested = pyqtSignal(int, int, int, int, str, int)
     overlay_clear_requested = pyqtSignal()
+    help_overlay_clear_sync_requested = pyqtSignal(object)
     agent_message_received = pyqtSignal(str)
     user_message_received = pyqtSignal(str)
     chat_toggle_requested = pyqtSignal()
@@ -754,6 +755,7 @@ class HelplerDesktopApp(QObject):
         self._dashboard.setWindowIcon(self._app_icon)
         self._overlay = OverlayManager(app)
         self._ghost_cursor = GhostCursorManager(app)
+        self.help_overlay_clear_sync_requested.connect(self._on_help_overlay_clear_sync_requested)
         self._confirmation_broker = ConfirmationBroker(self._widget)
         self._audio: AudioHandler | None = None
         self._controller: ComputerController | None = None
@@ -1495,7 +1497,12 @@ class HelplerDesktopApp(QObject):
             return False
         from help_session import HelpSession
 
-        self._help_session = HelpSession(self._agent, self._controller, parent=self)
+        self._help_session = HelpSession(
+            self._agent,
+            self._controller,
+            parent=self,
+            overlay_clear_barrier=self._clear_help_overlays_sync,
+        )
         self._help_session.ghost_clear.connect(self._ghost_cursor.clear)
         self._help_session.highlight_show.connect(self._on_help_highlight_show)
         self._help_session.highlight_clear.connect(self._overlay.clear)
@@ -1506,6 +1513,20 @@ class HelplerDesktopApp(QObject):
         self._help_session.failed.connect(self._on_help_session_failed)
         self._help_session.step_skipped.connect(self._on_help_step_skipped)
         return True
+
+    def _clear_help_overlays_sync(self) -> None:
+        ack = Event()
+        self.help_overlay_clear_sync_requested.emit(ack)
+        if not ack.wait(timeout=0.5):
+            log.warning("Timed out waiting for Help overlay clear before capture")
+
+    def _on_help_overlay_clear_sync_requested(self, ack: Event) -> None:
+        try:
+            self._ghost_cursor.clear()
+            self._overlay.clear()
+            self._app.processEvents()
+        finally:
+            ack.set()
 
     def _on_help_step_skipped(self, message: str) -> None:
         self.chat_status_changed.emit(message)

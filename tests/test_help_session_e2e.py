@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import threading
 import time
 import unittest
 from typing import Any
@@ -21,13 +22,14 @@ def _qt_app() -> QApplication:
     return app
 
 
-def _button_capture() -> Capture:
+def _button_capture(button_rect: tuple[int, int, int, int] = (40, 50, 120, 32)) -> Capture:
     image = Image.new("RGB", (240, 160), color=(244, 246, 249))
     draw = ImageDraw.Draw(image)
-    draw.rectangle((40, 50, 160, 82), fill=(45, 100, 190), outline=(18, 48, 130), width=2)
-    draw.rectangle((48, 58, 72, 74), fill=(245, 248, 255))
-    draw.line((82, 60, 150, 60), fill=(245, 248, 255), width=3)
-    draw.line((82, 70, 132, 70), fill=(245, 248, 255), width=3)
+    x, y, width, height = button_rect
+    draw.rectangle((x, y, x + width, y + height), fill=(45, 100, 190), outline=(18, 48, 130), width=2)
+    draw.rectangle((x + 8, y + 8, x + 32, y + height - 8), fill=(245, 248, 255))
+    draw.line((x + 42, y + 10, x + width - 10, y + 10), fill=(245, 248, 255), width=3)
+    draw.line((x + 42, y + 20, x + width - 28, y + 20), fill=(245, 248, 255), width=3)
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return Capture(
@@ -106,7 +108,72 @@ class _WrongTargetIdAgent(_ScriptedAgent):
         return LiveHelpDecision(kind="done", message="Saved.")
 
 
+class _DoneAgent:
+    def plan_next_step(
+        self,
+        history: Any,
+        *,
+        control_candidates: list[ControlCandidate] | None = None,
+        capture: Capture | None = None,
+    ) -> LiveHelpDecision:
+        return LiveHelpDecision(kind="done", message="Done.")
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
+    def test_help_session_waits_for_overlay_clear_barrier_before_capture(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        barrier_entered = threading.Event()
+        barrier_release = threading.Event()
+        capture_called = threading.Event()
+        capture_saw_released: list[bool] = []
+
+        def overlay_clear_barrier() -> None:
+            barrier_entered.set()
+            self.assertTrue(barrier_release.wait(timeout=2.0))
+
+        def capture_provider() -> Capture:
+            capture_saw_released.append(barrier_release.is_set())
+            capture_called.set()
+            return capture
+
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=lambda _capture: [],
+            overlay_clear_barrier=overlay_clear_barrier,
+        )
+        finished: list[str] = []
+        failed: list[str] = []
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        try:
+            session.start("Help me.")
+            self.assertTrue(barrier_entered.wait(timeout=1.0))
+            time.sleep(0.08)
+            app.processEvents()
+            self.assertFalse(capture_called.is_set())
+            barrier_release.set()
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Done."])
+        self.assertEqual(capture_saw_released, [True])
+
     def test_help_session_emits_candidate_highlight_and_click_outcome(self) -> None:
         app = _qt_app()
         capture = _button_capture()
@@ -191,6 +258,76 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         followup_text = agent.calls[1]["messages"][-1][1]
         self.assertIn("The user clicked the highlighted target.", followup_text)
         self.assertIn('Expected visible change: "A saved confirmation appears".', followup_text)
+
+    def test_help_session_revalidates_current_screen_before_emitting_highlight(self) -> None:
+        app = _qt_app()
+        first_capture = _button_capture((40, 50, 120, 32))
+        current_capture = _button_capture((82, 64, 120, 32))
+        capture_calls: list[Capture] = []
+        agent = _ScriptedAgent()
+
+        def capture_provider() -> Capture:
+            capture = first_capture if not capture_calls else current_capture
+            capture_calls.append(capture)
+            return capture
+
+        def candidate_provider(seen_capture: Capture) -> list[ControlCandidate]:
+            rect = (40, 50, 120, 32) if seen_capture is first_capture else (82, 64, 120, 32)
+            return [
+                ControlCandidate(
+                    id="c001",
+                    text="Save changes",
+                    control_type="button",
+                    rect=rect,
+                    automation_id="saveButton",
+                )
+            ]
+
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=candidate_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        click_sent = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if highlights and not click_sent:
+                    x, y, width, height, _label = highlights[0]
+                    time.sleep(0.05)
+                    session.notify_user_click(x + width // 2, y + height // 2)
+                    click_sent = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertGreaterEqual(len(capture_calls), 2)
+        self.assertEqual(highlights, [(82, 64, 120, 32, "Click Save changes.")])
+        self.assertGreaterEqual(len(diagnostics), 1)
+        self.assertEqual(diagnostics[0]["resolution"]["rect"], (82, 64, 120, 32))
 
     def test_help_session_recovers_wrong_target_id_before_emitting_highlight(self) -> None:
         app = _qt_app()

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 CandidateProvider = Callable[["Capture"], list[ControlCandidate]]
 CaptureProvider = Callable[[], "Capture"]
 Snapper = Callable[[tuple[int, int, int, int], str], SnapResult]
+OverlayClearBarrier = Callable[[], None]
 
 log = logging.getLogger("helper.help_session")
 
@@ -39,6 +40,7 @@ IDLE_RECHECK_SEC = 5.0
 MAX_TURNS = 25
 POST_ACTION_SETTLE_SEC = 0.6
 POST_CLICK_SETTLE_SEC = 0.35
+OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
 
 OVERSIZED_AREA_THRESHOLD = 100_000
@@ -300,6 +302,7 @@ class HelpSession(QObject):
         capture_provider: CaptureProvider = capture_active_monitor,
         candidate_provider: CandidateProvider = collect_control_candidates,
         snapper: Snapper = snap_to_control,
+        overlay_clear_barrier: OverlayClearBarrier | None = None,
     ) -> None:
         super().__init__(parent)
         self._agent = agent
@@ -307,6 +310,7 @@ class HelpSession(QObject):
         self._capture_provider = capture_provider
         self._candidate_provider = candidate_provider
         self._snapper = snapper
+        self._overlay_clear_barrier = overlay_clear_barrier
         self._thread: Thread | None = None
         self._cancelled = Event()
         self._click_inside_event = Event()
@@ -379,7 +383,9 @@ class HelpSession(QObject):
                 return
 
             self.chat_status.emit("Looking at your screen...")
-            self._clear_overlays()
+            self._clear_overlays(wait_for_flush=True)
+            if self._aborted():
+                return
             try:
                 capture = self._capture_provider()
             except Exception as exc:
@@ -470,6 +476,53 @@ class HelpSession(QObject):
                     decision,
                     target.rejected_reason,
                 )
+                continue
+
+            try:
+                capture, candidates, target = self._revalidate_target_on_current_screen(decision)
+            except Exception as exc:
+                reason = "current screen recheck failed"
+                log.exception("Pre-overlay target recheck failed")
+                rejected = replace(target, rejected_reason=reason)
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=capture,
+                        candidates=candidates,
+                        target=rejected,
+                        rejected_reason=reason,
+                    )
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(decision, reason)
+                continue
+
+            if target.rejected_reason:
+                reason = f"current screen recheck: {target.rejected_reason}"
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=capture,
+                        candidates=candidates,
+                        target=target,
+                        rejected_reason=reason,
+                    )
+                )
+                log.info("Step downgraded after current-screen recheck (%s): %s", reason, decision.instruction)
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(decision, reason)
                 continue
 
             log.info(
@@ -574,6 +627,22 @@ class HelpSession(QObject):
         self.chat_status.emit(instruction)
         self._set_active_rect(rect)
 
+    def _revalidate_target_on_current_screen(
+        self,
+        decision: "LiveHelpDecision",
+    ) -> tuple["Capture", list[ControlCandidate], TargetResolution]:
+        self._clear_overlays(wait_for_flush=True)
+        capture = self._capture_provider()
+        candidates = self._candidate_provider(capture)
+        target = resolve_help_target(
+            decision,
+            capture,
+            candidates,
+            snapper=self._snapper,
+            clip_to_capture=False,
+        )
+        return capture, candidates, target
+
     def _wait_for_progress(self, rect: tuple[int, int, int, int] | None) -> str:
         self._click_inside_event.clear()
         self._check_now_event.clear()
@@ -676,10 +745,23 @@ class HelpSession(QObject):
         self.chat_status.emit("")
         self.finished.emit(message)
 
-    def _clear_overlays(self) -> None:
+    def _clear_overlays(self, *, wait_for_flush: bool = False) -> None:
         self.ghost_clear.emit()
         self.highlight_clear.emit()
         self._set_active_rect(None)
+        if wait_for_flush:
+            self._flush_overlay_clear()
+
+    def _flush_overlay_clear(self) -> None:
+        if self._overlay_clear_barrier is None:
+            return
+        try:
+            self._overlay_clear_barrier()
+        except Exception:
+            log.exception("Overlay clear barrier failed")
+            return
+        if OVERLAY_CLEAR_SETTLE_SEC > 0:
+            self._cancelled.wait(OVERLAY_CLEAR_SETTLE_SEC)
 
     def _set_active_rect(self, rect: tuple[int, int, int, int] | None) -> None:
         with self._rect_lock:
