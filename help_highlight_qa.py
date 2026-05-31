@@ -132,6 +132,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "target_id_copied_wrong_geometry_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [120, 140, 90, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 240, "y": 437, "width": 180, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel", "control_type": "button", "rect": [120, 140, 90, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "scaled_negative_origin_snaps_to_candidate",
             "capture": {"width": 500, "height": 320, "monitor_left": -1000, "monitor_top": 200, "scale": 0.5},
             "draw": [

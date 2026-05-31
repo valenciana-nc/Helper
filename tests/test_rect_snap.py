@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 
 class _FakeRect:
@@ -370,7 +371,7 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
 
-    def test_target_id_label_mismatch_can_pass_with_exact_geometry_no_alternative(self) -> None:
+    def test_target_id_label_mismatch_rejects_even_with_exact_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
         result = resolve_candidate_target(
@@ -378,6 +379,23 @@ class ControlInventoryTests(unittest.TestCase):
             instruction="Click the settings gear.",
             candidates=[
                 ControlCandidate("c001", "Options", "button", (100, 10, 32, 32)),
+            ],
+            model_rect=(100, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
+
+    def test_unlabeled_target_id_can_pass_with_exact_geometry_when_unambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this icon.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (100, 10, 32, 32)),
             ],
             model_rect=(100, 10, 32, 32),
         )
@@ -587,6 +605,25 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertTrue(candidates)
         self.assertEqual(candidates[0].text, "Save changes")
         self.assertEqual(candidates[0].id, "c001")
+
+    def test_collect_skips_own_process_top_level_windows(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        helper_button = _make_button("Helper settings", 20, 20, 120, 30)
+        helper_window = _make_window("Helper", 0, 0, 200, 120, [helper_button], handle=101)
+        app_button = _make_button("Save changes", 220, 20, 120, 30)
+        app_window = _make_window("Editor", 200, 0, 300, 120, [app_button], handle=202)
+        desktop = _FakeDesktop([helper_window, app_window])
+
+        with patch("control_inventory._is_own_process_window", side_effect=lambda hwnd: hwnd == 101):
+            candidates = collect_control_candidates(
+                self._capture(),
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            )
+
+        self.assertEqual([candidate.text for candidate in candidates], ["Save changes"])
+        self.assertEqual(candidates[0].window_title, "Editor")
 
     def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target

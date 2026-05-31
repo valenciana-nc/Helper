@@ -185,6 +185,9 @@ def collect_control_candidates(
     for window_index, top in enumerate(windows):
         if time.monotonic() >= deadline:
             break
+        top_handle = _window_handle(top)
+        if top_handle is not None and _is_own_process_window(top_handle):
+            continue
         top_rect = _element_rect(top)
         if top_rect is None or not _intersects(top_rect, capture_rect):
             continue
@@ -715,19 +718,19 @@ def _target_id_plausibility(
             return False, max(text_score, geometry_score), "target_id ambiguous"
         return True, max(0.86, text_score, geometry_score), ""
 
-    if geometry_score >= TARGET_ID_GEOMETRY_FLOOR and not _has_semantic_alternative(
-        instruction_tokens=instruction_tokens,
-        selected=candidate,
-        candidates=candidates,
-    ):
-        return True, max(0.78, geometry_score), ""
-
     if identity_tokens:
         return (
             False,
             max(text_score, geometry_score),
             "target_id semantic mismatch",
         )
+
+    if geometry_score >= TARGET_ID_GEOMETRY_FLOOR and not _has_semantic_alternative(
+        instruction_tokens=instruction_tokens,
+        selected=candidate,
+        candidates=candidates,
+    ):
+        return True, max(0.78, geometry_score), ""
 
     if geometry_score >= TARGET_ID_GEOMETRY_FLOOR:
         if _has_nearby_unlabeled_competitor(candidate, candidates):
