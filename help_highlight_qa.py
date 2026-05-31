@@ -149,6 +149,80 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "foreground_candidate_snap_prefers_active_window",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 120, 80, 32], "label": "Save"},
+                {"rect": [170, 120, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 260, "y": 375, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 120, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+                {
+                    "id": "c002",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [170, 120, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [170, 120, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "background_candidate_snap_conflict_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [120, 100, 80, 32], "label": "Save"},
+                {"rect": [120, 145, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 240, "y": 425, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [120, 100, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "c002",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [120, 145, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "semantic_mismatch_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

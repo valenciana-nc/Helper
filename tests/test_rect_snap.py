@@ -83,6 +83,16 @@ class _FakeDesktop:
         return list(self._toplevels)
 
 
+class _RecordingControl(_FakeControl):
+    def __init__(self, *, visits: list[str], **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._visits = visits
+
+    def children(self) -> list[_FakeControl]:
+        self._visits.append(self.window_text())
+        return super().children()
+
+
 def _make_button(
     name: str,
     x: int,
@@ -676,6 +686,38 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(candidates[0].text, "Save changes")
         self.assertEqual(candidates[0].id, "c001")
 
+    def test_collect_visits_foreground_window_before_background_windows(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        visits: list[str] = []
+        background = _RecordingControl(
+            text="Background",
+            control_type="Window",
+            rect=_FakeRect(0, 0, 800, 300),
+            handle=101,
+            children=[_make_button("Background button", 20, 20, 120, 30)],
+            visits=visits,
+        )
+        foreground = _RecordingControl(
+            text="Foreground",
+            control_type="Window",
+            rect=_FakeRect(0, 320, 800, 620),
+            handle=202,
+            children=[_make_button("Foreground button", 20, 340, 120, 30)],
+            visits=visits,
+        )
+        desktop = _FakeDesktop([background, foreground])
+
+        collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            foreground_handle_provider=lambda: 202,
+            timeout_ms=2000,
+        )
+
+        self.assertGreaterEqual(len(visits), 2)
+        self.assertEqual(visits[:2], ["Foreground", "Background"])
+
     def test_collect_skips_own_process_top_level_windows(self) -> None:
         from control_inventory import collect_control_candidates
 
@@ -733,6 +775,24 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.rect, (100, 100, 50, 24))
+
+    def test_snap_candidate_target_prefers_foreground_duplicate_when_geometry_is_close(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (80, 100, 80, 32), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (170, 100, 80, 32), window_rank=0),
+            ],
+            model_rect=(130, 100, 80, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c002")
 
 
 class HelpTargetHarnessTests(unittest.TestCase):
@@ -863,6 +923,29 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(calls)
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this button.",
+                    "target": {"x": 120, "y": 136, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Save", "button", (120, 100, 80, 32), window_rank=0),
+                ControlCandidate("c002", "Save", "button", (120, 145, 80, 32), window_rank=2),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rejected_reason, "ambiguous candidate snap")
 
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate

@@ -27,6 +27,7 @@ CANDIDATE_SNAP_MARGIN_PX = 60
 MIN_VISIBLE_FRACTION = 0.20
 UNLABELED_COMPETITOR_MARGIN_PX = 96
 FOREGROUND_RANK_BONUS = 0.10
+FOREGROUND_SNAP_CONFLICT_GAP = 0.18
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -188,7 +189,12 @@ def collect_control_candidates(
     if topmost_provider is None and desktop_factory is None:
         topmost_provider = _topmost_window_handle_at_point
 
-    for window_index, top in enumerate(windows):
+    indexed_windows = list(enumerate(windows))
+    indexed_windows.sort(
+        key=lambda item: _candidate_window_rank(item[0], foreground_index),
+    )
+
+    for window_index, top in indexed_windows:
         if time.monotonic() >= deadline:
             break
         top_handle = _window_handle(top)
@@ -554,6 +560,19 @@ def snap_candidate_target(
                 rejected_reason="candidate semantic mismatch",
             )
         return None
+    if _foreground_snap_conflict(
+        ranked=ranked,
+        instruction_tokens=instruction_tokens,
+        confidence_floor=confidence_floor,
+    ):
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=best_score,
+            source="candidate_snap",
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason="ambiguous candidate snap",
+        )
     if len(ranked) > 1 and best_score - ranked[1][0] < TEXT_MATCH_GAP:
         return TargetResolution(
             rect=candidate.rect,
@@ -920,13 +939,54 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     area_score = _area_fit_score(candidate.rect, model_rect)
     type_score = 1.0 if candidate.control_type in {"button", "menuitem", "tabitem", "hyperlink", "splitbutton"} else 0.7
-    return (
+    score = (
         0.34 * iou
         + 0.24 * proximity
         + 0.20 * text_score
         + 0.14 * area_score
         + 0.08 * type_score
     )
+    return min(1.0, score + _foreground_rank_bonus(candidate, candidates))
+
+
+def _foreground_snap_conflict(
+    *,
+    ranked: list[tuple[float, ControlCandidate]],
+    instruction_tokens: set[str],
+    confidence_floor: float,
+) -> bool:
+    best_score, best = ranked[0]
+    min_rank = min(candidate.window_rank for _score, candidate in ranked)
+    if best.window_rank == min_rank:
+        return False
+
+    foreground: tuple[float, ControlCandidate] | None = None
+    for score, candidate in ranked:
+        if candidate.window_rank != min_rank:
+            continue
+        if score < confidence_floor:
+            continue
+        if not _same_snap_intent(best, candidate, instruction_tokens):
+            continue
+        if foreground is None or score > foreground[0]:
+            foreground = (score, candidate)
+    if foreground is None:
+        return False
+    return best_score - foreground[0] < FOREGROUND_SNAP_CONFLICT_GAP
+
+
+def _same_snap_intent(
+    first: ControlCandidate,
+    second: ControlCandidate,
+    instruction_tokens: set[str],
+) -> bool:
+    if not instruction_tokens:
+        return True
+    first_score = _text_evidence_score(instruction_tokens, _candidate_identity_tokens(first))
+    second_score = _text_evidence_score(instruction_tokens, _candidate_identity_tokens(second))
+    if first_score <= 0 and second_score <= 0:
+        return True
+    return second_score >= first_score - TEXT_MATCH_GAP
 
 
 def _candidate_snap_semantic_mismatch(
