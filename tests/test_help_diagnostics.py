@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from screen import Capture
 
@@ -105,7 +107,33 @@ class HelpTargetDiagnosticTests(unittest.TestCase):
         self.assertEqual(payload["overlay"]["rejected_reason"], "unknown target_id")
         self.assertEqual(payload["quality"], None)
 
+    def test_diagnostic_sink_writes_jsonl(self) -> None:
+        from help_diagnostics import HelpTargetDiagnosticSink
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "help_targets.jsonl"
+            sink = HelpTargetDiagnosticSink(path=path, enabled=True)
+
+            sink.write({"event": "target", "resolution": {"source": "target_id"}})
+
+            lines = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(len(lines), 1)
+        payload = json.loads(lines[0])
+        self.assertEqual(payload["event"], "target")
+        self.assertIn("timestamp", payload)
+
+    def test_diagnostic_sink_respects_disabled_flag(self) -> None:
+        from help_diagnostics import HelpTargetDiagnosticSink
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "help_targets.jsonl"
+            sink = HelpTargetDiagnosticSink(path=path, enabled=False)
+
+            sink.write({"event": "target"})
+
+            self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -33,6 +33,7 @@ from config import (
 )
 from computer_control import sleep_with_abort
 from conversation_store import ConversationStore, StoredConversation
+from help_diagnostics import HelpTargetDiagnosticSink
 import oauth_codex
 from ui_chat import ChatWindow
 from ui_dashboard import DashboardWindow
@@ -741,6 +742,7 @@ class HelplerDesktopApp(QObject):
         self._chat_window.setWindowIcon(self._app_icon)
         self._status_pill = ChatStatusPill()
         self._conversation_store = ConversationStore(CONVERSATIONS_PATH)
+        self._help_target_diagnostics = HelpTargetDiagnosticSink()
         self._active_conversation: StoredConversation | None = None
         self._dashboard = DashboardWindow(
             env_path=ENV_PATH,
@@ -1497,6 +1499,7 @@ class HelplerDesktopApp(QObject):
         self._help_session.ghost_clear.connect(self._ghost_cursor.clear)
         self._help_session.highlight_show.connect(self._on_help_highlight_show)
         self._help_session.highlight_clear.connect(self._overlay.clear)
+        self._help_session.target_diagnostic.connect(self._help_target_diagnostics.write)
         self._help_session.chat_message.connect(self._handle_agent_message)
         self._help_session.chat_status.connect(self._on_chat_status_changed)
         self._help_session.finished.connect(self._on_help_session_finished)
