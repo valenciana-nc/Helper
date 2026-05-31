@@ -68,6 +68,33 @@ class HelpPrecisionSelfTestUnitTests(unittest.TestCase):
         self.assertEqual(required[0]["automation_id"], "helperPrecisionSave")
         self.assertEqual(manifest["window_title"], "Helper Precision Self Test abc")
 
+    def test_evaluate_case_result_allows_expected_rejection(self) -> None:
+        from help_precision_selftest import evaluate_case_result
+
+        passed, failures = evaluate_case_result(
+            expected_candidate=None,
+            overlay_rect=None,
+            rejected_reason="unknown target_id",
+            expect_rejected_reason="unknown target_id",
+            expect_overlay=False,
+        )
+
+        self.assertTrue(passed)
+        self.assertEqual(failures, [])
+
+    def test_evaluate_case_result_rejects_unexpected_overlay(self) -> None:
+        from help_precision_selftest import evaluate_case_result
+
+        passed, failures = evaluate_case_result(
+            expected_candidate=None,
+            overlay_rect=(1, 2, 3, 4),
+            rejected_reason="",
+            expect_overlay=False,
+        )
+
+        self.assertFalse(passed)
+        self.assertTrue(any("unexpectedly" in failure for failure in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

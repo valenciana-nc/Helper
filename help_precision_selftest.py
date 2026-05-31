@@ -67,63 +67,36 @@ def run_selftest(
             )
             return summary
 
-        decision = _decision_for_candidate(capture, target_candidate)
-        target = resolve_help_target(
-            decision,
-            capture,
-            candidates,
-            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
-            clip_to_capture=False,
-        )
-        quality = None
-        overlay_rect = None
-        rejected_reason = target.rejected_reason
-        display_target = target
-        if not rejected_reason:
-            quality = evaluate_target_quality(
-                capture=capture,
-                rect=target.rect,
-                source=target.source,
-                confidence=target.confidence,
-            )
-            if not quality.accepted:
-                rejected_reason = quality.reason
-            else:
-                display_target = clip_resolution_to_capture(target, capture)
-                rejected_reason = display_target.rejected_reason
-                if not rejected_reason:
-                    overlay_rect = display_target.rect
-
-        diagnostic = build_target_diagnostic(
-            decision=decision,
+        cases = _run_resolution_cases(
             capture=capture,
             candidates=candidates,
-            target=display_target,
-            quality=quality,
-            overlay_rect=overlay_rect,
-            rejected_reason=rejected_reason,
-        )
-        passed, failures = evaluate_selftest_result(
             target_candidate=target_candidate,
-            overlay_rect=overlay_rect,
-            rejected_reason=rejected_reason,
+            title=title,
         )
+        primary = cases[0]
+        passed = all(case["passed"] for case in cases)
+        failures = [
+            f"{case['name']}: {failure}"
+            for case in cases
+            for failure in case["failures"]
+        ]
         summary = {
             "passed": passed,
             "failures": failures,
+            "cases": cases,
             "target_candidate": _candidate_payload(target_candidate),
-            "diagnostic": diagnostic,
         }
         _write_artifacts(
             artifacts_dir,
             capture,
             candidates,
             summary=summary,
-            diagnostic=diagnostic,
+            diagnostic=primary.get("diagnostic"),
             target_candidate=target_candidate,
-            overlay_rect=overlay_rect,
+            overlay_rect=primary.get("overlay_rect"),
             manifest=_manifest(title),
         )
+        _write_case_artifacts(artifacts_dir, capture, candidates, cases)
         return summary
     finally:
         _stop_child_window(child)
@@ -145,6 +118,153 @@ def evaluate_selftest_result(
         if iou < 0.85:
             failures.append(f"overlay/candidate IoU too low: {iou:.3f}")
     return not failures, failures
+
+
+def evaluate_case_result(
+    *,
+    expected_candidate: ControlCandidate | None,
+    overlay_rect: tuple[int, int, int, int] | None,
+    rejected_reason: str,
+    expect_rejected_reason: str = "",
+    expect_overlay: bool = True,
+    min_iou: float = 0.85,
+) -> tuple[bool, list[str]]:
+    failures: list[str] = []
+    if expect_rejected_reason:
+        if rejected_reason != expect_rejected_reason:
+            failures.append(
+                f"expected rejection {expect_rejected_reason!r}, got {rejected_reason!r}"
+            )
+    elif rejected_reason:
+        failures.append(f"target rejected: {rejected_reason}")
+    if expect_overlay and overlay_rect is None:
+        failures.append("overlay rect was not emitted")
+    if not expect_overlay and overlay_rect is not None:
+        failures.append(f"overlay rect was emitted unexpectedly: {overlay_rect}")
+    if expected_candidate is not None and overlay_rect is not None:
+        iou = _iou(expected_candidate.rect, overlay_rect)
+        if iou < min_iou:
+            failures.append(f"overlay/candidate IoU too low: {iou:.3f}")
+    return not failures, failures
+
+
+def _run_resolution_cases(
+    *,
+    capture: Capture,
+    candidates: list[ControlCandidate],
+    target_candidate: ControlCandidate,
+    title: str,
+) -> list[dict[str, Any]]:
+    duplicate_candidates = _find_candidates_by_text(candidates, "Duplicate", title=title)
+    cases = [
+        _run_resolution_case(
+            name="save_target_id_uses_candidate_rect",
+            decision=_decision_for_candidate(capture, target_candidate),
+            capture=capture,
+            candidates=candidates,
+            expected_candidate=target_candidate,
+        ),
+        _run_resolution_case(
+            name="unknown_target_id_rejects",
+            decision=_decision_unknown_id(capture, target_candidate),
+            capture=capture,
+            candidates=candidates,
+            expected_candidate=None,
+            expect_overlay=False,
+            expect_rejected_reason="unknown target_id",
+        ),
+        _run_resolution_case(
+            name="model_rect_snaps_to_candidate_snapshot",
+            decision=_decision_model_rect_only(capture, target_candidate),
+            capture=capture,
+            candidates=candidates,
+            expected_candidate=target_candidate,
+        ),
+    ]
+    if len(duplicate_candidates) >= 2:
+        cases.append(
+            _run_resolution_case(
+                name="duplicate_label_without_geometry_rejects",
+                decision=_decision_duplicate_without_rect(duplicate_candidates[0]),
+                capture=capture,
+                candidates=candidates,
+                expected_candidate=None,
+                expect_overlay=False,
+                expect_rejected_reason="target_id ambiguous",
+            )
+        )
+    else:
+        cases.append(
+            {
+                "name": "duplicate_label_without_geometry_rejects",
+                "passed": False,
+                "failures": ["duplicate controls not found"],
+                "overlay_rect": None,
+                "diagnostic": None,
+            }
+        )
+    return cases
+
+
+def _run_resolution_case(
+    *,
+    name: str,
+    decision,
+    capture: Capture,
+    candidates: list[ControlCandidate],
+    expected_candidate: ControlCandidate | None,
+    expect_overlay: bool = True,
+    expect_rejected_reason: str = "",
+) -> dict[str, Any]:
+    target = resolve_help_target(
+        decision,
+        capture,
+        candidates,
+        snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        clip_to_capture=False,
+    )
+    quality = None
+    overlay_rect = None
+    rejected_reason = target.rejected_reason
+    display_target = target
+    if not rejected_reason:
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=target.rect,
+            source=target.source,
+            confidence=target.confidence,
+        )
+        if not quality.accepted:
+            rejected_reason = quality.reason
+        else:
+            display_target = clip_resolution_to_capture(target, capture)
+            rejected_reason = display_target.rejected_reason
+            if not rejected_reason:
+                overlay_rect = display_target.rect
+    diagnostic = build_target_diagnostic(
+        decision=decision,
+        capture=capture,
+        candidates=candidates,
+        target=display_target,
+        quality=quality,
+        overlay_rect=overlay_rect,
+        rejected_reason=rejected_reason,
+    )
+    passed, failures = evaluate_case_result(
+        expected_candidate=expected_candidate,
+        overlay_rect=overlay_rect,
+        rejected_reason=rejected_reason,
+        expect_rejected_reason=expect_rejected_reason,
+        expect_overlay=expect_overlay,
+    )
+    return {
+        "name": name,
+        "passed": passed,
+        "failures": failures,
+        "overlay_rect": overlay_rect,
+        "rejected_reason": rejected_reason,
+        "diagnostic": diagnostic,
+    }
 
 
 def _start_child_window(title: str) -> subprocess.Popen:
@@ -271,6 +391,46 @@ def _decision_for_candidate(capture: Capture, candidate: ControlCandidate):
     return _parse_live_help_decision(json.dumps(payload))
 
 
+def _decision_unknown_id(capture: Capture, candidate: ControlCandidate):
+    norm = _norm_rect(candidate.rect, capture)
+    payload = {
+        "kind": "step",
+        "instruction": f"Click {TARGET_TEXT}.",
+        "target_id": "c999",
+        "target": {
+            "x": norm[0],
+            "y": norm[1],
+            "width": norm[2],
+            "height": norm[3],
+        },
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_model_rect_only(capture: Capture, candidate: ControlCandidate):
+    norm = _norm_rect(candidate.rect, capture)
+    payload = {
+        "kind": "step",
+        "instruction": "Click this button.",
+        "target": {
+            "x": max(0, norm[0] - 5),
+            "y": max(0, norm[1] - 5),
+            "width": min(1000, norm[2] + 10),
+            "height": min(1000, norm[3] + 10),
+        },
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_duplicate_without_rect(candidate: ControlCandidate):
+    payload = {
+        "kind": "step",
+        "instruction": "Click Duplicate.",
+        "target_id": candidate.id,
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
 def _norm_rect(
     rect: tuple[int, int, int, int],
     capture: Capture,
@@ -299,6 +459,22 @@ def _find_target_candidate(
         if TARGET_TEXT.lower() in candidate.descriptor.lower():
             return candidate
     return None
+
+
+def _find_candidates_by_text(
+    candidates: list[ControlCandidate],
+    text: str,
+    *,
+    title: str = "",
+) -> list[ControlCandidate]:
+    needle = text.lower()
+    out: list[ControlCandidate] = []
+    for candidate in candidates:
+        if title and title not in candidate.window_title:
+            continue
+        if needle in candidate.descriptor.lower():
+            out.append(candidate)
+    return out
 
 
 def _write_artifacts(
@@ -353,6 +529,55 @@ def _write_artifacts(
         box = _clip_box(screen_rect_to_image_box(capture, crop_rect), image.size)
         if box is not None:
             image.crop(box).save(artifacts_dir / "target_crop.png")
+
+
+def _write_case_artifacts(
+    artifacts_dir: Path,
+    capture: Capture,
+    candidates: list[ControlCandidate],
+    cases: list[dict[str, Any]],
+) -> None:
+    root = artifacts_dir / "cases"
+    root.mkdir(parents=True, exist_ok=True)
+    image = Image.open(io.BytesIO(capture.png_bytes)).convert("RGB")
+    for case in cases:
+        case_dir = root / str(case["name"])
+        case_dir.mkdir(parents=True, exist_ok=True)
+        diagnostic = case.get("diagnostic")
+        (case_dir / "summary.json").write_text(
+            json.dumps(
+                {
+                    "name": case["name"],
+                    "passed": case["passed"],
+                    "failures": case["failures"],
+                    "rejected_reason": case.get("rejected_reason", ""),
+                    "overlay_rect": case.get("overlay_rect"),
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        if diagnostic is None:
+            continue
+        (case_dir / "diagnostic.json").write_text(
+            json.dumps(diagnostic, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        overlay = image.copy()
+        draw = ImageDraw.Draw(overlay)
+        for candidate in candidates:
+            draw.rectangle(screen_rect_to_image_box(capture, candidate.rect), outline="#64748b", width=1)
+        model_rect = diagnostic["model"].get("screen_rect")
+        if model_rect:
+            draw.rectangle(screen_rect_to_image_box(capture, tuple(model_rect)), outline="#ef4444", width=2)
+        resolved_rect = diagnostic["resolution"].get("rect")
+        if resolved_rect:
+            draw.rectangle(screen_rect_to_image_box(capture, tuple(resolved_rect)), outline="#f59e0b", width=2)
+        overlay_rect = diagnostic["overlay"].get("rect")
+        if overlay_rect:
+            draw.rectangle(screen_rect_to_image_box(capture, tuple(overlay_rect)), outline="#22c55e", width=3)
+        overlay.save(case_dir / "overlay.png")
 
 
 def _failure_summary(

@@ -154,11 +154,7 @@ def resolve_help_target(
         )
 
     if decision.target_id:
-        if (
-            target is not None
-            and target.rejected_reason == "unknown target_id"
-            and model_rect is None
-        ):
+        if target is not None and target.rejected_reason == "unknown target_id":
             return target
         text_target = resolve_candidate_target(
             target_id="",
