@@ -37,6 +37,22 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target appears visually empty")
 
+    def test_rejects_small_blank_model_rects(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (80, 80), "white"))
+
+        for rect in ((10, 10, 20, 30), (40, 40, 10, 10)):
+            with self.subTest(rect=rect):
+                quality = evaluate_target_quality(
+                    capture=capture,
+                    rect=rect,
+                    source="model",
+                    confidence=0.0,
+                )
+                self.assertFalse(quality.accepted)
+                self.assertEqual(quality.reason, "target appears visually empty")
+
     def test_accepts_structured_model_rect(self) -> None:
         from target_quality import evaluate_target_quality
 
@@ -71,7 +87,21 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target mostly outside capture")
 
+    def test_rejects_raw_rect_with_only_small_visible_sliver(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (200, 120), "white"))
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(-45, 20, 60, 30),
+            source="target_id",
+            confidence=1.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target mostly outside capture")
+
 
 if __name__ == "__main__":
     unittest.main()
-

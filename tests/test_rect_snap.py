@@ -362,6 +362,23 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
 
+    def test_target_id_label_mismatch_can_pass_with_exact_geometry_no_alternative(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click the settings gear.",
+            candidates=[
+                ControlCandidate("c001", "Options", "button", (100, 10, 32, 32)),
+            ],
+            model_rect=(100, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "target_id")
+
     def test_target_id_duplicate_label_without_geometry_is_rejected(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -513,6 +530,31 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].rect, (120, 120, 50, 24))
+
+    def test_labeled_parent_is_not_pruned_by_unlabeled_child_glyph(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        glyph = _FakeControl(
+            text="",
+            control_type="Button",
+            rect=_FakeRect(104, 104, 124, 124),
+        )
+        parent = _FakeControl(
+            text="Enable sync",
+            control_type="CheckBox",
+            rect=_FakeRect(100, 100, 220, 132),
+            children=[glyph],
+        )
+        window = _make_window("Settings", 0, 0, 800, 600, [parent])
+        desktop = _FakeDesktop([window])
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertTrue(any(candidate.text == "Enable sync" for candidate in candidates))
 
     def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -684,7 +726,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
     def test_partially_offscreen_candidate_is_clipped_before_display(self) -> None:
         from control_inventory import ControlCandidate
-        from help_session import resolve_help_target
+        from help_session import clip_resolution_to_capture, resolve_help_target
 
         target = resolve_help_target(
             self._decision(
@@ -701,6 +743,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (0, 120, 40, 30))
+
+        raw_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Edge.",
+                    "target_id": "c001",
+                    "target": {"x": 0, "y": 120, "width": 40, "height": 30},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Edge", "button", (-20, 120, 60, 30))],
+            clip_to_capture=False,
+        )
+        clipped = clip_resolution_to_capture(raw_target, self._capture())
+        self.assertEqual(raw_target.rect, (-20, 120, 60, 30))
+        self.assertEqual(clipped.rect, (0, 120, 40, 30))
 
 
 class LooksOversizedTests(unittest.TestCase):

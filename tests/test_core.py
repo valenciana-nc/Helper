@@ -496,6 +496,20 @@ class ComputerControlTests(unittest.TestCase):
         self.assertIsNone(DesktopActionDispatcher._scroll_delta("right"))
 
 
+class HelpSessionMessageTests(unittest.TestCase):
+    def test_downgrade_note_includes_specific_rejection_reason(self) -> None:
+        from agent import LiveHelpDecision
+        from help_session import HelpSession
+
+        note = HelpSession._outcome_after_downgrade(
+            LiveHelpDecision(kind="step", instruction="Click Save."),
+            "unknown target_id",
+        )
+
+        self.assertIn("unknown target_id", note)
+        self.assertNotIn("panel-sized", note)
+
+
 class DesktopWindowTests(unittest.TestCase):
     def test_helper_logo_icon_is_loadable(self) -> None:
         app = _qt_app()

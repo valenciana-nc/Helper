@@ -103,8 +103,11 @@ def _visual_activity(png_bytes: bytes, rect: tuple[int, int, int, int]) -> float
             stats = ImageStat.Stat(crop)
             contrast = (stats.stddev[0] if stats.stddev else 0.0) / 255.0
             edges = crop.filter(ImageFilter.FIND_EDGES)
-            edge_mean = (ImageStat.Stat(edges).mean[0] if edges else 0.0) / 255.0
+            if edges.width > 2 and edges.height > 2:
+                edges = edges.crop((1, 1, edges.width - 1, edges.height - 1))
+                edge_mean = ImageStat.Stat(edges).mean[0] / 255.0
+            else:
+                edge_mean = 0.0
             return min(1.0, 0.65 * contrast + 0.35 * edge_mean)
     except Exception:
         return 0.0
-

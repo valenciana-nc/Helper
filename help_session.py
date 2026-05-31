@@ -133,6 +133,7 @@ def resolve_help_target(
     candidates: list[ControlCandidate],
     *,
     snapper: Snapper = snap_to_control,
+    clip_to_capture: bool = True,
 ) -> TargetResolution:
     model_rect = decision.screen_rect(capture) if decision.has_target_rect else None
 
@@ -143,7 +144,7 @@ def resolve_help_target(
         model_rect=model_rect,
     )
     if target is not None and not target.rejected_reason:
-        return _clip_resolution_to_capture(target, capture)
+        return _maybe_clip_resolution_to_capture(target, capture, clip_to_capture)
     if target is not None:
         log.info(
             "Ignoring invalid target_id=%s for instruction=%r: %s",
@@ -166,7 +167,7 @@ def resolve_help_target(
             model_rect=model_rect,
         )
         if text_target is not None and not text_target.rejected_reason:
-            return _clip_resolution_to_capture(text_target, capture)
+            return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
 
         if model_rect is not None:
             candidate_snap = snap_candidate_target(
@@ -175,7 +176,7 @@ def resolve_help_target(
                 model_rect=model_rect,
             )
             if candidate_snap is not None and not candidate_snap.rejected_reason:
-                return _clip_resolution_to_capture(candidate_snap, capture)
+                return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
             if candidate_snap is not None:
                 return candidate_snap
 
@@ -196,7 +197,7 @@ def resolve_help_target(
         model_rect=model_rect,
     )
     if candidate_snap is not None and not candidate_snap.rejected_reason:
-        return _clip_resolution_to_capture(candidate_snap, capture)
+        return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
     if candidate_snap is not None:
         return candidate_snap
 
@@ -207,12 +208,12 @@ def resolve_help_target(
         snap = SnapResult(rect=model_rect, confidence=0.0, source="model")
 
     if snap.source == "uia":
-        return _clip_resolution_to_capture(TargetResolution(
+        return _maybe_clip_resolution_to_capture(TargetResolution(
             rect=snap.rect,
             confidence=snap.confidence,
             source="snap",
             matched_text=snap.matched_text,
-        ), capture)
+        ), capture, clip_to_capture)
 
     if looks_oversized(decision):
         return TargetResolution(
@@ -223,15 +224,25 @@ def resolve_help_target(
             rejected_reason="oversized target",
         )
 
-    return _clip_resolution_to_capture(TargetResolution(
+    return _maybe_clip_resolution_to_capture(TargetResolution(
         rect=model_rect,
         confidence=snap.confidence,
         source="model",
         matched_text=snap.matched_text,
-    ), capture)
+    ), capture, clip_to_capture)
 
 
-def _clip_resolution_to_capture(
+def _maybe_clip_resolution_to_capture(
+    target: TargetResolution,
+    capture: "Capture",
+    clip_to_capture: bool,
+) -> TargetResolution:
+    if not clip_to_capture:
+        return target
+    return clip_resolution_to_capture(target, capture)
+
+
+def clip_resolution_to_capture(
     target: TargetResolution,
     capture: "Capture",
 ) -> TargetResolution:
@@ -432,6 +443,7 @@ class HelpSession(QObject):
                 capture,
                 candidates,
                 snapper=self._snapper,
+                clip_to_capture=False,
             )
             if target.rejected_reason:
                 self._emit_target_diagnostic(
@@ -457,7 +469,10 @@ class HelpSession(QObject):
                 wait_outcome = self._wait_for_progress(rect=None)
                 if wait_outcome == "cancelled":
                     return
-                outcome_note = self._outcome_after_downgrade(decision)
+                outcome_note = self._outcome_after_downgrade(
+                    decision,
+                    target.rejected_reason,
+                )
                 continue
 
             log.info(
@@ -506,12 +521,37 @@ class HelpSession(QObject):
                     quality.reason,
                 )
                 continue
+            display_target = clip_resolution_to_capture(target, capture)
+            if display_target.rejected_reason:
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=capture,
+                        candidates=candidates,
+                        target=display_target,
+                        quality=quality,
+                        rejected_reason=display_target.rejected_reason,
+                    )
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(
+                    decision,
+                    display_target.rejected_reason,
+                )
+                continue
+            final_rect = display_target.rect
             self._emit_target_diagnostic(
                 build_target_diagnostic(
                     decision=decision,
                     capture=capture,
                     candidates=candidates,
-                    target=target,
+                    target=display_target,
                     quality=quality,
                     overlay_rect=final_rect,
                 )
@@ -591,12 +631,15 @@ class HelpSession(QObject):
         return "Continue from the current screen."
 
     @staticmethod
-    def _outcome_after_downgrade(decision: "LiveHelpDecision") -> str:
+    def _outcome_after_downgrade(
+        decision: "LiveHelpDecision",
+        reason: str = "target was rejected",
+    ) -> str:
         instruction = decision.instruction.strip().rstrip(".")
         return (
-            f'You suggested: "{instruction}". The target rectangle was '
-            "panel-sized, so it was not drawn. Emit a smaller, more precise "
-            "target around the actual clickable element — or use narrate."
+            f'You suggested: "{instruction}". The target was not drawn because '
+            f"{reason}. Emit a precise target around the actual clickable "
+            "element only if you can identify it confidently — otherwise use narrate."
         )
 
     @staticmethod
