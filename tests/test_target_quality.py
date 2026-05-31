@@ -102,6 +102,25 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target mostly outside capture")
 
+    def test_rejects_panel_sized_candidate_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (200, 120), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((5, 5, 195, 95), outline="black", fill="#f3f4f6")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(5, 5, 190, 90),
+            source="target_id",
+            confidence=0.95,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target too large")
+        self.assertGreater(quality.target_area_fraction, 0.25)
+
 
 if __name__ == "__main__":
     unittest.main()

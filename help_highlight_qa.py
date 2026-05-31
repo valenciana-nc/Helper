@@ -213,6 +213,26 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "overlay_emitted": False,
             },
         },
+        {
+            "name": "panel_sized_candidate_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 450, 120], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "listitem", "rect": [20, 20, 450, 120]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target too large",
+                "overlay_emitted": False,
+            },
+        },
     ]
 
 

@@ -10,6 +10,7 @@ from screen import Capture
 MIN_VISIBLE_FRACTION = 0.35
 MODEL_EMPTY_VISUAL_FLOOR = 0.035
 MODEL_LOW_CONFIDENCE_FLOOR = 0.20
+MAX_TARGET_AREA_FRACTION = 0.25
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class TargetQuality:
     reason: str = ""
     visible_fraction: float = 1.0
     visual_activity: float = 0.0
+    target_area_fraction: float = 0.0
 
 
 def evaluate_target_quality(
@@ -39,11 +41,21 @@ def evaluate_target_quality(
     visible_area = clipped[2] * clipped[3]
     rect_area = max(1, image_rect[2] * image_rect[3])
     visible_fraction = visible_area / rect_area
+    target_area_fraction = rect_area / max(1, capture.width * capture.height)
     if visible_fraction < MIN_VISIBLE_FRACTION:
         return TargetQuality(
             accepted=False,
             reason="target mostly outside capture",
             visible_fraction=visible_fraction,
+            target_area_fraction=target_area_fraction,
+        )
+
+    if target_area_fraction > MAX_TARGET_AREA_FRACTION:
+        return TargetQuality(
+            accepted=False,
+            reason="target too large",
+            visible_fraction=visible_fraction,
+            target_area_fraction=target_area_fraction,
         )
 
     visual_activity = _visual_activity(capture.png_bytes, clipped)
@@ -57,12 +69,14 @@ def evaluate_target_quality(
             reason="target appears visually empty",
             visible_fraction=visible_fraction,
             visual_activity=visual_activity,
+            target_area_fraction=target_area_fraction,
         )
 
     return TargetQuality(
         accepted=True,
         visible_fraction=visible_fraction,
         visual_activity=visual_activity,
+        target_area_fraction=target_area_fraction,
     )
 
 

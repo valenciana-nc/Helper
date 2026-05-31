@@ -127,6 +127,7 @@ def _quality_payload(quality: TargetQuality | None) -> dict[str, Any] | None:
         "reason": quality.reason,
         "visible_fraction": round(float(quality.visible_fraction), 4),
         "visual_activity": round(float(quality.visual_activity), 4),
+        "target_area_fraction": round(float(quality.target_area_fraction), 4),
     }
 
 
