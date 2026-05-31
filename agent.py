@@ -1033,12 +1033,14 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
 def _coerce_norm(value: Any) -> int | None:
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         try:
             parsed = int(float(value))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return None
-    return max(0, min(1000, parsed))
+    if not 0 <= parsed <= 1000:
+        return None
+    return parsed
 
 
 def _print_turn(turn: GuideTurn) -> None:

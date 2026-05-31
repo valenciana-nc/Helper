@@ -860,6 +860,38 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         self.assertEqual(decision.kind, "narrate")
         self.assertEqual(decision.message, "Click here.")
 
+    def test_step_with_out_of_range_coords_falls_back_to_narrate(self) -> None:
+        from agent import _parse_live_help_decision
+
+        decision = _parse_live_help_decision(
+            json.dumps(
+                {
+                    "kind": "step",
+                    "instruction": "Click here.",
+                    "target": {"x": 1200, "y": 40, "width": 80, "height": 40},
+                }
+            )
+        )
+        self.assertEqual(decision.kind, "narrate")
+        self.assertEqual(decision.message, "Click here.")
+
+    def test_step_with_target_id_ignores_out_of_range_rect(self) -> None:
+        from agent import _parse_live_help_decision
+
+        decision = _parse_live_help_decision(
+            json.dumps(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
+                    "target": {"x": -50, "y": 40, "width": 80, "height": 40},
+                }
+            )
+        )
+        self.assertEqual(decision.kind, "step")
+        self.assertEqual(decision.target_id, "c001")
+        self.assertFalse(decision.has_target_rect)
+
     def test_garbage_input_falls_back_to_narrate(self) -> None:
         from agent import _parse_live_help_decision
 

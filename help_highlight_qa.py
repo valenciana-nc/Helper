@@ -183,6 +183,21 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "candidates": [],
             "expected": {"source": "model", "quality_reason": "target appears visually empty", "overlay_emitted": False},
         },
+        {
+            "name": "out_of_range_model_rect_does_not_draw_edge_overlay",
+            "capture": {"width": 500, "height": 320},
+            "decision": {
+                "kind": "step",
+                "instruction": "Click here.",
+                "target": {"x": 1200, "y": 40, "width": 80, "height": 40},
+            },
+            "candidates": [],
+            "expected": {
+                "source": "none",
+                "rejected_reason": "no resolvable target",
+                "overlay_emitted": False,
+            },
+        },
     ]
 
 
