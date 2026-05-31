@@ -109,6 +109,7 @@ def build_target_diagnostic(
                 "control_type": candidate.control_type,
                 "rect": candidate.rect,
                 "automation_id": candidate.automation_id,
+                "window_rank": candidate.window_rank,
             }
             for candidate in candidates[:20]
         ],

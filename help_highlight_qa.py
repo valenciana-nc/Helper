@@ -67,6 +67,91 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {"source": "target_id", "rejected_reason": "unknown target_id", "overlay_emitted": False},
         },
         {
+            "name": "wrong_target_id_recovers_by_text_match",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+                {"rect": [180, 80, 80, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [80, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ambiguous_candidate_snap_rejects_overlay",
+            "capture": {"width": 420, "height": 220},
+            "draw": [
+                {"rect": [100, 80, 90, 32], "label": "Duplicate"},
+                {"rect": [110, 80, 90, 32], "label": "Duplicate"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 250, "y": 345, "width": 214, "height": 181},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [100, 80, 90, 32]},
+                {"id": "c002", "text": "Duplicate", "control_type": "button", "rect": [110, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "semantic_mismatch_candidate_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [120, 140, 90, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 240, "y": 437, "width": 180, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel", "control_type": "button", "rect": [120, 140, 90, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "scaled_negative_origin_snaps_to_candidate",
+            "capture": {"width": 500, "height": 320, "monitor_left": -1000, "monitor_top": 200, "scale": 0.5},
+            "draw": [
+                {"rect": [-800, 360, 120, 40], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 190, "y": 240, "width": 140, "height": 82},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [-800, 360, 120, 40]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rect": [-800, 360, 120, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "blank_model_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {
@@ -321,4 +406,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

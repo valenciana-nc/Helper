@@ -22,6 +22,7 @@ class _FakeElementInfo:
         name: str = "",
         automation_id: str = "",
         rectangle: _FakeRect | None = None,
+        handle: int | None = None,
         enabled: bool = True,
         visible: bool = True,
     ) -> None:
@@ -29,6 +30,7 @@ class _FakeElementInfo:
         self.name = name
         self.automation_id = automation_id
         self.rectangle = rectangle
+        self.handle = handle
         self.enabled = enabled
         self.visible = visible
 
@@ -41,17 +43,20 @@ class _FakeControl:
         control_type: str = "",
         rect: _FakeRect | None = None,
         automation_id: str = "",
+        handle: int | None = None,
         enabled: bool = True,
         visible: bool = True,
         children: list["_FakeControl"] | None = None,
     ) -> None:
         self._text = text
+        self.handle = handle
         self._children = list(children or [])
         self.element_info = _FakeElementInfo(
             control_type=control_type,
             name=text,
             automation_id=automation_id,
             rectangle=rect,
+            handle=handle,
             enabled=enabled,
             visible=visible,
         )
@@ -102,11 +107,14 @@ def _make_window(
     w: int,
     h: int,
     children: list[_FakeControl],
+    *,
+    handle: int | None = None,
 ) -> _FakeControl:
     return _FakeControl(
         text=name,
         control_type="Window",
         rect=_FakeRect(x, y, x + w, y + h),
+        handle=handle,
         children=children,
     )
 
@@ -556,6 +564,30 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertTrue(any(candidate.text == "Enable sync" for candidate in candidates))
 
+    def test_collect_prioritizes_foreground_window_before_screen_position(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        background_buttons = [
+            _make_button(f"Browser {index}", 10 + index * 12, 10, 10, 24)
+            for index in range(12)
+        ]
+        background = _make_window("Browser", 0, 0, 800, 120, background_buttons, handle=101)
+        save = _make_button("Save changes", 120, 500, 90, 32)
+        foreground = _make_window("Editor", 0, 420, 800, 180, [save], handle=202)
+        desktop = _FakeDesktop([background, foreground])
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            foreground_handle_provider=lambda: 202,
+            timeout_ms=2000,
+            limit=3,
+        )
+
+        self.assertTrue(candidates)
+        self.assertEqual(candidates[0].text, "Save changes")
+        self.assertEqual(candidates[0].id, "c001")
+
     def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -699,6 +731,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(calls)
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        model_rect = (120, 160, 80, 32)
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 120, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Cancel", "button", model_rect)],
+            snapper=lambda rect, _instruction: SnapResult(
+                rect=rect,
+                confidence=0.41,
+                source="model",
+                matched_text="Cancel",
+            ),
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.matched_text, "Cancel")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_oversized_model_rect_is_rejected(self) -> None:
         from help_session import resolve_help_target

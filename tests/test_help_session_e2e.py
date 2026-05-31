@@ -81,6 +81,31 @@ class _ScriptedAgent:
         return LiveHelpDecision(kind="done", message="Saved.")
 
 
+class _WrongTargetIdAgent(_ScriptedAgent):
+    def plan_next_step(
+        self,
+        history: Any,
+        *,
+        control_candidates: list[ControlCandidate] | None = None,
+        capture: Capture | None = None,
+    ) -> LiveHelpDecision:
+        self.calls.append(
+            {
+                "messages": [(msg.role, msg.text) for msg in history.conversation_messages()],
+                "control_candidates": list(control_candidates or []),
+                "capture": capture,
+            }
+        )
+        if len(self.calls) == 1:
+            return LiveHelpDecision(
+                kind="step",
+                instruction="Click Save changes.",
+                expected_change="A saved confirmation appears.",
+                target_id="c002",
+            )
+        return LiveHelpDecision(kind="done", message="Saved.")
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
     def test_help_session_emits_candidate_highlight_and_click_outcome(self) -> None:
         app = _qt_app()
@@ -166,6 +191,77 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         followup_text = agent.calls[1]["messages"][-1][1]
         self.assertIn("The user clicked the highlighted target.", followup_text)
         self.assertIn('Expected visible change: "A saved confirmation appears".', followup_text)
+
+    def test_help_session_recovers_wrong_target_id_before_emitting_highlight(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        save = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        cancel = ControlCandidate(
+            id="c002",
+            text="Cancel",
+            control_type="button",
+            rect=(170, 50, 60, 32),
+            automation_id="cancelButton",
+        )
+        agent = _WrongTargetIdAgent()
+
+        def snapper(_rect: tuple[int, int, int, int], _instruction: str):
+            raise AssertionError("wrong target_id should recover from current candidates")
+
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [save, cancel],
+            snapper=snapper,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        click_sent = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if highlights and not click_sent:
+                    x, y, width, height, _label = highlights[0]
+                    time.sleep(0.05)
+                    session.notify_user_click(x + width // 2, y + height // 2)
+                    click_sent = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [(40, 50, 120, 32, "Click Save changes.")])
+        self.assertGreaterEqual(len(diagnostics), 1)
+        self.assertEqual(diagnostics[0]["resolution"]["source"], "text_match")
+        self.assertEqual(diagnostics[0]["resolution"]["target_id"], "c001")
+        self.assertEqual(diagnostics[0]["resolution"]["rect"], (40, 50, 120, 32))
 
 
 if __name__ == "__main__":

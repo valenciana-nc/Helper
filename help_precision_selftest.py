@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from agent import _parse_live_help_decision
-from control_inventory import ControlCandidate, collect_control_candidates
+from control_inventory import ControlCandidate, MAX_CANDIDATES, collect_control_candidates
 from help_live_probe import draw_candidate_overlay, screen_rect_to_image_box
 from help_session import build_target_diagnostic, clip_resolution_to_capture, resolve_help_target
 from rect_snap import SnapResult
@@ -360,7 +360,7 @@ def _wait_for_target_candidate(
     stable_rect: tuple[int, int, int, int] | None = None
     while True:
         capture = capture_active_monitor()
-        candidates = collect_control_candidates(capture, timeout_ms=1500, limit=160)
+        candidates = collect_control_candidates(capture, timeout_ms=1500, limit=MAX_CANDIDATES)
         target = _find_target_candidate(candidates, title=title)
         last = (capture, candidates, target)
         if target is not None:
@@ -608,6 +608,7 @@ def _candidate_payload(candidate: ControlCandidate) -> dict[str, Any]:
         "rect": candidate.rect,
         "automation_id": candidate.automation_id,
         "window_title": candidate.window_title,
+        "window_rank": candidate.window_rank,
     }
 
 
