@@ -5,13 +5,25 @@ import io
 import json
 import os
 import shutil
+import subprocess
+import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from agent import _parse_live_help_decision
 from control_inventory import ControlCandidate, collect_control_candidates
@@ -23,6 +35,8 @@ from target_quality import evaluate_target_quality
 
 WINDOW_TITLE_PREFIX = "Helper Precision Self Test"
 TARGET_TEXT = "Save changes"
+CHILD_READY_SETTLE_SEC = 0.25
+TARGET_WAIT_TIMEOUT_SEC = 5.0
 
 
 def run_selftest(
@@ -35,20 +49,22 @@ def run_selftest(
         shutil.rmtree(artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    app = QApplication.instance() or QApplication(["help_precision_selftest"])
-    window = _build_window()
+    title = f"{WINDOW_TITLE_PREFIX} {os.getpid()} {uuid.uuid4().hex[:6]}"
+    child = _start_child_window(title)
     try:
-        window.show()
-        window.raise_()
-        window.activateWindow()
-        _process_events(app, settle_sec)
-
-        capture = capture_active_monitor()
-        candidates = collect_control_candidates(capture, timeout_ms=1500, limit=120)
-        target_candidate = _find_target_candidate(candidates)
+        capture, candidates, target_candidate = _wait_for_target_candidate(
+            title=title,
+            timeout_sec=max(TARGET_WAIT_TIMEOUT_SEC, settle_sec),
+        )
         if target_candidate is None:
             summary = _failure_summary("target candidate not found", capture, candidates)
-            _write_artifacts(artifacts_dir, capture, candidates, summary=summary)
+            _write_artifacts(
+                artifacts_dir,
+                capture,
+                candidates,
+                summary=summary,
+                manifest=_manifest(title),
+            )
             return summary
 
         decision = _decision_for_candidate(capture, target_candidate)
@@ -106,11 +122,11 @@ def run_selftest(
             diagnostic=diagnostic,
             target_candidate=target_candidate,
             overlay_rect=overlay_rect,
+            manifest=_manifest(title),
         )
         return summary
     finally:
-        window.close()
-        _process_events(app, 0.1)
+        _stop_child_window(child)
 
 
 def evaluate_selftest_result(
@@ -131,14 +147,56 @@ def evaluate_selftest_result(
     return not failures, failures
 
 
-def _build_window() -> QWidget:
+def _start_child_window(title: str) -> subprocess.Popen:
+    return subprocess.Popen(
+        [sys.executable, "-m", "help_precision_selftest", "--child-window", title],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=str(Path(__file__).parent),
+    )
+
+
+def _stop_child_window(child: subprocess.Popen) -> None:
+    if child.poll() is not None:
+        return
+    child.terminate()
+    try:
+        child.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait(timeout=2.0)
+
+
+def run_child_window(title: str) -> int:
+    app = QApplication.instance() or QApplication(["help_precision_selftest_child"])
+    window = _build_window(title)
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    _process_events(app, CHILD_READY_SETTLE_SEC)
+    return app.exec()
+
+
+def _build_window(title: str) -> QWidget:
     window = QWidget()
-    window.setWindowTitle(f"{WINDOW_TITLE_PREFIX} {os.getpid()}")
+    window.setWindowTitle(title)
     window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-    window.setGeometry(120, 120, 420, 180)
+    window.setGeometry(120, 120, 520, 260)
     layout = QVBoxLayout(window)
     label = QLabel("Helper precision self-test")
     layout.addWidget(label)
+
+    edit = QLineEdit()
+    edit.setObjectName("helperPrecisionName")
+    edit.setAccessibleName("Project name")
+    edit.setText("Precision sample")
+    layout.addWidget(edit)
+
+    checkbox = QCheckBox("Enable precision mode")
+    checkbox.setObjectName("helperPrecisionCheckbox")
+    checkbox.setAccessibleName("Enable precision mode")
+    layout.addWidget(checkbox)
+
     row = QHBoxLayout()
     save = QPushButton(TARGET_TEXT)
     save.setObjectName("helperPrecisionSave")
@@ -149,7 +207,49 @@ def _build_window() -> QWidget:
     row.addWidget(save)
     row.addWidget(cancel)
     layout.addLayout(row)
+
+    duplicate_row = QHBoxLayout()
+    first_duplicate = QPushButton("Duplicate")
+    first_duplicate.setObjectName("helperPrecisionDuplicateA")
+    first_duplicate.setAccessibleName("Duplicate")
+    second_duplicate = QPushButton("Duplicate")
+    second_duplicate.setObjectName("helperPrecisionDuplicateB")
+    second_duplicate.setAccessibleName("Duplicate")
+    duplicate_row.addWidget(first_duplicate)
+    duplicate_row.addWidget(second_duplicate)
+    layout.addLayout(duplicate_row)
+
+    icon_row = QHBoxLayout()
+    icon_a = QPushButton("")
+    icon_a.setObjectName("helperPrecisionIconA")
+    icon_b = QPushButton("")
+    icon_b.setObjectName("helperPrecisionIconB")
+    icon_row.addWidget(icon_a)
+    icon_row.addWidget(icon_b)
+    layout.addLayout(icon_row)
     return window
+
+
+def _wait_for_target_candidate(
+    *,
+    title: str,
+    timeout_sec: float,
+) -> tuple[Capture, list[ControlCandidate], ControlCandidate | None]:
+    deadline = time.monotonic() + timeout_sec
+    last: tuple[Capture, list[ControlCandidate], ControlCandidate | None] | None = None
+    stable_rect: tuple[int, int, int, int] | None = None
+    while True:
+        capture = capture_active_monitor()
+        candidates = collect_control_candidates(capture, timeout_ms=1500, limit=160)
+        target = _find_target_candidate(candidates, title=title)
+        last = (capture, candidates, target)
+        if target is not None:
+            if stable_rect == target.rect:
+                return capture, candidates, target
+            stable_rect = target.rect
+        if time.monotonic() >= deadline:
+            return last
+        time.sleep(0.15)
 
 
 def _decision_for_candidate(capture: Capture, candidate: ControlCandidate):
@@ -188,8 +288,14 @@ def _norm_rect(
     )
 
 
-def _find_target_candidate(candidates: list[ControlCandidate]) -> ControlCandidate | None:
+def _find_target_candidate(
+    candidates: list[ControlCandidate],
+    *,
+    title: str = "",
+) -> ControlCandidate | None:
     for candidate in candidates:
+        if title and title not in candidate.window_title:
+            continue
         if TARGET_TEXT.lower() in candidate.descriptor.lower():
             return candidate
     return None
@@ -204,6 +310,7 @@ def _write_artifacts(
     diagnostic: dict[str, Any] | None = None,
     target_candidate: ControlCandidate | None = None,
     overlay_rect: tuple[int, int, int, int] | None = None,
+    manifest: dict[str, Any] | None = None,
 ) -> None:
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     image = Image.open(io.BytesIO(capture.png_bytes)).convert("RGB")
@@ -220,11 +327,32 @@ def _write_artifacts(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    (artifacts_dir / "candidates.json").write_text(
+        json.dumps(
+            {
+                "candidate_count": len(candidates),
+                "candidates": [_candidate_payload(candidate) for candidate in candidates],
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    if manifest is not None:
+        (artifacts_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     if diagnostic is not None:
         (artifacts_dir / "diagnostic.json").write_text(
             json.dumps(diagnostic, indent=2, sort_keys=True),
             encoding="utf-8",
         )
+    crop_rect = overlay_rect or (target_candidate.rect if target_candidate else None)
+    if crop_rect is not None:
+        box = _clip_box(screen_rect_to_image_box(capture, crop_rect), image.size)
+        if box is not None:
+            image.crop(box).save(artifacts_dir / "target_crop.png")
 
 
 def _failure_summary(
@@ -258,6 +386,34 @@ def _candidate_payload(candidate: ControlCandidate) -> dict[str, Any]:
     }
 
 
+def _manifest(title: str) -> dict[str, Any]:
+    return {
+        "window_title": title,
+        "expected_controls": [
+            {"text": TARGET_TEXT, "automation_id": "helperPrecisionSave", "role": "button", "required": True},
+            {"text": "Cancel", "automation_id": "helperPrecisionCancel", "role": "button", "required": False},
+            {"text": "Project name", "automation_id": "helperPrecisionName", "role": "edit", "required": False},
+            {"text": "Enable precision mode", "automation_id": "helperPrecisionCheckbox", "role": "checkbox", "required": False},
+            {"text": "Duplicate", "automation_id": "helperPrecisionDuplicateA", "role": "button", "required": False},
+            {"text": "Duplicate", "automation_id": "helperPrecisionDuplicateB", "role": "button", "required": False},
+            {"text": "", "automation_id": "helperPrecisionIconA", "role": "button", "required": False},
+            {"text": "", "automation_id": "helperPrecisionIconB", "role": "button", "required": False},
+        ],
+    }
+
+
+def _clip_box(
+    box: tuple[int, int, int, int],
+    size: tuple[int, int],
+) -> tuple[int, int, int, int] | None:
+    left, top, right, bottom = box
+    width, height = size
+    clipped = (max(0, left), max(0, top), min(width, right), min(height, bottom))
+    if clipped[2] <= clipped[0] or clipped[3] <= clipped[1]:
+        return None
+    return clipped
+
+
 def _process_events(app: QApplication, seconds: float) -> None:
     deadline = time.monotonic() + max(0.0, seconds)
     while True:
@@ -289,7 +445,10 @@ def _iou(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a live Help-mode precision self-test.")
     parser.add_argument("--artifacts", type=Path, default=Path("logs/help_precision_selftest/latest"))
+    parser.add_argument("--child-window", default="")
     args = parser.parse_args(argv)
+    if args.child_window:
+        return run_child_window(args.child_window)
     summary = run_selftest(artifacts_dir=args.artifacts)
     print(
         "Help precision self-test: "
@@ -303,4 +462,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
