@@ -168,10 +168,13 @@ Never include click_at, type_text_at, drag_and_drop, click_control. Clicking is 
 Rules:
 - ONE decision per turn. Do not list future steps.
 - Coordinates are normalized 0-1000 over the provided screenshot.
-- If the correct visible target is in the provided Visible clickable controls list, set target_id to that exact id.
+- If the correct visible target is in the provided Visible clickable controls list, set target_id to that exact id
+  AND include the same tight target rectangle from that list.
+- Only choose a target_id when the listed control's label, role, or screen position clearly matches your instruction.
 - If no listed control is the correct target but the target is clearly visible in the screenshot, leave target_id empty
   and provide a tight target rectangle.
-- If the needed target is not visible or you are not confident which listed control is correct, use narrate.
+- If the needed target is not visible, the listed controls disagree with the screenshot, or you are not confident which
+  exact control is correct, use narrate. It is better to explain than to point at a likely-wrong spot.
 - target must be a TIGHT bounding box around the EXACT clickable element. Typical size:
   width 20-120 / height 12-60 for a button or menu item; width 40-300 / height 16-40 for an input.
 - If the latest history note says the user clicked elsewhere or appears stuck, prefer "narrate" to
@@ -297,10 +300,13 @@ class HelpStep:
     helper_action: dict[str, Any] | None = None
 
     def screen_rect(self, capture: Capture) -> tuple[int, int, int, int]:
-        left_img = int(self.target_norm_x / 1000 * capture.width)
-        top_img = int(self.target_norm_y / 1000 * capture.height)
-        right_img = int((self.target_norm_x + self.target_norm_width) / 1000 * capture.width)
-        bottom_img = int((self.target_norm_y + self.target_norm_height) / 1000 * capture.height)
+        left_img, top_img, right_img, bottom_img = _clamped_image_rect(
+            self.target_norm_x,
+            self.target_norm_y,
+            self.target_norm_width,
+            self.target_norm_height,
+            capture,
+        )
         left, top = capture.to_screen_coords(left_img, top_img)
         right, bottom = capture.to_screen_coords(right_img, bottom_img)
         return left, top, max(8, right - left), max(8, bottom - top)
@@ -339,10 +345,13 @@ class LiveHelpDecision:
         return self.target_norm_width > 0 and self.target_norm_height > 0
 
     def screen_rect(self, capture: Capture) -> tuple[int, int, int, int]:
-        left_img = int(self.target_norm_x / 1000 * capture.width)
-        top_img = int(self.target_norm_y / 1000 * capture.height)
-        right_img = int((self.target_norm_x + self.target_norm_width) / 1000 * capture.width)
-        bottom_img = int((self.target_norm_y + self.target_norm_height) / 1000 * capture.height)
+        left_img, top_img, right_img, bottom_img = _clamped_image_rect(
+            self.target_norm_x,
+            self.target_norm_y,
+            self.target_norm_width,
+            self.target_norm_height,
+            capture,
+        )
         left, top = capture.to_screen_coords(left_img, top_img)
         right, bottom = capture.to_screen_coords(right_img, bottom_img)
         return left, top, max(8, right - left), max(8, bottom - top)
@@ -371,6 +380,52 @@ class LimitExceeded(RuntimeError):
     def __init__(self, message: str, *, kind: str) -> None:
         super().__init__(message)
         self.kind = kind
+
+
+def _clamped_image_rect(
+    norm_x: int,
+    norm_y: int,
+    norm_width: int,
+    norm_height: int,
+    capture: Capture,
+) -> tuple[int, int, int, int]:
+    width = max(1, capture.width)
+    height = max(1, capture.height)
+    left = int(norm_x / 1000 * width)
+    top = int(norm_y / 1000 * height)
+    right = int((norm_x + norm_width) / 1000 * width)
+    bottom = int((norm_y + norm_height) / 1000 * height)
+    left = max(0, min(width - 1, left))
+    top = max(0, min(height - 1, top))
+    right = max(left + 1, min(width, right))
+    bottom = max(top + 1, min(height, bottom))
+    return left, top, right, bottom
+
+
+def _with_control_candidates(
+    messages: list[dict[str, Any]],
+    control_candidates: list[ControlCandidate],
+    capture: Capture,
+) -> list[dict[str, Any]]:
+    candidate_text = format_candidates_for_prompt(control_candidates, capture)
+    copied = [
+        {
+            **message,
+            "parts": [dict(part) for part in message.get("parts", [])],
+        }
+        for message in messages
+    ]
+    for message in reversed(copied):
+        if message.get("role") == "user":
+            message.setdefault("parts", []).append({"text": candidate_text})
+            return copied
+    return [
+        *copied,
+        {
+            "role": "user",
+            "parts": [{"text": candidate_text}],
+        },
+    ]
 
 
 class HelplerAgent:
@@ -419,20 +474,7 @@ class HelplerAgent:
         """
         messages = history.build_messages()
         if control_candidates is not None and capture is not None:
-            messages = [
-                *messages,
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": format_candidates_for_prompt(
-                                control_candidates,
-                                capture,
-                            )
-                        }
-                    ],
-                },
-            ]
+            messages = _with_control_candidates(messages, control_candidates, capture)
         result = self._client.chat(
             messages,
             model=REASONING_MODEL,
@@ -874,8 +916,6 @@ def _parse_help_step(raw: dict[str, Any]) -> HelpStep | None:
     norm_h = _coerce_norm(target.get("height"))
     if None in (norm_x, norm_y, norm_w, norm_h):
         return None
-    norm_w = max(20, norm_w)
-    norm_h = max(20, norm_h)
     if norm_w * norm_h > 400_000:
         log.warning(
             "Help step target rect is suspiciously large (%dx%d normalized): %s",
@@ -944,10 +984,7 @@ def _parse_live_help_decision(text: str) -> LiveHelpDecision:
         has_rect = None not in (norm_x, norm_y, norm_w, norm_h)
         if not target_id and not has_rect:
             return LiveHelpDecision(kind="narrate", message=instruction, helper_action=helper_action)
-        if has_rect:
-            norm_w = max(20, norm_w)
-            norm_h = max(20, norm_h)
-        else:
+        if not has_rect:
             norm_x = norm_y = norm_w = norm_h = 0
         return LiveHelpDecision(
             kind="step",

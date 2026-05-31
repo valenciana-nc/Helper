@@ -183,6 +183,41 @@ class SnapToControlTests(unittest.TestCase):
         )
         self.assertEqual(result.source, "model")
 
+    def test_skips_disabled_or_hidden_controls(self) -> None:
+        from rect_snap import snap_to_control
+
+        disabled = _make_button("Submit", 100, 200, 60, 30)
+        disabled.element_info.enabled = False
+        hidden = _make_button("Submit", 110, 200, 60, 30)
+        hidden.element_info.visible = False
+        window = _make_window("App", 0, 0, 800, 600, [disabled, hidden])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 60, 30),
+            "Click Submit",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        self.assertEqual(result.source, "model")
+
+    def test_semantic_mismatch_does_not_snap_wrong_labeled_control(self) -> None:
+        from rect_snap import snap_to_control
+
+        cancel = _make_button("Cancel", 100, 200, 60, 30)
+        window = _make_window("App", 0, 0, 800, 600, [cancel])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 200, 60, 30)
+
+        result = snap_to_control(
+            model_rect,
+            "Click Submit",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        self.assertEqual(result.source, "model")
+        self.assertEqual(result.rect, model_rect)
+
     def test_factory_failure_falls_back_cleanly(self) -> None:
         from rect_snap import snap_to_control
 
@@ -291,7 +326,7 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertIn("Submit", prompt)
         self.assertIn("norm=(100,200,50,50)", prompt)
 
-    def test_resolve_exact_target_id_wins(self) -> None:
+    def test_resolve_exact_target_id_wins_when_semantically_compatible(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
         candidates = [
@@ -301,7 +336,7 @@ class ControlInventoryTests(unittest.TestCase):
 
         result = resolve_candidate_target(
             target_id="c002",
-            instruction="Click Cancel.",
+            instruction="Click Submit.",
             candidates=candidates,
         )
 
@@ -309,6 +344,74 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rect, (100, 10, 60, 30))
+        self.assertFalse(result.rejected_reason)
+
+    def test_target_id_semantic_mismatch_is_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click Cancel.",
+            candidates=[
+                ControlCandidate("c001", "Cancel", "button", (10, 10, 60, 30)),
+                ControlCandidate("c002", "Submit", "button", (100, 10, 60, 30)),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
+
+    def test_target_id_duplicate_label_without_geometry_is_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30)),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30)),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
+    def test_target_id_duplicate_label_with_geometry_is_accepted(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30)),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30)),
+            ],
+            model_rect=(298, 8, 64, 34),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (300, 10, 60, 30))
+
+    def test_unlabeled_target_id_with_nearby_unlabeled_competitor_is_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Click this button.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (100, 10, 32, 32)),
+                ControlCandidate("c002", "", "button", (140, 10, 32, 32)),
+            ],
+            model_rect=(140, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "target_id ambiguous unlabeled control")
 
     def test_resolve_text_match_beats_nearby_wrong_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -355,6 +458,249 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.rejected_reason, "unknown target_id")
+
+    def test_ambiguous_text_match_returns_rejected_resolution(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30)),
+                ControlCandidate("c002", "Save", "button", (100, 10, 60, 30)),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "ambiguous text match")
+
+    def test_norm_rect_clips_partially_offscreen_candidate(self) -> None:
+        from control_inventory import collect_control_candidates, format_candidates_for_prompt
+
+        button = _make_button("Edge", -20, 120, 60, 30)
+        window = _make_window("App", -40, 0, 200, 600, [button])
+        desktop = _FakeDesktop([window])
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        prompt = format_candidates_for_prompt(candidates, self._capture())
+
+        self.assertIn("Edge", prompt)
+        self.assertIn("norm=(0,200,50,50)", prompt)
+
+    def test_collect_prefers_tighter_child_over_matching_container(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        child = _make_button("Save", 120, 120, 50, 24)
+        parent = _FakeControl(
+            text="Save",
+            control_type="Button",
+            rect=_FakeRect(100, 100, 240, 180),
+            children=[child],
+        )
+        window = _make_window("App", 0, 0, 800, 600, [parent])
+        desktop = _FakeDesktop([window])
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].rect, (120, 120, 50, 24))
+
+    def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[ControlCandidate("c001", "Save", "button", (100, 100, 50, 24))],
+            model_rect=(96, 96, 60, 30),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.rect, (100, 100, 50, 24))
+
+
+class HelpTargetHarnessTests(unittest.TestCase):
+    def _capture(self):
+        from screen import Capture
+
+        return Capture(
+            png_bytes=b"png",
+            width=1000,
+            height=1000,
+            monitor_left=0,
+            monitor_top=0,
+            scale=1.0,
+        )
+
+    def _decision(self, payload: dict):
+        from agent import _parse_live_help_decision
+        import json
+
+        return _parse_live_help_decision(json.dumps(payload))
+
+    def test_target_id_uses_candidate_rect_not_model_rect(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
+                    "target": {"x": 100, "y": 150, "width": 120, "height": 60},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Save", "button", (120, 160, 80, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_wrong_target_id_recovers_by_text_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c002",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Save", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Cancel", "button", (260, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+
+    def test_unknown_target_id_without_rect_downgrades_no_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c999",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Save", "button", (120, 160, 80, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "unknown target_id")
+
+    def test_unknown_target_id_with_rect_does_not_fall_back_to_raw_model_rect(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c999",
+                    "target": {"x": 400, "y": 400, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Cancel", "button", (120, 160, 80, 32))],
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "unknown target_id")
+
+    def test_model_rect_snaps_to_candidate_snapshot_without_fresh_uia(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        calls: list[bool] = []
+
+        def snapper(_rect, _instruction):
+            calls.append(True)
+            raise AssertionError("fresh UIA snapper should not be called")
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this button.",
+                    "target": {"x": 105, "y": 155, "width": 105, "height": 50},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Save", "button", (120, 160, 80, 32))],
+            snapper=snapper,
+        )
+
+        self.assertFalse(calls)
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_oversized_model_rect_is_rejected(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the button.",
+                    "target": {"x": 100, "y": 100, "width": 600, "height": 300},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, _instruction: SnapResult(
+                rect=rect,
+                confidence=0.0,
+                source="model",
+            ),
+        )
+
+        self.assertEqual(target.source, "model")
+        self.assertEqual(target.rejected_reason, "oversized target")
+
+    def test_partially_offscreen_candidate_is_clipped_before_display(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Edge.",
+                    "target_id": "c001",
+                    "target": {"x": 0, "y": 120, "width": 40, "height": 30},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Edge", "button", (-20, 120, 60, 30))],
+        )
+
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (0, 120, 40, 30))
 
 
 class LooksOversizedTests(unittest.TestCase):

@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+import io
+import unittest
+
+from PIL import Image, ImageDraw
+
+from screen import Capture
+
+
+def _capture_with_image(img: Image.Image, *, scale: float = 1.0) -> Capture:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Capture(
+        png_bytes=buf.getvalue(),
+        width=img.width,
+        height=img.height,
+        monitor_left=0,
+        monitor_top=0,
+        scale=scale,
+    )
+
+
+class TargetQualityTests(unittest.TestCase):
+    def test_rejects_low_confidence_model_rect_on_blank_space(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (200, 120), "white"))
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 60, 30),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears visually empty")
+
+    def test_accepts_structured_model_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (200, 120), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 30, 100, 60), outline="black", fill="#f3f4f6")
+        draw.text((52, 38), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 60, 30),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertTrue(quality.accepted)
+        self.assertGreaterEqual(quality.visual_activity, 0.035)
+
+    def test_rejects_mostly_outside_capture(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (200, 120), "white"))
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(180, 20, 100, 30),
+            source="target_id",
+            confidence=1.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target mostly outside capture")
+
+
+if __name__ == "__main__":
+    unittest.main()
+

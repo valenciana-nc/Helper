@@ -296,7 +296,7 @@ class AgentTests(unittest.TestCase):
 
     def test_chat_route_does_not_capture_screenshot(self) -> None:
         class Client:
-            def chat(self, messages, *, model, system_prompt=None):  # noqa: ANN001
+            def chat(self, messages, *, model, system_prompt=None, **_kwargs):  # noqa: ANN001
                 self.messages = messages
                 return ChatResult(text="hello", tool_calls=[])
 
@@ -392,7 +392,7 @@ class AgentTests(unittest.TestCase):
         )
 
         class Client:
-            def computer_use_step(self, messages, *, model, system_prompt=None):  # noqa: ANN001
+            def computer_use_step(self, messages, *, model, system_prompt=None, **_kwargs):  # noqa: ANN001
                 return ChatResult(
                     text="",
                     tool_calls=[
@@ -446,7 +446,7 @@ class AgentTests(unittest.TestCase):
         )
 
         class Client:
-            def chat(self, messages, *, model, system_prompt=None):  # noqa: ANN001
+            def chat(self, messages, *, model, system_prompt=None, **_kwargs):  # noqa: ANN001
                 self.messages = messages
                 return ChatResult(
                     text=json.dumps(
@@ -473,7 +473,9 @@ class AgentTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.target_id, "c001")
-        prompt_text = client.messages[-1]["parts"][0]["text"]
+        latest_parts = client.messages[-1]["parts"]
+        prompt_text = latest_parts[-1]["text"]
+        self.assertTrue(any("image_png" in part for part in latest_parts))
         self.assertIn("Visible clickable controls", prompt_text)
         self.assertIn("c001", prompt_text)
 
@@ -787,7 +789,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         self.assertEqual(decision.target_id, "c001")
         self.assertFalse(decision.has_target_rect)
 
-    def test_step_enforces_minimum_rect_size(self) -> None:
+    def test_step_preserves_tiny_target_geometry(self) -> None:
         from agent import _parse_live_help_decision
 
         payload = json.dumps(
@@ -799,8 +801,8 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         )
         decision = _parse_live_help_decision(payload)
         self.assertEqual(decision.kind, "step")
-        self.assertGreaterEqual(decision.target_norm_width, 20)
-        self.assertGreaterEqual(decision.target_norm_height, 20)
+        self.assertEqual(decision.target_norm_width, 2)
+        self.assertEqual(decision.target_norm_height, 3)
 
     def test_done_decision(self) -> None:
         from agent import _parse_live_help_decision
@@ -909,6 +911,31 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         )
         rect = decision.screen_rect(capture)
         self.assertEqual(rect, (150, 120, 100, 100))
+
+    def test_screen_rect_clamps_right_bottom_to_capture_bounds(self) -> None:
+        from agent import _parse_live_help_decision
+
+        decision = _parse_live_help_decision(
+            json.dumps(
+                {
+                    "kind": "step",
+                    "instruction": "Click the edge.",
+                    "target": {"x": 980, "y": 990, "width": 80, "height": 50},
+                }
+            )
+        )
+        capture = Capture(
+            png_bytes=_png_bytes(),
+            width=1000,
+            height=1000,
+            monitor_left=50,
+            monitor_top=20,
+            scale=2.0,
+        )
+
+        rect = decision.screen_rect(capture)
+
+        self.assertEqual(rect, (540, 515, 10, 8))
 
 
 @unittest.skipUnless(

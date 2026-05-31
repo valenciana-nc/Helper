@@ -18,6 +18,7 @@ log = logging.getLogger("helper.rect_snap")
 DEFAULT_TIMEOUT_MS = 400
 SEARCH_MARGIN_PX = 60
 CONFIDENCE_FLOOR = 0.42
+SEMANTIC_MISMATCH_CAP = 0.41
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -49,10 +50,26 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "button", "icon", "link", "tab", "menu", "item", "field", "input",
         "open", "type", "enter", "into",
+        "near", "beside", "nearby", "under", "above", "below",
+        "top", "bottom", "left", "right", "upper", "lower",
+        "middle", "center", "corner", "side",
     }
 )
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_TOKEN_ALIASES = {
+    "cog": {"settings"},
+    "gear": {"settings"},
+    "magnifier": {"search"},
+    "magnifying": {"search"},
+    "lens": {"search"},
+    "ellipsis": {"more", "options", "menu"},
+    "dot": {"more", "options", "menu"},
+    "dots": {"more", "options", "menu"},
+    "trash": {"delete", "remove"},
+    "bin": {"delete", "remove"},
+    "plus": {"add", "new", "create"},
+}
 _MAX_BFS_DEPTH = 8
 
 
@@ -99,6 +116,8 @@ def snap_to_control(
     for control, rect in _iter_candidates(desktop, search_rect, deadline):
         ctype = _control_type(control)
         if ctype not in CLICKABLE_CONTROL_TYPES:
+            continue
+        if not _is_enabled(control) or not _is_visible(control):
             continue
         text = _control_text(control)
         score = _score(
@@ -231,9 +250,35 @@ def _control_text(control) -> str:
     return " | ".join(parts)
 
 
+def _is_enabled(control) -> bool:
+    try:
+        return bool(control.is_enabled())
+    except Exception:
+        try:
+            value = getattr(control.element_info, "enabled", None)
+        except Exception:
+            value = None
+        return True if value is None else bool(value)
+
+
+def _is_visible(control) -> bool:
+    try:
+        return bool(control.is_visible())
+    except Exception:
+        try:
+            value = getattr(control.element_info, "visible", None)
+        except Exception:
+            value = None
+        return True if value is None else bool(value)
+
+
 def _tokenize_instruction(instruction: str) -> set[str]:
     tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
-    return {t for t in tokens if t not in _INSTRUCTION_STOPWORDS and len(t) > 1}
+    filtered = {t for t in tokens if t not in _INSTRUCTION_STOPWORDS and len(t) > 1}
+    expanded = set(filtered)
+    for token in filtered:
+        expanded.update(_TOKEN_ALIASES.get(token, set()))
+    return expanded
 
 
 def _tokenize_control(text: str) -> set[str]:
@@ -257,9 +302,9 @@ def _score(
     proximity = max(0.0, 1.0 - min(1.0, distance / diagonal))
 
     control_tokens = _tokenize_control(text)
+    overlap = instruction_tokens & control_tokens
     if instruction_tokens and control_tokens:
-        overlap = len(instruction_tokens & control_tokens)
-        text_score = overlap / max(1, len(instruction_tokens))
+        text_score = len(overlap) / max(1, len(instruction_tokens))
     else:
         text_score = 0.0
 
@@ -277,12 +322,15 @@ def _score(
     else:
         type_score = 0.3
 
-    return (
+    score = (
         SCORE_WEIGHT_IOU * iou
         + SCORE_WEIGHT_PROXIMITY * proximity
         + SCORE_WEIGHT_TEXT * text_score
         + SCORE_WEIGHT_TYPE * type_score
     )
+    if instruction_tokens and control_tokens and not overlap:
+        return min(score, SEMANTIC_MISMATCH_CAP)
+    return score
 
 
 def _iou(

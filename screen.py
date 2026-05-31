@@ -1,5 +1,6 @@
 import ctypes
 import io
+import os
 from ctypes import wintypes
 from dataclasses import dataclass
 
@@ -7,6 +8,8 @@ import mss
 from PIL import Image
 
 from config import SCREENSHOT_MAX_EDGE
+
+_LAST_FOREGROUND_MONITOR: dict[str, int] | None = None
 
 
 def set_dpi_aware() -> None:
@@ -85,22 +88,48 @@ def capture_active_monitor(max_edge: int = SCREENSHOT_MAX_EDGE) -> Capture:
 
 
 def _active_monitor_dict() -> dict[str, int] | None:
+    global _LAST_FOREGROUND_MONITOR
     user32 = ctypes.windll.user32
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
-        return None
+        return _LAST_FOREGROUND_MONITOR
+    if _is_own_process_window(hwnd):
+        return _LAST_FOREGROUND_MONITOR or _cursor_monitor_dict()
     rect = wintypes.RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-        return None
+        return _LAST_FOREGROUND_MONITOR or _cursor_monitor_dict()
     cx = (rect.left + rect.right) // 2
     cy = (rect.top + rect.bottom) // 2
+    monitor = _monitor_containing_point(cx, cy)
+    if monitor is not None:
+        _LAST_FOREGROUND_MONITOR = monitor
+    return monitor or _LAST_FOREGROUND_MONITOR or _cursor_monitor_dict()
+
+
+def _is_own_process_window(hwnd: int) -> bool:
+    pid = wintypes.DWORD()
+    try:
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    except Exception:
+        return False
+    return int(pid.value) == os.getpid()
+
+
+def _cursor_monitor_dict() -> dict[str, int] | None:
+    point = wintypes.POINT()
+    if not ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+        return None
+    return _monitor_containing_point(int(point.x), int(point.y))
+
+
+def _monitor_containing_point(x: int, y: int) -> dict[str, int] | None:
     with mss.mss() as sct:
         for monitor in sct.monitors[1:]:
             left = monitor["left"]
             top = monitor["top"]
             right = left + monitor["width"]
             bottom = top + monitor["height"]
-            if left <= cx < right and top <= cy < bottom:
+            if left <= x < right and top <= y < bottom:
                 return dict(monitor)
     return None
 

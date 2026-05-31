@@ -1526,6 +1526,7 @@ class HelplerDesktopApp(QObject):
         height: int,
         label: str,
     ) -> None:
+        self._ghost_cursor.animate_to(x + width // 2, y + height // 2, label)
         self._overlay.show_highlight(x, y, width, height, label, 0)
 
     def _on_help_session_finished(self, _summary: str) -> None:

@@ -37,6 +37,35 @@ class OverlayHighlight:
         return QRect(self.x, self.y, self.width, self.height)
 
 
+def local_highlight_rect(highlight_rect: QRect, screen_geometry: QRect) -> QRect | None:
+    if not screen_geometry.intersects(highlight_rect):
+        return None
+    return highlight_rect.translated(-screen_geometry.x(), -screen_geometry.y())
+
+
+def place_label_rect(
+    target_rect: QRect,
+    *,
+    label_width: int,
+    label_height: int,
+    surface_width: int,
+    surface_height: int,
+    margin: int = 8,
+    gap: int = 10,
+) -> QRect:
+    x = target_rect.left()
+    y = target_rect.top() - label_height - gap
+    if y < margin:
+        y = target_rect.bottom() + gap
+    if y + label_height > surface_height - margin:
+        y = max(margin, surface_height - label_height - margin)
+    if x + label_width > surface_width - margin:
+        x = surface_width - label_width - margin
+    if x < margin:
+        x = margin
+    return QRect(x, y, label_width, label_height)
+
+
 class OverlayWindow(QWidget):
     def __init__(self, screen) -> None:
         super().__init__(None)
@@ -62,7 +91,7 @@ class OverlayWindow(QWidget):
         self._sync_to_screen()
         geometry = self.geometry()
         self._highlights = [
-            item for item in highlights if geometry.intersects(item.rect)
+            item for item in highlights if local_highlight_rect(item.rect, geometry) is not None
         ]
         if self._highlights:
             self.show()
@@ -100,8 +129,7 @@ class OverlayWindow(QWidget):
                 )
 
     def _to_local(self, rect: QRect) -> QRect:
-        geometry = self.geometry()
-        return rect.translated(-geometry.x(), -geometry.y())
+        return local_highlight_rect(rect, self.geometry()) or QRect()
 
     def _draw_label(
         self,
@@ -123,16 +151,13 @@ class OverlayWindow(QWidget):
         label_width = metrics.horizontalAdvance(text) + padding_x * 2
         label_height = metrics.height() + padding_y * 2
 
-        x = rect.left()
-        y = rect.top() - label_height - 10
-        if y < 8:
-            y = rect.bottom() + 10
-        if x + label_width > self.width() - 8:
-            x = self.width() - label_width - 8
-        if x < 8:
-            x = 8
-
-        label_rect = QRect(x, y, label_width, label_height)
+        label_rect = place_label_rect(
+            rect,
+            label_width=label_width,
+            label_height=label_height,
+            surface_width=self.width(),
+            surface_height=self.height(),
+        )
         painter.setPen(QPen(outline, 2))
         painter.setBrush(label_bg)
         painter.drawRoundedRect(label_rect, 10, 10)
