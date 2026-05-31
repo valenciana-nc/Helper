@@ -198,6 +198,21 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "overlay_emitted": False,
             },
         },
+        {
+            "name": "overflowing_model_rect_does_not_draw_edge_overlay",
+            "capture": {"width": 500, "height": 320},
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the edge.",
+                "target": {"x": 980, "y": 990, "width": 80, "height": 50},
+            },
+            "candidates": [],
+            "expected": {
+                "source": "none",
+                "rejected_reason": "no resolvable target",
+                "overlay_emitted": False,
+            },
+        },
     ]
 
 

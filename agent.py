@@ -917,6 +917,8 @@ def _parse_help_step(raw: dict[str, Any]) -> HelpStep | None:
     norm_h = _coerce_norm(target.get("height"))
     if None in (norm_x, norm_y, norm_w, norm_h):
         return None
+    if not _valid_norm_rect(norm_x, norm_y, norm_w, norm_h):
+        return None
     if norm_w * norm_h > 400_000:
         log.warning(
             "Help step target rect is suspiciously large (%dx%d normalized): %s",
@@ -983,6 +985,8 @@ def _parse_live_help_decision(text: str) -> LiveHelpDecision:
             norm_w = _coerce_norm(target.get("width"))
             norm_h = _coerce_norm(target.get("height"))
         has_rect = None not in (norm_x, norm_y, norm_w, norm_h)
+        if has_rect and not _valid_norm_rect(norm_x, norm_y, norm_w, norm_h):
+            has_rect = False
         if not target_id and not has_rect:
             return LiveHelpDecision(kind="narrate", message=instruction, helper_action=helper_action)
         if not has_rect:
@@ -1042,6 +1046,12 @@ def _coerce_norm(value: Any) -> int | None:
     if not 0 <= parsed <= 1000:
         return None
     return parsed
+
+
+def _valid_norm_rect(x: int, y: int, width: int, height: int) -> bool:
+    if width <= 0 or height <= 0:
+        return False
+    return x + width <= 1000 and y + height <= 1000
 
 
 def _print_turn(turn: GuideTurn) -> None:

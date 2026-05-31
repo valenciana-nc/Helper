@@ -791,7 +791,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
             {
                 "kind": "step",
                 "instruction": "Click the Start button.",
-                "target": {"x": 10, "y": 980, "width": 40, "height": 40},
+                "target": {"x": 10, "y": 960, "width": 40, "height": 40},
                 "expected_change": "Start menu opens.",
             }
         )
@@ -799,7 +799,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         self.assertEqual(decision.kind, "step")
         self.assertEqual(decision.instruction, "Click the Start button.")
         self.assertEqual(decision.target_norm_x, 10)
-        self.assertEqual(decision.target_norm_y, 980)
+        self.assertEqual(decision.target_norm_y, 960)
         self.assertEqual(decision.target_norm_width, 40)
         self.assertEqual(decision.target_norm_height, 40)
         self.assertEqual(decision.expected_change, "Start menu opens.")
@@ -909,6 +909,38 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         self.assertEqual(decision.target_id, "c001")
         self.assertFalse(decision.has_target_rect)
 
+    def test_step_with_overflowing_rect_falls_back_to_narrate(self) -> None:
+        from agent import _parse_live_help_decision
+
+        decision = _parse_live_help_decision(
+            json.dumps(
+                {
+                    "kind": "step",
+                    "instruction": "Click the edge.",
+                    "target": {"x": 980, "y": 990, "width": 80, "height": 50},
+                }
+            )
+        )
+        self.assertEqual(decision.kind, "narrate")
+        self.assertEqual(decision.message, "Click the edge.")
+
+    def test_step_with_target_id_ignores_overflowing_rect(self) -> None:
+        from agent import _parse_live_help_decision
+
+        decision = _parse_live_help_decision(
+            json.dumps(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
+                    "target": {"x": 980, "y": 990, "width": 80, "height": 50},
+                }
+            )
+        )
+        self.assertEqual(decision.kind, "step")
+        self.assertEqual(decision.target_id, "c001")
+        self.assertFalse(decision.has_target_rect)
+
     def test_garbage_input_falls_back_to_narrate(self) -> None:
         from agent import _parse_live_help_decision
 
@@ -975,7 +1007,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
         rect = decision.screen_rect(capture)
         self.assertEqual(rect, (150, 120, 100, 100))
 
-    def test_screen_rect_clamps_right_bottom_to_capture_bounds(self) -> None:
+    def test_screen_rect_preserves_valid_edge_target(self) -> None:
         from agent import _parse_live_help_decision
 
         decision = _parse_live_help_decision(
@@ -983,7 +1015,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
                 {
                     "kind": "step",
                     "instruction": "Click the edge.",
-                    "target": {"x": 980, "y": 990, "width": 80, "height": 50},
+                    "target": {"x": 960, "y": 980, "width": 40, "height": 20},
                 }
             )
         )
@@ -998,7 +1030,7 @@ class ParseLiveHelpDecisionTests(unittest.TestCase):
 
         rect = decision.screen_rect(capture)
 
-        self.assertEqual(rect, (540, 515, 10, 8))
+        self.assertEqual(rect, (530, 510, 20, 10))
 
 
 @unittest.skipUnless(
