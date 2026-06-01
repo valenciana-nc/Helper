@@ -1938,6 +1938,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "select_yes_wrong_target_id_recovers_to_radio",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Yes"},
+                {"rect": [140, 80, 80, 32], "label": "Yes"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Yes.",
+                "target_id": "c002",
+                "target": {"x": 140, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Yes", "control_type": "radiobutton", "rect": [20, 80, 80, 32]},
+                {"id": "c002", "text": "Yes", "control_type": "button", "rect": [140, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "country_select_wrong_target_id_recovers_to_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Country"},
+                {"rect": [240, 80, 100, 32], "label": "Country"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Country select.",
+                "target_id": "c002",
+                "target": {"x": 240, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Country", "control_type": "combobox", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Country", "control_type": "button", "rect": [240, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "check_for_updates_button_remains_clickable",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2250,6 +2298,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Message sent", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "resolve_alert_target_id_rejects_resolved_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Alert resolved"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Resolve alert.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Alert resolved", "control_type": "button", "rect": [20, 80, 180, 32]},
             ],
             "expected": {
                 "source": "target_id",
@@ -2891,6 +2960,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Search results", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "go_back_rejects_backup_sync_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Back up and sync"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go back.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Back up and sync", "control_type": "button", "rect": [20, 80, 180, 32]},
             ],
             "expected": {
                 "source": "candidate_snap",
@@ -4168,6 +4258,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "copy_selected_text_accepts_copy_toolbar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Copy"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Copy selected text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Copy", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "paste_selected_text_accepts_paste_toolbar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Paste"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste selected text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Paste", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "cut_action_target_id_accepts_scissors_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4415,6 +4547,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Italic text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "I", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "italicize_selected_text_accepts_italic_toolbar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "I"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Italicize selected text.",
                 "target_id": "c001",
             },
             "candidates": [
@@ -6357,6 +6510,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "audio_settings_rejects_taskbar_volume_status_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Volume 24%"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open audio settings.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Volume Speakers (Realtek(R) Audio): 24%",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "lock_action_target_id_accepts_padlock_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7730,6 +7912,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c002",
                 "rect": [300, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_settings_prefers_visible_settings_over_chrome_menu",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Chrome"},
+                {"rect": [160, 80, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open settings.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Settings - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Settings",
+                    "control_type": "button",
+                    "rect": [160, 80, 100, 32],
+                    "window_title": "Settings - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [160, 80, 100, 32],
                 "overlay_emitted": True,
             },
         },

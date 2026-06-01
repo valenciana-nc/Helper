@@ -295,11 +295,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         bold_intents = instruction_control_intents("Bold text")
         click_b_intents = instruction_control_intents("Click B")
+        italicize_intents = instruction_control_intents("Italicize selected text")
+        copy_intents = instruction_control_intents("Copy selected text")
+        paste_intents = instruction_control_intents("Paste selected text")
         remove_formatting_tokens = tokenize_instruction("Remove formatting")
 
         self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Bold text")))
         self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Click B")))
         self.assertTrue({"i", "italic"}.issubset(tokenize_instruction("Italic text")))
+        self.assertTrue({"i", "italic"}.issubset(tokenize_instruction("Italicize selected text")))
         self.assertTrue({"u", "underline"}.issubset(tokenize_instruction("Underline text")))
         self.assertTrue({"clear", "formatting"}.issubset(remove_formatting_tokens))
         self.assertFalse(
@@ -315,7 +319,13 @@ class HelpIntentLanguageTests(unittest.TestCase):
         )
         self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(bold_intents))
         self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(click_b_intents))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(italicize_intents))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(copy_intents))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(paste_intents))
         self.assertNotIn("edit", bold_intents)
+        self.assertNotIn("edit", italicize_intents)
+        self.assertNotIn("edit", copy_intents)
+        self.assertNotIn("edit", paste_intents)
         self.assertIn("undo", tokenize_control("\u21b6"))
         self.assertIn("redo", tokenize_control("\u21b7"))
         self.assertIn("undo", tokenize_control("Ctrl+Z"))
@@ -953,11 +963,18 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         date_picker_intents = instruction_control_intents("Open the date picker")
         country_selector_intents = instruction_control_intents("Open the country selector")
+        country_select_intents = instruction_control_intents("Open Country select.")
+        select_yes_intents = instruction_control_intents("Select Yes.")
 
         self.assertTrue(
             {"button", "splitbutton", "edit", "combobox"}.issubset(date_picker_intents)
         )
         self.assertEqual(country_selector_intents, {"combobox"})
+        self.assertIn("combobox", country_select_intents)
+        self.assertNotIn("button", country_select_intents)
+        self.assertNotIn("radiobutton", country_select_intents)
+        self.assertIn("radiobutton", select_yes_intents)
+        self.assertNotIn("button", select_yes_intents)
 
     def test_iconic_disclosure_and_menu_launcher_intents(self) -> None:
         from help_intents import instruction_control_intents, menu_segment_intent
@@ -2615,6 +2632,7 @@ class SnapToControlTests(unittest.TestCase):
             ("Go forward.", "Next song"),
             ("Go back.", "Previous track"),
             ("Go back.", "Previous song"),
+            ("Go back.", "Back up and sync"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -2680,6 +2698,8 @@ class SnapToControlTests(unittest.TestCase):
             ("Enable notifications.", "Notifications", (100, 200, 180, 32)),
             ("Pick Daily choice.", "Daily", (100, 200, 180, 32)),
             ("Choose Weekly option.", "Weekly", (100, 200, 180, 32)),
+            ("Select Yes.", "Yes", (100, 200, 180, 32)),
+            ("Open Country select.", "Country", (100, 200, 180, 32)),
         )
         for instruction, label, rect in cases:
             with self.subTest(instruction=instruction):
@@ -4487,6 +4507,8 @@ class ControlInventoryTests(unittest.TestCase):
             ("Enable notifications.", "Notifications"),
             ("Pick Daily choice.", "Daily"),
             ("Choose Weekly option.", "Weekly"),
+            ("Select Yes.", "Yes"),
+            ("Open Country select.", "Country"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction):
@@ -4566,22 +4588,38 @@ class ControlInventoryTests(unittest.TestCase):
     def test_choice_wording_text_match_prefers_radio_over_same_label_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
-        result = resolve_candidate_target(
-            target_id="",
-            instruction="Pick Daily choice.",
-            candidates=[
+        cases = (
+            (
+                "Pick Daily choice.",
                 ControlCandidate("c001", "Daily", "radiobutton", (10, 10, 180, 32)),
                 ControlCandidate("c002", "Daily", "button", (240, 10, 120, 32)),
-            ],
-            model_rect=(240, 10, 120, 32),
+            ),
+            (
+                "Select Yes.",
+                ControlCandidate("c001", "Yes", "radiobutton", (10, 10, 80, 32)),
+                ControlCandidate("c002", "Yes", "button", (240, 10, 80, 32)),
+            ),
+            (
+                "Open Country select.",
+                ControlCandidate("c001", "Country", "combobox", (10, 10, 180, 32)),
+                ControlCandidate("c002", "Country", "button", (240, 10, 120, 32)),
+            ),
         )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[expected, decoy],
+                    model_rect=decoy.rect,
+                )
 
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertEqual(result.source, "text_match")
-        self.assertEqual(result.target_id, "c001")
-        self.assertEqual(result.rect, (10, 10, 180, 32))
-        self.assertFalse(result.rejected_reason)
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "text_match")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rect, expected.rect)
+                self.assertFalse(result.rejected_reason)
 
     def test_check_for_updates_keeps_button_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -5343,6 +5381,7 @@ class ControlInventoryTests(unittest.TestCase):
             ("Go forward.", "Next song"),
             ("Go back.", "Previous track"),
             ("Go back.", "Previous song"),
+            ("Go back.", "Back up and sync"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -6052,6 +6091,8 @@ class ControlInventoryTests(unittest.TestCase):
             ("Enable notifications.", "Notifications"),
             ("Pick Daily choice.", "Daily"),
             ("Choose Weekly option.", "Weekly"),
+            ("Select Yes.", "Yes"),
+            ("Open Country select.", "Country"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction):
@@ -6684,26 +6725,47 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Pick Daily choice.",
-                    "target_id": "c002",
-                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
-                }
-            ),
-            self._capture(),
-            [
+        cases = (
+            (
+                "Pick Daily choice.",
                 ControlCandidate("c001", "Daily", "radiobutton", (120, 160, 160, 32)),
                 ControlCandidate("c002", "Daily", "button", (300, 160, 90, 32)),
-            ],
+            ),
+            (
+                "Select Yes.",
+                ControlCandidate("c001", "Yes", "radiobutton", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Yes", "button", (300, 160, 80, 32)),
+            ),
+            (
+                "Open Country select.",
+                ControlCandidate("c001", "Country", "combobox", (120, 160, 180, 32)),
+                ControlCandidate("c002", "Country", "button", (300, 160, 100, 32)),
+            ),
         )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": decoy.id,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
 
-        self.assertEqual(target.source, "text_match")
-        self.assertEqual(target.target_id, "c001")
-        self.assertEqual(target.rect, (120, 160, 160, 32))
-        self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertEqual(target.rect, expected.rect)
+                self.assertFalse(target.rejected_reason)
 
     def test_check_for_updates_model_rect_keeps_button_overlay(self) -> None:
         from control_inventory import ControlCandidate
@@ -7952,6 +8014,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
                 self.assertEqual(help_target.target_id, "button")
                 self.assertFalse(help_target.rejected_reason)
+
+    def test_generic_settings_prefers_visible_settings_over_chrome_menu(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        menu = ControlCandidate(
+            "menu",
+            "Chrome",
+            "button",
+            (960, 8, 32, 32),
+            window_title="Settings - Google Chrome",
+        )
+        settings = ControlCandidate(
+            "settings",
+            "Settings",
+            "button",
+            (500, 120, 100, 32),
+            window_title="Settings - Google Chrome",
+        )
+        candidates = [menu, settings]
+
+        target_id = resolve_candidate_target(
+            target_id="menu",
+            instruction="Open settings.",
+            candidates=candidates,
+            model_rect=menu.rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open settings.",
+            candidates=candidates,
+            model_rect=menu.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open settings.",
+                    "target_id": "menu",
+                    "target": {
+                        "x": menu.rect[0],
+                        "y": menu.rect[1],
+                        "width": menu.rect[2],
+                        "height": menu.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "settings")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.target_id, "settings")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_explicit_settings_tab_wording_still_accepts_browser_tab_title(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -11237,8 +11355,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Delete file.", "File deleted", "button"),
             ("Download report.", "Downloaded report", "button"),
             ("Download report.", "Report downloaded", "button"),
+            ("Dismiss notification.", "Dismissed notification", "button"),
             ("Install app.", "Installed app", "button"),
             ("Invite user.", "Invited user", "button"),
+            ("Fix issue.", "Fixed issue", "button"),
+            ("Resolve alert.", "Resolved alert", "button"),
             ("Save document.", "Saved document", "button"),
             ("Save document.", "Document saved", "button"),
             ("Send message.", "Sent message", "button"),
@@ -11525,6 +11646,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             ("Paste into the note.", "Clipboard", (120, 160, 110, 32)),
             ("Paste.", "\U0001f4cb", (120, 160, 32, 32)),
+            ("Copy selected text.", "Copy", (120, 160, 80, 32)),
+            ("Paste selected text.", "Paste", (120, 160, 80, 32)),
             ("Cut selection.", "Scissors", (120, 160, 100, 32)),
             ("Cut selection.", "\u2702", (120, 160, 32, 32)),
             ("Click scissors.", "Cut", (120, 160, 80, 32)),
@@ -11557,6 +11680,16 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Paste.",
                 ControlCandidate("c001", "Clipboard", "button", (120, 160, 110, 32)),
                 ControlCandidate("c002", "Export", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Copy selected text.",
+                ControlCandidate("c001", "Copy", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Paste selected text.",
+                ControlCandidate("c001", "Paste", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
             ),
             (
                 "Cut selection.",
@@ -11666,6 +11799,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Bold text.", "B", (120, 160, 32, 32)),
             ("Click B.", "B", (120, 160, 32, 32)),
             ("Italic text.", "I", (120, 160, 32, 32)),
+            ("Italicize selected text.", "I", (120, 160, 32, 32)),
             ("Underline text.", "U", (120, 160, 32, 32)),
             ("Undo change.", "\u21b6", (120, 160, 32, 32)),
             ("Redo change.", "\u21b7", (120, 160, 32, 32)),
@@ -11705,6 +11839,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ),
             (
                 "Italic text.",
+                ControlCandidate("c001", "I", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Italicize selected text.",
                 ControlCandidate("c001", "I", "button", (120, 160, 32, 32)),
                 ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
             ),
@@ -13246,6 +13385,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Go forward.", "Next song"),
             ("Go back.", "Previous track"),
             ("Go back.", "Previous song"),
+            ("Go back.", "Back up and sync"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -14530,6 +14670,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (300, 160, 140, 32))
+
+    def test_audio_settings_rejects_taskbar_volume_status_snap(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidate = ControlCandidate(
+            "volume",
+            "Volume Speakers (Realtek(R) Audio): 24%",
+            "button",
+            (760, 960, 160, 32),
+            automation_id="SystemTrayIcon",
+            window_title="Taskbar",
+        )
+        target_id = resolve_candidate_target(
+            target_id="volume",
+            instruction="Open audio settings.",
+            candidates=[candidate],
+            model_rect=candidate.rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Open audio settings.",
+            candidates=[candidate],
+            model_rect=candidate.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open audio settings.",
+                    "target_id": "volume",
+                    "target": {
+                        "x": candidate.rect[0],
+                        "y": candidate.rect[1],
+                        "width": candidate.rect[2],
+                        "height": candidate.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            [candidate],
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
     def test_security_control_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate

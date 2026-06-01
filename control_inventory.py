@@ -81,6 +81,8 @@ HISTORY_REDO_WORDS = frozenset({"redo"})
 CHECKBOX_ON_ACTION_WORDS = frozenset({"check", "enable", "tick"})
 CHECKBOX_OFF_ACTION_WORDS = frozenset({"disable", "uncheck", "untick"})
 NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
+NAVIGATION_BACK_WORDS = frozenset({"back", "previous"})
+BACKUP_ACTION_WORDS = frozenset({"backup", "sync", "synced", "up"})
 MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
@@ -199,7 +201,9 @@ STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"create"}), frozenset({"created"})),
     (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
     (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"dismiss"}), frozenset({"dismissed"})),
     (frozenset({"finish"}), frozenset({"finished"})),
+    (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"import", "upload"}), frozenset({"imported", "uploaded"})),
     (frozenset({"install"}), frozenset({"installed"})),
     (frozenset({"invite"}), frozenset({"invited"})),
@@ -208,6 +212,7 @@ STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"save"}), frozenset({"saved"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
+    (frozenset({"resolve"}), frozenset({"resolved"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
     (frozenset({"hide"}), frozenset({"hidden"})),
     (frozenset({"update"}), frozenset({"updated"})),
@@ -241,12 +246,15 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"attach", "import", "upload"}), frozenset({"attached", "imported", "uploaded"})),
     (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
     (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"dismiss"}), frozenset({"dismissed"})),
     (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
     (frozenset({"invite"}), frozenset({"invited"})),
     (frozenset({"save"}), frozenset({"saved"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
+    (frozenset({"resolve"}), frozenset({"resolved"})),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -375,6 +383,7 @@ TASKBAR_NETWORK_STATUS_IDENTITY_WORDS = frozenset(
 TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
     {"audio", "realtek", "sound", "speaker", "speakers", "volume"}
 )
+TASKBAR_STATUS_SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
 TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
@@ -451,6 +460,7 @@ BROWSER_MENU_BUTTON_TOKENS = frozenset(
 )
 BROWSER_MENU_CONTROL_INTENTS = frozenset({"button", "menuitem", "splitbutton"})
 BROWSER_MENU_REQUEST_WORDS = frozenset({"menu", "more", "options", "overflow"})
+BROWSER_MENU_SETTINGS_REQUEST_WORDS = frozenset({"preferences", "settings"})
 BROWSER_MENU_SPECIFIC_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -1599,6 +1609,8 @@ def _text_match_score(
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
+    if _navigation_backup_action_mismatch(instruction, candidate):
+        return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
@@ -1723,6 +1735,8 @@ def _context_text_match_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return 0.0
+    if _navigation_backup_action_mismatch(instruction, candidate):
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2003,6 +2017,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _navigation_backup_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2365,6 +2385,11 @@ def _browser_menu_button_action_mismatch(
     candidate: ControlCandidate,
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
+    if _looks_like_browser_menu_button(candidate):
+        return bool(
+            raw_tokens & BROWSER_MENU_SETTINGS_REQUEST_WORDS
+            and not (raw_tokens & BROWSER_MENU_REQUEST_WORDS)
+        )
     if not (raw_tokens & BROWSER_MENU_REQUEST_WORDS):
         return False
     if raw_tokens & BROWSER_MENU_SPECIFIC_CONTEXT_WORDS:
@@ -2376,8 +2401,6 @@ def _browser_menu_button_action_mismatch(
         return False
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
-        return False
-    if _looks_like_browser_menu_button(candidate):
         return False
     return _looks_like_browser_toolbar_button(candidate)
 
@@ -3150,6 +3173,19 @@ def _navigation_media_transport_action_mismatch(
     return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
 
 
+def _navigation_backup_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & NAVIGATION_BACK_WORDS):
+        return False
+    if instruction_tokens & BACKUP_ACTION_WORDS:
+        return False
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    return bool("back" in control_tokens and control_tokens & BACKUP_ACTION_WORDS)
+
+
 def _explicit_action_context_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -3807,10 +3843,28 @@ def _taskbar_status_label_action_mismatch(
     identity_tokens = _taskbar_status_identity_tokens(text_tokens, candidate)
     if not identity_tokens:
         return False
+    if _taskbar_status_settings_request_mismatch(instruction_tokens, text_tokens, candidate):
+        return True
     if instruction_tokens & identity_tokens:
         return False
     overlap = instruction_tokens & text_tokens
     return bool(overlap)
+
+
+def _taskbar_status_settings_request_mismatch(
+    instruction_tokens: set[str],
+    text_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not (instruction_tokens & TASKBAR_STATUS_SETTINGS_REQUEST_WORDS):
+        return False
+    if text_tokens & TASKBAR_STATUS_SETTINGS_REQUEST_WORDS:
+        return False
+    automation_id = (candidate.automation_id or "").strip().lower()
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if automation_id != "systemtrayicon" and not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    return True
 
 
 def _taskbar_status_identity_tokens(
@@ -3929,6 +3983,8 @@ def _target_id_ambiguity(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_backup_action_mismatch(instruction, candidate):
             continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
@@ -4152,6 +4208,8 @@ def _has_semantic_alternative(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _navigation_backup_action_mismatch(instruction, candidate):
+            continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
@@ -4253,6 +4311,8 @@ def _has_visible_semantic_alternative(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_backup_action_mismatch(instruction, candidate):
             continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
@@ -4358,6 +4418,8 @@ def _candidate_snap_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -4598,6 +4660,8 @@ def _single_contained_control_intent_candidate(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_backup_action_mismatch(instruction, candidate):
             continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
@@ -4865,6 +4929,8 @@ def _candidate_snap_semantic_mismatch(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return True
+    if _navigation_backup_action_mismatch(instruction, candidate):
         return True
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return True

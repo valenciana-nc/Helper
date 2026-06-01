@@ -69,6 +69,8 @@ HISTORY_REDO_WORDS = frozenset({"redo"})
 CHECKBOX_ON_ACTION_WORDS = frozenset({"check", "enable", "tick"})
 CHECKBOX_OFF_ACTION_WORDS = frozenset({"disable", "uncheck", "untick"})
 NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
+NAVIGATION_BACK_WORDS = frozenset({"back", "previous"})
+BACKUP_ACTION_WORDS = frozenset({"backup", "sync", "synced", "up"})
 MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
@@ -155,7 +157,9 @@ STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"create"}), frozenset({"created"})),
     (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
     (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"dismiss"}), frozenset({"dismissed"})),
     (frozenset({"finish"}), frozenset({"finished"})),
+    (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"import", "upload"}), frozenset({"imported", "uploaded"})),
     (frozenset({"install"}), frozenset({"installed"})),
     (frozenset({"invite"}), frozenset({"invited"})),
@@ -164,6 +168,7 @@ STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"save"}), frozenset({"saved"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
+    (frozenset({"resolve"}), frozenset({"resolved"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
     (frozenset({"hide"}), frozenset({"hidden"})),
     (frozenset({"update"}), frozenset({"updated"})),
@@ -197,12 +202,15 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"attach", "import", "upload"}), frozenset({"attached", "imported", "uploaded"})),
     (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
     (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"dismiss"}), frozenset({"dismissed"})),
     (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
     (frozenset({"invite"}), frozenset({"invited"})),
     (frozenset({"save"}), frozenset({"saved"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
+    (frozenset({"resolve"}), frozenset({"resolved"})),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -659,6 +667,11 @@ def snap_to_control(
                 automation_id,
             )
         )
+        navigation_backup_action_mismatch = _navigation_backup_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+        )
         explicit_action_context_mismatch = _explicit_action_context_mismatch(
             instruction,
             visible_text,
@@ -723,6 +736,7 @@ def snap_to_control(
             or history_action_mismatch
             or checkbox_state_action_mismatch
             or navigation_media_transport_action_mismatch
+            or navigation_backup_action_mismatch
             or explicit_action_context_mismatch
             or exclusive_action_family_mismatch
             or clear_close_action_mismatch
@@ -1790,6 +1804,20 @@ def _navigation_media_transport_action_mismatch(
     if not (control_tokens & NAVIGATION_DIRECTION_WORDS):
         return False
     return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
+
+
+def _navigation_backup_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & NAVIGATION_BACK_WORDS):
+        return False
+    if instruction_tokens & BACKUP_ACTION_WORDS:
+        return False
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    return bool("back" in control_tokens and control_tokens & BACKUP_ACTION_WORDS)
 
 
 def _explicit_action_context_mismatch(

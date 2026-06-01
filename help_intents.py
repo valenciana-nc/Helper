@@ -310,6 +310,10 @@ _TOKEN_ALIASES = {
     "bell": {"alerts", "notification", "notifications", "notify"},
     "bookmark": {"favorite", "star"},
     "bold": {"b"},
+    "bolded": {"b", "bold"},
+    "bolden": {"b", "bold"},
+    "boldened": {"b", "bold"},
+    "boldface": {"b", "bold"},
     "browse": {"choose", "file", "files", "select", "upload"},
     "cart": {"bag", "basket"},
     "calendar": {"date"},
@@ -369,6 +373,10 @@ _TOKEN_ALIASES = {
     "information": {"about", "details", "info"},
     "internet": {"network", "wifi"},
     "italic": {"i"},
+    "italicise": {"i", "italic"},
+    "italicised": {"i", "italic"},
+    "italicize": {"i", "italic"},
+    "italicized": {"i", "italic"},
     "italics": {"i", "italic"},
     "launch": {"external", "open_new"},
     "lens": {"find", "search"},
@@ -681,6 +689,7 @@ _CHECKBOX_ACTION_BLOCKING_WORDS = frozenset(
 )
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _EDIT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "hyperlink", "menuitem"})
+_CLIPBOARD_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _FORMAT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _HISTORY_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _ZOOM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
@@ -736,6 +745,7 @@ _PICKER_LAUNCHER_CONTEXT_WORDS = frozenset(
 )
 _SELECTOR_INTENT_TYPES = frozenset({"combobox"})
 _SELECTOR_INTENT_WORDS = frozenset({"picker", "selector"})
+_SELECT_NOUN_ACTION_WORDS = frozenset({"click", "focus", "open", "press", "tap"})
 _SELECTOR_BLOCKING_WORDS = frozenset(
     {
         "button",
@@ -754,6 +764,33 @@ _SELECTOR_BLOCKING_WORDS = frozenset(
 )
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
+_SELECTION_ACTION_INTENT_TYPES = _OPTION_INTENT_TYPES | frozenset({"combobox"})
+_SELECTION_ACTION_WORDS = frozenset({"select"})
+_SELECTION_ACTION_BLOCKING_WORDS = frozenset(
+    {
+        "all",
+        "attach",
+        "attachment",
+        "browse",
+        "choose",
+        "directory",
+        "directories",
+        "document",
+        "documents",
+        "file",
+        "files",
+        "folder",
+        "folders",
+        "image",
+        "paperclip",
+        "photo",
+        "picture",
+        "text",
+        "upload",
+        "word",
+        "words",
+    }
+)
 _LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
 _TREE_ITEM_INTENT_TYPES = frozenset({"treeitem"})
 _NAV_ITEM_INTENT_TYPES = frozenset(
@@ -842,7 +879,26 @@ _MEDIA_CONTROL_CONTEXT_WORDS = frozenset(
 )
 _MEDIA_RESUME_WORDS = frozenset({"resume"})
 _MEDIA_STOP_WORDS = frozenset({"stop"})
-_FORMAT_ACTION_WORDS = frozenset({"bold", "italic", "italics", "underline", "underlined"})
+_CLIPBOARD_ACTION_WORDS = frozenset(
+    {"clipboard", "copy", "cut", "paste", "scissor", "scissors"}
+)
+_FORMAT_ACTION_WORDS = frozenset(
+    {
+        "bold",
+        "bolded",
+        "bolden",
+        "boldened",
+        "boldface",
+        "italic",
+        "italicise",
+        "italicised",
+        "italicize",
+        "italicized",
+        "italics",
+        "underline",
+        "underlined",
+    }
+)
 _FORMAT_SINGLE_LETTER_WORDS = frozenset({"b", "i", "u"})
 _FORMAT_SINGLE_LETTER_CONTEXT_WORDS = frozenset(
     {"button", "click", "format", "formatting", "icon", "press", "style", "tap", "toolbar"}
@@ -947,8 +1003,10 @@ def instruction_control_intents(instruction: str) -> set[str]:
     contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
+    clipboard_action_requested = _clipboard_action_requested(raw_tokens)
     format_action_requested = _format_action_requested(raw_tokens)
     clear_action_requested = _clear_action_requested(raw_tokens)
+    selection_action_requested = _selection_action_requested(raw_tokens)
     history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
     zoom_action_requested = _zoom_action_requested(raw_tokens)
     external_link_action_requested = _external_link_action_requested(raw_tokens)
@@ -985,8 +1043,10 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or contextual_menu_launcher_requested
         or disclosure_requested
         or password_visibility_requested
+        or clipboard_action_requested
         or format_action_requested
         or clear_action_requested
+        or selection_action_requested
         or history_action_requested
         or zoom_action_requested
         or external_link_action_requested
@@ -1007,8 +1067,10 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and input_requested
         and not explicit_button_requested
         and not password_visibility_requested
+        and not clipboard_action_requested
         and not format_action_requested
         and not clear_action_requested
+        and not selection_action_requested
     ):
         intents.update(INPUT_CONTROL_TYPES)
     if raw_tokens & {"combo", "combobox"}:
@@ -1029,6 +1091,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("splitbutton")
     if password_visibility_requested:
         intents.update(_BUTTON_INTENT_TYPES)
+    if clipboard_action_requested:
+        intents.update(_CLIPBOARD_ACTION_INTENT_TYPES)
     if format_action_requested:
         intents.update(_FORMAT_ACTION_INTENT_TYPES)
     if clear_action_requested:
@@ -1050,8 +1114,10 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not radio_requested
         and not split_button_requested
         and not password_visibility_requested
+        and not clipboard_action_requested
         and not format_action_requested
         and not clear_action_requested
+        and not selection_action_requested
         and not zoom_action_requested
         and not external_link_action_requested
         and not confirm_action_requested
@@ -1079,6 +1145,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_NAV_ITEM_INTENT_TYPES)
     if raw_tokens & _OPTION_INTENT_WORDS:
         intents.update(_OPTION_INTENT_TYPES)
+    if selection_action_requested:
+        intents.update(_SELECTION_ACTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")
     if "headeritem" in raw_tokens:
@@ -1212,6 +1280,12 @@ def _media_control_requested(raw_tokens: set[str]) -> bool:
     return False
 
 
+def _clipboard_action_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _CLIPBOARD_ACTION_WORDS):
+        return False
+    return not bool(raw_tokens & _TEXT_ENTRY_ACTION_WORDS)
+
+
 def _format_action_requested(raw_tokens: set[str]) -> bool:
     if raw_tokens & _FORMAT_ACTION_WORDS:
         return True
@@ -1219,6 +1293,14 @@ def _format_action_requested(raw_tokens: set[str]) -> bool:
     if len(letter_tokens) != 1:
         return False
     return bool(raw_tokens & _FORMAT_SINGLE_LETTER_CONTEXT_WORDS)
+
+
+def _selection_action_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _SELECTION_ACTION_WORDS):
+        return False
+    if raw_tokens & _SELECT_NOUN_ACTION_WORDS:
+        return False
+    return not bool(raw_tokens & _SELECTION_ACTION_BLOCKING_WORDS)
 
 
 def _clear_action_requested(raw_tokens: set[str]) -> bool:
@@ -1282,9 +1364,10 @@ def _disclosure_requested(raw_tokens: set[str]) -> bool:
 def _selector_requested(raw_tokens: set[str]) -> bool:
     if _picker_launcher_requested(raw_tokens):
         return False
-    return bool(raw_tokens & _SELECTOR_INTENT_WORDS) and not bool(
-        raw_tokens & _SELECTOR_BLOCKING_WORDS
+    selector_wording = bool(raw_tokens & _SELECTOR_INTENT_WORDS) or (
+        "select" in raw_tokens and bool(raw_tokens & _SELECT_NOUN_ACTION_WORDS)
     )
+    return selector_wording and not bool(raw_tokens & _SELECTOR_BLOCKING_WORDS)
 
 
 def _picker_launcher_requested(raw_tokens: set[str]) -> bool:
