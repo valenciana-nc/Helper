@@ -90,6 +90,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "wrong_target_id_recovers_by_geometry_when_text_ambiguous",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 80, 80, 32], "label": "Cancel"},
+                {"rect": [160, 80, 80, 32], "label": "Save"},
+                {"rect": [300, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 320, "y": 250, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel", "control_type": "button", "rect": [40, 80, 80, 32]},
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [160, 80, 80, 32]},
+                {"id": "c003", "text": "Save", "control_type": "button", "rect": [300, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [160, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "background_duplicate_target_id_recovers_to_foreground",
             "capture": {"width": 500, "height": 320},
             "draw": [

@@ -916,6 +916,32 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
 
+    def test_wrong_target_id_recovers_by_geometry_when_text_is_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
+                    "target": {"x": 120, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Cancel", "button", (20, 160, 80, 32)),
+                ControlCandidate("c002", "Save", "button", (120, 160, 80, 32)),
+                ControlCandidate("c003", "Save", "button", (260, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 80, 32))
+
     def test_unknown_target_id_without_rect_downgrades_no_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

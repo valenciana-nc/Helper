@@ -179,6 +179,14 @@ def resolve_help_target(
             return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
 
         if target is not None and target.rejected_reason == "target_id semantic mismatch":
+            if model_rect is not None:
+                candidate_snap = snap_candidate_target(
+                    instruction=decision.instruction,
+                    candidates=candidates,
+                    model_rect=model_rect,
+                )
+                if candidate_snap is not None and not candidate_snap.rejected_reason:
+                    return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
             return target
 
         if model_rect is not None:
