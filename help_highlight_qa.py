@@ -1952,6 +1952,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "lock_action_target_id_accepts_padlock_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 110, 32], "label": "Padlock"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Lock screen.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Padlock", "control_type": "button", "rect": [20, 80, 110, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "unlock_action_target_id_accepts_lock_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Lock"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unlock account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Lock", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "security_action_target_id_accepts_shield_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Shield"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open security.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Shield", "control_type": "button", "rect": [20, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "lock_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "L"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Lock screen.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f512", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "lock_text_match_overrides_security_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 110, 32], "label": "Padlock"},
+                {"rect": [180, 80, 160, 32], "label": "Security settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Lock screen.",
+                "target": {"x": 180, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Padlock", "control_type": "button", "rect": [20, 80, 110, 32]},
+                {"id": "c002", "text": "Security settings", "control_type": "button", "rect": [180, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "security_settings_exact_target_id_stays_settings",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Shield"},
+                {"rect": [180, 80, 160, 32], "label": "Security settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open security settings.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Shield", "control_type": "button", "rect": [20, 80, 90, 32]},
+                {"id": "c002", "text": "Security settings", "control_type": "button", "rect": [180, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c002",
+                "rect": [180, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "video_text_match_overrides_av_settings_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

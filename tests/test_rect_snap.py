@@ -219,6 +219,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("visibility", tokenize_control("Eye"))
         self.assertIn("eye", tokenize_control("Visibility"))
 
+    def test_security_control_aliases_expand_to_lock_and_shield_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("padlock", tokenize_instruction("Lock screen"))
+        self.assertIn("lock", tokenize_instruction("Click the padlock"))
+        self.assertIn("lock", tokenize_instruction("Unlock account"))
+        self.assertIn("shield", tokenize_instruction("Open security"))
+        self.assertIn("security", tokenize_instruction("Click shield"))
+        self.assertIn("lock", tokenize_control("Padlock"))
+        self.assertIn("security", tokenize_control("Shield"))
+
     def test_navigation_and_time_aliases_expand_to_common_labels(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -300,6 +311,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f4f7", {"camera", "video", "webcam"}),
             ("\U0001f6d2", {"bag", "basket", "cart"}),
             ("\U0001f441", {"eye", "visibility", "visible"}),
+            ("\U0001f512", {"lock", "locked", "padlock"}),
+            ("\U0001f513", {"lock", "padlock", "unlock", "unlocked"}),
+            ("\U0001f6e1", {"secure", "security", "shield"}),
             ("\U0001f4c5", {"calendar", "date"}),
             ("\U0001f551", {"clock", "time"}),
             ("\U0001f3e0", {"home", "house"}),
@@ -5650,6 +5664,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (300, 160, 140, 32))
+
+    def test_security_control_alias_target_id_accepts_common_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Lock screen.", "Padlock", (120, 160, 110, 32)),
+            ("Click the padlock.", "Lock", (120, 160, 80, 32)),
+            ("Unlock account.", "Lock", (120, 160, 80, 32)),
+            ("Open security.", "Shield", (120, 160, 90, 32)),
+            ("Click shield.", "Security", (120, 160, 110, 32)),
+            ("Lock screen.", "\U0001f512", (120, 160, 32, 32)),
+            ("Open security.", "\U0001f6e1", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_lock_alias_text_match_overrides_security_settings_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Lock screen.",
+                    "target": {"x": 300, "y": 160, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Padlock", "button", (120, 160, 110, 32)),
+                ControlCandidate("c002", "Security settings", "button", (300, 160, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 110, 32))
+
+    def test_security_settings_instruction_targets_settings_not_shield_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open security settings.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Security settings", "button", (300, 160, 160, 32)),
+                ControlCandidate("c002", "Shield", "button", (120, 160, 90, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (300, 160, 160, 32))
 
     def test_cart_action_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate
