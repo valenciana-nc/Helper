@@ -151,6 +151,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(clone_tokens))
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(duplicate_tokens))
 
+    def test_transfer_and_refresh_aliases_expand_to_matching_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("export", tokenize_instruction("Download the report"))
+        self.assertIn("download", tokenize_control("Export"))
+        self.assertIn("upload", tokenize_instruction("Import data"))
+        self.assertIn("import", tokenize_control("Upload"))
+        self.assertIn("reload", tokenize_instruction("Refresh the page"))
+        self.assertIn("refresh", tokenize_control("Reload"))
+
     def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
         from help_intents import tokens_from_text
 
@@ -5082,6 +5092,84 @@ class HelpTargetHarnessTests(unittest.TestCase):
             [
                 ControlCandidate("c001", "Duplicate", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Copy", "button", (260, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_transfer_and_refresh_alias_target_id_accepts_matching_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Download the report.", "Export"),
+            ("Export the report.", "Download"),
+            ("Import data.", "Upload"),
+            ("Upload data.", "Import"),
+            ("Refresh the page.", "Reload"),
+            ("Reload the page.", "Refresh"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 120, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_download_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Download the report.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "button", (120, 160, 120, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_transfer_alias_rejects_ambiguous_download_and_export_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Download the report.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "button", (120, 160, 120, 32)),
+                ControlCandidate("c002", "Download", "button", (280, 160, 140, 32)),
             ],
         )
 
