@@ -193,6 +193,10 @@ BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
 )
+BROWSER_TAB_OWNER_ACCOUNT_RE = re.compile(
+    r"\s*[\-\|\u2013\u2014]\s*[^|\u2013\u2014-]*@[^|\u2013\u2014-]*['\u2019]s\s+account(?=\s*[\-\|\u2013\u2014]|$)",
+    re.IGNORECASE,
+)
 SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
 UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
     {
@@ -1554,6 +1558,7 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
 def _candidate_visible_semantic_text(candidate: ControlCandidate) -> str:
     text = candidate.text or ""
     if candidate.control_type == "tabitem":
+        text = BROWSER_TAB_OWNER_ACCOUNT_RE.sub("", text)
         text = BROWSER_TAB_MEMORY_USAGE_RE.sub("", text)
     return text.strip()
 

@@ -40,6 +40,10 @@ BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
 )
+BROWSER_TAB_OWNER_ACCOUNT_RE = re.compile(
+    r"\s*[\-\|\u2013\u2014]\s*[^|\u2013\u2014-]*@[^|\u2013\u2014-]*['\u2019]s\s+account(?=\s*[\-\|\u2013\u2014]|$)",
+    re.IGNORECASE,
+)
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -665,7 +669,8 @@ def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
 
 
 def _semantic_text(text: str) -> str:
-    return BROWSER_TAB_MEMORY_USAGE_RE.sub("", text or "").strip()
+    text = BROWSER_TAB_OWNER_ACCOUNT_RE.sub("", text or "")
+    return BROWSER_TAB_MEMORY_USAGE_RE.sub("", text).strip()
 
 
 def _start_button_action_mismatch(

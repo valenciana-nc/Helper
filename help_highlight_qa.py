@@ -8899,6 +8899,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "tab_owner_account_segment_rejects_generic_account_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Cloudflare tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Account tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "tab_owner_account_segment_rejects_generic_account_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Cloudflare tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open account.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "tab_owner_account_segment_keeps_cloudflare_title_words",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Cloudflare tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Cloudflare tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "tab_memory_usage_suffix_rejects_generic_memory_target_id",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

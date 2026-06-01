@@ -1114,6 +1114,33 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_tab_owner_account_segment_does_not_snap_as_tab_title(self) -> None:
+        from rect_snap import snap_to_control
+
+        tab = _make_button(
+            "DNS | Records | limitles.dev | "
+            "Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+            100,
+            20,
+            220,
+            34,
+            control_type="TabItem",
+        )
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 220, 34)
+
+        result = snap_to_control(
+            model_rect,
+            "Click the Account tab.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
         from rect_snap import snap_to_control
 
@@ -7953,6 +7980,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
 
+    def test_chrome_tab_owner_account_segment_is_not_title_evidence(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        label = (
+            "DNS | Records | limitles.dev | "
+            "Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB"
+        )
+        cases = (
+            ("Click the Account tab.", "target_id semantic mismatch"),
+            ("Open account.", "target_id semantic mismatch"),
+            ("Click Cloudflare tab.", ""),
+            ("Click DNS records tab.", ""),
+        )
+        for instruction, reason in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_chrome_tab_owner_account_segment_is_not_text_match_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click the Account tab.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "DNS | Records | limitles.dev | "
+                    "Abelnavarrocarreon@gmail.com's Account | Cloudflare - "
+                    "Memory usage - 580 MB",
+                    "tabitem",
+                    (120, 160, 220, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
     def test_chrome_tab_memory_usage_suffix_rejects_model_rect_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -7970,6 +8058,36 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate(
                     "c001",
                     "Home - Limitless - Stripe - Memory usage - 687 MB",
+                    "tabitem",
+                    (120, 160, 220, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_chrome_tab_owner_account_segment_rejects_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Account tab.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "DNS | Records | limitles.dev | "
+                    "Abelnavarrocarreon@gmail.com's Account | Cloudflare - "
+                    "Memory usage - 580 MB",
                     "tabitem",
                     (120, 160, 220, 32),
                     window_title="GitHub Dashboard - Google Chrome",
