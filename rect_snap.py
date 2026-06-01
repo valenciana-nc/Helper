@@ -106,6 +106,18 @@ _SWITCH_ACTION_CONTEXT_WORDS = frozenset(
         "workspace",
     }
 )
+_TOGGLE_ACTION_CONTEXT_WORDS = _SWITCH_ACTION_CONTEXT_WORDS | frozenset(
+    {
+        "drawer",
+        "menu",
+        "nav",
+        "navigation",
+        "panel",
+        "section",
+        "sidebar",
+        "toolbar",
+    }
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
@@ -704,7 +716,10 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     checkbox_requested = "checkbox" in raw_tokens or (
         "check" in raw_tokens and "box" in raw_tokens
     )
-    toggle_requested = "toggle" in raw_tokens
+    toggle_requested = (
+        "toggle" in raw_tokens
+        and not (raw_tokens & _TOGGLE_ACTION_CONTEXT_WORDS)
+    )
     switch_requested = (
         "switch" in raw_tokens
         and not (raw_tokens & _SWITCH_ACTION_CONTEXT_WORDS)

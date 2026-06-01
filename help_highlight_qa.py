@@ -647,6 +647,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "toggle_sidebar_model_rect_highlights_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Toggle sidebar"},
+                {"rect": [20, 130, 160, 32], "label": "Dark mode"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Toggle sidebar.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Toggle sidebar", "control_type": "button", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Dark mode", "control_type": "checkbox", "rect": [20, 130, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

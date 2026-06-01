@@ -409,6 +409,39 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 180, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_allows_toggle_sidebar_button_label(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button(
+            "Toggle sidebar",
+            100,
+            200,
+            150,
+            32,
+            control_type="Button",
+        )
+        checkbox = _make_button(
+            "Dark mode",
+            100,
+            250,
+            150,
+            32,
+            control_type="CheckBox",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [button, checkbox])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 150, 32),
+            "Click Toggle sidebar.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 150, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_accepts_generic_focus_field_intent_without_label_match(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1335,6 +1368,26 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 140, 32))
 
+    def test_toggle_sidebar_text_match_still_allows_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Toggle sidebar.",
+            candidates=[
+                ControlCandidate("c001", "Toggle sidebar", "button", (10, 10, 150, 32)),
+                ControlCandidate("c002", "Dark mode", "checkbox", (10, 60, 140, 32)),
+            ],
+            model_rect=(10, 10, 150, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 150, 32))
+
     def test_generic_column_header_target_id_accepts_header_without_label_match(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1980,6 +2033,25 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_snap_candidate_target_allows_toggle_sidebar_button_label(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Toggle sidebar.",
+            candidates=[
+                ControlCandidate("c001", "Toggle sidebar", "button", (10, 10, 150, 32)),
+                ControlCandidate("c002", "Dark mode", "checkbox", (10, 60, 140, 32)),
+            ],
+            model_rect=(10, 10, 150, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 150, 32))
 
     def test_snap_candidate_target_accepts_generic_column_header(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -2699,6 +2771,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 200, 32))
+
+    def test_toggle_sidebar_model_rect_highlights_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Toggle sidebar.",
+                    "target": {"x": 10, "y": 10, "width": 150, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Toggle sidebar", "button", (10, 10, 150, 32)),
+                ControlCandidate("c002", "Dark mode", "checkbox", (10, 60, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 150, 32))
 
     def test_generic_column_header_model_rect_highlights_header(self) -> None:
         from control_inventory import ControlCandidate
