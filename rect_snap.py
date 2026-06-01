@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import os
+import re
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -35,6 +36,10 @@ MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
+BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
+    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
+    re.IGNORECASE,
+)
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -637,26 +642,30 @@ def _is_visible(control) -> bool:
 
 
 def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
-    control_tokens = _tokenize_control(text)
+    control_tokens = _tokenize_control(_semantic_text(text))
     if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
         return True
     return bool(instruction_tokens and control_tokens and not (instruction_tokens & control_tokens))
 
 
 def _semantic_overlap(text: str, instruction_tokens: set[str]) -> bool:
-    control_tokens = _tokenize_control(text)
+    control_tokens = _tokenize_control(_semantic_text(text))
     if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
         return False
     return bool(instruction_tokens and (control_tokens & instruction_tokens))
 
 
 def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
-    control_tokens = _tokenize_control(text)
+    control_tokens = _tokenize_control(_semantic_text(text))
     if not instruction_tokens or not control_tokens:
         return 0.0
     if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
         return 0.0
     return len(instruction_tokens & control_tokens) / max(1, len(instruction_tokens))
+
+
+def _semantic_text(text: str) -> str:
+    return BROWSER_TAB_MEMORY_USAGE_RE.sub("", text or "").strip()
 
 
 def _start_button_action_mismatch(
@@ -716,7 +725,7 @@ def _score(
     distance = ((cx - mx) ** 2 + (cy - my) ** 2) ** 0.5
     proximity = max(0.0, 1.0 - min(1.0, distance / diagonal))
 
-    control_tokens = _tokenize_control(semantic_text)
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
     overlap = instruction_tokens & control_tokens
     disclosure_mismatch = _disclosure_action_tokens_mismatch(
         instruction_tokens,
@@ -810,12 +819,12 @@ def _same_snap_intent(
         return first_ctype == second_ctype
     if _disclosure_action_tokens_mismatch(
         instruction_tokens,
-        _tokenize_control(first_text),
+        _tokenize_control(_semantic_text(first_text)),
     ):
         return False
     if _disclosure_action_tokens_mismatch(
         instruction_tokens,
-        _tokenize_control(second_text),
+        _tokenize_control(_semantic_text(second_text)),
     ):
         return False
     first_score = _semantic_score(first_text, instruction_tokens)
@@ -870,7 +879,7 @@ def _single_contained_control_intent_result(
     for result, semantic_text in results:
         if _disclosure_action_tokens_mismatch(
             instruction_tokens,
-            _tokenize_control(semantic_text),
+            _tokenize_control(_semantic_text(semantic_text)),
         ):
             continue
         if instruction_tokens and not _contained_control_intent_result_has_evidence(
@@ -899,10 +908,10 @@ def _contained_control_intent_result_has_evidence(
     contexts: list[tuple[tuple[int, int, int, int], str]],
     instruction_tokens: set[str],
 ) -> bool:
-    evidence_tokens = _tokenize_control(semantic_text)
+    evidence_tokens = _tokenize_control(_semantic_text(semantic_text))
     for context_rect, context_text in contexts:
         if _contains_rect(_expand_rect(context_rect, 4), rect):
-            evidence_tokens.update(_tokenize_control(context_text))
+            evidence_tokens.update(_tokenize_control(_semantic_text(context_text)))
     return _text_evidence_score(instruction_tokens, evidence_tokens) >= 0.35
 
 

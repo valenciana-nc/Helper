@@ -1088,6 +1088,32 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
+        from rect_snap import snap_to_control
+
+        tab = _make_button(
+            "Home - Limitless - Stripe - Memory usage - 687 MB",
+            100,
+            20,
+            220,
+            34,
+            control_type="TabItem",
+        )
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 220, 34)
+
+        result = snap_to_control(
+            model_rect,
+            "Open memory.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
         from rect_snap import snap_to_control
 
@@ -7879,6 +7905,73 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "Memory usage - 580 MB",
                     "tabitem",
                     (120, 160, 184, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_chrome_tab_memory_usage_suffix_is_not_title_evidence(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        label = "Home - Limitless - Stripe - Memory usage - 687 MB"
+        cases = (
+            ("Open memory.", "target_id semantic mismatch"),
+            ("Open usage.", "target_id semantic mismatch"),
+            ("Open MB.", "target_id semantic mismatch"),
+            ("Open 687.", "target_id semantic mismatch"),
+            ("Open Stripe.", ""),
+            ("Open Limitless.", ""),
+        )
+        for instruction, reason in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_chrome_tab_memory_usage_suffix_rejects_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open memory.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Home - Limitless - Stripe - Memory usage - 687 MB",
+                    "tabitem",
+                    (120, 160, 220, 32),
                     window_title="GitHub Dashboard - Google Chrome",
                 )
             ],

@@ -189,6 +189,10 @@ GMAIL_TAB_SERVICE_RE = re.compile(
 )
 GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
 MAIL_TAB_EXPLICIT_WORDS = frozenset({"email", "inbox", "mail", "recibidos"})
+BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
+    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
+    re.IGNORECASE,
+)
 SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
 UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
     {
@@ -1522,12 +1526,16 @@ def _target_id_plausibility(
 
 
 def _candidate_identity_tokens(candidate: ControlCandidate) -> set[str]:
-    text = " ".join(part for part in (candidate.text, candidate.automation_id) if part)
+    text = " ".join(
+        part
+        for part in (_candidate_visible_semantic_text(candidate), candidate.automation_id)
+        if part
+    )
     return _expand_token_aliases(_tokens_from_text(text))
 
 
 def _candidate_visible_text_tokens(candidate: ControlCandidate) -> set[str]:
-    return _tokenize_control(candidate.text)
+    return _tokenize_control(_candidate_visible_semantic_text(candidate))
 
 
 def _candidate_automation_tokens(candidate: ControlCandidate) -> set[str]:
@@ -1541,6 +1549,13 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
         return visible_tokens | inferred_tokens
     automation_tokens = _candidate_automation_tokens(candidate)
     return automation_tokens | inferred_tokens
+
+
+def _candidate_visible_semantic_text(candidate: ControlCandidate) -> str:
+    text = candidate.text or ""
+    if candidate.control_type == "tabitem":
+        text = BROWSER_TAB_MEMORY_USAGE_RE.sub("", text)
+    return text.strip()
 
 
 def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]:
