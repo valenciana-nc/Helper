@@ -4168,6 +4168,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_new_target_id_rejects_brave_new_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open new.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "Vidbox - Brave",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "external_link_action_rejects_chain_share_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7503,6 +7530,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "candidate_snap",
                 "target_id": "c001",
                 "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_view_rejects_brave_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "automation_id": "view_1011",
+                    "window_title": "Vidbox - Brave",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
             },
         },

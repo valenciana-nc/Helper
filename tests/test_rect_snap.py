@@ -1151,15 +1151,84 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, model_rect)
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_file_picker_action_does_not_snap_taskbar_file_explorer_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        file_explorer = _make_button("File Explorer pinned", 120, 160, 180, 32)
+        window = _make_window("Taskbar", 0, 140, 800, 80, [file_explorer])
+        desktop = _FakeDesktop([window])
+        model_rect = (120, 160, 180, 32)
+
+        for instruction in (
+            "Open the file picker.",
+            "Attach file.",
+            "Upload a file.",
+            "Choose a file.",
+        ):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_file_explorer_wording_still_snaps_taskbar_file_explorer_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        file_explorer = _make_button("File Explorer pinned", 120, 160, 180, 32)
+        window = _make_window("Taskbar", 0, 140, 800, 80, [file_explorer])
+        desktop = _FakeDesktop([window])
+        model_rect = (120, 160, 180, 32)
+
+        for instruction in ("Open File Explorer.", "Click File Explorer."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_generic_new_does_not_snap_browser_new_tab_button(self) -> None:
         from rect_snap import snap_to_control
 
-        new_tab = _make_button("New Tab", 100, 20, 32, 32)
-        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [new_tab])
-        desktop = _FakeDesktop([window])
-        model_rect = (100, 20, 32, 32)
+        for window_title in ("GitHub - Google Chrome", "Vidbox - Brave"):
+            new_tab = _make_button("New Tab", 100, 20, 32, 32)
+            window = _make_window(window_title, 0, 0, 800, 600, [new_tab])
+            desktop = _FakeDesktop([window])
+            model_rect = (100, 20, 32, 32)
 
-        for instruction in ("Open new.", "Create new.", "Add new."):
+            for instruction in ("Open new.", "Create new.", "Add new."):
+                with self.subTest(instruction=instruction, window_title=window_title):
+                    result = snap_to_control(
+                        model_rect,
+                        instruction,
+                        desktop_factory=lambda: desktop,
+                        timeout_ms=2000,
+                    )
+
+                    self.assertEqual(result.source, "uia")
+                    self.assertEqual(result.rect, model_rect)
+                    self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_brave_site_information_generic_view_does_not_snap(self) -> None:
+        from rect_snap import snap_to_control
+
+        site_info = _make_button("View site information", 100, 20, 160, 32)
+        window = _make_window("Vidbox - Brave", 0, 0, 800, 600, [site_info])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 160, 32)
+
+        for instruction in ("Open view.", "Click view."):
             with self.subTest(instruction=instruction):
                 result = snap_to_control(
                     model_rect,
@@ -1175,21 +1244,23 @@ class SnapToControlTests(unittest.TestCase):
     def test_new_tab_phrase_still_snaps_browser_new_tab_button(self) -> None:
         from rect_snap import snap_to_control
 
-        new_tab = _make_button("New Tab", 100, 20, 32, 32)
-        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [new_tab])
-        desktop = _FakeDesktop([window])
-        model_rect = (100, 20, 32, 32)
+        for window_title in ("GitHub - Google Chrome", "Vidbox - Brave"):
+            with self.subTest(window_title=window_title):
+                new_tab = _make_button("New Tab", 100, 20, 32, 32)
+                window = _make_window(window_title, 0, 0, 800, 600, [new_tab])
+                desktop = _FakeDesktop([window])
+                model_rect = (100, 20, 32, 32)
 
-        result = snap_to_control(
-            model_rect,
-            "Open new tab.",
-            desktop_factory=lambda: desktop,
-            timeout_ms=2000,
-        )
+                result = snap_to_control(
+                    model_rect,
+                    "Open new tab.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
 
-        self.assertEqual(result.source, "uia")
-        self.assertEqual(result.rect, model_rect)
-        self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertFalse(result.rejected_reason)
 
     def test_extension_status_words_do_not_snap_access_button(self) -> None:
         from rect_snap import snap_to_control
@@ -6024,6 +6095,93 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(calls)
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_file_picker_fresh_snap_rejects_taskbar_file_explorer_button(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        file_explorer = _make_button("File Explorer pinned", 120, 160, 180, 32)
+        desktop = _FakeDesktop([
+            _make_window("Taskbar", 0, 140, 800, 80, [file_explorer])
+        ])
+
+        def snapper(rect, instruction):
+            return snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            )
+
+        for instruction in (
+            "Open the file picker.",
+            "Attach file.",
+            "Upload a file.",
+            "Choose a file.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": 120,
+                                "y": 160,
+                                "width": 180,
+                                "height": 32,
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=snapper,
+                )
+
+                self.assertEqual(target.source, "snap")
+                self.assertEqual(target.rect, (120, 160, 180, 32))
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_file_explorer_fresh_snap_still_accepts_taskbar_file_explorer_button(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        file_explorer = _make_button("File Explorer pinned", 120, 160, 180, 32)
+        desktop = _FakeDesktop([
+            _make_window("Taskbar", 0, 140, 800, 80, [file_explorer])
+        ])
+
+        def snapper(rect, instruction):
+            return snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            )
+
+        for instruction in ("Open File Explorer.", "Click File Explorer."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": 120,
+                                "y": 160,
+                                "width": 180,
+                                "height": 32,
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=snapper,
+                )
+
+                self.assertEqual(target.source, "snap")
+                self.assertEqual(target.rect, (120, 160, 180, 32))
+                self.assertFalse(target.rejected_reason)
 
     def test_loose_row_model_rect_snaps_to_tight_child_action(self) -> None:
         from control_inventory import ControlCandidate
@@ -11337,59 +11495,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
 
-        candidates = [
-            ControlCandidate(
-                "c001",
-                "New Tab",
-                "button",
-                (120, 160, 32, 32),
-                window_title="GitHub - Google Chrome",
-            )
-        ]
-        for instruction in ("Open new.", "Create new.", "Add new."):
-            with self.subTest(instruction=instruction):
-                target = resolve_help_target(
-                    self._decision(
-                        {
-                            "kind": "step",
-                            "instruction": instruction,
-                            "target_id": "c001",
-                        }
-                    ),
-                    self._capture(),
-                    candidates,
+        for window_title in ("GitHub - Google Chrome", "Vidbox - Brave"):
+            candidates = [
+                ControlCandidate(
+                    "c001",
+                    "New Tab",
+                    "button",
+                    (120, 160, 32, 32),
+                    window_title=window_title,
                 )
-                text_target = resolve_candidate_target(
-                    target_id="",
-                    instruction=instruction,
-                    candidates=candidates,
-                )
-                snap_target = resolve_help_target(
-                    self._decision(
-                        {
-                            "kind": "step",
-                            "instruction": instruction,
-                            "target": {"x": 120, "y": 160, "width": 32, "height": 32},
-                        }
-                    ),
-                    self._capture(),
-                    candidates,
-                )
+            ]
+            for instruction in ("Open new.", "Create new.", "Add new."):
+                with self.subTest(instruction=instruction, window_title=window_title):
+                    target = resolve_help_target(
+                        self._decision(
+                            {
+                                "kind": "step",
+                                "instruction": instruction,
+                                "target_id": "c001",
+                            }
+                        ),
+                        self._capture(),
+                        candidates,
+                    )
+                    text_target = resolve_candidate_target(
+                        target_id="",
+                        instruction=instruction,
+                        candidates=candidates,
+                    )
+                    snap_target = resolve_help_target(
+                        self._decision(
+                            {
+                                "kind": "step",
+                                "instruction": instruction,
+                                "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+                            }
+                        ),
+                        self._capture(),
+                        candidates,
+                    )
 
-                self.assertEqual(target.source, "target_id")
-                self.assertEqual(target.target_id, "c001")
-                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
-                self.assertIsNone(text_target)
-                self.assertEqual(snap_target.source, "candidate_snap")
-                self.assertEqual(snap_target.target_id, "c001")
-                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                    self.assertEqual(target.source, "target_id")
+                    self.assertEqual(target.target_id, "c001")
+                    self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                    self.assertIsNone(text_target)
+                    self.assertEqual(snap_target.source, "candidate_snap")
+                    self.assertEqual(snap_target.target_id, "c001")
+                    self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
-    def test_new_tab_wording_accepts_browser_new_tab_button(self) -> None:
+    def test_brave_site_information_requires_info_or_lock_wording(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        cases = ("Open new tab.", "Open in new tab.")
-        for instruction in cases:
+        cases = (
+            ("Open view.", "target_id semantic mismatch"),
+            ("Click view.", "target_id semantic mismatch"),
+            ("Open site information.", ""),
+            ("Click the site info button.", ""),
+        )
+        for instruction, reason in cases:
             with self.subTest(instruction=instruction):
                 target = resolve_help_target(
                     self._decision(
@@ -11403,17 +11567,49 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     [
                         ControlCandidate(
                             "c001",
-                            "New Tab",
+                            "View site information",
                             "button",
-                            (120, 160, 32, 32),
-                            window_title="GitHub - Google Chrome",
+                            (120, 160, 160, 32),
+                            window_title="Vidbox - Brave",
                         )
                     ],
                 )
 
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
-                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_new_tab_wording_accepts_browser_new_tab_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = ("Open new tab.", "Open in new tab.")
+        for window_title in ("GitHub - Google Chrome", "Vidbox - Brave"):
+            for instruction in cases:
+                with self.subTest(instruction=instruction, window_title=window_title):
+                    target = resolve_help_target(
+                        self._decision(
+                            {
+                                "kind": "step",
+                                "instruction": instruction,
+                                "target_id": "c001",
+                            }
+                        ),
+                        self._capture(),
+                        [
+                            ControlCandidate(
+                                "c001",
+                                "New Tab",
+                                "button",
+                                (120, 160, 32, 32),
+                                window_title=window_title,
+                            )
+                        ],
+                    )
+
+                    self.assertEqual(target.source, "target_id")
+                    self.assertEqual(target.target_id, "c001")
+                    self.assertFalse(target.rejected_reason)
 
     def test_external_link_aliases_do_not_cross_share_link_icons(self) -> None:
         from control_inventory import ControlCandidate

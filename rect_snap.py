@@ -38,7 +38,26 @@ DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
-BROWSER_APP_IDENTITY_WORDS = frozenset({"browser", "chrome", "edge", "google"})
+TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
+    {"pinned", "running", "window", "windows"}
+)
+TASKBAR_FILE_ACTION_WORDS = frozenset(
+    {
+        "attach",
+        "attachment",
+        "browse",
+        "choose",
+        "document",
+        "documents",
+        "file",
+        "files",
+        "paperclip",
+        "select",
+        "upload",
+    }
+)
+TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
+BROWSER_APP_IDENTITY_WORDS = frozenset({"brave", "browser", "chrome", "edge", "google"})
 BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
@@ -72,7 +91,7 @@ PROGRAM_MANAGER_GENERIC_NAME_WORDS = frozenset(
         "system",
     }
 )
-BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
+BROWSER_PROFILE_WINDOW_WORDS = frozenset({"brave", "browser", "chrome", "edge"})
 BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
 BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
@@ -241,6 +260,12 @@ def snap_to_control(
             instruction_tokens,
             visible_text,
         )
+        taskbar_file_action_mismatch = _taskbar_file_action_mismatch(
+            instruction_tokens,
+            visible_text,
+            ctype,
+            window_title,
+        )
         program_manager_action_mismatch = _program_manager_desktop_item_action_mismatch(
             instruction_tokens,
             visible_text,
@@ -290,6 +315,7 @@ def snap_to_control(
             or task_view_action_mismatch
             or hidden_icons_action_mismatch
             or show_desktop_action_mismatch
+            or taskbar_file_action_mismatch
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
             or browser_new_tab_action_mismatch
@@ -390,6 +416,7 @@ def snap_to_control(
             control_intents
             and _contains_rect(_expand_rect(model_rect, 4), rect)
             and not (ctype == "splitbutton" and _menu_segment_intent(control_intents))
+            and not semantic_action_mismatch
             and not any(item.rect == result.rect for item, _text in contained_control_intent_results)
         ):
             contained_control_intent_results.append((result, semantic_text))
@@ -907,6 +934,32 @@ def _program_manager_desktop_item_action_mismatch(
         if distinctive_tokens and not instruction_tokens & distinctive_tokens:
             return True
     return False
+
+
+def _taskbar_file_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    if not (instruction_tokens & TASKBAR_FILE_ACTION_WORDS):
+        return False
+    raw_control_tokens = _tokens_from_text(visible_text or "")
+    if not (raw_control_tokens & TASKBAR_GENERIC_FILE_IDENTITY_WORDS):
+        return False
+    distinctive_tokens = (
+        raw_control_tokens
+        - TASKBAR_GENERIC_FILE_IDENTITY_WORDS
+        - TASKBAR_APP_STATE_CONTEXT_WORDS
+    )
+    if distinctive_tokens and instruction_tokens & distinctive_tokens:
+        return False
+    return True
 
 
 def _browser_profile_identity_action_mismatch(
