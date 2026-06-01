@@ -562,6 +562,18 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("field", agentic_tokens)
         self.assertFalse(instruction_control_intents("Open AgenticField group"))
 
+    def test_b2b_phrase_does_not_expand_to_bold_formatting(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        control_tokens = tokenize_control("B2B group - Closed")
+        instruction_tokens = tokenize_instruction("Open B2B group")
+
+        self.assertTrue({"b2", "b2b"}.issubset(control_tokens))
+        self.assertTrue({"b2", "b2b"}.issubset(instruction_tokens))
+        self.assertNotIn("b", control_tokens)
+        self.assertNotIn("bold", control_tokens)
+        self.assertNotIn("bold", instruction_tokens)
+
     def test_tab_search_and_windows_search_phrases_are_specific(self) -> None:
         from help_intents import (
             instruction_control_intents,
@@ -7406,6 +7418,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_bold_action_rejects_b2b_browser_group(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open bold.",
+            "Click bold.",
+            "Make it bold.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "B2B group - Closed",
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_bold_action_recovers_from_b2b_group_to_bold_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open bold.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "B2B group - Closed",
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate("c002", "Bold", "button", (400, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
 
     def test_mail_target_id_accepts_envelope_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate

@@ -5962,6 +5962,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bold_action_rejects_b2b_browser_group",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "B2B group"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open bold.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "B2B group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bold_action_recovers_from_b2b_group_to_bold_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "B2B group"},
+                {"rect": [240, 80, 80, 32], "label": "Bold"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open bold.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "B2B group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {"id": "c002", "text": "Bold", "control_type": "button", "rect": [240, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [240, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_account_target_id_rejects_unnamed_account_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

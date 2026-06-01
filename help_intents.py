@@ -75,6 +75,11 @@ _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
 )
 _PHRASE_TOKEN_REWRITES = (
     (
+        re.compile(r"\bb2\s+b\b|\bb2b\b"),
+        {"b2", "b2b"},
+        {"b"},
+    ),
+    (
         re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
         {"tab_search"},
         {"find", "search", "tab", "tabs"},
