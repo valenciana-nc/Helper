@@ -2478,6 +2478,11 @@ class SnapToControlTests(unittest.TestCase):
             ("Click message.", "Send message", "App"),
             ("Click invoice.", "Pay invoice", "App"),
             ("Click project.", "Share project", "App"),
+            ("Find account.", "Delete account", "App"),
+            ("Search account.", "Archive account", "App"),
+            ("Search for account.", "Delete account", "App"),
+            ("Look for report.", "Download report", "App"),
+            ("Focus account.", "Delete account", "App"),
             ("Delete account.", "Delete message", "App"),
             ("Download report.", "Download invoice", "App"),
             ("Copy coupon.", "Copy address", "App"),
@@ -11370,6 +11375,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Click message.", "Send message", "App"),
             ("Click invoice.", "Pay invoice", "App"),
             ("Click project.", "Share project", "App"),
+            ("Find account.", "Delete account", "App"),
+            ("Search account.", "Archive account", "App"),
+            ("Search for account.", "Delete account", "App"),
+            ("Look for report.", "Download report", "App"),
+            ("Focus account.", "Delete account", "App"),
             ("Delete account.", "Delete message", "App"),
             ("Download report.", "Download invoice", "App"),
             ("Copy coupon.", "Copy address", "App"),
@@ -11481,6 +11491,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Click Delete account.", "Delete account"),
             ("Click checkout.", "Checkout"),
             ("Click Pandora.", "New Pandora (1)"),
+            ("Find account.", "Find account"),
+            ("Search account.", "Search account"),
+            ("Focus account.", "Account"),
         )
         for case in cases:
             if len(case) == 2:

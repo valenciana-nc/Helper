@@ -85,7 +85,19 @@ MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
 EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
 OPEN_VIEW_REQUEST_WORDS = frozenset({"open", "show", "view"})
 GENERIC_OBJECT_REQUEST_WORDS = frozenset(
-    {"click", "go", "hit", "navigate", "press", "tap", "visit"}
+    {
+        "click",
+        "find",
+        "focus",
+        "go",
+        "hit",
+        "look",
+        "navigate",
+        "press",
+        "search",
+        "tap",
+        "visit",
+    }
 )
 CONFIRM_ACTION_WORDS = frozenset(
     {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
@@ -131,7 +143,7 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
         "select",
     }
 )
-GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"on", "to"})
+GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"for", "on", "to"})
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
