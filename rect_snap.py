@@ -132,6 +132,9 @@ def snap_to_control(
     best_score = 0.0
     best_result: SnapResult | None = None
     best_semantic_text = ""
+    best_is_automation_only = False
+    best_visible_score = 0.0
+    best_visible_result: SnapResult | None = None
     own_process_result: SnapResult | None = None
 
     for control, rect, is_own_process in _iter_candidates(desktop, search_rect, deadline):
@@ -141,7 +144,9 @@ def snap_to_control(
         if not _is_enabled(control) or not _is_visible(control):
             continue
         text = _control_text(control)
-        semantic_text = _control_semantic_text(control)
+        visible_text = _control_visible_text(control)
+        automation_id = _control_automation_id(control)
+        semantic_text = visible_text or automation_id
         if is_own_process:
             if (
                 own_process_result is None
@@ -164,12 +169,40 @@ def snap_to_control(
             instruction_tokens=instruction_tokens,
             diagonal=diagonal,
         )
+        if (
+            visible_text
+            and _semantic_overlap(visible_text, instruction_tokens)
+            and score > best_visible_score
+        ):
+            best_visible_score = score
+            best_visible_result = SnapResult(
+                rect=rect,
+                confidence=score,
+                source="uia",
+                matched_text=text,
+            )
         if score > best_score:
             best_score = score
             best_semantic_text = semantic_text
+            best_is_automation_only = bool(not visible_text and automation_id)
             best_result = SnapResult(
                 rect=rect, confidence=score, source="uia", matched_text=text
             )
+
+    if (
+        best_result is not None
+        and best_is_automation_only
+        and best_visible_result is not None
+    ):
+        if best_visible_score >= confidence_floor:
+            return best_visible_result
+        return SnapResult(
+            rect=best_result.rect,
+            confidence=best_score,
+            source="uia",
+            matched_text=best_result.matched_text,
+            rejected_reason="automation-only target ambiguous",
+        )
 
     if best_result is None or best_score < confidence_floor:
         if (
@@ -363,13 +396,6 @@ def _control_automation_id(control) -> str:
         return ""
 
 
-def _control_semantic_text(control) -> str:
-    visible = _control_visible_text(control)
-    if visible:
-        return visible
-    return _control_automation_id(control)
-
-
 def _is_enabled(control) -> bool:
     try:
         return bool(control.is_enabled())
@@ -405,6 +431,10 @@ def _tokenize_control(text: str) -> set[str]:
 def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
     control_tokens = _tokenize_control(text)
     return bool(instruction_tokens and control_tokens and not (instruction_tokens & control_tokens))
+
+
+def _semantic_overlap(text: str, instruction_tokens: set[str]) -> bool:
+    return bool(instruction_tokens and (_tokenize_control(text) & instruction_tokens))
 
 
 def _semantic_mismatch_targets_model_rect(

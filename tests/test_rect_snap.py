@@ -277,6 +277,45 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
         self.assertIn("saveButton", result.matched_text)
 
+    def test_snap_prefers_visible_text_over_automation_only_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        icon = _make_button("", 100, 200, 32, 32, automation_id="save_button")
+        save = _make_button("Save", 145, 200, 80, 32)
+        window = _make_window("App", 0, 0, 800, 600, [icon, save])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 32, 32),
+            "Click Save.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (145, 200, 80, 32))
+        self.assertEqual(result.matched_text, "Save")
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_automation_only_match_when_visible_alternative_is_weak(self) -> None:
+        from rect_snap import snap_to_control
+
+        icon = _make_button("", 100, 200, 32, 32, automation_id="save_button")
+        save = _make_button("Save", 190, 260, 80, 32, control_type="Spinner")
+        window = _make_window("App", 0, 0, 800, 600, [icon, save])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 32, 32),
+            "Click Save.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 32, 32))
+        self.assertEqual(result.rejected_reason, "automation-only target ambiguous")
+
     def test_snap_rejects_own_process_target_instead_of_raw_fallback(self) -> None:
         from rect_snap import snap_to_control
 
