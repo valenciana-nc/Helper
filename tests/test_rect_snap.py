@@ -2354,6 +2354,13 @@ class SnapToControlTests(unittest.TestCase):
             ("Open new tab.", "New window", "GitHub - Google Chrome"),
             ("Open new window.", "New tab", "GitHub - Google Chrome"),
             ("Favorite this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+            ("Delete account.", "Delete message", "App"),
+            ("Download report.", "Download invoice", "App"),
+            ("Copy coupon.", "Copy address", "App"),
+            ("Send invite.", "Send email", "App"),
+            ("Delete account.", "Delete", "Messages"),
+            ("Show sidebar.", "Hide sidebar", "App"),
+            ("Hide sidebar.", "Show sidebar", "App"),
         )
         for instruction, label, window_title in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -2371,6 +2378,31 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.source, "uia")
                 self.assertEqual(result.rect, (360, 160, 180, 32))
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_sidebar_item_does_not_snap_browser_tabitem(self) -> None:
+        from rect_snap import snap_to_control
+
+        tab = _make_button(
+            "Settings - MyApp - Google Chrome",
+            20,
+            10,
+            220,
+            32,
+            control_type="TabItem",
+        )
+        window = _make_window("MyApp - Google Chrome", 0, 0, 800, 600, [tab])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (20, 10, 220, 32),
+            "Click the Settings sidebar item.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (20, 10, 220, 32))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_remove_formatting_does_not_snap_delete_family_button(self) -> None:
         from rect_snap import snap_to_control
@@ -10378,6 +10410,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Favorite this item.", "Bookmark this tab", "GitHub - Google Chrome"),
             ("Star this item.", "Bookmark this tab", "GitHub - Google Chrome"),
             ("Bookmark this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+            ("Delete account.", "Delete message", "App"),
+            ("Download report.", "Download invoice", "App"),
+            ("Copy coupon.", "Copy address", "App"),
+            ("Send invite.", "Send email", "App"),
+            ("Delete account.", "Delete", "Messages"),
+            ("Show sidebar.", "Hide sidebar", "App"),
+            ("Hide sidebar.", "Show sidebar", "App"),
         )
         for instruction, label, window_title in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10422,8 +10461,19 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open file.", "Open file"),
             ("Bookmark this tab.", "Bookmark this tab"),
             ("Add bookmark.", "Bookmark this tab"),
+            ("Save document.", "Save file"),
+            ("Delete account.", "Delete"),
+            ("Delete account.", "Delete", "Accounts"),
+            ("Copy coupon.", "Copy"),
+            ("Show sidebar.", "Show sidebar"),
+            ("Hide sidebar.", "Hide sidebar"),
         )
-        for instruction, label in cases:
+        for case in cases:
+            if len(case) == 2:
+                instruction, label = case
+                window_title = "GitHub - Google Chrome"
+            else:
+                instruction, label, window_title = case
             with self.subTest(instruction=instruction, label=label):
                 target = resolve_candidate_target(
                     target_id="c001",
@@ -10434,7 +10484,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                             label,
                             "button",
                             (120, 160, 180, 32),
-                            window_title="GitHub - Google Chrome",
+                            window_title=window_title,
                         )
                     ],
                 )
@@ -16067,6 +16117,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_sidebar_item_rejects_browser_tabitem_collision(self) -> None:
+        from control_inventory import (
+            ControlCandidate,
+            resolve_candidate_target,
+            snap_candidate_target,
+        )
+        from help_session import resolve_help_target
+
+        browser_tab = ControlCandidate(
+            "c001",
+            "Settings - MyApp - Google Chrome",
+            "tabitem",
+            (20, 10, 220, 32),
+            window_title="MyApp - Google Chrome",
+        )
+        sidebar_item = ControlCandidate(
+            "c002",
+            "Settings",
+            "listitem",
+            (10, 120, 180, 32),
+            window_title="MyApp - Google Chrome",
+        )
+
+        target_id = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click the Settings sidebar item.",
+            candidates=[browser_tab, sidebar_item],
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click the Settings sidebar item.",
+            candidates=[browser_tab, sidebar_item],
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Settings sidebar item.",
+            candidates=[browser_tab],
+            model_rect=browser_tab.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings sidebar item.",
+                    "target": {
+                        "x": browser_tab.rect[0],
+                        "y": browser_tab.rect[1],
+                        "width": browser_tab.rect[2],
+                        "height": browser_tab.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            [browser_tab, sidebar_item],
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "c002")
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.target_id, "c002")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_table_row_broad_group_rejects_multiple_listitems(self) -> None:
         from control_inventory import ControlCandidate

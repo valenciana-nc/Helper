@@ -1882,6 +1882,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "copy_coupon_model_rect_rejects_copy_address_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Copy address"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Copy coupon.",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Copy address", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "create_action_target_id_accepts_add_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2694,6 +2715,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "delete_account_target_id_rejects_delete_message_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Delete message"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Delete message", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "delete_account_target_id_rejects_delete_button_in_messages_window",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Delete",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "Messages",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
@@ -4242,6 +4311,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "download_report_target_id_rejects_download_invoice_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Download invoice"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Download report.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Download invoice", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
             },
         },
@@ -6119,6 +6209,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c002",
                 "rect": [20, 80, 150, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "show_sidebar_model_rect_rejects_hide_sidebar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Hide sidebar"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show sidebar.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Hide sidebar", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "hide_sidebar_model_rect_rejects_show_sidebar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Show sidebar"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Hide sidebar.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Show sidebar", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
@@ -8821,6 +8953,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "candidate_snap",
                 "rejected_reason": "candidate snapshot no match",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "sidebar_item_target_id_rejects_browser_tabitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 220, 32], "label": "Settings - MyApp - Google Chrome"},
+                {"rect": [20, 120, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings sidebar item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Settings - MyApp - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 220, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Settings",
+                    "control_type": "listitem",
+                    "rect": [20, 120, 180, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [20, 120, 180, 32],
+                "overlay_emitted": True,
             },
         },
         {

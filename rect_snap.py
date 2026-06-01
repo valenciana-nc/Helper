@@ -74,6 +74,27 @@ CONFIRM_OBJECT_STOPWORDS = frozenset(
         "that",
     }
 )
+ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
+    {
+        "current",
+        "data",
+        "document",
+        "documents",
+        "entry",
+        "entries",
+        "file",
+        "files",
+        "icon",
+        "item",
+        "items",
+        "paper",
+        "record",
+        "records",
+        "row",
+        "rows",
+        "select",
+    }
+)
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
@@ -84,6 +105,45 @@ FILE_PICKER_ACTION_WORDS = frozenset(
 FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
 BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
 BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
+CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
+GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
+GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
+GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
+WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
+    {
+        "account",
+        "accounts",
+        "address",
+        "addresses",
+        "chat",
+        "chats",
+        "coupon",
+        "coupons",
+        "email",
+        "emails",
+        "image",
+        "images",
+        "inbox",
+        "invoice",
+        "invoices",
+        "mail",
+        "message",
+        "messages",
+        "notification",
+        "notifications",
+        "photo",
+        "photos",
+        "profile",
+        "profiles",
+        "project",
+        "projects",
+        "report",
+        "reports",
+        "settings",
+        "user",
+        "users",
+    }
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -1485,6 +1545,19 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _same_action_family_object_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _same_action_family_window_context_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+            window_title,
+        )
+        or _generic_visibility_polarity_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _new_tab_window_action_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -1493,6 +1566,11 @@ def _explicit_action_context_mismatch(
             instruction,
             visible_text,
             automation_id,
+            ctype,
+            window_title,
+        )
+        or _browser_tab_contextual_item_mismatch(
+            instruction,
             ctype,
             window_title,
         )
@@ -1558,7 +1636,24 @@ def _same_action_object_mismatch(
     control_objects = _action_object_tokens(control_tokens, action_tokens, stopwords)
     if not instruction_objects or not control_objects:
         return False
-    return not bool(instruction_objects & control_objects)
+    return not bool(
+        _object_token_variants(instruction_objects)
+        & _object_token_variants(control_objects)
+    )
+
+
+def _object_token_variants(tokens: set[str]) -> set[str]:
+    variants = set(tokens)
+    for token in tokens:
+        if len(token) < 4:
+            continue
+        if token.endswith("ies") and len(token) > 4:
+            variants.add(f"{token[:-3]}y")
+        if token.endswith("es") and len(token) > 4:
+            variants.add(token[:-2])
+        if token.endswith("s") and not token.endswith("ss"):
+            variants.add(token[:-1])
+    return variants
 
 
 def _action_object_tokens(
@@ -1595,6 +1690,101 @@ def _file_action_kind(tokens: set[str], *, is_instruction: bool) -> str:
     if tokens & FILE_OPEN_ACTION_WORDS:
         return "open"
     return ""
+
+
+def _same_action_family_object_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    control_raw_tokens = _tokens_from_text(candidate_text)
+    if not instruction_raw_tokens or not control_raw_tokens:
+        return False
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if not (instruction_raw_tokens & family and control_raw_tokens & family):
+            continue
+        if _same_action_object_mismatch(
+            _tokenize_instruction(instruction),
+            _tokenize_control(candidate_text),
+            family,
+            ACTION_OBJECT_STOPWORDS,
+        ):
+            return True
+    return False
+
+
+def _same_action_family_window_context_mismatch(
+    instruction: str,
+    candidate_text: str,
+    window_title: str,
+) -> bool:
+    if not (window_title or "").strip():
+        return False
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    control_raw_tokens = _tokens_from_text(candidate_text)
+    if not instruction_raw_tokens or not control_raw_tokens:
+        return False
+    context_tokens = _tokenize_control(window_title or "")
+    context_objects = _object_token_variants(
+        _action_object_tokens(
+            context_tokens,
+            frozenset(),
+            ACTION_OBJECT_STOPWORDS,
+        )
+    ) & WINDOW_CONTEXT_OBJECT_WORDS
+    if not context_objects:
+        return False
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if not (instruction_raw_tokens & family and control_raw_tokens & family):
+            continue
+        instruction_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_instruction(instruction),
+                family,
+                ACTION_OBJECT_STOPWORDS,
+            )
+        )
+        if not instruction_objects:
+            continue
+        control_objects = _action_object_tokens(
+            _tokenize_control(candidate_text),
+            family,
+            ACTION_OBJECT_STOPWORDS,
+        )
+        if control_objects:
+            continue
+        if instruction_objects & context_objects:
+            return False
+        return True
+    return False
+
+
+def _generic_visibility_polarity_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_show = bool(instruction_tokens & GENERIC_VISIBILITY_SHOW_WORDS)
+    requested_hide = bool(instruction_tokens & GENERIC_VISIBILITY_HIDE_WORDS)
+    if requested_show == requested_hide:
+        return False
+
+    control_tokens = _tokens_from_text(candidate_text)
+    control_show = bool(control_tokens & GENERIC_VISIBILITY_SHOW_WORDS)
+    control_hide = bool(control_tokens & GENERIC_VISIBILITY_HIDE_WORDS)
+    if control_show == control_hide:
+        return False
+    if requested_show == control_show:
+        return False
+
+    instruction_objects = _action_object_tokens(
+        _tokenize_instruction(instruction),
+        GENERIC_VISIBILITY_ACTION_WORDS,
+        ACTION_OBJECT_STOPWORDS,
+    )
+    control_objects = _action_object_tokens(
+        _tokenize_control(candidate_text),
+        GENERIC_VISIBILITY_ACTION_WORDS,
+        ACTION_OBJECT_STOPWORDS,
+    )
+    return bool(instruction_objects or control_objects)
 
 
 def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
@@ -1646,6 +1836,24 @@ def _browser_tab_bookmark_action_mismatch(
     if raw_instruction_tokens & BROWSER_BOOKMARK_ITEM_CONTEXT_WORDS:
         return True
     return bool(raw_instruction_tokens & {"favorite", "star"} and raw_instruction_tokens & {"this", "that"})
+
+
+def _browser_tab_contextual_item_mismatch(
+    instruction: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype != "tabitem":
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & BROWSER_TAB_WORDS:
+        return False
+    if "item" not in raw_tokens:
+        return False
+    if not (raw_tokens & CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS):
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    return bool(window_tokens & BROWSER_PROFILE_WINDOW_WORDS)
 
 
 def _control_matches_effective_intent(
