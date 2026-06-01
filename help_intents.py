@@ -85,6 +85,16 @@ _PHRASE_TOKEN_REWRITES = (
         {"find", "search", "window", "windows"},
     ),
     (
+        re.compile(r"\btab\s+groups?\b"),
+        {"groups"},
+        {"tab"},
+    ),
+    (
+        re.compile(r"\bagentic\s+field\b"),
+        {"agentic", "agenticfield"},
+        {"field"},
+    ),
+    (
         re.compile(r"\b(?:hide|minimi[sz]e)\s+all\s+windows\b"),
         {"show_desktop"},
         {"all", "hide", "minimise", "minimize", "minus", "windows"},

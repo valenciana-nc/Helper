@@ -5345,6 +5345,140 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_closed_rejects_browser_group_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Limitless group"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open closed.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Limitless group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "wrong_named_group_rejects_browser_group_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "AgenticField group"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Limitless group.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "AgenticField group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_agenticfield_group_accepts_browser_group_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "AgenticField group"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open AgenticField group.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "AgenticField group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "tab_groups_button_accepts_tab_groups_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Tab groups"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open tab groups.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Tab groups",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_closed_group_model_rect_rejects_browser_group_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Limitless group"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open closed group.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Limitless group - Closed",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_account_target_id_rejects_unnamed_account_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

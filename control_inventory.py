@@ -110,6 +110,8 @@ BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
 BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
+BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
+BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
     {
@@ -1029,6 +1031,8 @@ def _text_match_score(
         candidate,
     ):
         return 0.0
+    if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -1085,6 +1089,8 @@ def _context_text_match_score(
         instruction_tokens,
         candidate,
     ):
+        return 0.0
+    if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1212,6 +1218,12 @@ def _target_id_plausibility(
         instruction_tokens,
         candidate,
     ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1591,6 +1603,30 @@ def _instruction_names_unnamed_bookmark_destination(
     return False
 
 
+def _browser_group_state_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_named_group_button(candidate):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    identity_tokens = text_tokens - BROWSER_GROUP_GENERIC_WORDS
+    if identity_tokens and instruction_tokens & identity_tokens:
+        return False
+    overlap = instruction_tokens & text_tokens
+    return bool(overlap and overlap <= BROWSER_GROUP_GENERIC_WORDS)
+
+
+def _looks_like_browser_named_group_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    return "group" in text_tokens and bool(text_tokens & BROWSER_GROUP_STATE_WORDS)
+
+
 def _candidate_is_taskbar_app_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     return (
@@ -1731,6 +1767,8 @@ def _target_id_ambiguity(
             candidate,
         ):
             continue
+        if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+            continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
         if _gmail_tab_selected_over_generic_mail_decoy(
             instruction_tokens=instruction_tokens,
@@ -1835,6 +1873,8 @@ def _has_semantic_alternative(
             candidate,
         ):
             continue
+        if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+            continue
         score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -1883,6 +1923,8 @@ def _has_visible_semantic_alternative(
             candidate,
         ):
             continue
+        if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+            continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
             continue
@@ -1927,6 +1969,8 @@ def _candidate_snap_score(
         instruction_tokens,
         candidate,
     ):
+        return 0.0
+    if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if (
         control_intents
@@ -2174,6 +2218,8 @@ def _candidate_snap_semantic_mismatch(
         instruction_tokens,
         candidate,
     ):
+        return True
+    if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

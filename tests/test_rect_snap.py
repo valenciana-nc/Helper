@@ -541,6 +541,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("x", weather_tokens)
         self.assertIn("clear", tokenize_control("Clear"))
 
+    def test_browser_group_phrases_do_not_force_tab_or_input_intents(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_instruction
+
+        tab_group_tokens = tokenize_instruction("Open tab groups")
+        self.assertIn("groups", tab_group_tokens)
+        self.assertNotIn("tab", tab_group_tokens)
+        self.assertNotIn("tabitem", instruction_control_intents("Open tab groups"))
+
+        agentic_tokens = tokenize_instruction("Open AgenticField group")
+        self.assertTrue({"agentic", "agenticfield"}.issubset(agentic_tokens))
+        self.assertNotIn("field", agentic_tokens)
+        self.assertFalse(instruction_control_intents("Open AgenticField group"))
+
     def test_tab_search_and_windows_search_phrases_are_specific(self) -> None:
         from help_intents import (
             instruction_control_intents,
@@ -6959,6 +6972,140 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
                 self.assertEqual(target.source, "candidate_snap")
                 self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_browser_named_group_rejects_generic_state_words(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open closed.",
+            "Open group.",
+            "Open closed group.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Limitless group - Closed",
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_browser_named_group_requires_matching_name(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open Limitless group.", "AgenticField group - Closed"),
+            ("Open AgenticField group.", "Limitless group - Closed"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_browser_named_group_accepts_matching_name_and_tab_groups_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open tab groups.", "Tab groups"),
+            ("Open AgenticField.", "AgenticField group - Closed"),
+            ("Open AgenticField group.", "AgenticField group - Closed"),
+            ("Open Limitless group.", "Limitless group - Closed"),
+            ("Open B2B.", "B2B group - Closed"),
+            ("Open Collage.", "Collage group - Closed"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_browser_named_group_rejects_generic_state_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open closed group.",
+                    "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Limitless group - Closed",
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_mail_target_id_accepts_envelope_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate
