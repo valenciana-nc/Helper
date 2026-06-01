@@ -514,6 +514,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "broad_same_type_button_recovers_to_tight_child_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Settings"},
+                {"rect": [540, 104, 70, 28], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "button", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Settings", "control_type": "button", "rect": [540, 104, 70, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [540, 104, 70, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_row_model_rect_with_actions_rejects_overlay",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1791,6 +1815,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "paste_into_message_recovers_from_toolbar_paste_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 500, 40], "label": "Message"},
+                {"rect": [20, 20, 90, 32], "label": "Paste"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into message.",
+                "target_id": "paste",
+                "target": {"x": 20, "y": 20, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "message", "text": "Message", "control_type": "edit", "rect": [120, 160, 500, 40]},
+                {"id": "paste", "text": "Paste", "control_type": "button", "rect": [20, 20, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "message",
+                "rect": [120, 160, 500, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "search_bar_plain_button_rejects_overlay",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2440,6 +2488,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Document saved", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "filter_orders_model_rect_rejects_filtered_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Orders filtered"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Filter orders.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Orders filtered", "control_type": "button", "rect": [20, 80, 180, 32]},
             ],
             "expected": {
                 "source": "candidate_snap",
@@ -13511,6 +13580,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "page_back_wording_recovers_from_browser_toolbar_back_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [16, 50, 36, 32], "label": "Back"},
+                {"rect": [80, 180, 80, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Back button on the page.",
+                "target_id": "browser_back",
+                "target": {"x": 16, "y": 50, "width": 36, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "browser_back",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [16, 50, 36, 32],
+                    "window_title": "Docs - Google Chrome",
+                },
+                {
+                    "id": "page_back",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [80, 180, 80, 32],
+                    "window_title": "Docs - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_back",
+                "rect": [80, 180, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "undo_action_rejects_back_arrow_alias_collision",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14126,6 +14231,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "edit2",
                 "rect": [150, 100, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "positional_duplicate_field_recovers_requested_input",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 220, 32], "label": "Email"},
+                {"rect": [100, 150, 220, 32], "label": "Phone"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type in the second field.",
+                "target_id": "email",
+                "target": {"x": 100, "y": 100, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "email", "text": "Email", "control_type": "edit", "rect": [100, 100, 220, 32]},
+                {"id": "phone", "text": "Phone", "control_type": "edit", "rect": [100, 150, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "phone",
+                "rect": [100, 150, 220, 32],
                 "overlay_emitted": True,
             },
         },

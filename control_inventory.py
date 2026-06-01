@@ -274,6 +274,8 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
         "find",
         "input",
         "location",
+        "message",
+        "messages",
         "omnibox",
         "query",
         "search",
@@ -427,10 +429,12 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
     (frozenset({"dismiss"}), frozenset({"dismissed"})),
     (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"filter"}), frozenset({"filtered"})),
     (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
     (frozenset({"invite"}), frozenset({"invited"})),
-    (frozenset({"save"}), frozenset({"saved"})),
+    (frozenset({"save"}), frozenset({"autosaved", "saved"})),
+    (frozenset({"search"}), frozenset({"searched"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
     (frozenset({"resolve"}), frozenset({"resolved"})),
@@ -1013,6 +1017,9 @@ CONTAINED_CONTROL_REQUEST_WORDS = frozenset(
         "textbox",
         "toggle",
     }
+)
+POSITIONAL_DUPLICATE_REQUEST_WORDS = CONTAINED_CONTROL_REQUEST_WORDS | frozenset(
+    {"buttons", "controls", "entries", "entry", "icons", "result", "results"}
 )
 COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 ForegroundHandleProvider = Callable[[], int | None]
@@ -1967,6 +1974,18 @@ def _text_match_score(
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
         return 0.0
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        score = TEXT_MATCH_FLOOR + 0.04
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     overlap = instruction_tokens & candidate_tokens
     if not overlap:
         return 0.0
@@ -2148,6 +2167,18 @@ def _context_text_match_score(
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
         return 0.0
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        score = TEXT_MATCH_FLOOR + 0.04
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     overlap = instruction_tokens & candidate_tokens
     if not overlap:
         return 0.0
@@ -2958,6 +2989,7 @@ def _instruction_requests_app_local_surface(
     text = (instruction or "").lower()
     return bool(
         re.search(r"\bin\s+(?:the\s+)?app\b", text)
+        or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
         or re.search(r"\bin[-\s]?page\b", text)
     )
 
@@ -4766,12 +4798,13 @@ def _positional_action_duplicate_mismatch(
     requested_positions = _positional_action_request_tokens(instruction)
     if not requested_positions:
         return False
-    if not _positional_action_duplicate_action_tokens(instruction_tokens, candidate):
+    request_tokens = instruction_tokens | _tokens_from_text(instruction)
+    if not _positional_action_duplicate_action_tokens(request_tokens, candidate):
         return False
     position_tokens = _positional_action_duplicate_position_tokens(
         candidate,
         candidates,
-        instruction_tokens,
+        request_tokens,
     )
     if not position_tokens:
         return False
@@ -4787,10 +4820,11 @@ def _candidate_satisfies_positional_action_duplicate_request(
     requested_positions = _positional_action_request_tokens(instruction)
     if not requested_positions:
         return False
+    request_tokens = instruction_tokens | _tokens_from_text(instruction)
     position_tokens = _positional_action_duplicate_position_tokens(
         candidate,
         candidates,
-        instruction_tokens,
+        request_tokens,
     )
     if not position_tokens:
         return False
@@ -4799,10 +4833,7 @@ def _candidate_satisfies_positional_action_duplicate_request(
 
 def _positional_action_request_tokens(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
-    if not (
-        raw_tokens & CONTAINED_CONTROL_REQUEST_WORDS
-        or raw_tokens & {"buttons", "controls", "icons"}
-    ):
+    if not (raw_tokens & POSITIONAL_DUPLICATE_REQUEST_WORDS):
         return set()
     requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
     if raw_tokens & {"arrow", "caret", "chevron"}:
@@ -4864,7 +4895,7 @@ def _positional_action_duplicate_candidates(
     candidates: list[ControlCandidate],
     instruction_tokens: set[str],
 ) -> list[ControlCandidate]:
-    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+    if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
         return []
     action_tokens = _positional_action_duplicate_action_tokens(instruction_tokens, candidate)
     if not action_tokens:
@@ -4888,11 +4919,51 @@ def _positional_action_duplicate_action_tokens(
     instruction_tokens: set[str],
     candidate: ControlCandidate,
 ) -> set[str]:
-    return (
+    semantic_overlap = (
         instruction_tokens
         & _candidate_semantic_tokens(candidate)
         - CONTEXTUAL_DUPLICATE_POSITION_WORDS
     )
+    if semantic_overlap:
+        return semantic_overlap
+    return (
+        instruction_tokens
+        & _positional_duplicate_control_tokens(candidate)
+        - CONTEXTUAL_DUPLICATE_POSITION_WORDS
+    )
+
+
+def _positional_duplicate_control_tokens(candidate: ControlCandidate) -> set[str]:
+    tokens = set(_tokenize_control(candidate.control_type))
+    if candidate.control_type == "button":
+        tokens.update({"button", "control", "icon"})
+    elif candidate.control_type == "splitbutton":
+        tokens.update({"button", "control", "splitbutton"})
+    elif candidate.control_type == "edit":
+        tokens.update({"box", "edit", "field", "input", "textbox"})
+    elif candidate.control_type == "combobox":
+        tokens.update({"box", "combo", "combobox", "dropdown", "field", "input"})
+    elif candidate.control_type == "spinner":
+        tokens.update({"field", "input", "spinner"})
+    elif candidate.control_type == "listitem":
+        tokens.update({"entry", "item", "listitem", "result", "row"})
+    elif candidate.control_type == "treeitem":
+        tokens.update({"entry", "item", "treeitem", "row"})
+    elif candidate.control_type == "radiobutton":
+        tokens.update({"option", "radio", "radiobutton"})
+    elif candidate.control_type == "checkbox":
+        tokens.update({"checkbox", "option"})
+    elif candidate.control_type == "hyperlink":
+        tokens.update({"hyperlink", "link"})
+    elif candidate.control_type == "menuitem":
+        tokens.update({"item", "menuitem", "option"})
+    elif candidate.control_type == "tabitem":
+        tokens.update({"tab", "tabitem"})
+    elif candidate.control_type == "headeritem":
+        tokens.update({"column", "header", "headeritem", "heading"})
+    elif candidate.control_type == "slider":
+        tokens.update({"slider"})
+    return tokens
 
 
 def _exact_action_word_alternative_mismatch(
@@ -5907,6 +5978,12 @@ def _candidate_snap_score(
         candidates,
     ):
         return 0.0
+    positional_duplicate_satisfied = _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
     if _contextual_surface_action_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -5963,7 +6040,12 @@ def _candidate_snap_score(
         control_intents=control_intents,
     ):
         return 0.0
-    if instruction_tokens and semantic_tokens and text_score <= 0:
+    if (
+        instruction_tokens
+        and semantic_tokens
+        and text_score <= 0
+        and not positional_duplicate_satisfied
+    ):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     area_score = _area_fit_score(candidate.rect, model_rect)
     type_score = 1.0 if candidate.control_type in {"button", "menuitem", "tabitem", "hyperlink", "splitbutton"} else 0.7
@@ -5982,12 +6064,7 @@ def _candidate_snap_score(
     )
     if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
-    if _candidate_satisfies_positional_action_duplicate_request(
-        instruction,
-        instruction_tokens,
-        candidate,
-        candidates,
-    ):
+    if positional_duplicate_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
@@ -6028,6 +6105,7 @@ def _contains_tighter_same_intent_action(
 ) -> bool:
     if (
         selected.control_type not in ROW_LIKE_CONTROL_TYPES
+        and selected.control_type not in TIGHT_ACTION_CONTROL_TYPES
         and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
         and not _instruction_requests_contained_surface_action(instruction, selected)
     ):

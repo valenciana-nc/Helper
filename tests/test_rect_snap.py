@@ -6802,6 +6802,27 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "search")
 
+        message_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Paste into message.",
+                    "target_id": "paste",
+                    "target": {"x": 20, "y": 20, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("paste", "Paste", "button", (20, 20, 90, 32)),
+                ControlCandidate("message", "Message", "edit", (120, 160, 500, 40)),
+            ],
+        )
+
+        self.assertEqual(message_target.source, "text_match")
+        self.assertEqual(message_target.target_id, "message")
+        self.assertEqual(message_target.rect, (120, 160, 500, 40))
+        self.assertFalse(message_target.rejected_reason)
+
         for toolbar_instruction in ("Paste selected text.", "Click Paste."):
             with self.subTest(toolbar_instruction=toolbar_instruction):
                 toolbar_target = resolve_help_target(
@@ -7395,6 +7416,39 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rect, (20, 20, 70, 30))
         self.assertFalse(target.rejected_reason)
+
+    def test_broad_same_type_action_target_recovers_to_tight_child(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("c001", "Settings", "button", (20, 80, 600, 80)),
+            ControlCandidate("c002", "Settings", "button", (540, 104, 70, 28)),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings.",
+                    "target_id": "c001",
+                    "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Settings.",
+            candidates=candidates,
+            model_rect=(20, 80, 600, 80),
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rect, (540, 104, 70, 28))
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "c002")
+        self.assertFalse(snap_target.rejected_reason)
 
     def test_splitbutton_target_id_recovers_to_menu_segment(self) -> None:
         from control_inventory import ControlCandidate
@@ -11950,12 +12004,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Download report.", "Downloaded report", "button"),
             ("Download report.", "Report downloaded", "button"),
             ("Dismiss notification.", "Dismissed notification", "button"),
+            ("Filter orders.", "Orders filtered", "button"),
             ("Install app.", "Installed app", "button"),
             ("Invite user.", "Invited user", "button"),
             ("Fix issue.", "Fixed issue", "button"),
             ("Resolve alert.", "Resolved alert", "button"),
             ("Save document.", "Saved document", "button"),
             ("Save document.", "Document saved", "button"),
+            ("Save document.", "Document autosaved", "button"),
+            ("Search orders.", "Orders searched", "button"),
             ("Send message.", "Sent message", "button"),
             ("Send message.", "Message delivered", "button"),
             ("Share link.", "Shared link", "button"),
@@ -14092,6 +14149,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "browser_back")
         self.assertEqual(target.rect, (16, 16, 32, 32))
         self.assertFalse(target.rejected_reason)
+
+    def test_page_local_navigation_wording_recovers_from_browser_toolbar_back(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "browser_back",
+                "Back",
+                "button",
+                (16, 50, 36, 32),
+                window_title="Docs - Google Chrome",
+            ),
+            ControlCandidate(
+                "page_back",
+                "Back",
+                "button",
+                (80, 180, 80, 32),
+                window_title="Docs - Google Chrome",
+            ),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Back button on the page.",
+                    "target_id": "browser_back",
+                    "target": {"x": 16, "y": 50, "width": 36, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Back button on the page.",
+            candidates=candidates,
+            model_rect=(16, 50, 36, 32),
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "page_back")
+        self.assertEqual(target.rect, (80, 180, 80, 32))
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "browser_back")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_navigation_arrow_aliases_do_not_cross_history_controls(self) -> None:
         from control_inventory import ControlCandidate
@@ -17297,6 +17400,94 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "edit2")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (150, 100, 32, 32))
+
+    def test_positional_duplicate_controls_recover_requested_field_and_option(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Type in the second field.",
+                [
+                    ControlCandidate("email", "Email", "edit", (100, 100, 220, 32)),
+                    ControlCandidate("phone", "Phone", "edit", (100, 150, 220, 32)),
+                ],
+                "email",
+                "phone",
+                (100, 100, 220, 32),
+                (100, 150, 220, 32),
+            ),
+            (
+                "Select the second option.",
+                [
+                    ControlCandidate("first", "Option", "radiobutton", (100, 100, 120, 32)),
+                    ControlCandidate("second", "Option", "radiobutton", (100, 150, 120, 32)),
+                ],
+                "first",
+                "second",
+                (100, 100, 120, 32),
+                (100, 150, 120, 32),
+            ),
+            (
+                "Click the second search result.",
+                [
+                    ControlCandidate("result1", "Search result", "listitem", (100, 100, 300, 40)),
+                    ControlCandidate("result2", "Search result", "listitem", (100, 150, 300, 40)),
+                ],
+                "result1",
+                "result2",
+                (100, 100, 300, 40),
+                (100, 150, 300, 40),
+            ),
+        )
+
+        for instruction, candidates, wrong_id, expected_id, wrong_rect, expected_rect in cases:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {
+                                "x": wrong_rect[0],
+                                "y": wrong_rect[1],
+                                "width": wrong_rect[2],
+                                "height": wrong_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, wrong_id)
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.target_id, expected_id)
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.target_id, expected_id)
+                self.assertFalse(snap_target.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, expected_id)
+                self.assertEqual(help_target.rect, expected_rect)
+                self.assertFalse(help_target.rejected_reason)
 
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate
