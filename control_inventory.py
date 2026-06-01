@@ -105,6 +105,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "drag",
         "slide",
         "move",
+        "spin",
         "open",
         "focus",
         "go",
@@ -139,6 +140,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "button",
         "icon",
         "link",
+        "hyperlink",
         "tab",
         "menu",
         "item",
@@ -161,6 +163,9 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "combobox",
         "dropdown",
         "slider",
+        "spinner",
+        "spinbox",
+        "stepper",
         "drop",
         "down",
         "arrow",
@@ -194,6 +199,7 @@ ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
 SLIDER_CONTROL_TYPES = frozenset({"slider"})
+SPINNER_CONTROL_TYPES = frozenset({"spinner"})
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
@@ -1474,11 +1480,15 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_DROPDOWN_INTENT_TYPES)
     if "slider" in raw_tokens:
         intents.update(SLIDER_CONTROL_TYPES)
+    if raw_tokens & {"spinner", "spinbox", "stepper"} or (
+        "spin" in raw_tokens and "box" in raw_tokens
+    ):
+        intents.update(SPINNER_CONTROL_TYPES)
     if not checkbox_requested and not radio_requested and "button" in raw_tokens:
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
         intents.update(_ICON_INTENT_TYPES)
-    if "link" in raw_tokens:
+    if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")

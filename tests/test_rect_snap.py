@@ -459,6 +459,56 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 220, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_generic_spinner_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        spinner = _make_button(
+            "History max tokens",
+            100,
+            200,
+            160,
+            32,
+            control_type="Spinner",
+        )
+        window = _make_window("Settings", 0, 0, 800, 600, [spinner])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 160, 32),
+            "Adjust this spinner.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 160, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_generic_hyperlink_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        link = _make_button(
+            "Documentation",
+            100,
+            200,
+            140,
+            28,
+            control_type="Hyperlink",
+        )
+        window = _make_window("Help", 0, 0, 800, 600, [link])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 140, 28),
+            "Click this hyperlink.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 140, 28))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1452,6 +1502,60 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 220, 32))
 
+    def test_generic_spinner_target_id_accepts_spinner_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Adjust this spinner.",
+            candidates=[
+                ControlCandidate("c001", "History max tokens", "spinner", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_generic_stepper_target_id_accepts_spinner_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this stepper.",
+            candidates=[
+                ControlCandidate("c001", "Retries", "spinner", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_generic_hyperlink_target_id_accepts_hyperlink_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this hyperlink.",
+            candidates=[
+                ControlCandidate("c001", "Documentation", "hyperlink", (10, 10, 140, 28)),
+            ],
+            model_rect=(10, 10, 140, 28),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 140, 28))
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -2200,6 +2304,72 @@ class ControlInventoryTests(unittest.TestCase):
                 ControlCandidate("c003", "Contrast", "slider", (10, 90, 220, 32)),
             ],
             model_rect=(10, 10, 220, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_generic_spinner(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Adjust this spinner.",
+            candidates=[
+                ControlCandidate("c001", "History max tokens", "spinner", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_snap_candidate_target_rejects_broad_spinner_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Adjust this spinner.",
+            candidates=[
+                ControlCandidate("c001", "Temperature", "spinner", (10, 10, 120, 32)),
+                ControlCandidate("c002", "Retries", "spinner", (10, 50, 120, 32)),
+                ControlCandidate("c003", "Delay", "spinner", (10, 90, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_generic_hyperlink(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this hyperlink.",
+            candidates=[
+                ControlCandidate("c001", "Documentation", "hyperlink", (10, 10, 140, 28)),
+            ],
+            model_rect=(10, 10, 140, 28),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 140, 28))
+
+    def test_snap_candidate_target_rejects_broad_hyperlink_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this hyperlink.",
+            candidates=[
+                ControlCandidate("c001", "Docs", "hyperlink", (10, 10, 120, 28)),
+                ControlCandidate("c002", "Support", "hyperlink", (10, 46, 120, 28)),
+                ControlCandidate("c003", "Pricing", "hyperlink", (10, 82, 120, 28)),
+            ],
+            model_rect=(10, 10, 120, 100),
         )
 
         self.assertIsNone(result)
@@ -3035,6 +3205,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 220, 32))
 
+    def test_generic_spinner_model_rect_highlights_spinner(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Adjust this spinner.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "History max tokens", "spinner", (10, 10, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 160, 32))
+
+    def test_generic_hyperlink_model_rect_highlights_hyperlink(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this hyperlink.",
+                    "target": {"x": 10, "y": 10, "width": 140, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Documentation", "hyperlink", (10, 10, 140, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 140, 28))
+
     def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -3052,6 +3268,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
                 ControlCandidate("c002", "Brightness", "slider", (10, 50, 220, 32)),
                 ControlCandidate("c003", "Contrast", "slider", (10, 90, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_spinner_broad_group_rejects_multiple_spinners(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Adjust this spinner.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Temperature", "spinner", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Retries", "spinner", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Delay", "spinner", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_hyperlink_broad_group_rejects_multiple_hyperlinks(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this hyperlink.",
+                    "target": {"x": 10, "y": 10, "width": 120, "height": 100},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Docs", "hyperlink", (10, 10, 120, 28)),
+                ControlCandidate("c002", "Support", "hyperlink", (10, 46, 120, 28)),
+                ControlCandidate("c003", "Pricing", "hyperlink", (10, 82, 120, 28)),
             ],
         )
 

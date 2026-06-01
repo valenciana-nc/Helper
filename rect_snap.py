@@ -54,17 +54,17 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 _INSTRUCTION_STOPWORDS = frozenset(
     {
         "click", "tap", "press", "select", "choose", "adjust", "drag",
-        "slide", "move", "focus", "go",
+        "slide", "move", "spin", "focus", "go",
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "here", "there", "highlighted", "shown", "indicated", "selected",
         "area", "spot", "place", "location",
-        "button", "icon", "link", "tab", "menu", "item", "option",
+        "button", "icon", "link", "hyperlink", "tab", "menu", "item", "option",
         "header", "heading", "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
         "radio", "radiobutton", "combo", "combobox", "dropdown",
-        "slider",
+        "slider", "spinner", "spinbox", "stepper",
         "drop", "down", "arrow", "caret", "chevron",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
@@ -75,6 +75,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
 
 INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
 SLIDER_CONTROL_TYPES = frozenset({"slider"})
+SPINNER_CONTROL_TYPES = frozenset({"spinner"})
 TIGHT_ACTION_CONTROL_TYPES = frozenset(
     {
         "button",
@@ -746,11 +747,15 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_DROPDOWN_INTENT_TYPES)
     if "slider" in raw_tokens:
         intents.update(SLIDER_CONTROL_TYPES)
+    if raw_tokens & {"spinner", "spinbox", "stepper"} or (
+        "spin" in raw_tokens and "box" in raw_tokens
+    ):
+        intents.update(SPINNER_CONTROL_TYPES)
     if not checkbox_requested and not radio_requested and "button" in raw_tokens:
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
         intents.update(_ICON_INTENT_TYPES)
-    if "link" in raw_tokens:
+    if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")
