@@ -986,6 +986,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
     }
 )
 NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
+LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
@@ -1415,6 +1416,11 @@ def resolve_candidate_target(
         return dialog_dismiss
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
+        matches_row_action = (
+            _instruction_requests_contained_row_action(instruction)
+            and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
+            and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
+        )
         matches_control_intent = _candidate_matches_control_intent(
             candidate,
             control_intents,
@@ -1424,7 +1430,7 @@ def resolve_candidate_target(
             instruction_tokens,
             candidate,
             candidates,
-        )
+        ) or matches_row_action
         if control_intents and not matches_control_intent:
             score = _context_text_match_score(
                 instruction,
@@ -1842,7 +1848,12 @@ def _text_match_score(
     control_intents = _instruction_control_intents(instruction)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
-    if not _candidate_matches_control_intent(
+    matches_row_action = (
+        _instruction_requests_contained_row_action(instruction)
+        and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
+        and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
+    )
+    if not matches_row_action and not _candidate_matches_control_intent(
         candidate,
         control_intents,
         instruction=instruction,
@@ -1879,6 +1890,8 @@ def _text_match_score(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -1983,7 +1996,8 @@ def _text_match_score(
             score = min(1.0, score + 0.05 * _proximity_score(candidate.rect, model_rect))
         return score
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    candidate_tokens = _candidate_semantic_tokens(candidate)
+    label_tokens = _nearby_field_label_tokens(candidate, candidates)
+    candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
         return 0.0
     if _candidate_satisfies_positional_action_duplicate_request(
@@ -1998,11 +2012,16 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(max(score, 0.0), 1.0)
-    overlap = instruction_tokens & candidate_tokens
+    match_tokens = _candidate_match_instruction_tokens(
+        instruction,
+        instruction_tokens,
+        candidate,
+    )
+    overlap = match_tokens & candidate_tokens
     if not overlap:
         return 0.0
 
-    coverage = len(overlap) / max(1, len(instruction_tokens))
+    coverage = len(overlap) / max(1, len(match_tokens))
     density = len(overlap) / max(1, len(candidate_tokens))
     score = 0.70 * coverage + 0.18 * min(1.0, density * 3.0)
     window_tokens = _tokens_from_text(candidate.window_title)
@@ -2014,6 +2033,8 @@ def _text_match_score(
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+    if label_tokens and overlap & label_tokens:
+        score = max(score, TEXT_MATCH_FLOOR + 0.03)
     if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
         instruction,
         candidate,
@@ -2024,6 +2045,8 @@ def _text_match_score(
         candidate,
         candidates,
     ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if _candidate_satisfies_positional_action_duplicate_request(
         instruction,
@@ -2079,6 +2102,8 @@ def _context_text_match_score(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -2178,7 +2203,8 @@ def _context_text_match_score(
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    candidate_tokens = _candidate_semantic_tokens(candidate)
+    label_tokens = _nearby_field_label_tokens(candidate, candidates)
+    candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
         return 0.0
     if _candidate_satisfies_positional_action_duplicate_request(
@@ -2193,16 +2219,23 @@ def _context_text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(max(score, 0.0), 1.0)
-    overlap = instruction_tokens & candidate_tokens
+    match_tokens = _candidate_match_instruction_tokens(
+        instruction,
+        instruction_tokens,
+        candidate,
+    )
+    overlap = match_tokens & candidate_tokens
     if not overlap:
         return 0.0
-    coverage = len(overlap) / max(1, len(instruction_tokens))
+    coverage = len(overlap) / max(1, len(match_tokens))
     density = len(overlap) / max(1, len(candidate_tokens))
     score = 0.70 * coverage + 0.18 * min(1.0, density * 3.0)
     if visible_tokens:
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+    if label_tokens and overlap & label_tokens:
+        score = max(score, TEXT_MATCH_FLOOR + 0.03)
     if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
         instruction,
         candidate,
@@ -2213,6 +2246,8 @@ def _context_text_match_score(
         candidate,
         candidates,
     ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if _candidate_satisfies_positional_action_duplicate_request(
         instruction,
@@ -2301,7 +2336,10 @@ def _target_id_plausibility(
 ) -> tuple[bool, float, str]:
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
-    semantic_tokens = _candidate_semantic_tokens(candidate)
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+        candidate,
+        candidates,
+    )
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return (
@@ -2370,6 +2408,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2815,6 +2859,66 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
     return automation_tokens | inferred_tokens
 
 
+def _nearby_field_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return set()
+    if _candidate_visible_text_tokens(candidate) or candidate.automation_id.strip():
+        return set()
+    best_score = 0.0
+    best_tokens: set[str] = set()
+    field_area = max(1, candidate.rect[2] * candidate.rect[3])
+    for label in candidates:
+        if label.id == candidate.id:
+            continue
+        if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        tokens = _candidate_visible_text_tokens(label)
+        if not tokens or len(tokens) > 8:
+            continue
+        label_area = max(1, label.rect[2] * label.rect[3])
+        if label_area > field_area * 4:
+            continue
+        score = _nearby_field_label_score(candidate.rect, label.rect)
+        if score > best_score:
+            best_score = score
+            best_tokens = tokens
+    if best_score < 0.5:
+        return set()
+    return best_tokens
+
+
+def _nearby_field_label_score(
+    field_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    field_left, field_top, field_width, field_height = field_rect
+    field_right = field_left + field_width
+    field_bottom = field_top + field_height
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+
+    y_overlap = max(0, min(field_bottom, label_bottom) - max(field_top, label_top))
+    y_ratio = y_overlap / max(1, min(field_height, label_height))
+    left_gap = field_left - label_right
+    if y_ratio >= 0.45 and -8 <= left_gap <= 180 and label_left <= field_left:
+        return 0.75 + 0.25 * (1.0 - min(1.0, max(0, left_gap) / 180.0))
+
+    x_overlap = max(0, min(field_right, label_right) - max(field_left, label_left))
+    x_ratio = x_overlap / max(1, min(field_width, label_width))
+    above_gap = field_top - label_bottom
+    label_center_x, _label_center_y = _center(label_rect)
+    field_center_x, _field_center_y = _center(field_rect)
+    center_aligned = abs(label_center_x - field_center_x) <= max(60, field_width * 0.45)
+    if 0 <= above_gap <= 64 and (x_ratio >= 0.25 or center_aligned):
+        return 0.65 + 0.20 * (1.0 - min(1.0, above_gap / 64.0))
+
+    return 0.0
+
+
 def _candidate_visible_semantic_text(candidate: ControlCandidate) -> str:
     text = candidate.text or ""
     if candidate.control_type == "tabitem":
@@ -3002,6 +3106,22 @@ def _browser_navigation_chrome_action_mismatch(
         return False
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not (candidate_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    return not _looks_like_browser_toolbar_button(candidate)
+
+
+def _browser_toolbar_chrome_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS):
+        return False
+    toolbar_words = raw_tokens & BROWSER_CHROME_TOOLBAR_WORDS
+    if not toolbar_words:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if not (candidate_tokens & BROWSER_CHROME_TOOLBAR_WORDS):
         return False
     return not _looks_like_browser_toolbar_button(candidate)
 
@@ -4447,6 +4567,7 @@ def _contained_row_action_context_mismatch(
         and _contained_row_action_candidate_matches(
             candidate,
             _tokenize_instruction(instruction),
+            instruction,
         )
     ):
         row_objects = _contained_row_context_objects(candidate, candidates)
@@ -4476,6 +4597,7 @@ def _instruction_contained_row_context_objects(
         candidate_words
         | CONTEXTUAL_DUPLICATE_STOPWORDS
         | ROW_CONTEXT_GENERIC_WORDS
+        | REVERSIBLE_ACTION_POLARITY_WORDS
         | CLEAR_CONTEXT_WORDS
     )
     context_words: set[str] = set()
@@ -5446,6 +5568,8 @@ def _target_id_ambiguity(
             continue
         if _browser_navigation_chrome_action_mismatch(instruction, candidate):
             continue
+        if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -5730,6 +5854,8 @@ def _has_semantic_alternative(
             continue
         if _browser_navigation_chrome_action_mismatch(instruction, candidate):
             continue
+        if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -5840,6 +5966,8 @@ def _has_visible_semantic_alternative(
             continue
         if _browser_navigation_chrome_action_mismatch(instruction, candidate):
             continue
+        if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -5927,7 +6055,10 @@ def _candidate_snap_score(
 ) -> float:
     iou = _iou(candidate.rect, model_rect)
     proximity = _proximity_score(candidate.rect, model_rect)
-    semantic_tokens = _candidate_semantic_tokens(candidate)
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+        candidate,
+        candidates,
+    )
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
@@ -5954,6 +6085,8 @@ def _candidate_snap_score(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -6278,7 +6411,7 @@ def _contains_tighter_row_action_candidate(
             continue
         if not _contains_rect(_expand_rect(selected.rect, 2), candidate.rect):
             continue
-        if _contained_row_action_candidate_matches(candidate, instruction_tokens):
+        if _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction):
             return True
     return False
 
@@ -6286,11 +6419,33 @@ def _contains_tighter_row_action_candidate(
 def _contained_row_action_candidate_matches(
     candidate: ControlCandidate,
     instruction_tokens: set[str],
+    instruction: str = "",
 ) -> bool:
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    return bool(visible_tokens and instruction_tokens & visible_tokens)
+    if not visible_tokens:
+        return False
+    action_tokens = set(instruction_tokens)
+    if instruction:
+        action_tokens.update(_tokens_from_text(instruction) & visible_tokens)
+    return bool(action_tokens & visible_tokens)
+
+
+def _candidate_match_instruction_tokens(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> set[str]:
+    tokens = set(instruction_tokens)
+    if (
+        _instruction_requests_contained_row_action(instruction)
+        and candidate.control_type in TIGHT_ACTION_CONTROL_TYPES
+    ):
+        visible_tokens = _candidate_visible_text_tokens(candidate)
+        if visible_tokens:
+            tokens.update(_tokens_from_text(instruction) & visible_tokens)
+    return tokens
 
 
 def _row_scoped_action_target_matches_context(
@@ -6301,7 +6456,7 @@ def _row_scoped_action_target_matches_context(
     if not _instruction_requests_contained_row_action(instruction):
         return False
     instruction_tokens = _tokenize_instruction(instruction)
-    if not _contained_row_action_candidate_matches(candidate, instruction_tokens):
+    if not _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction):
         return False
     return not _contained_row_action_context_mismatch(instruction, candidate, candidates)
 
@@ -6367,7 +6522,7 @@ def _single_contained_control_intent_candidate(
         matches_row_action = (
             _instruction_requests_contained_row_action(instruction)
             and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
-            and _contained_row_action_candidate_matches(candidate, instruction_tokens)
+            and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
         )
         if not matches_intent and not matches_row_action:
             continue
@@ -6389,6 +6544,8 @@ def _single_contained_control_intent_candidate(
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
         if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+            continue
+        if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
@@ -6577,6 +6734,8 @@ def _state_action_button_matches_checkbox_intent(
         return False
 
     instruction_tokens = _tokens_from_text(instruction)
+    if "checkbox" in instruction_tokens or {"check", "box"} <= instruction_tokens:
+        return False
     requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
     requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if requested_on == requested_off:
@@ -6669,7 +6828,10 @@ def _candidate_snap_semantic_mismatch(
     instruction_tokens: set[str],
     model_rect: tuple[int, int, int, int],
 ) -> bool:
-    semantic_tokens = _candidate_semantic_tokens(candidate)
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+        candidate,
+        candidates,
+    )
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
@@ -6697,6 +6859,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return True
+    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
         return True
     if _browser_address_bar_content_mismatch(
         instruction,

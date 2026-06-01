@@ -1813,6 +1813,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "fill_text_entry_wrong_target_id_recovers_to_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Email"},
+                {"rect": [300, 80, 90, 32], "label": "Email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Fill email address.",
+                "target_id": "c002",
+                "target": {"x": 300, "y": 80, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Email", "control_type": "edit", "rect": [20, 80, 220, 32]},
+                {"id": "c002", "text": "Email", "control_type": "button", "rect": [300, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "text_entry_label_target_recovers_to_adjacent_empty_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 100, 80, 24], "label": "Username"},
+                {"rect": [180, 94, 280, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type into Username.",
+                "target_id": "label",
+                "target": {"x": 80, "y": 100, "width": 80, "height": 24},
+            },
+            "candidates": [
+                {"id": "label", "text": "Username", "control_type": "text", "rect": [80, 100, 80, 24]},
+                {"id": "field", "text": "", "control_type": "edit", "rect": [180, 94, 280, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "field",
+                "rect": [180, 94, 280, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "paste_into_search_field_recovers_from_toolbar_paste_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1950,6 +1998,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 190, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_checkbox_wording_recovers_from_state_action_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Notifications"},
+                {"rect": [320, 100, 190, 32], "label": "Enable notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enable notifications checkbox.",
+                "target_id": "button",
+                "target": {"x": 320, "y": 100, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "checkbox", "text": "Notifications", "control_type": "checkbox", "rect": [100, 100, 180, 32]},
+                {"id": "button", "text": "Enable notifications", "control_type": "button", "rect": [320, 100, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "checkbox",
+                "rect": [100, 100, 180, 32],
                 "overlay_emitted": True,
             },
         },
@@ -13721,6 +13793,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "chrome_toolbar_reload_wording_recovers_from_page_reload",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [16, 8, 34, 34], "label": "Reload"},
+                {"rect": [80, 220, 120, 36], "label": "Reload"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Chrome toolbar Reload button.",
+                "target_id": "page_reload",
+                "target": {"x": 80, "y": 220, "width": 120, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "browser_reload",
+                    "text": "Reload",
+                    "control_type": "button",
+                    "rect": [16, 8, 34, 34],
+                    "automation_id": "reload",
+                    "window_title": "Docs - Google Chrome",
+                },
+                {
+                    "id": "page_reload",
+                    "text": "Reload",
+                    "control_type": "button",
+                    "rect": [80, 220, 120, 36],
+                    "window_title": "Docs - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "browser_reload",
+                "rect": [16, 8, 34, 34],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "undo_action_rejects_back_arrow_alias_collision",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -13996,7 +14105,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "pay2", "text": "Pay", "control_type": "button", "rect": [730, 144, 60, 30]},
             ],
             "expected": {
-                "source": "candidate_snap",
+                "source": "text_match",
                 "target_id": "pay2",
                 "rect": [730, 144, 60, 30],
                 "overlay_emitted": True,
@@ -14031,6 +14140,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "bob_clear",
                 "rect": [390, 170, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_open_action_uses_action_word_filtered_from_tokens",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 600, 80], "label": "Alice"},
+                {"rect": [520, 34, 80, 30], "label": "Open"},
+                {"rect": [10, 100, 600, 80], "label": "Bob"},
+                {"rect": [520, 124, 80, 30], "label": "Open"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open in Bob row.",
+                "target_id": "a1",
+                "target": {"x": 520, "y": 34, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Alice", "control_type": "listitem", "rect": [10, 10, 600, 80]},
+                {"id": "a1", "text": "Open", "control_type": "button", "rect": [520, 34, 80, 30]},
+                {"id": "r2", "text": "Bob", "control_type": "listitem", "rect": [10, 100, 600, 80]},
+                {"id": "a2", "text": "Open", "control_type": "button", "rect": [520, 124, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "a2",
+                "rect": [520, 124, 80, 30],
                 "overlay_emitted": True,
             },
         },

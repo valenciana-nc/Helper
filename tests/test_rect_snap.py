@@ -1,6 +1,7 @@
 """Tests for rect_snap.snap_to_control and help_session.looks_oversized."""
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -4555,22 +4556,67 @@ class ControlInventoryTests(unittest.TestCase):
     def test_text_entry_action_text_match_prefers_edit_over_same_label_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
-        result = resolve_candidate_target(
-            target_id="",
-            instruction="Enter the verification code.",
-            candidates=[
-                ControlCandidate("c001", "Verification code", "edit", (10, 10, 260, 32)),
-                ControlCandidate("c002", "Verification code", "button", (300, 10, 140, 32)),
+        cases = (
+            ("Enter the verification code.", "Verification code", (10, 10, 260, 32)),
+            ("Fill email address.", "Email", (10, 10, 220, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "edit", rect),
+                        ControlCandidate("c002", label, "button", (300, 10, 140, 32)),
+                    ],
+                    model_rect=(300, 10, 140, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "text_match")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+
+    def test_text_entry_action_recovers_from_adjacent_label_target(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Type into Username.",
+                        "target_id": "label",
+                        "target": {"x": 80, "y": 100, "width": 80, "height": 24},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate("label", "Username", "text", (80, 100, 80, 24)),
+                ControlCandidate("field", "", "edit", (180, 94, 280, 36)),
             ],
-            model_rect=(300, 10, 140, 32),
         )
 
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertEqual(result.source, "text_match")
-        self.assertEqual(result.target_id, "c001")
-        self.assertEqual(result.rect, (10, 10, 260, 32))
-        self.assertFalse(result.rejected_reason)
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "field")
+        self.assertEqual(target.rect, (180, 94, 280, 36))
+        self.assertFalse(target.rejected_reason)
 
     def test_text_entry_wording_keeps_explicit_enter_button_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -4657,6 +4703,45 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertEqual(result.rect, (10, 10, 190, 32))
         self.assertFalse(result.rejected_reason)
+
+    def test_explicit_checkbox_wording_recovers_from_state_action_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Enable notifications checkbox.",
+                        "target_id": "button",
+                        "target": {"x": 320, "y": 100, "width": 190, "height": 32},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate("checkbox", "Notifications", "checkbox", (100, 100, 180, 32)),
+                ControlCandidate("button", "Enable notifications", "button", (320, 100, 190, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "checkbox")
+        self.assertEqual(target.rect, (100, 100, 180, 32))
+        self.assertFalse(target.rejected_reason)
 
     def test_state_action_target_id_accepts_matching_action_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -14356,6 +14441,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, (80, 220, 100, 36))
         self.assertFalse(target.rejected_reason)
 
+    def test_chrome_toolbar_reload_wording_recovers_from_page_reload(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "browser_reload",
+                "Reload",
+                "button",
+                (16, 8, 34, 34),
+                automation_id="reload",
+                window_title="Docs - Google Chrome",
+            ),
+            ControlCandidate(
+                "page_reload",
+                "Reload",
+                "button",
+                (80, 220, 120, 36),
+                window_title="Docs - Google Chrome",
+            ),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Chrome toolbar Reload button.",
+                    "target_id": "page_reload",
+                    "target": {"x": 80, "y": 220, "width": 120, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Chrome toolbar Reload button.",
+            candidates=candidates,
+            model_rect=(80, 220, 120, 36),
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "browser_reload")
+        self.assertEqual(target.rect, (16, 8, 34, 34))
+        self.assertFalse(target.rejected_reason)
+        self.assertIsNone(snap_target)
+
     def test_navigation_arrow_aliases_do_not_cross_history_controls(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -16981,7 +17111,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
                 "pay2",
                 (720, 64, 60, 30),
-                "candidate_snap",
+                "text_match",
             ),
             (
                 "Click More in Bob row.",
@@ -16993,7 +17123,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
                 "more2",
                 (720, 64, 60, 30),
-                "candidate_snap",
+                "text_match",
             ),
         )
         for instruction, candidates, candidate_id, rect, source in cases:
@@ -17014,6 +17144,42 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, candidate_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_row_scoped_action_wrong_target_id_recovers_to_filtered_action_word(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Alice", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("a1", "Open", "button", (520, 34, 80, 30)),
+            ControlCandidate("r2", "Bob", "listitem", (10, 100, 600, 80)),
+            ControlCandidate("a2", "Open", "button", (520, 124, 80, 30)),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Open in Bob row.",
+                    "target_id": "a1",
+                    "target": {"x": 520, "y": 34, "width": 80, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Open in Bob row.",
+            candidates=candidates,
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "a2")
+        self.assertEqual(target.rect, (520, 124, 80, 30))
+        self.assertFalse(target.rejected_reason)
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "a2")
 
     def test_row_scoped_action_target_id_uses_context_over_wrong_model_rect(self) -> None:
         from control_inventory import ControlCandidate

@@ -614,7 +614,7 @@ _CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = (
     _TEXT_ENTRY_TARGET_WORDS
     | frozenset({"chat", "comment", "comments", "message", "messages", "reply"})
 ) - frozenset({"text"})
-_TEXT_ENTRY_ACTION_WORDS = frozenset({"enter", "type"})
+_TEXT_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "type"})
 _TEXT_ENTRY_BLOCKING_WORDS = frozenset(
     {
         "arrow",
