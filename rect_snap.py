@@ -54,13 +54,14 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 _INSTRUCTION_STOPWORDS = frozenset(
     {
         "click", "tap", "press", "select", "choose", "adjust", "drag",
-        "slide", "move", "spin", "focus", "go",
+        "pick", "slide", "move", "spin", "focus", "go",
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "here", "there", "bar", "highlighted", "shown", "indicated", "selected",
         "control", "controls",
         "area", "spot", "place", "location",
         "button", "icon", "link", "hyperlink", "split", "tab", "list", "tree", "menu", "item", "option",
+        "choice", "choices",
         "header", "heading", "field", "input", "edit", "editable",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
@@ -137,11 +138,48 @@ _TEXT_ENTRY_BLOCKING_WORDS = frozenset(
         "treeitem",
     }
 )
+_CHECKBOX_ACTION_WORDS = frozenset({"check", "tick", "uncheck", "untick"})
+_CHECKBOX_STATE_ACTION_WORDS = frozenset({"disable", "enable"})
+_CHECKBOX_ACTION_BLOCKING_WORDS = frozenset(
+    {
+        "button",
+        "combo",
+        "combobox",
+        "down",
+        "drop",
+        "dropdown",
+        "header",
+        "headeritem",
+        "heading",
+        "hyperlink",
+        "icon",
+        "key",
+        "link",
+        "list",
+        "listitem",
+        "menu",
+        "menuitem",
+        "radio",
+        "radiobutton",
+        "shortcut",
+        "slider",
+        "spinbox",
+        "spinner",
+        "split",
+        "splitbutton",
+        "stepper",
+        "tab",
+        "tabitem",
+        "tree",
+        "treeitem",
+    }
+)
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
+_OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
 _LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
 _TREE_ITEM_INTENT_TYPES = frozenset({"treeitem"})
 _NAV_ITEM_INTENT_TYPES = frozenset(
@@ -803,8 +841,10 @@ def _tokenize_instruction(instruction: str) -> set[str]:
 def _instruction_control_intents(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
     intents: set[str] = set()
-    checkbox_requested = "checkbox" in raw_tokens or (
-        "check" in raw_tokens and "box" in raw_tokens
+    checkbox_requested = (
+        "checkbox" in raw_tokens
+        or ("check" in raw_tokens and "box" in raw_tokens)
+        or _checkbox_action_requested(raw_tokens)
     )
     toggle_requested = (
         "toggle" in raw_tokens
@@ -872,7 +912,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
-    if "option" in raw_tokens:
+    if raw_tokens & _OPTION_INTENT_WORDS:
         intents.update(_OPTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")
@@ -889,6 +929,18 @@ def _text_entry_action_requested(raw_tokens: set[str]) -> bool:
     if not (raw_tokens & _TEXT_ENTRY_ACTION_WORDS):
         return False
     return not bool(raw_tokens & _TEXT_ENTRY_BLOCKING_WORDS)
+
+
+def _checkbox_action_requested(raw_tokens: set[str]) -> bool:
+    if raw_tokens & _CHECKBOX_ACTION_WORDS:
+        if "check" in raw_tokens and "for" in raw_tokens and "box" not in raw_tokens:
+            return False
+        return not bool(raw_tokens & _CHECKBOX_ACTION_BLOCKING_WORDS)
+    if raw_tokens & _CHECKBOX_STATE_ACTION_WORDS:
+        return not bool(raw_tokens & _CHECKBOX_ACTION_BLOCKING_WORDS)
+    if "turn" in raw_tokens and raw_tokens & {"off", "on"}:
+        return not bool(raw_tokens & _CHECKBOX_ACTION_BLOCKING_WORDS)
+    return False
 
 
 def _menu_segment_intent(control_intents: set[str]) -> bool:

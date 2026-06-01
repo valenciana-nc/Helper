@@ -745,6 +745,53 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 120, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_rejects_state_and_choice_wording_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Check Remember me.", "Remember me", (100, 200, 180, 32)),
+            ("Uncheck Remember me.", "Remember me", (100, 200, 180, 32)),
+            ("Tick Remember me.", "Remember me", (100, 200, 180, 32)),
+            ("Turn on dark mode.", "Dark mode", (100, 200, 180, 32)),
+            ("Enable notifications.", "Notifications", (100, 200, 180, 32)),
+            ("Pick Daily choice.", "Daily", (100, 200, 180, 32)),
+            ("Choose Weekly option.", "Weekly", (100, 200, 180, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button(label, *rect, control_type="Button")
+                window = _make_window("App", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertEqual(result.rejected_reason, "control type mismatch")
+
+    def test_snap_keeps_check_for_updates_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Check for updates", 100, 200, 180, 32)
+        window = _make_window("Settings", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 180, 32),
+            "Check for updates.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_accepts_generic_button_control_suffix(self) -> None:
         from rect_snap import snap_to_control
 
@@ -2079,6 +2126,90 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 120, 32))
 
+    def test_state_and_choice_target_id_rejects_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Check Remember me.", "Remember me"),
+            ("Turn on dark mode.", "Dark mode"),
+            ("Enable notifications.", "Notifications"),
+            ("Pick Daily choice.", "Daily"),
+            ("Choose Weekly option.", "Weekly"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (10, 10, 180, 32)),
+                    ],
+                    model_rect=(10, 10, 180, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
+    def test_state_action_text_match_prefers_checkbox_over_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Check Remember me.",
+            candidates=[
+                ControlCandidate("c001", "Remember me", "checkbox", (10, 10, 180, 32)),
+                ControlCandidate("c002", "Remember me", "button", (240, 10, 120, 32)),
+            ],
+            model_rect=(240, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertEqual(result.rect, (10, 10, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_choice_wording_text_match_prefers_radio_over_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Pick Daily choice.",
+            candidates=[
+                ControlCandidate("c001", "Daily", "radiobutton", (10, 10, 180, 32)),
+                ControlCandidate("c002", "Daily", "button", (240, 10, 120, 32)),
+            ],
+            model_rect=(240, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertEqual(result.rect, (10, 10, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_check_for_updates_keeps_button_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Check for updates.",
+            candidates=[
+                ControlCandidate("c001", "Check for updates", "button", (10, 10, 180, 32)),
+            ],
+            model_rect=(10, 10, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 180, 32))
+
     def test_button_control_suffix_target_id_accepts_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -3187,6 +3318,47 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.rect, (10, 10, 260, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_candidate_target_rejects_state_and_choice_wording_on_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Check Remember me.", "Remember me"),
+            ("Uncheck Remember me.", "Remember me"),
+            ("Tick Remember me.", "Remember me"),
+            ("Turn on dark mode.", "Dark mode"),
+            ("Enable notifications.", "Notifications"),
+            ("Pick Daily choice.", "Daily"),
+            ("Choose Weekly option.", "Weekly"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (10, 10, 180, 32)),
+                    ],
+                    model_rect=(10, 10, 180, 32),
+                )
+
+                self.assertIsNone(result)
+
+    def test_snap_candidate_target_keeps_check_for_updates_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Check for updates.",
+            candidates=[
+                ControlCandidate("c001", "Check for updates", "button", (10, 10, 180, 32)),
+            ],
+            model_rect=(10, 10, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_candidate_target_accepts_button_control_suffix(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -3639,6 +3811,78 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_state_action_wrong_target_id_recovers_to_checkbox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Check Remember me.",
+                    "target_id": "c002",
+                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Remember me", "checkbox", (120, 160, 160, 32)),
+                ControlCandidate("c002", "Remember me", "button", (300, 160, 90, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 160, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_choice_wording_wrong_target_id_recovers_to_radio(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Pick Daily choice.",
+                    "target_id": "c002",
+                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Daily", "radiobutton", (120, 160, 160, 32)),
+                ControlCandidate("c002", "Daily", "button", (300, 160, 90, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 160, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_check_for_updates_model_rect_keeps_button_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Check for updates.",
+                    "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Check for updates", "button", (120, 160, 180, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
 
     def test_unlabeled_target_id_with_geometry_recovers_to_visible_text_match(self) -> None:
         from control_inventory import ControlCandidate

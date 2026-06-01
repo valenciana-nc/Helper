@@ -1210,6 +1210,75 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "state_action_wrong_target_id_recovers_to_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Remember me"},
+                {"rect": [240, 80, 120, 32], "label": "Remember me"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check Remember me.",
+                "target_id": "c002",
+                "target": {"x": 240, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Remember me", "control_type": "checkbox", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Remember me", "control_type": "button", "rect": [240, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "choice_wording_wrong_target_id_recovers_to_radio",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Daily"},
+                {"rect": [240, 80, 120, 32], "label": "Daily"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pick Daily choice.",
+                "target_id": "c002",
+                "target": {"x": 240, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Daily", "control_type": "radiobutton", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Daily", "control_type": "button", "rect": [240, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "check_for_updates_button_remains_clickable",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Check for updates"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check for updates.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Check for updates", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
