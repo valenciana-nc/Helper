@@ -156,6 +156,7 @@ def _run_resolution_cases(
     title: str,
 ) -> list[dict[str, Any]]:
     duplicate_candidates = _find_candidates_by_text(candidates, "Duplicate", title=title)
+    cancel_candidates = _find_candidates_by_text(candidates, "Cancel", title=title)
     icon_candidates = _find_candidates_by_automation_ids(
         candidates,
         {"helperPrecisionIconA", "helperPrecisionIconB"},
@@ -186,6 +187,41 @@ def _run_resolution_cases(
             expected_candidate=target_candidate,
         ),
     ]
+    if cancel_candidates:
+        cancel_candidate = cancel_candidates[0]
+        cases.append(
+            _run_resolution_case(
+                name="wrong_target_id_recovers_by_text_match",
+                decision=_decision_wrong_target_id(cancel_candidate),
+                capture=capture,
+                candidates=candidates,
+                expected_candidate=target_candidate,
+            )
+        )
+        cases.append(
+            _run_resolution_case(
+                name="copied_wrong_target_id_without_semantic_alternative_rejects",
+                decision=_decision_copied_wrong_target_id(capture, cancel_candidate),
+                capture=capture,
+                candidates=[cancel_candidate],
+                expected_candidate=None,
+                expect_overlay=False,
+                expect_rejected_reason="target_id semantic mismatch",
+            )
+        )
+    else:
+        cases.append(
+            _missing_case(
+                "wrong_target_id_recovers_by_text_match",
+                "cancel control not found",
+            )
+        )
+        cases.append(
+            _missing_case(
+                "copied_wrong_target_id_without_semantic_alternative_rejects",
+                "cancel control not found",
+            )
+        )
     if len(duplicate_candidates) >= 2:
         cases.append(
             _run_resolution_case(
@@ -441,6 +477,34 @@ def _decision_model_rect_only(capture: Capture, candidate: ControlCandidate):
             "y": max(0, norm[1] - 5),
             "width": min(1000, norm[2] + 10),
             "height": min(1000, norm[3] + 10),
+        },
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_wrong_target_id(wrong_candidate: ControlCandidate):
+    payload = {
+        "kind": "step",
+        "instruction": f"Click {TARGET_TEXT}.",
+        "target_id": wrong_candidate.id,
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_copied_wrong_target_id(
+    capture: Capture,
+    wrong_candidate: ControlCandidate,
+):
+    norm = _norm_rect(wrong_candidate.rect, capture)
+    payload = {
+        "kind": "step",
+        "instruction": f"Click {TARGET_TEXT}.",
+        "target_id": wrong_candidate.id,
+        "target": {
+            "x": norm[0],
+            "y": norm[1],
+            "width": norm[2],
+            "height": norm[3],
         },
     }
     return _parse_live_help_decision(json.dumps(payload))

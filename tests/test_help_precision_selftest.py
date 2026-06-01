@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+import io
 import unittest
 
+from PIL import Image, ImageDraw
+
 from control_inventory import ControlCandidate
+from screen import Capture
+
+
+def _capture_with_image(img: Image.Image) -> Capture:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Capture(
+        png_bytes=buf.getvalue(),
+        width=img.width,
+        height=img.height,
+        monitor_left=0,
+        monitor_top=0,
+        scale=1.0,
+    )
 
 
 class HelpPrecisionSelfTestUnitTests(unittest.TestCase):
@@ -94,6 +111,48 @@ class HelpPrecisionSelfTestUnitTests(unittest.TestCase):
 
         self.assertFalse(passed)
         self.assertTrue(any("unexpectedly" in failure for failure in failures))
+
+    def test_resolution_cases_cover_wrong_target_id_paths(self) -> None:
+        from help_precision_selftest import _run_resolution_cases
+
+        img = Image.new("RGB", (260, 100), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((20, 20, 140, 52), outline="black", fill="#f3f4f6")
+        draw.text((34, 29), "Save changes", fill="black")
+        draw.rectangle((160, 20, 235, 52), outline="black", fill="#f3f4f6")
+        draw.text((174, 29), "Cancel", fill="black")
+        capture = _capture_with_image(img)
+        title = "Helper Precision Self Test unit"
+        save = ControlCandidate(
+            "c001",
+            "Save changes",
+            "button",
+            (20, 20, 120, 32),
+            window_title=title,
+        )
+        cancel = ControlCandidate(
+            "c002",
+            "Cancel",
+            "button",
+            (160, 20, 75, 32),
+            window_title=title,
+        )
+
+        cases = _run_resolution_cases(
+            capture=capture,
+            candidates=[save, cancel],
+            target_candidate=save,
+            title=title,
+        )
+        by_name = {case["name"]: case for case in cases}
+
+        recovered = by_name["wrong_target_id_recovers_by_text_match"]
+        self.assertTrue(recovered["passed"], recovered["failures"])
+        self.assertEqual(recovered["overlay_rect"], (20, 20, 120, 32))
+
+        rejected = by_name["copied_wrong_target_id_without_semantic_alternative_rejects"]
+        self.assertTrue(rejected["passed"], rejected["failures"])
+        self.assertEqual(rejected["rejected_reason"], "target_id semantic mismatch")
 
 
 if __name__ == "__main__":
