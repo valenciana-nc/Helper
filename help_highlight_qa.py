@@ -1784,6 +1784,180 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "minimize_window_target_id_accepts_minus_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "-"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "-", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "maximize_window_target_id_accepts_square_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Square"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Maximize window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25a1", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "restore_window_target_id_accepts_overlap_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Restore"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Restore window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5d7", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "minimize_window_text_match_overrides_zoom_out_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "-"},
+                {"rect": [180, 80, 100, 32], "label": "Zoom out"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize window.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "-", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Zoom out", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "maximize_window_text_match_overrides_full_screen_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Square"},
+                {"rect": [180, 80, 120, 32], "label": "Full screen"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Maximize window.",
+                "target": {"x": 180, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25a1", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Full screen", "control_type": "button", "rect": [180, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "restore_window_text_match_overrides_maximize_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Restore"},
+                {"rect": [180, 80, 100, 32], "label": "Maximize"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Restore window.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5d7", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Maximize", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_out_rejects_minimize_button_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Minimize"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom out.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Minimize", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "minimize_window_rejects_zoom_out_button_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Zoom out"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Zoom out", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "paste_action_target_id_accepts_clipboard_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

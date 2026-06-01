@@ -296,6 +296,23 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("zoom_in", tokenize_control("Add"))
         self.assertNotIn("zoom_out", tokenize_control("Remove"))
 
+    def test_window_control_aliases_expand_to_caption_icon_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        self.assertTrue({"minimize", "minus"}.issubset(tokenize_instruction("Minimize window")))
+        self.assertIn("maximize", tokenize_instruction("Maximize window"))
+        self.assertTrue({"restore", "overlap"}.issubset(tokenize_instruction("Restore window")))
+        self.assertIn("minimize", tokenize_control("-"))
+        self.assertIn("minimize", tokenize_control("\u2212"))
+        self.assertIn("minimize", tokenize_control("\U0001f5d5"))
+        self.assertIn("maximize", tokenize_control("\u25a1"))
+        self.assertIn("maximize", tokenize_control("\u25a2"))
+        self.assertIn("maximize", tokenize_control("\u2b1c"))
+        self.assertIn("maximize", tokenize_control("\U0001f5d6"))
+        self.assertIn("restore", tokenize_control("\U0001f5d7"))
+        self.assertNotIn("zoom_out", tokenize_control("Minimize"))
+        self.assertNotIn("minimize", tokenize_control("Zoom out"))
+
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -463,11 +480,14 @@ class HelpIntentLanguageTests(unittest.TestCase):
         cases = (
             ("?", {"help", "mark", "question"}),
             ("+", {"add", "create", "new", "plus", "zoom_in"}),
-            ("-", {"minus", "zoom_out"}),
+            ("-", {"minimize", "minus", "zoom_out"}),
             ("...", {"dot", "dots", "ellipsis", "menu", "more", "options"}),
             ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
             ("\u00d7", {"clear", "close", "dismiss", "x"}),
-            ("\u2212", {"minus", "zoom_out"}),
+            ("\u2212", {"minimize", "minus", "zoom_out"}),
+            ("\u25a1", {"maximize", "square"}),
+            ("\u25a2", {"maximize", "square"}),
+            ("\u2b1c", {"maximize", "square"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
@@ -494,6 +514,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f5c4", {"archive", "cabinet", "filing"}),
             ("\U0001f5d1", {"bin", "delete", "remove", "trash", "wastebasket"}),
+            ("\U0001f5d5", {"minimize", "minus"}),
+            ("\U0001f5d6", {"maximize", "square"}),
+            ("\U0001f5d7", {"overlap", "restore"}),
             ("\U0001f4cb", {"clipboard", "paste"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
@@ -6142,6 +6165,110 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             ("Zoom in.", "Add"),
             ("Zoom out.", "Remove"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_window_control_target_id_accepts_common_caption_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Minimize window.", "-", (120, 160, 32, 32)),
+            ("Minimize window.", "\u2212", (120, 160, 32, 32)),
+            ("Minimize window.", "\U0001f5d5", (120, 160, 32, 32)),
+            ("Maximize window.", "\u25a1", (120, 160, 32, 32)),
+            ("Maximize window.", "\u25a2", (120, 160, 32, 32)),
+            ("Maximize window.", "\u2b1c", (120, 160, 32, 32)),
+            ("Maximize window.", "\U0001f5d6", (120, 160, 32, 32)),
+            ("Restore window.", "\U0001f5d7", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_window_control_text_match_overrides_nearby_toolbar_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Minimize window.",
+                ControlCandidate("c001", "-", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Zoom out", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Maximize window.",
+                ControlCandidate("c001", "\u25a1", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Full screen", "button", (300, 160, 120, 32)),
+            ),
+            (
+                "Restore window.",
+                ControlCandidate("c001", "\U0001f5d7", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Maximize", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_window_control_aliases_do_not_cross_zoom_controls(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Zoom out.", "Minimize"),
+            ("Minimize window.", "Zoom out"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
