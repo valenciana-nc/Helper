@@ -151,6 +151,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(clone_tokens))
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(duplicate_tokens))
 
+    def test_create_and_completion_aliases_expand_to_common_button_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        create_tokens = tokenize_instruction("Create item")
+        finish_tokens = tokenize_instruction("Finish setup")
+
+        self.assertTrue({"add", "create", "new"}.issubset(create_tokens))
+        self.assertTrue({"add", "create", "new"}.issubset(tokenize_instruction("New item")))
+        self.assertTrue({"add", "create", "new"}.issubset(tokenize_control("Add")))
+        self.assertTrue({"complete", "done", "finish"}.issubset(finish_tokens))
+        self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_instruction("Complete setup")))
+        self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_control("Done")))
+
     def test_clipboard_action_aliases_expand_to_common_icon_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -185,6 +198,28 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"descending", "sort"}.issubset(tokenize_instruction("Click Z to A")))
         self.assertTrue({"ascending", "sort"}.issubset(tokenize_control("A to Z")))
         self.assertTrue({"descending", "sort"}.issubset(tokenize_control("Z to A")))
+
+    def test_editor_toolbar_aliases_expand_to_format_and_history_language(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        bold_intents = instruction_control_intents("Bold text")
+        click_b_intents = instruction_control_intents("Click B")
+
+        self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Bold text")))
+        self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Click B")))
+        self.assertTrue({"i", "italic"}.issubset(tokenize_instruction("Italic text")))
+        self.assertTrue({"u", "underline"}.issubset(tokenize_instruction("Underline text")))
+        self.assertTrue({"b", "bold"}.issubset(tokenize_control("B")))
+        self.assertTrue({"i", "italic"}.issubset(tokenize_control("I")))
+        self.assertTrue({"u", "underline"}.issubset(tokenize_control("U")))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(bold_intents))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(click_b_intents))
+        self.assertNotIn("edit", bold_intents)
+        self.assertIn("undo", tokenize_control("\u21b6"))
+        self.assertIn("redo", tokenize_control("\u21b7"))
+        self.assertIn("undo", tokenize_control("Ctrl+Z"))
+        self.assertIn("redo", tokenize_control("Ctrl+Y"))
+        self.assertIn("redo", tokenize_control("Ctrl+Shift+Z"))
 
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -5399,6 +5434,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
+    def test_create_and_completion_alias_target_id_accepts_common_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Create item.", "Add"),
+            ("New item.", "Add"),
+            ("Add item.", "Create"),
+            ("Finish setup.", "Done"),
+            ("Complete setup.", "Done"),
+            ("Click Done.", "Finish"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 120, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Create item.",
+                ControlCandidate("c001", "Add", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Finish setup.",
+                ControlCandidate("c001", "Done", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Back", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
     def test_clipboard_action_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -5513,6 +5619,89 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Sort ascending.",
                 ControlCandidate("c001", "A to Z", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Filter", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_editor_toolbar_target_id_accepts_format_and_history_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Bold text.", "B", (120, 160, 32, 32)),
+            ("Click B.", "B", (120, 160, 32, 32)),
+            ("Italic text.", "I", (120, 160, 32, 32)),
+            ("Underline text.", "U", (120, 160, 32, 32)),
+            ("Undo change.", "\u21b6", (120, 160, 32, 32)),
+            ("Redo change.", "\u21b7", (120, 160, 32, 32)),
+            ("Undo change.", "Ctrl+Z", (120, 160, 90, 32)),
+            ("Redo change.", "Ctrl+Shift+Z", (120, 160, 140, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_editor_toolbar_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Bold text.",
+                ControlCandidate("c001", "B", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Italic text.",
+                ControlCandidate("c001", "I", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Undo change.",
+                ControlCandidate("c001", "\u21b6", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Back", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Redo change.",
+                ControlCandidate("c001", "\u21b7", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Next", "button", (300, 160, 100, 32)),
             ),
         )
         for instruction, expected, decoy in cases:

@@ -29,6 +29,9 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\ba\s+(?:to\s+)?z\b"), {"ascending", "sort"}),
     (re.compile(r"\bz\s+(?:to\s+)?a\b"), {"descending", "sort"}),
+    (re.compile(r"\b(?:ctrl|control)\s*\+?\s*shift\s*\+?\s*z\b"), {"redo"}),
+    (re.compile(r"\b(?:ctrl|control)\s*\+?\s*z\b"), {"undo"}),
+    (re.compile(r"\b(?:ctrl|control)\s*\+?\s*y\b"), {"redo"}),
 )
 
 _SYMBOL_TOKEN_ALIASES = {
@@ -51,6 +54,13 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u23f8": {"pause"},
     "\u23f9": {"stop"},
     "\u23fa": {"record"},
+    "\u21b6": {"undo"},
+    "\u21b7": {"redo"},
+    "\u21ba": {"undo"},
+    "\u21bb": {"redo"},
+    "\u238c": {"undo"},
+    "\u293a": {"undo"},
+    "\u293b": {"redo"},
     "\u270e": {"edit", "pencil"},
     "\u270f": {"edit", "pencil"},
     "\u2702": {"cut", "scissors"},
@@ -98,9 +108,11 @@ _SYMBOL_TOKEN_ALIASES = {
 
 _TOKEN_ALIASES = {
     "account": {"profile", "user"},
+    "add": {"create", "new", "plus"},
     "address": {"location", "url"},
     "arrow": {"caret", "chevron", "collapse", "disclosure", "expand"},
     "avatar": {"account", "profile", "user"},
+    "b": {"bold"},
     "back": {"previous"},
     "attach": {"attachment", "browse", "choose", "file", "upload"},
     "attachment": {"attach", "browse", "choose", "file", "upload"},
@@ -109,6 +121,7 @@ _TOKEN_ALIASES = {
     "basket": {"bag", "cart"},
     "bell": {"alerts", "notification", "notifications", "notify"},
     "bookmark": {"favorite", "star"},
+    "bold": {"b"},
     "browse": {"choose", "file", "files", "select", "upload"},
     "cart": {"bag", "basket"},
     "calendar": {"date"},
@@ -124,6 +137,8 @@ _TOKEN_ALIASES = {
     "confirm": {"ok", "okay"},
     "continue": {"next", "proceed"},
     "copy": {"clone", "duplicate"},
+    "complete": {"done", "finish"},
+    "create": {"add", "new", "plus"},
     "cut": {"scissors"},
     "date": {"calendar"},
     "dismiss": {"close"},
@@ -133,6 +148,7 @@ _TOKEN_ALIASES = {
     "document": {"file"},
     "documents": {"file", "files"},
     "download": {"export"},
+    "done": {"complete", "finish"},
     "duplicate": {"clone", "copy"},
     "edit": {"pencil"},
     "expand": {"arrow", "caret", "chevron", "disclosure"},
@@ -143,6 +159,7 @@ _TOKEN_ALIASES = {
     "files": {"attach", "attachment", "browse", "choose", "documents", "file", "select", "upload"},
     "filing": {"archive", "cabinet"},
     "find": {"search"},
+    "finish": {"complete", "done"},
     "filter": {"funnel"},
     "floppy": {"save"},
     "folder": {"directory"},
@@ -151,6 +168,9 @@ _TOKEN_ALIASES = {
     "gear": {"options", "preferences", "settings"},
     "home": {"house"},
     "house": {"home"},
+    "i": {"italic"},
+    "italic": {"i"},
+    "italics": {"i", "italic"},
     "lens": {"find", "search"},
     "location": {"address", "url"},
     "lock": {"locked", "padlock", "unlock"},
@@ -165,6 +185,7 @@ _TOKEN_ALIASES = {
     "mic": {"microphone"},
     "microphone": {"mic"},
     "more": {"menu", "options"},
+    "new": {"add", "create", "plus"},
     "next": {"continue", "proceed"},
     "notification": {"alerts", "bell", "notifications", "notify"},
     "notifications": {"alerts", "bell", "notification", "notify"},
@@ -203,6 +224,9 @@ _TOKEN_ALIASES = {
     "speaker": {"sound", "volume"},
     "star": {"bookmark", "favorite"},
     "submit": {"send"},
+    "u": {"underline"},
+    "underlined": {"u", "underline"},
+    "underline": {"u"},
     "import": {"upload"},
     "unlock": {"lock", "padlock", "unlocked"},
     "unlocked": {"lock", "padlock", "unlock"},
@@ -426,6 +450,8 @@ _CHECKBOX_ACTION_BLOCKING_WORDS = frozenset(
 )
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _EDIT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "hyperlink", "menuitem"})
+_FORMAT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
+_HISTORY_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -577,6 +603,15 @@ _MEDIA_CONTROL_CONTEXT_WORDS = frozenset(
 )
 _MEDIA_RESUME_WORDS = frozenset({"resume"})
 _MEDIA_STOP_WORDS = frozenset({"stop"})
+_FORMAT_ACTION_WORDS = frozenset({"bold", "italic", "italics", "underline", "underlined"})
+_FORMAT_SINGLE_LETTER_WORDS = frozenset({"b", "i", "u"})
+_FORMAT_SINGLE_LETTER_CONTEXT_WORDS = frozenset(
+    {"button", "click", "format", "formatting", "icon", "press", "style", "tap", "toolbar"}
+)
+_FORMAT_ACTION_CONTEXT_WORDS = frozenset(
+    {"content", "copy", "message", "paragraph", "selection", "text", "word", "words"}
+)
+_HISTORY_ACTION_WORDS = frozenset({"redo", "undo"})
 _EDIT_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -609,6 +644,9 @@ def tokenize_instruction(instruction: str) -> set[str]:
         filtered -= _MEDIA_CONTROL_CONTEXT_WORDS
         if tokens & _MEDIA_RESUME_WORDS:
             filtered.add("play")
+    if _format_action_requested(tokens):
+        filtered -= _FORMAT_ACTION_CONTEXT_WORDS
+        filtered.update(tokens & _FORMAT_SINGLE_LETTER_WORDS)
     if _edit_action_requested(tokens):
         filtered.update({"edit", "pencil"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
@@ -643,6 +681,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
     contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
+    format_action_requested = _format_action_requested(raw_tokens)
+    history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
     edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -663,7 +703,12 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("radiobutton")
     if raw_tokens & {"edit", "editable"} and not edit_action_requested:
         intents.update(EDIT_CONTROL_TYPES)
-    if not checkbox_requested and input_requested and not password_visibility_requested:
+    if (
+        not checkbox_requested
+        and input_requested
+        and not password_visibility_requested
+        and not format_action_requested
+    ):
         intents.update(INPUT_CONTROL_TYPES)
     if raw_tokens & {"combo", "combobox"}:
         intents.add("combobox")
@@ -683,6 +728,10 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("splitbutton")
     if password_visibility_requested:
         intents.update(_BUTTON_INTENT_TYPES)
+    if format_action_requested:
+        intents.update(_FORMAT_ACTION_INTENT_TYPES)
+    if history_action_requested:
+        intents.update(_HISTORY_ACTION_INTENT_TYPES)
     if edit_action_requested:
         intents.update(_EDIT_ACTION_INTENT_TYPES)
     if (
@@ -690,6 +739,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not radio_requested
         and not split_button_requested
         and not password_visibility_requested
+        and not format_action_requested
         and not edit_action_requested
         and "button" in raw_tokens
     ):
@@ -801,6 +851,15 @@ def _media_control_requested(raw_tokens: set[str]) -> bool:
     if raw_tokens & _MEDIA_STOP_WORDS:
         return bool(raw_tokens & _MEDIA_CONTROL_CONTEXT_WORDS)
     return False
+
+
+def _format_action_requested(raw_tokens: set[str]) -> bool:
+    if raw_tokens & _FORMAT_ACTION_WORDS:
+        return True
+    letter_tokens = raw_tokens & _FORMAT_SINGLE_LETTER_WORDS
+    if len(letter_tokens) != 1:
+        return False
+    return bool(raw_tokens & _FORMAT_SINGLE_LETTER_CONTEXT_WORDS)
 
 
 def _edit_action_requested(raw_tokens: set[str]) -> bool:

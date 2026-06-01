@@ -1367,6 +1367,94 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "create_action_target_id_accepts_add_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Add"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Create item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Add", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "finish_action_target_id_accepts_done_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Done"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Finish setup.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Done", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "create_action_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Add"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Create item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Add", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "finish_action_text_match_overrides_back_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Done"},
+                {"rect": [180, 80, 100, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Finish setup.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Done", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Back", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "paste_action_target_id_accepts_clipboard_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1623,6 +1711,180 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bold_action_target_id_accepts_b_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "B"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Bold text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "B", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "italic_action_target_id_accepts_i_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "I"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Italic text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "I", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "underline_action_target_id_accepts_u_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "U"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Underline text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "U", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bold_text_match_overrides_text_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "B"},
+                {"rect": [180, 80, 220, 32], "label": "Body text"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Bold text.",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "B", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Body text", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "undo_action_target_id_accepts_left_curved_arrow",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Undo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Undo change.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21b6", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "redo_action_target_id_accepts_right_curved_arrow",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Redo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Redo change.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21b7", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "undo_text_match_overrides_back_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Undo"},
+                {"rect": [180, 80, 100, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Undo change.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21b6", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Back", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "redo_text_match_overrides_next_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Redo"},
+                {"rect": [180, 80, 100, 32], "label": "Next"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Redo change.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21b7", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Next", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
                 "overlay_emitted": True,
             },
         },
