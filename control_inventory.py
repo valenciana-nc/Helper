@@ -1959,6 +1959,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
@@ -2105,6 +2111,11 @@ def _candidate_visible_semantic_text(candidate: ControlCandidate) -> str:
     return text.strip()
 
 
+def _has_unparsed_alnum_text(text: str) -> bool:
+    value = (text or "").strip()
+    return bool(value and not _tokens_from_text(value) and any(ch.isalnum() for ch in value))
+
+
 def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]:
     if _looks_like_browser_profile_button(candidate):
         return set(BROWSER_PROFILE_TOKENS)
@@ -2239,6 +2250,15 @@ def _looks_like_browser_menu_button(candidate: ControlCandidate) -> bool:
     return _tokens_from_text(candidate.text) == {"chrome"}
 
 
+def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return (candidate.automation_id or "").strip().lower().startswith("view_")
+
+
 def _browser_menu_button_action_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -2258,7 +2278,7 @@ def _browser_menu_button_action_mismatch(
         return False
     if _looks_like_browser_menu_button(candidate):
         return False
-    return candidate.control_type in BROWSER_MENU_CONTROL_INTENTS
+    return _looks_like_browser_toolbar_button(candidate)
 
 
 def _hidden_bookmarks_overflow_action_mismatch(
@@ -4169,6 +4189,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
         and not _candidate_matches_control_intent(
@@ -4535,6 +4557,8 @@ def _candidate_snap_semantic_mismatch(
 ) -> bool:
     semantic_tokens = _candidate_semantic_tokens(candidate)
     if _browser_menu_button_action_mismatch(instruction, candidate):
+        return True
+    if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True
     if not instruction_tokens or not semantic_tokens:
         return False

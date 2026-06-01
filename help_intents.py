@@ -1095,9 +1095,11 @@ def tokens_from_text(text: str) -> set[str]:
     for pattern, aliases in _PHRASE_TOKEN_ALIAS_PATTERNS:
         if pattern.search(phrase_text):
             tokens.update(aliases)
+    compact = _WHITESPACE_RE.sub("", value)
     if tokens:
         return tokens
-    compact = _WHITESPACE_RE.sub("", value)
+    if compact not in _SYMBOL_TOKEN_ALIASES and any(ch.isalnum() for ch in value):
+        return set()
     symbol_tokens: set[str] = set()
     for symbol, aliases in _SYMBOL_TOKEN_ALIASES.items():
         if symbol in compact:

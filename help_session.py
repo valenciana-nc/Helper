@@ -224,6 +224,9 @@ def resolve_help_target(
             rejected_reason="no resolvable target",
         )
 
+    if target is not None and target.rejected_reason == "ambiguous text match":
+        return target
+
     candidate_snap = snap_candidate_target(
         instruction=decision.instruction,
         candidates=candidates,

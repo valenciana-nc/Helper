@@ -364,6 +364,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("zoom_out", tokenize_control("Minus"))
         self.assertNotIn("zoom_in", tokenize_control("Add"))
         self.assertNotIn("zoom_out", tokenize_control("Remove"))
+        self.assertNotIn("zoom_out", tokenize_control("搜索 - 世界珊瑚礁日"))
+        self.assertNotIn("minimize", tokenize_control("搜索 - 世界珊瑚礁日"))
+        self.assertNotIn("minus", tokenize_control("搜索 - 世界珊瑚礁日"))
 
     def test_window_control_aliases_expand_to_caption_icon_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
@@ -1112,6 +1115,27 @@ class SnapToControlTests(unittest.TestCase):
             automation_id="SearchGleamButton",
         )
         window = _make_window("Taskbar", 0, 0, 800, 600, [search])
+        desktop = _FakeDesktop([window])
+        model_rect = (120, 160, 220, 32)
+
+        for instruction in ("Zoom out.", "Minimize.", "Click minus."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_localized_label_separator_does_not_snap_minus_alias(self) -> None:
+        from rect_snap import snap_to_control
+
+        label = _make_button("搜索 - 世界珊瑚礁日", 120, 160, 220, 32)
+        window = _make_window("Browser", 0, 0, 800, 600, [label])
         desktop = _FakeDesktop([window])
         model_rect = (120, 160, 220, 32)
 
@@ -6756,6 +6780,29 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 80, 32))
 
+    def test_ambiguous_text_match_without_target_id_blocks_geometry_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 120, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Save", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Save", "button", (520, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "ambiguous text match")
+
     def test_unknown_target_id_without_rect_downgrades_no_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -9216,6 +9263,40 @@ class HelpTargetHarnessTests(unittest.TestCase):
             (120, 160, 220, 32),
             automation_id="SearchGleamButton",
             window_title="Taskbar",
+        )
+        for instruction in ("Zoom out.", "Minimize.", "Click minus."):
+            with self.subTest(instruction=instruction):
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=candidate.rect,
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_localized_label_separator_does_not_match_minus_alias(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidate = ControlCandidate(
+            "c001",
+            "搜索 - 世界珊瑚礁日",
+            "button",
+            (120, 160, 220, 32),
+            window_title="Browser",
         )
         for instruction in ("Zoom out.", "Minimize.", "Click minus."):
             with self.subTest(instruction=instruction):
@@ -16081,6 +16162,43 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
+
+    def test_browser_window_page_menu_button_beats_chrome_menu_fallback(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the more options menu.",
+                    "target_id": "c001",
+                    "target": {"x": 400, "y": 400, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "More options",
+                    "button",
+                    (400, 400, 120, 32),
+                    window_title="Project - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Chrome",
+                    "button",
+                    (930, 8, 40, 34),
+                    automation_id="view_1007",
+                    window_title="Project - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
 
     def test_generic_menu_button_rejects_browser_navigation_toolbar_button(self) -> None:
         from control_inventory import ControlCandidate

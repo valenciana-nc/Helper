@@ -601,6 +601,11 @@ def snap_to_control(
             visible_text,
             automation_id,
         )
+        unparsed_visible_text_action_mismatch = bool(
+            instruction_tokens
+            and not _tokenize_control(semantic_text)
+            and _has_unparsed_alnum_text(visible_text)
+        )
         browser_about_blank_title_info_mismatch = (
             _browser_about_blank_title_info_mismatch(
                 instruction,
@@ -639,6 +644,7 @@ def snap_to_control(
             or exclusive_action_family_mismatch
             or clear_close_action_mismatch
             or close_context_action_mismatch
+            or unparsed_visible_text_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
@@ -1165,6 +1171,11 @@ def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
 def _semantic_text(text: str) -> str:
     text = BROWSER_TAB_OWNER_ACCOUNT_RE.sub("", text or "")
     return BROWSER_TAB_MEMORY_USAGE_RE.sub("", text).strip()
+
+
+def _has_unparsed_alnum_text(text: str) -> bool:
+    value = (text or "").strip()
+    return bool(value and not _tokens_from_text(value) and any(ch.isalnum() for ch in value))
 
 
 def _start_button_action_mismatch(

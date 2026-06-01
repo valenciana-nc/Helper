@@ -133,6 +133,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ambiguous_text_without_target_id_blocks_geometry_snap",
+            "capture": {"width": 700, "height": 320},
+            "draw": [
+                {"rect": [160, 80, 80, 32], "label": "Save"},
+                {"rect": [520, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 160, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [160, 80, 80, 32]},
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [520, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rejected_reason": "ambiguous text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "unlabeled_target_id_recovers_to_visible_text_match",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -1525,6 +1548,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 60, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_window_page_more_options_beats_chrome_menu_fallback",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [400, 400, 120, 32], "label": "More options"},
+                {"rect": [930, 8, 40, 34], "label": "Chrome"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the more options menu.",
+                "target_id": "c001",
+                "target": {"x": 400, "y": 400, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "More options",
+                    "control_type": "button",
+                    "rect": [400, 400, 120, 32],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [930, 8, 40, 34],
+                    "automation_id": "view_1007",
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [400, 400, 120, 32],
                 "overlay_emitted": True,
             },
         },
@@ -10918,6 +10978,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "rect": [20, 80, 240, 32],
                     "automation_id": "SearchGleamButton",
                     "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "localized_label_separator_rejects_zoom_out_alias",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Localized label"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom out.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "\u641c\u7d22 - \u4e16\u754c\u73ca\u745a\u7901\u65e5",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "window_title": "Browser",
                 },
             ],
             "expected": {
