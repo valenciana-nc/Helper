@@ -1220,6 +1220,32 @@ class SnapToControlTests(unittest.TestCase):
                     self.assertEqual(result.rect, model_rect)
                     self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_external_and_new_window_wording_does_not_snap_browser_new_tab_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        new_tab = _make_button("New Tab", 100, 20, 32, 32)
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [new_tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 32, 32)
+
+        cases = (
+            "Open external.",
+            "Open external link.",
+            "Open in new window.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_brave_site_information_generic_view_does_not_snap(self) -> None:
         from rect_snap import snap_to_control
 
@@ -11669,6 +11695,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertEqual(snap_target.source, "candidate_snap")
                     self.assertEqual(snap_target.target_id, "c001")
                     self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_external_and_new_window_wording_rejects_browser_new_tab_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "New Tab",
+                "button",
+                (120, 160, 100, 32),
+                window_title="ChatGPT - Google Chrome",
+            )
+        ]
+        cases = (
+            "Open external.",
+            "Open external link.",
+            "Open in new window.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_brave_site_information_requires_info_or_lock_wording(self) -> None:
         from control_inventory import ControlCandidate

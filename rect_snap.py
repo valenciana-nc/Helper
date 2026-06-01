@@ -95,6 +95,11 @@ PROGRAM_MANAGER_GENERIC_NAME_WORDS = frozenset(
 BROWSER_PROFILE_WINDOW_WORDS = frozenset({"brave", "browser", "chrome", "edge"})
 BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
 BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
+BROWSER_NEW_TAB_RELATED_REQUEST_WORDS = (
+    BROWSER_NEW_TAB_GENERIC_WORDS
+    | BROWSER_NEW_TAB_WORDS
+    | frozenset({"external", "new_window", "open_new"})
+)
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
     {"access", "button", "control", "extension", "has", "open", "site", "this", "to", "wants"}
@@ -1015,16 +1020,14 @@ def _browser_new_tab_action_mismatch(
         _tokenize_control(window_title or "") & BROWSER_PROFILE_WINDOW_WORDS
     ):
         return False
-    control_tokens = _tokenize_control(visible_text or "")
     raw_control_tokens = _tokens_from_text(visible_text or "")
-    if not (control_tokens & BROWSER_NEW_TAB_WORDS or {"new", "tab"} <= raw_control_tokens):
+    if not {"new", "tab"} <= raw_control_tokens:
         return False
-    if not (instruction_tokens & BROWSER_NEW_TAB_GENERIC_WORDS):
+    if not (instruction_tokens & BROWSER_NEW_TAB_RELATED_REQUEST_WORDS):
         return False
-    if instruction_tokens & BROWSER_NEW_TAB_WORDS:
+    if _instruction_mentions_tab_context(instruction):
         return False
-    raw_tokens = _tokens_from_text(instruction)
-    return "tab" not in raw_tokens and "tabs" not in raw_tokens
+    return True
 
 
 def _browser_extension_access_action_mismatch(

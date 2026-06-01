@@ -4114,6 +4114,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "external_link_target_id_rejects_new_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open external link.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "new_window_model_rect_rejects_new_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open in new window.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_new_target_id_rejects_new_tab_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

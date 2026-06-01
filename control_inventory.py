@@ -168,6 +168,11 @@ BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS = frozenset(
 )
 BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
 BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
+BROWSER_NEW_TAB_RELATED_REQUEST_WORDS = (
+    BROWSER_NEW_TAB_GENERIC_WORDS
+    | BROWSER_NEW_TAB_WORDS
+    | frozenset({"external", "new_window", "open_new"})
+)
 BROWSER_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
@@ -1858,12 +1863,11 @@ def _browser_new_tab_action_mismatch(
 ) -> bool:
     if not _looks_like_browser_new_tab_button(candidate):
         return False
-    if not (instruction_tokens & BROWSER_NEW_TAB_GENERIC_WORDS):
+    if not (instruction_tokens & BROWSER_NEW_TAB_RELATED_REQUEST_WORDS):
         return False
-    if instruction_tokens & BROWSER_NEW_TAB_WORDS:
+    if _instruction_mentions_tab_context(instruction):
         return False
-    raw_tokens = _tokens_from_text(instruction)
-    return "tab" not in raw_tokens and "tabs" not in raw_tokens
+    return True
 
 
 def _looks_like_browser_new_tab_button(candidate: ControlCandidate) -> bool:
@@ -1872,9 +1876,9 @@ def _looks_like_browser_new_tab_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
-    text_tokens = _candidate_visible_text_tokens(candidate)
     raw_text_tokens = _tokens_from_text(candidate.text)
-    return bool(text_tokens & BROWSER_NEW_TAB_WORDS) or {"new", "tab"} <= raw_text_tokens
+    automation_tokens = _tokens_from_text(candidate.automation_id)
+    return {"new", "tab"} <= raw_text_tokens or {"new", "tab"} <= automation_tokens
 
 
 def _close_tab_action_mismatch(
@@ -2929,6 +2933,10 @@ def _single_contained_control_intent_candidate(
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
+            continue
+        if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
