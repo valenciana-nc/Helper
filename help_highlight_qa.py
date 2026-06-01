@@ -2455,6 +2455,92 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "refresh_icon_target_id_accepts_clockwise_arrow_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Refresh"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the page.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u27f3", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "reload_icon_target_id_accepts_clockwise_arrows_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Reload"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Reload this view.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f504", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "refresh_icon_text_match_overrides_back_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Refresh"},
+                {"rect": [180, 80, 100, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the page.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u27f3", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Back", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "refresh_action_rejects_redo_arrow_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Redo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the page.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21bb", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "download_action_text_match_overrides_wrong_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5012,6 +5098,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "navigation_back_target_id_accepts_left_arrow_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go back.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2190", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "navigation_forward_target_id_accepts_right_arrow_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Forward"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go forward.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2192", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "navigation_back_text_match_overrides_undo_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Back"},
+                {"rect": [180, 80, 100, 32], "label": "Undo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go back.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2190", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Undo", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "navigation_forward_text_match_overrides_redo_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Forward"},
+                {"rect": [180, 80, 100, 32], "label": "Redo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go forward.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2192", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Redo", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "undo_action_rejects_back_arrow_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Undo last change.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2190", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "navigation_back_rejects_undo_arrow_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Undo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go back.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u21b6", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "symbol_ellipsis_target_id_highlights_more_options_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5029,6 +5245,71 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "disclosure_target_id_accepts_right_triangle_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Expand"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Expand Advanced settings.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25b8", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "disclosure_target_id_accepts_down_triangle_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Collapse"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Collapse Advanced settings.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25be", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "disclosure_icon_text_match_overrides_row_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 500, 80], "label": "Advanced settings"},
+                {"rect": [478, 106, 28, 28], "label": "Expand"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Expand Advanced settings.",
+                "target": {"x": 20, "y": 80, "width": 500, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Advanced settings", "control_type": "listitem", "rect": [20, 80, 500, 80]},
+                {"id": "c002", "text": "\u25b8", "control_type": "button", "rect": [478, 106, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [478, 106, 28, 28],
                 "overlay_emitted": True,
             },
         },

@@ -213,6 +213,10 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("import", tokenize_control("Upload"))
         self.assertIn("reload", tokenize_instruction("Refresh the page"))
         self.assertIn("refresh", tokenize_control("Reload"))
+        for icon in ("\u27f2", "\u27f3", "\U0001f503", "\U0001f504"):
+            with self.subTest(icon=icon):
+                self.assertTrue({"refresh", "reload"}.issubset(tokenize_control(icon)))
+        self.assertNotIn("refresh", tokenize_control("\u21bb"))
 
     def test_share_and_archive_aliases_expand_to_common_icon_language(self) -> None:
         from help_intents import tokenize_control
@@ -474,6 +478,32 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(alerts_tokens))
         self.assertTrue(expected.issubset(control_tokens))
 
+    def test_navigation_arrow_aliases_expand_to_directional_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        self.assertTrue({"back", "previous"}.issubset(tokenize_instruction("Go back")))
+        self.assertTrue({"forward", "next"}.issubset(tokenize_instruction("Go forward")))
+        self.assertTrue(
+            {"back", "left_arrow", "previous"}.issubset(
+                tokenize_instruction("Click left arrow")
+            )
+        )
+        self.assertTrue(
+            {"forward", "next", "right_arrow"}.issubset(
+                tokenize_instruction("Click right arrow")
+            )
+        )
+        self.assertNotIn("expand", tokenize_instruction("Click left arrow"))
+        self.assertNotIn("expand", tokenize_instruction("Click right arrow"))
+        for icon in ("\u2190", "\u2039", "<"):
+            with self.subTest(icon=icon):
+                self.assertTrue({"back", "previous"}.issubset(tokenize_control(icon)))
+        for icon in ("\u2192", "\u203a", ">"):
+            with self.subTest(icon=icon):
+                self.assertTrue({"forward", "next"}.issubset(tokenize_control(icon)))
+        self.assertNotIn("undo", tokenize_control("\u2190"))
+        self.assertNotIn("redo", tokenize_control("\u2192"))
+
     def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
         from help_intents import tokens_from_text
 
@@ -481,14 +511,30 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("?", {"help", "mark", "question"}),
             ("+", {"add", "create", "new", "plus", "zoom_in"}),
             ("-", {"minimize", "minus", "zoom_out"}),
+            ("<", {"arrow", "back", "chevron", "left", "previous"}),
+            (">", {"arrow", "chevron", "forward", "next", "right"}),
             ("...", {"dot", "dots", "ellipsis", "menu", "more", "options"}),
             ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
             ("\u00d7", {"clear", "close", "dismiss", "x"}),
+            ("\u2039", {"arrow", "back", "chevron", "left", "previous"}),
+            ("\u203a", {"arrow", "chevron", "forward", "next", "right"}),
+            ("\u2190", {"back", "left", "left_arrow", "previous"}),
+            ("\u2192", {"forward", "next", "right", "right_arrow"}),
             ("\u2212", {"minimize", "minus", "zoom_out"}),
+            ("\u2303", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
+            ("\u2304", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
             ("\u25a1", {"maximize", "square"}),
             ("\u25a2", {"maximize", "square"}),
+            ("\u25b4", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
+            ("\u25b5", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
+            ("\u25b8", {"arrow", "caret", "chevron", "disclosure", "expand"}),
+            ("\u25b9", {"arrow", "caret", "chevron", "disclosure", "expand"}),
+            ("\u25be", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
+            ("\u25bf", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
             ("\u2b1c", {"maximize", "square"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
+            ("\u27f2", {"refresh", "reload"}),
+            ("\u27f3", {"refresh", "reload"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
             ("\u25b6", {"play"}),
@@ -498,6 +544,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u270f", {"edit", "pencil"}),
             ("\u2702", {"cut", "scissors"}),
             ("\U0001f517", {"link", "share"}),
+            ("\U0001f503", {"refresh", "reload"}),
+            ("\U0001f504", {"refresh", "reload"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
             ("\U0001f507", {"mute", "speaker", "sound", "volume"}),
@@ -6288,6 +6336,173 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_navigation_arrow_target_id_accepts_icon_only_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Go back.", "\u2190"),
+            ("Click Previous.", "\u2039"),
+            ("Click Previous.", "<"),
+            ("Click left arrow.", "\u2190"),
+            ("Go forward.", "\u2192"),
+            ("Click Continue.", "\u203a"),
+            ("Click Continue.", ">"),
+            ("Click right arrow.", "\u2192"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_navigation_arrow_text_match_overrides_history_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Go back.",
+                ControlCandidate("c001", "\u2190", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Undo", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Go forward.",
+                ControlCandidate("c001", "\u2192", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Redo", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_navigation_arrow_aliases_do_not_cross_history_controls(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Undo last change.", "\u2190"),
+            ("Go back.", "\u21b6"),
+            ("Redo last change.", "\u2192"),
+            ("Go forward.", "\u21b7"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_disclosure_arrow_target_id_accepts_icon_only_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the chevron.", "\u203a"),
+            ("Click the down arrow.", "\u25be"),
+            ("Expand Advanced settings.", "\u25b8"),
+            ("Collapse Advanced settings.", "\u2304"),
+            ("Collapse Advanced settings.", "\u25be"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_disclosure_arrow_text_match_overrides_broad_row_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the chevron.", "\u203a"),
+            ("Expand Advanced settings.", "\u25b8"),
+            ("Collapse Advanced settings.", "\u25be"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 500, "height": 80},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Advanced settings",
+                            "listitem",
+                            (120, 160, 500, 80),
+                        ),
+                        ControlCandidate("c002", label, "button", (578, 186, 28, 28)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c002")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (578, 186, 28, 28))
+
     def test_transfer_and_refresh_alias_target_id_accepts_matching_action(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -6318,6 +6533,85 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_refresh_target_id_accepts_icon_only_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Refresh the page.", "\u27f2"),
+            ("Refresh the page.", "\u27f3"),
+            ("Reload the page.", "\U0001f503"),
+            ("Reload the page.", "\U0001f504"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_refresh_icon_text_match_overrides_navigation_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Refresh the page.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\u27f3", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Back", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_refresh_icon_aliases_do_not_cross_history_controls(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Refresh the page.", "\u21bb"),
+            ("Redo last change.", "\u27f3"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_download_action_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
