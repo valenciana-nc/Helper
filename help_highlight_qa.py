@@ -538,6 +538,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "broad_toolbar_recovers_to_tight_save_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 300, 60], "label": "Save"},
+                {"rect": [250, 34, 60, 28], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 20, "width": 300, "height": 60},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "toolbar", "rect": [20, 20, 300, 60]},
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [250, 34, 60, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [250, 34, 60, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_row_model_rect_with_actions_rejects_overlay",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1839,6 +1863,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "paste_into_chat_recovers_from_toolbar_paste_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 500, 40], "label": "Chat"},
+                {"rect": [20, 20, 90, 32], "label": "Paste"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into chat.",
+                "target_id": "paste",
+                "target": {"x": 20, "y": 20, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "chat", "text": "Chat", "control_type": "edit", "rect": [120, 160, 500, 40]},
+                {"id": "paste", "text": "Paste", "control_type": "button", "rect": [20, 20, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "chat",
+                "rect": [120, 160, 500, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "search_bar_plain_button_rejects_overlay",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2509,6 +2557,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Orders filtered", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "sort_orders_model_rect_rejects_sorted_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Orders sorted"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sort orders.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Orders sorted", "control_type": "button", "rect": [20, 80, 180, 32]},
             ],
             "expected": {
                 "source": "candidate_snap",
@@ -13612,6 +13681,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "page_back",
                 "rect": [80, 180, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "page_find_wording_recovers_from_browser_toolbar_find",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [760, 8, 80, 34], "label": "Find"},
+                {"rect": [80, 220, 100, 36], "label": "Find"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Find on the page.",
+                "target_id": "browser_find",
+                "target": {"x": 760, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_find",
+                    "text": "Find",
+                    "control_type": "button",
+                    "rect": [760, 8, 80, 34],
+                    "window_title": "Docs - Google Chrome",
+                },
+                {
+                    "id": "page_find",
+                    "text": "Find",
+                    "control_type": "button",
+                    "rect": [80, 220, 100, 36],
+                    "window_title": "Docs - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_find",
+                "rect": [80, 220, 100, 36],
                 "overlay_emitted": True,
             },
         },

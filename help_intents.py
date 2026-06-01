@@ -611,7 +611,8 @@ _TEXT_ENTRY_TARGET_WORDS = (
     _INPUT_INTENT_WORDS | _ADDRESS_BAR_INTENT_WORDS | _SEARCH_BAR_INTENT_WORDS | frozenset({"bar"})
 )
 _CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = (
-    _TEXT_ENTRY_TARGET_WORDS | frozenset({"message", "messages"})
+    _TEXT_ENTRY_TARGET_WORDS
+    | frozenset({"chat", "comment", "comments", "message", "messages", "reply"})
 ) - frozenset({"text"})
 _TEXT_ENTRY_ACTION_WORDS = frozenset({"enter", "type"})
 _TEXT_ENTRY_BLOCKING_WORDS = frozenset(

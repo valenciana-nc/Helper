@@ -269,6 +269,9 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
         "address",
         "bar",
         "box",
+        "chat",
+        "comment",
+        "comments",
         "field",
         "filter",
         "find",
@@ -278,6 +281,7 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
         "messages",
         "omnibox",
         "query",
+        "reply",
         "search",
         "textbox",
         "textarea",
@@ -343,6 +347,7 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "download",
         "downloads",
         "extensions",
+        "find",
         "forward",
         "history",
         "home",
@@ -433,10 +438,14 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"fix"}), frozenset({"fixed"})),
     (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
     (frozenset({"invite"}), frozenset({"invited"})),
+    (frozenset({"paste"}), frozenset({"pasted"})),
+    (frozenset({"print"}), frozenset({"printed"})),
     (frozenset({"save"}), frozenset({"autosaved", "saved"})),
     (frozenset({"search"}), frozenset({"searched"})),
     (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
     (frozenset({"share"}), frozenset({"shared"})),
+    (frozenset({"sort"}), frozenset({"sorted"})),
+    (frozenset({"sync"}), frozenset({"synced"})),
     (frozenset({"resolve"}), frozenset({"resolved"})),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
@@ -976,6 +985,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "slider",
     }
 )
+NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
@@ -1830,6 +1840,8 @@ def _text_match_score(
 ) -> float:
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
+    if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
     if not _candidate_matches_control_intent(
         candidate,
         control_intents,
@@ -2043,6 +2055,8 @@ def _context_text_match_score(
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     if not instruction_tokens:
+        return 0.0
+    if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -2289,6 +2303,12 @@ def _target_id_plausibility(
     control_intents = _instruction_control_intents(instruction)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return (
             False,
@@ -2688,6 +2708,17 @@ def _target_id_plausibility(
             return True, max(0.82, geometry_score), ""
         return False, geometry_score, "target_id lacks instruction evidence"
 
+    if (
+        candidate.control_type in SURFACE_CONTEXT_CONTROL_TYPES
+        and text_score >= TARGET_ID_TEXT_FLOOR
+        and _explicit_surface_container_target_request(
+            instruction,
+            control_intents,
+            candidate.control_type,
+        )
+    ):
+        return True, max(0.86, text_score, geometry_score), ""
+
     if _has_visible_semantic_alternative(
         instruction=instruction,
         instruction_tokens=instruction_tokens,
@@ -2942,13 +2973,22 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
         return True
     text_tokens = _tokens_from_text(candidate.text)
     compact_toolbar_shape = max(candidate.rect[2], candidate.rect[3]) <= 56
+    compact_text_toolbar_shape = candidate.rect[2] <= 96 and candidate.rect[3] <= 44
     if (
         automation_id in BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS
         and compact_toolbar_shape
         and candidate.rect[1] <= 72
     ):
         return True
-    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and compact_toolbar_shape)
+    toolbar_words = text_tokens & BROWSER_CHROME_TOOLBAR_WORDS
+    if toolbar_words and candidate.rect[1] > 144:
+        return False
+    if "find" in toolbar_words and candidate.rect[1] > 72:
+        return False
+    return bool(
+        toolbar_words
+        and (compact_toolbar_shape or compact_text_toolbar_shape)
+    )
 
 
 def _browser_navigation_chrome_action_mismatch(
@@ -5889,6 +5929,8 @@ def _candidate_snap_score(
     proximity = _proximity_score(candidate.rect, model_rect)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
@@ -6107,10 +6149,17 @@ def _contains_tighter_same_intent_action(
         selected.control_type not in ROW_LIKE_CONTROL_TYPES
         and selected.control_type not in TIGHT_ACTION_CONTROL_TYPES
         and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
+        and selected.control_type not in SURFACE_CONTEXT_CONTROL_TYPES
         and not _instruction_requests_contained_surface_action(instruction, selected)
     ):
         return False
     if selected.control_type in ROW_CONTEXT_CONTROL_TYPES and _explicit_container_target_request(
+        instruction,
+        control_intents,
+        selected.control_type,
+    ):
+        return False
+    if selected.control_type in SURFACE_CONTEXT_CONTROL_TYPES and _explicit_surface_container_target_request(
         instruction,
         control_intents,
         selected.control_type,
@@ -6277,6 +6326,21 @@ def _explicit_container_target_request(
         or {"list", "item"} <= raw_tokens
         or {"tree", "item"} <= raw_tokens
     )
+
+
+def _explicit_surface_container_target_request(
+    instruction: str,
+    control_intents: set[str],
+    selected_control_type: str,
+) -> bool:
+    if selected_control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+        return False
+    if control_intents and selected_control_type not in control_intents:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    requested_tokens = _object_token_variants(raw_tokens)
+    surface_tokens = _object_token_variants(_surface_context_type_tokens(selected_control_type))
+    return bool(requested_tokens & surface_tokens)
 
 
 def _single_contained_control_intent_candidate(

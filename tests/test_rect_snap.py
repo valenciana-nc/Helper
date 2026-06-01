@@ -6823,6 +6823,33 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(message_target.rect, (120, 160, 500, 40))
         self.assertFalse(message_target.rejected_reason)
 
+        for instruction, field_label in (
+            ("Paste into chat.", "Chat"),
+            ("Paste into the comment.", "Comment"),
+            ("Paste into reply.", "Reply"),
+        ):
+            with self.subTest(destination=field_label):
+                destination_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "paste",
+                            "target": {"x": 20, "y": 20, "width": 90, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("paste", "Paste", "button", (20, 20, 90, 32)),
+                        ControlCandidate("destination", field_label, "edit", (120, 160, 500, 40)),
+                    ],
+                )
+
+                self.assertEqual(destination_target.source, "text_match")
+                self.assertEqual(destination_target.target_id, "destination")
+                self.assertEqual(destination_target.rect, (120, 160, 500, 40))
+                self.assertFalse(destination_target.rejected_reason)
+
         for toolbar_instruction in ("Paste selected text.", "Click Paste."):
             with self.subTest(toolbar_instruction=toolbar_instruction):
                 toolbar_target = resolve_help_target(
@@ -6885,6 +6912,31 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rect, (120, 160, 160, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_action_request_recovers_from_passive_text_status_to_checkbox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Mark as done.",
+                    "target_id": "status",
+                    "target": {"x": 300, "y": 100, "width": 80, "height": 24},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("status", "Done", "text", (300, 100, 80, 24)),
+                ControlCandidate("checkbox", "Done", "checkbox", (80, 100, 24, 24)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "checkbox")
+        self.assertEqual(target.rect, (80, 100, 24, 24))
         self.assertFalse(target.rejected_reason)
 
     def test_state_action_model_rect_prefers_matching_action_button_over_noun_checkbox(self) -> None:
@@ -7449,6 +7501,72 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(snap_target.target_id, "c002")
         self.assertFalse(snap_target.rejected_reason)
+
+    def test_broad_surface_action_target_recovers_to_tight_child(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Settings.",
+                [
+                    ControlCandidate("c001", "Settings", "window", (20, 20, 500, 400)),
+                    ControlCandidate("c002", "Settings", "button", (450, 30, 60, 28)),
+                ],
+                (450, 30, 60, 28),
+            ),
+            (
+                "Click Save.",
+                [
+                    ControlCandidate("c001", "Save", "toolbar", (20, 20, 300, 60)),
+                    ControlCandidate("c002", "Save", "button", (250, 34, 60, 28)),
+                ],
+                (250, 34, 60, 28),
+            ),
+        )
+        for instruction, candidates, expected_rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                            "target": {
+                                "x": candidates[0].rect[0],
+                                "y": candidates[0].rect[1],
+                                "width": candidates[0].rect[2],
+                                "height": candidates[0].rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c002")
+                self.assertEqual(target.rect, expected_rect)
+                self.assertFalse(target.rejected_reason)
+
+        explicit_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save toolbar.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Save", "toolbar", (20, 20, 300, 60)),
+                ControlCandidate("c002", "Save", "button", (250, 34, 60, 28)),
+            ],
+        )
+
+        self.assertEqual(explicit_target.source, "target_id")
+        self.assertEqual(explicit_target.target_id, "c001")
+        self.assertFalse(explicit_target.rejected_reason)
 
     def test_splitbutton_target_id_recovers_to_menu_segment(self) -> None:
         from control_inventory import ControlCandidate
@@ -12009,6 +12127,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Invite user.", "Invited user", "button"),
             ("Fix issue.", "Fixed issue", "button"),
             ("Resolve alert.", "Resolved alert", "button"),
+            ("Paste message.", "Message pasted", "button"),
+            ("Print document.", "Document printed", "button"),
             ("Save document.", "Saved document", "button"),
             ("Save document.", "Document saved", "button"),
             ("Save document.", "Document autosaved", "button"),
@@ -12016,6 +12136,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Send message.", "Sent message", "button"),
             ("Send message.", "Message delivered", "button"),
             ("Share link.", "Shared link", "button"),
+            ("Sort orders.", "Orders sorted", "button"),
+            ("Sync files.", "Files synced", "button"),
             ("Update profile.", "Updated profile", "button"),
             ("Upload file.", "Uploaded file", "button"),
             ("Upload file.", "File uploaded", "button"),
@@ -14195,6 +14317,44 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.source, "candidate_snap")
         self.assertEqual(snap_target.target_id, "browser_back")
         self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_page_local_find_wording_recovers_from_browser_toolbar_find(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "browser_find",
+                "Find",
+                "button",
+                (760, 8, 80, 34),
+                window_title="Docs - Google Chrome",
+            ),
+            ControlCandidate(
+                "page_find",
+                "Find",
+                "button",
+                (80, 220, 100, 36),
+                window_title="Docs - Google Chrome",
+            ),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Find on the page.",
+                    "target_id": "browser_find",
+                    "target": {"x": 760, "y": 8, "width": 80, "height": 34},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "page_find")
+        self.assertEqual(target.rect, (80, 220, 100, 36))
+        self.assertFalse(target.rejected_reason)
 
     def test_navigation_arrow_aliases_do_not_cross_history_controls(self) -> None:
         from control_inventory import ControlCandidate
