@@ -113,6 +113,7 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
 )
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
+BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 BROWSER_MENU_BUTTON_TOKENS = frozenset(
     {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
 )
@@ -1182,6 +1183,8 @@ def _text_match_score(
         return 0.0
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -1265,6 +1268,8 @@ def _context_text_match_score(
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1462,6 +1467,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -2334,6 +2345,24 @@ def _browser_tab_auth_action_mismatch(
     return instruction_tokens <= BROWSER_TAB_AUTH_ACTION_WORDS
 
 
+def _browser_tab_generic_section_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type != "tabitem":
+        return False
+    if not instruction_tokens or not (instruction_tokens & BROWSER_TAB_GENERIC_SECTION_WORDS):
+        return False
+    if _instruction_mentions_tab_context(instruction):
+        return False
+    return instruction_tokens <= BROWSER_TAB_GENERIC_SECTION_WORDS
+
+
+def _instruction_mentions_tab_context(instruction: str) -> bool:
+    return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
+
+
 def _has_explicit_gmail_tab_evidence(candidate: ControlCandidate) -> bool:
     if candidate.control_type != "tabitem":
         return False
@@ -2553,6 +2582,8 @@ def _candidate_snap_score(
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
@@ -2879,6 +2910,8 @@ def _candidate_snap_semantic_mismatch(
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return True
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

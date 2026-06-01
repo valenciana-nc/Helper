@@ -1154,6 +1154,31 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_generic_page_section_words_do_not_snap_browser_tab_titles(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Open home.", "Home - Limitless - Stripe - Memory usage - 687 MB"),
+            ("Open overview.", "Billing overview - OpenAI API - Memory usage - 195 MB"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                tab = _make_button(label, 100, 20, 220, 34, control_type="TabItem")
+                window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [tab])
+                desktop = _FakeDesktop([window])
+                model_rect = (100, 20, 220, 34)
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_generic_login_does_not_snap_browser_tab_title(self) -> None:
         from rect_snap import snap_to_control
 
@@ -8204,6 +8229,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
 
+    def test_browser_tab_generic_page_sections_are_not_title_evidence(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open home.",
+                "Home - Limitless - Stripe - Memory usage - 687 MB",
+                "target_id semantic mismatch",
+            ),
+            (
+                "Click home.",
+                "Home - Limitless - Stripe - Memory usage - 687 MB",
+                "target_id semantic mismatch",
+            ),
+            (
+                "Open overview.",
+                "Billing overview - OpenAI API - Memory usage - 195 MB",
+                "target_id semantic mismatch",
+            ),
+            (
+                "Click overview.",
+                "Billing overview - OpenAI API - Memory usage - 195 MB",
+                "target_id semantic mismatch",
+            ),
+            ("Open Stripe tab.", "Home - Limitless - Stripe - Memory usage - 687 MB", ""),
+            ("Open OpenAI API tab.", "Billing overview - OpenAI API - Memory usage - 195 MB", ""),
+            ("Open home tab.", "Home - Limitless - Stripe - Memory usage - 687 MB", ""),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_browser_tab_generic_page_sections_are_not_text_match_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Open home.", "Home - Limitless - Stripe - Memory usage - 687 MB"),
+            ("Open overview.", "Billing overview - OpenAI API - Memory usage - 195 MB"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertIsNone(result)
+
     def test_browser_tab_login_title_does_not_match_generic_auth_action(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -8348,6 +8453,40 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_browser_tab_generic_page_sections_reject_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open home.", "Home - Limitless - Stripe - Memory usage - 687 MB"),
+            ("Open overview.", "Billing overview - OpenAI API - Memory usage - 195 MB"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_chrome_tab_owner_account_segment_rejects_model_rect_snap(self) -> None:
         from control_inventory import ControlCandidate

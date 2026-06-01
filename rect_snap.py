@@ -37,6 +37,7 @@ DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
+BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -174,10 +175,16 @@ def snap_to_control(
             instruction_tokens,
             ctype,
         )
+        browser_tab_generic_section_mismatch = _browser_tab_generic_section_mismatch(
+            instruction,
+            instruction_tokens,
+            ctype,
+        )
         semantic_action_mismatch = (
             start_button_action_mismatch
             or task_view_action_mismatch
             or browser_tab_auth_action_mismatch
+            or browser_tab_generic_section_mismatch
         )
         if not _is_candidate_topmost(top_handle, rect, topmost_provider):
             if (
@@ -733,6 +740,24 @@ def _browser_tab_auth_action_mismatch(
     if not instruction_tokens or not (instruction_tokens & BROWSER_TAB_AUTH_ACTION_WORDS):
         return False
     return instruction_tokens <= BROWSER_TAB_AUTH_ACTION_WORDS
+
+
+def _browser_tab_generic_section_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    ctype: str,
+) -> bool:
+    if ctype != "tabitem":
+        return False
+    if not instruction_tokens or not (instruction_tokens & BROWSER_TAB_GENERIC_SECTION_WORDS):
+        return False
+    if _instruction_mentions_tab_context(instruction):
+        return False
+    return instruction_tokens <= BROWSER_TAB_GENERIC_SECTION_WORDS
+
+
+def _instruction_mentions_tab_context(instruction: str) -> bool:
+    return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
 
 
 def _disclosure_action_tokens_mismatch(

@@ -9276,6 +9276,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_tab_home_title_rejects_generic_home_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Stripe home tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open home.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Home - Limitless - Stripe - Memory usage - 687 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "browser_tab_overview_title_rejects_generic_overview_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OpenAI overview tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open overview.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Billing overview - OpenAI API - Memory usage - 195 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "browser_tab_overview_title_keeps_openai_api_tab_wording",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OpenAI overview tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open OpenAI API tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Billing overview - OpenAI API - Memory usage - 195 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "tab_memory_usage_suffix_rejects_generic_memory_target_id",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
