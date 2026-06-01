@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,18 +25,37 @@ def run_probe(
     max_candidates: int = 80,
     min_candidates: int = 1,
     min_actionable_candidates: int = 1,
+    candidate_retries: int = 2,
+    retry_delay_sec: float = 0.1,
 ) -> dict[str, Any]:
     if clean and artifacts_dir.exists():
         shutil.rmtree(artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    capture = capture_provider()
-    resolved_candidates = (
-        list(candidates)
-        if candidates is not None
-        else collect_control_candidates(capture, limit=max_candidates)
-    )
-    resolved_candidates = resolved_candidates[:max_candidates]
+    collection_attempts = 1
+    if candidates is not None:
+        capture = capture_provider()
+        resolved_candidates = list(candidates)[:max_candidates]
+    else:
+        attempts = max(0, candidate_retries) + 1
+        resolved_candidates = []
+        for attempt in range(attempts):
+            collection_attempts = attempt + 1
+            capture = capture_provider()
+            resolved_candidates = collect_control_candidates(
+                capture,
+                limit=max_candidates,
+            )[:max_candidates]
+            failures, _actionable_count = _probe_failures(
+                capture,
+                resolved_candidates,
+                min_candidates=min_candidates,
+                min_actionable_candidates=min_actionable_candidates,
+            )
+            if not failures or attempt == attempts - 1:
+                break
+            if retry_delay_sec > 0:
+                time.sleep(retry_delay_sec)
 
     screen = Image.open(io.BytesIO(capture.png_bytes)).convert("RGB")
     screen.save(artifacts_dir / "screen.png")
@@ -47,6 +67,7 @@ def run_probe(
         resolved_candidates,
         min_candidates=min_candidates,
         min_actionable_candidates=min_actionable_candidates,
+        collection_attempts=collection_attempts,
     )
     (artifacts_dir / "candidates.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True),
@@ -61,18 +82,14 @@ def build_probe_summary(
     *,
     min_candidates: int = 0,
     min_actionable_candidates: int = 0,
+    collection_attempts: int = 1,
 ) -> dict[str, Any]:
-    failures: list[str] = []
-    if len(candidates) < max(0, min_candidates):
-        failures.append(
-            f"candidate count {len(candidates)} below required minimum {min_candidates}"
-        )
-    actionable_count = sum(1 for candidate in candidates if _is_actionable_candidate(candidate, capture))
-    if actionable_count < max(0, min_actionable_candidates):
-        failures.append(
-            "actionable candidate count "
-            f"{actionable_count} below required minimum {min_actionable_candidates}"
-        )
+    failures, actionable_count = _probe_failures(
+        capture,
+        candidates,
+        min_candidates=min_candidates,
+        min_actionable_candidates=min_actionable_candidates,
+    )
     return {
         "capture": {
             "width": capture.width,
@@ -85,6 +102,7 @@ def build_probe_summary(
         "actionable_candidate_count": actionable_count,
         "min_candidates": max(0, min_candidates),
         "min_actionable_candidates": max(0, min_actionable_candidates),
+        "collection_attempts": max(1, collection_attempts),
         "passed": not failures,
         "failures": failures,
         "candidates": [
@@ -100,6 +118,29 @@ def build_probe_summary(
             for candidate in candidates
         ],
     }
+
+
+def _probe_failures(
+    capture: Capture,
+    candidates: list[ControlCandidate],
+    *,
+    min_candidates: int,
+    min_actionable_candidates: int,
+) -> tuple[list[str], int]:
+    failures: list[str] = []
+    required_candidates = max(0, min_candidates)
+    required_actionable = max(0, min_actionable_candidates)
+    if len(candidates) < required_candidates:
+        failures.append(
+            f"candidate count {len(candidates)} below required minimum {required_candidates}"
+        )
+    actionable_count = sum(1 for candidate in candidates if _is_actionable_candidate(candidate, capture))
+    if actionable_count < required_actionable:
+        failures.append(
+            "actionable candidate count "
+            f"{actionable_count} below required minimum {required_actionable}"
+        )
+    return failures, actionable_count
 
 
 def _is_actionable_candidate(candidate: ControlCandidate, capture: Capture) -> bool:
@@ -187,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-candidates", type=int, default=80)
     parser.add_argument("--min-candidates", type=int, default=1)
     parser.add_argument("--min-actionable-candidates", type=int, default=1)
+    parser.add_argument("--candidate-retries", type=int, default=2)
+    parser.add_argument("--retry-delay-sec", type=float, default=0.1)
     args = parser.parse_args(argv)
 
     summary = run_probe(
@@ -195,11 +238,14 @@ def main(argv: list[str] | None = None) -> int:
         max_candidates=args.max_candidates,
         min_candidates=args.min_candidates,
         min_actionable_candidates=args.min_actionable_candidates,
+        candidate_retries=args.candidate_retries,
+        retry_delay_sec=args.retry_delay_sec,
     )
     print(
         "Help live probe: "
         f"{summary['candidate_count']} candidates "
         f"({summary['actionable_candidate_count']} actionable), "
+        f"{summary['collection_attempts']} collection attempt(s), "
         f"{summary['capture']['width']}x{summary['capture']['height']} "
         f"scale={summary['capture']['scale']:.3f}; "
         f"artifacts={args.artifacts}"
