@@ -1883,6 +1883,157 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "play_video_target_id_accepts_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "P"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Play video.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25b6", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "pause_video_target_id_accepts_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "P"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pause video.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u23f8", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "stop_playback_target_id_accepts_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Stop playback.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u23f9", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "record_clip_target_id_accepts_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "R"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Record clip.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u23fa", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "resume_playback_target_id_accepts_play_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Play"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Resume playback.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Play", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "play_video_text_match_overrides_video_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "P"},
+                {"rect": [180, 80, 160, 32], "label": "Video settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Play video.",
+                "target": {"x": 180, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u25b6", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Video settings", "control_type": "button", "rect": [180, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "pause_video_text_match_overrides_camera_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Pause"},
+                {"rect": [180, 80, 100, 32], "label": "Camera"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pause video.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pause", "control_type": "button", "rect": [20, 80, 90, 32]},
+                {"id": "c002", "text": "Camera", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "microphone_text_match_overrides_audio_settings_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

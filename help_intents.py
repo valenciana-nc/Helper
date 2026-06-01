@@ -41,6 +41,11 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u2606": {"bookmark", "favorite", "star"},
     "\u2661": {"favorite", "heart"},
     "\u2665": {"favorite", "heart"},
+    "\u25b6": {"play"},
+    "\u23f5": {"play"},
+    "\u23f8": {"pause"},
+    "\u23f9": {"stop"},
+    "\u23fa": {"record"},
     "\U0001f514": {"alerts", "bell", "notification", "notifications", "notify"},
     "\U0001f399": {"mic", "microphone"},
     "\U0001f3a4": {"mic", "microphone"},
@@ -542,6 +547,12 @@ _AUDIO_OUTPUT_ACTION_WORDS = frozenset(
         "volume",
     }
 )
+_MEDIA_CONTROL_ACTION_WORDS = frozenset({"pause", "play", "record"})
+_MEDIA_CONTROL_CONTEXT_WORDS = frozenset(
+    {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
+)
+_MEDIA_RESUME_WORDS = frozenset({"resume"})
+_MEDIA_STOP_WORDS = frozenset({"stop"})
 
 
 def tokenize_instruction(instruction: str) -> set[str]:
@@ -554,6 +565,10 @@ def tokenize_instruction(instruction: str) -> set[str]:
     if _audio_output_control_requested(tokens):
         filtered.discard("audio")
         filtered.update({"speaker", "sound", "volume"})
+    if _media_control_requested(tokens):
+        filtered -= _MEDIA_CONTROL_CONTEXT_WORDS
+        if tokens & _MEDIA_RESUME_WORDS:
+            filtered.add("play")
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
     if context_tokens and (tokens & _DEICTIC_WORDS or filtered - context_tokens):
         filtered -= context_tokens
@@ -726,6 +741,16 @@ def _password_visibility_requested(raw_tokens: set[str]) -> bool:
 
 def _audio_output_control_requested(raw_tokens: set[str]) -> bool:
     return "audio" in raw_tokens and bool(raw_tokens & _AUDIO_OUTPUT_ACTION_WORDS)
+
+
+def _media_control_requested(raw_tokens: set[str]) -> bool:
+    if raw_tokens & _MEDIA_CONTROL_ACTION_WORDS:
+        return True
+    if raw_tokens & _MEDIA_RESUME_WORDS:
+        return bool(raw_tokens & _MEDIA_CONTROL_CONTEXT_WORDS)
+    if raw_tokens & _MEDIA_STOP_WORDS:
+        return bool(raw_tokens & _MEDIA_CONTROL_CONTEXT_WORDS)
+    return False
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:

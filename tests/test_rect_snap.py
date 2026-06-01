@@ -194,6 +194,22 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("speaker", tokenize_control("Sound"))
         self.assertIn("volume", tokenize_control("Speaker"))
 
+    def test_media_control_intents_do_not_expand_video_to_camera(self) -> None:
+        from help_intents import tokenize_instruction
+
+        play_tokens = tokenize_instruction("Play video")
+        pause_tokens = tokenize_instruction("Pause video")
+        resume_tokens = tokenize_instruction("Resume playback")
+        start_tokens = tokenize_instruction("Start video")
+
+        self.assertIn("play", play_tokens)
+        self.assertNotIn("camera", play_tokens)
+        self.assertIn("pause", pause_tokens)
+        self.assertNotIn("camera", pause_tokens)
+        self.assertIn("play", resume_tokens)
+        self.assertNotIn("playback", resume_tokens)
+        self.assertIn("camera", start_tokens)
+
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -304,6 +320,10 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
+            ("\u25b6", {"play"}),
+            ("\u23f8", {"pause"}),
+            ("\u23f9", {"stop"}),
+            ("\u23fa", {"record"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
             ("\U0001f507", {"mute", "speaker", "sound", "volume"}),
@@ -5640,6 +5660,76 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_media_control_symbol_target_id_accepts_common_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Play video.", "\u25b6", (120, 160, 32, 32)),
+            ("Pause video.", "\u23f8", (120, 160, 32, 32)),
+            ("Stop playback.", "\u23f9", (120, 160, 32, 32)),
+            ("Record clip.", "\u23fa", (120, 160, 32, 32)),
+            ("Resume playback.", "Play", (120, 160, 80, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_media_action_text_match_overrides_camera_and_settings_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Play video.",
+                ControlCandidate("c001", "\u25b6", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Video settings", "button", (300, 160, 160, 32)),
+            ),
+            (
+                "Pause video.",
+                ControlCandidate("c001", "Pause", "button", (120, 160, 90, 32)),
+                ControlCandidate("c002", "Camera", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
 
     def test_audio_settings_instruction_targets_settings_not_speaker_button(self) -> None:
         from control_inventory import ControlCandidate
