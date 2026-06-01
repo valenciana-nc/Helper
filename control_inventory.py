@@ -80,6 +80,41 @@ GMAIL_TAB_SERVICE_RE = re.compile(
     re.IGNORECASE,
 )
 GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
+SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
+UNNAMED_BOOKMARK_RE = re.compile(r"^\s*Unnamed bookmark for https?://", re.IGNORECASE)
+UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "app",
+        "application",
+        "browser",
+        "chrome",
+        "click",
+        "edge",
+        "for",
+        "go",
+        "in",
+        "launch",
+        "open",
+        "option",
+        "options",
+        "page",
+        "preference",
+        "preferences",
+        "setting",
+        "settings",
+        "show",
+        "site",
+        "tab",
+        "the",
+        "to",
+        "web",
+        "website",
+        "window",
+    }
+)
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -485,7 +520,12 @@ def resolve_candidate_target(
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
         if control_intents and not _candidate_matches_control_intent(candidate, control_intents):
-            score = _context_text_match_score(instruction_tokens, candidate, model_rect)
+            score = _context_text_match_score(
+                instruction,
+                instruction_tokens,
+                candidate,
+                model_rect,
+            )
         else:
             score = _text_match_score(instruction, candidate, model_rect)
         score += _foreground_rank_bonus(candidate, candidates)
@@ -570,6 +610,7 @@ def snap_candidate_target(
         score = _candidate_snap_score(
             candidate=candidate,
             candidates=candidates,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             control_intents=control_intents,
             model_rect=model_rect,
@@ -612,6 +653,7 @@ def snap_candidate_target(
             )
         if _candidate_snap_semantic_mismatch(
             candidate=candidate,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             model_rect=model_rect,
         ):
@@ -870,6 +912,12 @@ def _text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _unnamed_bookmark_generic_settings_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -896,6 +944,7 @@ def _text_match_score(
 
 
 def _context_text_match_score(
+    instruction: str,
     instruction_tokens: set[str],
     candidate: ControlCandidate,
     model_rect: tuple[int, int, int, int] | None,
@@ -903,6 +952,12 @@ def _context_text_match_score(
     if not instruction_tokens:
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _unnamed_bookmark_generic_settings_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -993,6 +1048,16 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _unnamed_bookmark_generic_settings_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
@@ -1041,6 +1106,7 @@ def _target_id_plausibility(
         return False, geometry_score, "target_id lacks instruction evidence"
 
     if _has_visible_semantic_alternative(
+        instruction=instruction,
         instruction_tokens=instruction_tokens,
         selected=candidate,
         candidates=candidates,
@@ -1054,6 +1120,7 @@ def _target_id_plausibility(
 
     if text_score >= TARGET_ID_TEXT_FLOOR:
         ambiguous, _gap = _target_id_ambiguity(
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             selected=candidate,
             candidates=candidates,
@@ -1073,6 +1140,7 @@ def _target_id_plausibility(
 
     if geometry_score >= TARGET_ID_GEOMETRY_FLOOR:
         if _has_semantic_alternative(
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             selected=candidate,
             candidates=candidates,
@@ -1175,6 +1243,52 @@ def _taskbar_app_state_action_mismatch(
     return False
 
 
+def _unnamed_bookmark_generic_settings_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_unnamed_bookmark(candidate):
+        return False
+    if not (instruction_tokens & SETTINGS_REQUEST_WORDS):
+        return False
+    candidate_tokens = _candidate_visible_text_tokens(candidate)
+    specific_overlap = (instruction_tokens & candidate_tokens) - SETTINGS_REQUEST_WORDS
+    if specific_overlap:
+        return False
+    return not _instruction_names_unnamed_bookmark_destination(instruction, candidate)
+
+
+def _looks_like_unnamed_bookmark(candidate: ControlCandidate) -> bool:
+    return candidate.control_type in {"button", "splitbutton"} and bool(
+        UNNAMED_BOOKMARK_RE.search(candidate.text or "")
+    )
+
+
+def _instruction_names_unnamed_bookmark_destination(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_words = set(re.findall(r"[a-z0-9]+", (instruction or "").lower()))
+    destination_words = _tokens_from_text(candidate.text)
+    destination_text = (candidate.text or "").lower()
+    destination_compact = re.sub(r"[^a-z0-9]+", "", destination_text)
+    for word in raw_words:
+        if (
+            len(word) <= 1
+            or word.isdigit()
+            or word in UNNAMED_BOOKMARK_DESTINATION_STOPWORDS
+        ):
+            continue
+        if word in destination_words:
+            return True
+        if len(word) >= 4 and word in destination_compact:
+            return True
+        if word == "ai" and "openai" in destination_compact:
+            return True
+    return False
+
+
 def _candidate_is_taskbar_app_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     return (
@@ -1193,6 +1307,7 @@ def _taskbar_app_identity_tokens(candidate: ControlCandidate) -> set[str]:
 
 def _target_id_ambiguity(
     *,
+    instruction: str,
     instruction_tokens: set[str],
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -1218,6 +1333,12 @@ def _target_id_ambiguity(
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _unnamed_bookmark_generic_settings_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
             continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
         if _gmail_tab_selected_over_generic_mail_decoy(
@@ -1286,6 +1407,7 @@ def _foreground_rank_bonus(
 
 def _has_semantic_alternative(
     *,
+    instruction: str,
     instruction_tokens: set[str],
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -1300,6 +1422,12 @@ def _has_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _unnamed_bookmark_generic_settings_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -1311,6 +1439,7 @@ def _has_semantic_alternative(
 
 def _has_visible_semantic_alternative(
     *,
+    instruction: str,
     instruction_tokens: set[str],
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -1325,6 +1454,12 @@ def _has_visible_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _unnamed_bookmark_generic_settings_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
             continue
@@ -1337,6 +1472,7 @@ def _candidate_snap_score(
     *,
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
+    instruction: str,
     instruction_tokens: set[str],
     control_intents: set[str],
     model_rect: tuple[int, int, int, int],
@@ -1347,6 +1483,12 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _unnamed_bookmark_generic_settings_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
     if (
         control_intents
         and not _candidate_matches_control_intent(candidate, control_intents)
@@ -1355,6 +1497,7 @@ def _candidate_snap_score(
     if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
         return 0.0
     if _has_visible_semantic_alternative(
+        instruction=instruction,
         instruction_tokens=instruction_tokens,
         selected=candidate,
         candidates=candidates,
@@ -1562,6 +1705,7 @@ def _same_snap_intent(
 def _candidate_snap_semantic_mismatch(
     *,
     candidate: ControlCandidate,
+    instruction: str,
     instruction_tokens: set[str],
     model_rect: tuple[int, int, int, int],
 ) -> bool:
@@ -1569,6 +1713,12 @@ def _candidate_snap_semantic_mismatch(
     if not instruction_tokens or not semantic_tokens:
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _unnamed_bookmark_generic_settings_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

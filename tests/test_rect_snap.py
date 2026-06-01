@@ -5912,6 +5912,144 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
 
+    def test_generic_settings_target_id_rejects_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        bookmark = (
+            "Unnamed bookmark for "
+            "https://platform.openai.com/settings/organization/billing/overview"
+        )
+        for instruction in (
+            "Open settings.",
+            "Open browser settings.",
+            "Open Chrome settings.",
+            "Open site settings.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            bookmark,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_specific_settings_target_id_accepts_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        bookmark = (
+            "Unnamed bookmark for "
+            "https://platform.openai.com/settings/organization/billing/overview"
+        )
+        for instruction in (
+            "Open OpenAI settings.",
+            "Open billing settings.",
+            "Open organization settings.",
+            "Open billing.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            bookmark,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 220, 32))
+
+    def test_generic_settings_text_match_ignores_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open settings.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://platform.openai.com/settings/organization/billing/overview",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate("c002", "Settings", "button", (420, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (420, 160, 100, 32))
+
+    def test_generic_settings_model_rect_does_not_snap_to_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open settings.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://platform.openai.com/settings/organization/billing/overview",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
     def test_info_target_id_accepts_common_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
