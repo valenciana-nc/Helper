@@ -2251,6 +2251,59 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (700, 20, 32, 32))
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_password_visibility_wording_does_not_snap_opposite_state_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Hide password.", "Show password"),
+            ("Show password.", "Hide password"),
+            ("Conceal password.", "Reveal password"),
+            ("Reveal password.", "Conceal password"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 120, 32)
+                field = _make_button("Password", 120, 160, 220, 32, control_type="Edit")
+                window = _make_window("Login", 0, 0, 800, 600, [field, button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 120, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 120, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_audio_volume_direction_does_not_snap_opposite_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Increase volume.", "Decrease volume"),
+            ("Decrease volume.", "Increase volume"),
+            ("Volume up.", "Volume down"),
+            ("Lower volume.", "Raise volume"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 140, 32)
+                window = _make_window("Sound", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 140, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 140, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -12234,6 +12287,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Mute audio.", "Speaker", (120, 160, 100, 32)),
             ("Mute speaker.", "Sound", (120, 160, 90, 32)),
             ("Open volume.", "Speaker", (120, 160, 100, 32)),
+            ("Increase volume.", "Volume", (120, 160, 100, 32)),
+            ("Lower volume.", "Speaker", (120, 160, 100, 32)),
             ("Start video.", "Camera", (120, 160, 100, 32)),
             ("Start camera.", "Video", (120, 160, 90, 32)),
             ("Start webcam.", "Camera", (120, 160, 100, 32)),
@@ -12260,6 +12315,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_audio_volume_direction_rejects_opposite_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Increase volume.", "Decrease volume"),
+            ("Decrease volume.", "Increase volume"),
+            ("Volume up.", "Volume down"),
+            ("Lower volume.", "Raise volume"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (360, 160, 140, 32)),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 360, "y": 160, "width": 140, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_start_video_rejects_taskbar_start_button(self) -> None:
         from control_inventory import ControlCandidate
@@ -12847,6 +12953,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Show password.", "Eye", (360, 160, 32, 32)),
             ("Hide password.", "Visibility", (360, 160, 80, 32)),
             ("Reveal passcode.", "Eye", (360, 160, 32, 32)),
+            ("Show password.", "Show password", (360, 160, 120, 32)),
+            ("Hide password.", "Hide password", (360, 160, 120, 32)),
             ("Show password.", "\U0001f441", (360, 160, 32, 32)),
         )
         for instruction, label, rect in cases:
@@ -12870,6 +12978,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_password_visibility_wording_rejects_opposite_state_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Hide password.", "Show password"),
+            ("Show password.", "Hide password"),
+            ("Conceal password.", "Reveal password"),
+            ("Reveal password.", "Conceal password"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (360, 160, 120, 32)),
+                    ControlCandidate("c002", "Password", "edit", (120, 160, 220, 32)),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidates[0]],
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 360, "y": 160, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_password_visibility_text_match_overrides_password_field_geometry(self) -> None:
         from control_inventory import ControlCandidate

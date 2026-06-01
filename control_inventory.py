@@ -51,6 +51,12 @@ CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
+PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
+PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
+PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
+AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
+AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
+AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
@@ -1239,6 +1245,10 @@ def _text_match_score(
         return 0.0
     if _pin_state_action_mismatch(instruction, candidate):
         return 0.0
+    if _password_visibility_state_action_mismatch(instruction, candidate):
+        return 0.0
+    if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
@@ -1336,6 +1346,10 @@ def _context_text_match_score(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _pin_state_action_mismatch(instruction, candidate):
+        return 0.0
+    if _password_visibility_state_action_mismatch(instruction, candidate):
+        return 0.0
+    if _audio_output_polarity_action_mismatch(instruction, candidate):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1563,6 +1577,18 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _pin_state_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _password_visibility_state_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _audio_output_polarity_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2397,6 +2423,48 @@ def _pin_state_action_mismatch(
     return "unpin" in control_tokens
 
 
+def _password_visibility_state_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & PASSWORD_VISIBILITY_CONTEXT_WORDS):
+        return False
+    requested_show = bool(instruction_tokens & PASSWORD_VISIBILITY_SHOW_WORDS)
+    requested_hide = bool(instruction_tokens & PASSWORD_VISIBILITY_HIDE_WORDS)
+    if requested_show == requested_hide:
+        return False
+
+    control_tokens = _literal_words_from_text(candidate.descriptor)
+    control_show = bool(control_tokens & PASSWORD_VISIBILITY_SHOW_WORDS)
+    control_hide = bool(control_tokens & PASSWORD_VISIBILITY_HIDE_WORDS)
+    if control_show == control_hide:
+        return False
+    return requested_show != control_show
+
+
+def _audio_output_polarity_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
+        return False
+    requested_up = bool(instruction_tokens & AUDIO_OUTPUT_UP_WORDS)
+    requested_down = bool(instruction_tokens & AUDIO_OUTPUT_DOWN_WORDS)
+    if requested_up == requested_down:
+        return False
+
+    control_tokens = _literal_words_from_text(candidate.descriptor)
+    if not (control_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
+        return False
+    control_up = bool(control_tokens & AUDIO_OUTPUT_UP_WORDS)
+    control_down = bool(control_tokens & AUDIO_OUTPUT_DOWN_WORDS)
+    if control_up == control_down:
+        return False
+    return requested_up != control_up
+
+
 def _disclosure_action_tokens_mismatch(
     instruction_tokens: set[str],
     candidate_tokens: set[str],
@@ -2589,6 +2657,10 @@ def _target_id_ambiguity(
             continue
         if _pin_state_action_mismatch(instruction, candidate):
             continue
+        if _password_visibility_state_action_mismatch(instruction, candidate):
+            continue
+        if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -2768,6 +2840,10 @@ def _has_semantic_alternative(
             continue
         if _pin_state_action_mismatch(instruction, candidate):
             continue
+        if _password_visibility_state_action_mismatch(instruction, candidate):
+            continue
+        if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         score = _text_evidence_score(
@@ -2843,6 +2919,10 @@ def _has_visible_semantic_alternative(
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _pin_state_action_mismatch(instruction, candidate):
+            continue
+        if _password_visibility_state_action_mismatch(instruction, candidate):
+            continue
+        if _audio_output_polarity_action_mismatch(instruction, candidate):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
@@ -2924,6 +3004,10 @@ def _candidate_snap_score(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _pin_state_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _password_visibility_state_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _audio_output_polarity_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -3078,6 +3162,10 @@ def _single_contained_control_intent_candidate(
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _pin_state_action_mismatch(instruction, candidate):
+            continue
+        if _password_visibility_state_action_mismatch(instruction, candidate):
+            continue
+        if _audio_output_polarity_action_mismatch(instruction, candidate):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
@@ -3282,6 +3370,10 @@ def _candidate_snap_semantic_mismatch(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _pin_state_action_mismatch(instruction, candidate):
+        return True
+    if _password_visibility_state_action_mismatch(instruction, candidate):
+        return True
+    if _audio_output_polarity_action_mismatch(instruction, candidate):
         return True
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return True

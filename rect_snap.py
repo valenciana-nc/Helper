@@ -39,6 +39,12 @@ CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
+PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
+PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
+PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
+AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
+AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
+AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
@@ -322,6 +328,20 @@ def snap_to_control(
             visible_text,
             automation_id,
         )
+        password_visibility_state_action_mismatch = (
+            _password_visibility_state_action_mismatch(
+                instruction,
+                visible_text,
+                automation_id,
+            )
+        )
+        audio_output_polarity_action_mismatch = (
+            _audio_output_polarity_action_mismatch(
+                instruction,
+                visible_text,
+                automation_id,
+            )
+        )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,
             instruction_tokens,
@@ -357,6 +377,8 @@ def snap_to_control(
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
             or pin_state_action_mismatch
+            or password_visibility_state_action_mismatch
+            or audio_output_polarity_action_mismatch
             or clear_close_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
@@ -1209,6 +1231,52 @@ def _pin_state_action_mismatch(
     if requested_unpin:
         return "pin" in control_tokens and not (control_tokens & PIN_STATE_NEUTRAL_WORDS)
     return "unpin" in control_tokens
+
+
+def _password_visibility_state_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & PASSWORD_VISIBILITY_CONTEXT_WORDS):
+        return False
+    requested_show = bool(instruction_tokens & PASSWORD_VISIBILITY_SHOW_WORDS)
+    requested_hide = bool(instruction_tokens & PASSWORD_VISIBILITY_HIDE_WORDS)
+    if requested_show == requested_hide:
+        return False
+
+    control_tokens = _literal_words_from_text(" ".join((visible_text or "", automation_id or "")))
+    control_show = bool(control_tokens & PASSWORD_VISIBILITY_SHOW_WORDS)
+    control_hide = bool(control_tokens & PASSWORD_VISIBILITY_HIDE_WORDS)
+    if control_show == control_hide:
+        return False
+    return requested_show != control_show
+
+
+def _audio_output_polarity_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
+        return False
+    requested_up = bool(instruction_tokens & AUDIO_OUTPUT_UP_WORDS)
+    requested_down = bool(instruction_tokens & AUDIO_OUTPUT_DOWN_WORDS)
+    if requested_up == requested_down:
+        return False
+
+    control_tokens = _literal_words_from_text(
+        " ".join((visible_text or "", automation_id or ""))
+    )
+    if not (control_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
+        return False
+    control_up = bool(control_tokens & AUDIO_OUTPUT_UP_WORDS)
+    control_down = bool(control_tokens & AUDIO_OUTPUT_DOWN_WORDS)
+    if control_up == control_down:
+        return False
+    return requested_up != control_up
 
 
 def _clear_close_action_mismatch(

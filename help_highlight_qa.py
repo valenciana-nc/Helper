@@ -4790,6 +4790,69 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "increase_volume_target_id_accepts_volume_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Increase volume.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Volume", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "increase_volume_target_id_rejects_decrease_volume_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Decrease volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Increase volume.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Decrease volume", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "volume_down_model_rect_rejects_volume_up_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Volume up"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Volume down.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Volume up", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "speaker_symbol_target_id_accepts_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5746,6 +5809,52 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [260, 80, 32, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "hide_password_target_id_rejects_show_password_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 130, 32], "label": "Show password"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Hide password.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Show password", "control_type": "button", "rect": [260, 80, 130, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "show_password_model_rect_rejects_hide_password_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 130, 32], "label": "Hide password"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show password.",
+                "target": {"x": 260, "y": 80, "width": 130, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Hide password", "control_type": "button", "rect": [260, 80, 130, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
