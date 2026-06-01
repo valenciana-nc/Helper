@@ -7255,10 +7255,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open site.", "target_id semantic mismatch"),
             ("Open this site.", "target_id semantic mismatch"),
             ("Open site access.", "target_id semantic mismatch"),
+            ("Open view.", "target_id semantic mismatch"),
+            ("Click view.", "target_id semantic mismatch"),
             ("Open site information.", ""),
             ("Click the site info button.", ""),
             ("Click the lock icon.", ""),
             ("Click the padlock icon.", ""),
+            ("View site information.", ""),
         )
         for instruction, reason in cases:
             with self.subTest(instruction=instruction):
@@ -7285,6 +7288,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
+
+    def test_site_information_text_match_ignores_generic_view(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open view.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "View site information",
+                    "button",
+                    (120, 160, 160, 32),
+                    automation_id="view_1011",
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
+    def test_site_information_model_rect_rejects_generic_view_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open view.",
+                    "target": {"x": 120, "y": 160, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "View site information",
+                    "button",
+                    (120, 160, 160, 32),
+                    automation_id="view_1011",
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_site_information_text_match_recovers_from_extension_access_target_id(self) -> None:
         from control_inventory import ControlCandidate
@@ -11315,6 +11367,32 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_site_information_does_not_snap_generic_view(self) -> None:
+        from rect_snap import snap_to_control
+
+        site_info = _make_button(
+            "View site information",
+            100,
+            20,
+            160,
+            32,
+            automation_id="view_1011",
+        )
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [site_info])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 160, 32)
+
+        result = snap_to_control(
+            model_rect,
+            "Open view.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_site_information_aliases_do_not_cross_lock_security_or_settings(self) -> None:
         from control_inventory import ControlCandidate

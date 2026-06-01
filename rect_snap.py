@@ -38,6 +38,9 @@ DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
+SITE_INFORMATION_REQUEST_WORDS = frozenset(
+    {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
+)
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -180,11 +183,17 @@ def snap_to_control(
             instruction_tokens,
             ctype,
         )
+        site_information_action_mismatch = _site_information_action_mismatch(
+            instruction_tokens,
+            semantic_text,
+            ctype,
+        )
         semantic_action_mismatch = (
             start_button_action_mismatch
             or task_view_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
+            or site_information_action_mismatch
         )
         if not _is_candidate_topmost(top_handle, rect, topmost_provider):
             if (
@@ -758,6 +767,21 @@ def _browser_tab_generic_section_mismatch(
 
 def _instruction_mentions_tab_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
+
+
+def _site_information_action_mismatch(
+    instruction_tokens: set[str],
+    semantic_text: str,
+    ctype: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
+    if not {"site", "information"} <= control_tokens:
+        return False
+    if instruction_tokens & SITE_INFORMATION_REQUEST_WORDS:
+        return False
+    return bool(instruction_tokens & {"site", "view"})
 
 
 def _disclosure_action_tokens_mismatch(

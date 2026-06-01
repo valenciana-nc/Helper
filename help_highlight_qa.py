@@ -6914,6 +6914,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_view_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "automation_id": "view_1011",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_view_model_rect_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "automation_id": "view_1011",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "site_information_recovers_from_extension_access_target_id",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

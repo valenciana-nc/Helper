@@ -1899,9 +1899,9 @@ def _site_information_action_mismatch(
 ) -> bool:
     if not _looks_like_site_information_button(candidate):
         return False
-    if "site" not in instruction_tokens:
+    if instruction_tokens & SITE_INFORMATION_REQUEST_WORDS:
         return False
-    return not bool(instruction_tokens & SITE_INFORMATION_REQUEST_WORDS)
+    return bool(instruction_tokens & {"site", "view"})
 
 
 def _looks_like_site_information_button(candidate: ControlCandidate) -> bool:
@@ -2568,7 +2568,7 @@ def _candidate_snap_score(
     ):
         return 0.0
     if _site_information_action_mismatch(instruction_tokens, candidate):
-        return 0.0
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
