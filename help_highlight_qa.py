@@ -140,6 +140,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "automation_only_model_rect_recovers_to_visible_text_match",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 32, 32], "label": ""},
+                {"rect": [180, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 160, "y": 250, "width": 64, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "",
+                    "automation_id": "saveButton",
+                    "control_type": "button",
+                    "rect": [80, 80, 32, 32],
+                },
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [180, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [180, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "background_duplicate_target_id_recovers_to_foreground",
             "capture": {"width": 500, "height": 320},
             "draw": [

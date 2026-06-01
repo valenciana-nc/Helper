@@ -20,6 +20,8 @@ MAX_CANDIDATES = 80
 MAX_BFS_DEPTH = 8
 TEXT_MATCH_FLOOR = 0.55
 TEXT_MATCH_GAP = 0.08
+VISIBLE_TEXT_MATCH_BONUS = 0.08
+AUTOMATION_ONLY_MATCH_PENALTY = 0.08
 TARGET_ID_TEXT_FLOOR = 0.35
 TARGET_ID_GEOMETRY_FLOOR = 0.72
 TARGET_ID_FOREGROUND_CONFLICT_GAP = 0.35
@@ -527,7 +529,8 @@ def resolve_candidate_target(
     if best_score < TEXT_MATCH_FLOOR:
         return None
 
-    if len(ranked) > 1 and best_score - ranked[1][0] < TEXT_MATCH_GAP:
+    runner_up = _first_distinct_ranked_candidate(ranked[1:], candidate)
+    if runner_up is not None and best_score - runner_up[0] < TEXT_MATCH_GAP:
         return TargetResolution(
             rect=candidate.rect,
             confidence=best_score,
@@ -607,7 +610,8 @@ def snap_candidate_target(
             target_id=candidate.id,
             rejected_reason="ambiguous candidate snap",
         )
-    if len(ranked) > 1 and best_score - ranked[1][0] < TEXT_MATCH_GAP:
+    runner_up = _first_distinct_ranked_candidate(ranked[1:], candidate)
+    if runner_up is not None and best_score - runner_up[0] < TEXT_MATCH_GAP:
         return TargetResolution(
             rect=candidate.rect,
             confidence=best_score,
@@ -740,12 +744,50 @@ def _dedupe_candidates(candidates: list[ControlCandidate]) -> list[ControlCandid
     seen: set[tuple[tuple[int, int, int, int], str, str]] = set()
     out: list[ControlCandidate] = []
     for candidate in candidates:
-        key = (candidate.rect, candidate.control_type, candidate.descriptor.lower())
+        key = _candidate_visual_key(candidate)
         if key in seen:
             continue
         seen.add(key)
         out.append(candidate)
     return out
+
+
+def _candidate_visual_key(
+    candidate: ControlCandidate,
+) -> tuple[tuple[int, int, int, int], str, str]:
+    return (candidate.rect, candidate.control_type, _candidate_semantic_key(candidate))
+
+
+def _candidate_semantic_key(candidate: ControlCandidate) -> str:
+    visible = _candidate_text_key(candidate.text)
+    if visible:
+        return f"text:{visible}"
+    automation = _candidate_text_key(candidate.automation_id)
+    if automation:
+        return f"automation:{automation}"
+    return ""
+
+
+def _candidate_text_key(text: str) -> str:
+    tokens = _tokens_from_text(text)
+    if tokens:
+        return " ".join(sorted(tokens))
+    return (text or "").strip().lower()
+
+
+def _same_visual_candidate(first: ControlCandidate, second: ControlCandidate) -> bool:
+    return _candidate_visual_key(first) == _candidate_visual_key(second)
+
+
+def _first_distinct_ranked_candidate(
+    ranked: list[tuple[float, ControlCandidate]],
+    selected: ControlCandidate,
+) -> tuple[float, ControlCandidate] | None:
+    for score, candidate in ranked:
+        if _same_visual_candidate(candidate, selected):
+            continue
+        return (score, candidate)
+    return None
 
 
 def _prune_dominated_candidates(candidates: list[ControlCandidate]) -> list[ControlCandidate]:
@@ -796,7 +838,8 @@ def _text_match_score(
     instruction_tokens = _tokenize_instruction(instruction)
     if not instruction_tokens:
         return 0.0
-    candidate_tokens = _candidate_semantic_tokens(candidate)
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
     if not candidate_tokens:
         return 0.0
     overlap = instruction_tokens & candidate_tokens
@@ -811,9 +854,13 @@ def _text_match_score(
         score += 0.04
     if candidate.control_type in instruction_tokens:
         score += 0.03
+    if visible_tokens:
+        score += VISIBLE_TEXT_MATCH_BONUS
+    elif candidate.automation_id.strip():
+        score -= AUTOMATION_ONLY_MATCH_PENALTY
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
-    return min(score, 1.0)
+    return min(max(score, 0.0), 1.0)
 
 
 def _target_id_plausibility(
@@ -925,6 +972,8 @@ def _target_id_ambiguity(
     for candidate in candidates:
         if candidate is selected or candidate.id == selected.id:
             continue
+        if _same_visual_candidate(candidate, selected):
+            continue
         text_score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -980,6 +1029,25 @@ def _has_semantic_alternative(
     return False
 
 
+def _has_visible_semantic_alternative(
+    *,
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not instruction_tokens or _candidate_visible_text_tokens(selected):
+        return False
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        visible_tokens = _candidate_visible_text_tokens(candidate)
+        if not visible_tokens:
+            continue
+        if _text_evidence_score(instruction_tokens, visible_tokens) >= TARGET_ID_TEXT_FLOOR:
+            return True
+    return False
+
+
 def _candidate_snap_score(
     *,
     candidate: ControlCandidate,
@@ -992,6 +1060,12 @@ def _candidate_snap_score(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
+        return 0.0
+    if _has_visible_semantic_alternative(
+        instruction_tokens=instruction_tokens,
+        selected=candidate,
+        candidates=candidates,
+    ):
         return 0.0
     if instruction_tokens and semantic_tokens and text_score <= 0:
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -1021,6 +1095,8 @@ def _foreground_snap_conflict(
     foreground: tuple[float, ControlCandidate] | None = None
     for score, candidate in ranked:
         if candidate.window_rank != min_rank:
+            continue
+        if _same_visual_candidate(best, candidate):
             continue
         if score < confidence_floor:
             continue

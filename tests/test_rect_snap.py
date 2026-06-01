@@ -406,6 +406,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(candidates[0].automation_id, "save-btn")
         self.assertEqual(candidates[0].rect, (100, 200, 60, 30))
 
+    def test_collect_dedupes_same_visible_control_with_different_automation_ids(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        save_a = _make_button("Save", 100, 200, 60, 30, automation_id="save-a")
+        save_b = _make_button("Save", 100, 200, 60, 30, automation_id="save-b")
+        window = _make_window("Editor", 0, 0, 800, 600, [save_a, save_b])
+        desktop = _FakeDesktop([window])
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].text, "Save")
+        self.assertEqual(candidates[0].rect, (100, 200, 60, 30))
+
     def test_candidate_prompt_includes_target_ids_and_normalized_rects(self) -> None:
         from control_inventory import collect_control_candidates, format_candidates_for_prompt
 
@@ -521,6 +539,25 @@ class ControlInventoryTests(unittest.TestCase):
         )
 
         self.assertIsNone(result)
+
+    def test_text_match_prefers_visible_label_over_automation_only_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32), automation_id="saveButton"),
+                ControlCandidate("c002", "Save", "button", (120, 10, 80, 32)),
+            ],
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c002")
+        self.assertFalse(result.rejected_reason)
 
     def test_target_id_accepts_common_ui_synonym_with_exact_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -792,6 +829,23 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "ambiguous text match")
 
+    def test_text_match_ignores_same_visual_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), automation_id="save-a"),
+                ControlCandidate("c002", "Save", "button", (10, 10, 60, 30), automation_id="save-b"),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.target_id, "c001")
+
     def test_norm_rect_clips_partially_offscreen_candidate(self) -> None:
         from control_inventory import collect_control_candidates, format_candidates_for_prompt
 
@@ -1024,6 +1078,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.rect, (100, 100, 50, 24))
 
+    def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (100, 100, 50, 24), automation_id="save-a"),
+                ControlCandidate("c002", "Save", "button", (100, 100, 50, 24), automation_id="save-b"),
+            ],
+            model_rect=(96, 96, 60, 30),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+
     def test_snap_candidate_target_prefers_foreground_duplicate_when_geometry_is_close(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1059,6 +1131,20 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.target_id, "c002")
         self.assertEqual(result.rejected_reason, "ambiguous candidate snap")
+
+    def test_snap_candidate_target_rejects_automation_only_when_visible_alternative_exists(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32), automation_id="saveButton"),
+                ControlCandidate("c002", "Save", "button", (160, 10, 80, 32)),
+            ],
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNone(result)
 
     def test_snap_candidate_target_rejects_visible_text_conflict_despite_matching_automation_id(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -1167,6 +1253,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rect, (100, 10, 60, 30))
+        self.assertFalse(target.rejected_reason)
+
+    def test_model_rect_on_automation_only_candidate_recovers_to_visible_text_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 10, "y": 10, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32), automation_id="saveButton"),
+                ControlCandidate("c002", "Save", "button", (120, 10, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rect, (120, 10, 80, 32))
         self.assertFalse(target.rejected_reason)
 
     def test_background_target_id_with_geometry_does_not_resnap_same_rejected_target(self) -> None:
