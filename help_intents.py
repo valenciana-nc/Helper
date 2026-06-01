@@ -46,6 +46,9 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u23f8": {"pause"},
     "\u23f9": {"stop"},
     "\u23fa": {"record"},
+    "\u270e": {"edit", "pencil"},
+    "\u270f": {"edit", "pencil"},
+    "\U0001f589": {"edit", "pencil"},
     "\U0001f517": {"link", "share"},
     "\U0001f514": {"alerts", "bell", "notification", "notifications", "notify"},
     "\U0001f399": {"mic", "microphone"},
@@ -123,6 +126,7 @@ _TOKEN_ALIASES = {
     "documents": {"file", "files"},
     "download": {"export"},
     "duplicate": {"clone", "copy"},
+    "edit": {"pencil"},
     "expand": {"arrow", "caret", "chevron", "disclosure"},
     "export": {"download"},
     "eye": {"visibility", "visible"},
@@ -161,6 +165,7 @@ _TOKEN_ALIASES = {
     "options": {"preferences", "settings"},
     "overflow": {"menu", "more", "options"},
     "padlock": {"lock", "locked", "unlock", "unlocked"},
+    "pencil": {"edit"},
     "preferences": {"options", "settings"},
     "previous": {"back"},
     "plane": {"send"},
@@ -407,6 +412,7 @@ _CHECKBOX_ACTION_BLOCKING_WORDS = frozenset(
     }
 )
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
+_EDIT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "hyperlink", "menuitem"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -558,6 +564,22 @@ _MEDIA_CONTROL_CONTEXT_WORDS = frozenset(
 )
 _MEDIA_RESUME_WORDS = frozenset({"resume"})
 _MEDIA_STOP_WORDS = frozenset({"stop"})
+_EDIT_ACTION_CONTEXT_WORDS = frozenset(
+    {
+        "account",
+        "avatar",
+        "button",
+        "details",
+        "entry",
+        "icon",
+        "item",
+        "profile",
+        "record",
+        "row",
+        "selection",
+        "user",
+    }
+)
 
 
 def tokenize_instruction(instruction: str) -> set[str]:
@@ -574,6 +596,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
         filtered -= _MEDIA_CONTROL_CONTEXT_WORDS
         if tokens & _MEDIA_RESUME_WORDS:
             filtered.add("play")
+    if _edit_action_requested(tokens):
+        filtered.update({"edit", "pencil"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
     if context_tokens and (tokens & _DEICTIC_WORDS or filtered - context_tokens):
         filtered -= context_tokens
@@ -606,6 +630,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
+    edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -623,7 +648,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("checkbox")
     if radio_requested:
         intents.add("radiobutton")
-    if raw_tokens & {"edit", "editable"}:
+    if raw_tokens & {"edit", "editable"} and not edit_action_requested:
         intents.update(EDIT_CONTROL_TYPES)
     if not checkbox_requested and input_requested and not password_visibility_requested:
         intents.update(INPUT_CONTROL_TYPES)
@@ -645,11 +670,14 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("splitbutton")
     if password_visibility_requested:
         intents.update(_BUTTON_INTENT_TYPES)
+    if edit_action_requested:
+        intents.update(_EDIT_ACTION_INTENT_TYPES)
     if (
         not checkbox_requested
         and not radio_requested
         and not split_button_requested
         and not password_visibility_requested
+        and not edit_action_requested
         and "button" in raw_tokens
     ):
         intents.update(_BUTTON_INTENT_TYPES)
@@ -756,6 +784,10 @@ def _media_control_requested(raw_tokens: set[str]) -> bool:
     if raw_tokens & _MEDIA_STOP_WORDS:
         return bool(raw_tokens & _MEDIA_CONTROL_CONTEXT_WORDS)
     return False
+
+
+def _edit_action_requested(raw_tokens: set[str]) -> bool:
+    return "edit" in raw_tokens and bool(raw_tokens & _EDIT_ACTION_CONTEXT_WORDS)
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:

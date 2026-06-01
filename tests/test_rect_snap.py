@@ -217,6 +217,20 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("playback", resume_tokens)
         self.assertIn("camera", start_tokens)
 
+    def test_edit_action_intent_splits_button_action_from_edit_control(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        edit_row_tokens = tokenize_instruction("Edit this row")
+        edit_row_intents = instruction_control_intents("Edit this row")
+        literal_edit_intents = instruction_control_intents("Click this edit control")
+
+        self.assertTrue({"edit", "pencil"}.issubset(edit_row_tokens))
+        self.assertTrue({"button", "splitbutton", "hyperlink", "menuitem"}.issubset(edit_row_intents))
+        self.assertNotIn("edit", edit_row_intents)
+        self.assertEqual(literal_edit_intents, {"edit"})
+        self.assertIn("edit", tokenize_control("Pencil"))
+        self.assertIn("pencil", tokenize_control("Edit"))
+
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -331,6 +345,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u23f8", {"pause"}),
             ("\u23f9", {"stop"}),
             ("\u23fa", {"record"}),
+            ("\u270f", {"edit", "pencil"}),
             ("\U0001f517", {"link", "share"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
@@ -5803,6 +5818,84 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_edit_action_target_id_accepts_common_button_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Edit this row.", "Edit", (120, 160, 80, 32)),
+            ("Edit this row.", "Pencil", (120, 160, 90, 32)),
+            ("Edit this row.", "\u270f", (120, 160, 32, 32)),
+            ("Edit profile.", "Pencil", (120, 160, 90, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_edit_action_text_match_overrides_edit_field_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Edit this row.",
+                    "target": {"x": 300, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Pencil", "button", (120, 160, 90, 32)),
+                ControlCandidate("c002", "Name", "edit", (300, 160, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 90, 32))
+
+    def test_literal_edit_control_instruction_still_targets_edit_field(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this edit control.",
+                    "target_id": "c001",
+                    "target": {"x": 300, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Name", "edit", (300, 160, 220, 32)),
+                ControlCandidate("c002", "Edit", "button", (120, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (300, 160, 220, 32))
 
     def test_audio_settings_instruction_targets_settings_not_speaker_button(self) -> None:
         from control_inventory import ControlCandidate

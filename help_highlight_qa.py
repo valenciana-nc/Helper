@@ -2143,6 +2143,116 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "edit_row_target_id_accepts_edit_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Edit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit this row.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Edit", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edit_row_target_id_accepts_pencil_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Pencil"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit this row.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pencil", "control_type": "button", "rect": [20, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edit_row_target_id_accepts_pencil_symbol",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "E"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit this row.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u270f", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edit_action_text_match_overrides_name_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Pencil"},
+                {"rect": [180, 80, 220, 32], "label": "Name"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit this row.",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pencil", "control_type": "button", "rect": [20, 80, 90, 32]},
+                {"id": "c002", "text": "Name", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "literal_edit_control_target_id_stays_edit_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Edit"},
+                {"rect": [180, 80, 220, 32], "label": "Name"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this edit control.",
+                "target_id": "c002",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Edit", "control_type": "button", "rect": [20, 80, 80, 32]},
+                {"id": "c002", "text": "Name", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c002",
+                "rect": [180, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "microphone_text_match_overrides_audio_settings_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
