@@ -87,6 +87,27 @@ class TargetQualityTests(unittest.TestCase):
         self.assertTrue(quality.accepted)
         self.assertGreaterEqual(quality.visual_activity, 0.035)
 
+    def test_rejects_model_rect_containing_multiple_button_boundaries(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 74, 140, 106), outline="black", fill="#f3f4f6")
+        draw.text((80, 83), "Save", fill="black")
+        draw.rectangle((160, 74, 240, 106), outline="black", fill="#f3f4f6")
+        draw.text((177, 83), "Cancel", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(60, 74, 180, 32),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
     def test_rejects_noisy_model_rect_without_candidate_evidence(self) -> None:
         from target_quality import evaluate_target_quality
 

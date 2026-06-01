@@ -12,6 +12,8 @@ MODEL_EMPTY_VISUAL_FLOOR = 0.035
 MODEL_BOUNDARY_ACTIVITY_FLOOR = 0.10
 MODEL_NOISY_VISUAL_CEILING = 0.40
 MODEL_NOISY_BOUNDARY_FLOOR = 0.25
+MODEL_COMPOUND_SEPARATOR_FLOOR = 0.65
+MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 MAX_TARGET_AREA_FRACTION = 0.25
 
@@ -90,6 +92,15 @@ def evaluate_target_quality(
             return TargetQuality(
                 accepted=False,
                 reason="target lacks visible control boundary",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
+        if _has_compound_control_separators(capture.png_bytes, clipped):
+            return TargetQuality(
+                accepted=False,
+                reason="target appears to contain multiple controls",
                 visible_fraction=visible_fraction,
                 visual_activity=visual_activity,
                 boundary_activity=boundary_activity,
@@ -181,3 +192,48 @@ def _boundary_activity(crop: Image.Image) -> float:
     mean = sum(values) / len(values)
     variance = sum((value - mean) ** 2 for value in values) / len(values)
     return min(1.0, (variance ** 0.5) / 255.0)
+
+
+def _has_compound_control_separators(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 24 or crop.height < 16:
+                return False
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return (
+                _strong_internal_separator_groups(edges, vertical=True)
+                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+                or _strong_internal_separator_groups(edges, vertical=False)
+                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+            )
+    except Exception:
+        return False
+
+
+def _strong_internal_separator_groups(edges: Image.Image, *, vertical: bool) -> int:
+    width, height = edges.size
+    band = max(2, min(5, width // 12, height // 12))
+    if width <= band * 2 or height <= band * 2:
+        return 0
+    pixels = edges.load()
+    positions = range(band, width - band) if vertical else range(band, height - band)
+    line_length = (height - band * 2) if vertical else (width - band * 2)
+    groups = 0
+    last_strong: int | None = None
+    for position in positions:
+        strong = 0
+        for cross in range(band, (height if vertical else width) - band):
+            value = int(pixels[position, cross] if vertical else pixels[cross, position])
+            if value > 32:
+                strong += 1
+        if strong / max(1, line_length) < MODEL_COMPOUND_SEPARATOR_FLOOR:
+            continue
+        if last_strong is None or position - last_strong > 2:
+            groups += 1
+        last_strong = position
+    return groups

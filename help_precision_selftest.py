@@ -127,6 +127,7 @@ def evaluate_case_result(
     overlay_rect: tuple[int, int, int, int] | None,
     rejected_reason: str,
     expect_rejected_reason: str = "",
+    allow_any_rejection: bool = False,
     expect_overlay: bool = True,
     min_iou: float = 0.85,
 ) -> tuple[bool, list[str]]:
@@ -136,6 +137,9 @@ def evaluate_case_result(
             failures.append(
                 f"expected rejection {expect_rejected_reason!r}, got {rejected_reason!r}"
             )
+    elif allow_any_rejection:
+        if not rejected_reason:
+            failures.append("expected target rejection")
     elif rejected_reason:
         failures.append(f"target rejected: {rejected_reason}")
     if expect_overlay and overlay_rect is None:
@@ -210,6 +214,17 @@ def _run_resolution_cases(
                 expect_rejected_reason="target_id semantic mismatch",
             )
         )
+        cases.append(
+            _run_resolution_case(
+                name="no_candidate_compound_model_rect_rejects",
+                decision=_decision_compound_model_rect(capture, [target_candidate, cancel_candidate]),
+                capture=capture,
+                candidates=[],
+                expected_candidate=None,
+                expect_overlay=False,
+                allow_any_rejection=True,
+            )
+        )
     else:
         cases.append(
             _missing_case(
@@ -220,6 +235,12 @@ def _run_resolution_cases(
         cases.append(
             _missing_case(
                 "copied_wrong_target_id_without_semantic_alternative_rejects",
+                "cancel control not found",
+            )
+        )
+        cases.append(
+            _missing_case(
+                "no_candidate_compound_model_rect_rejects",
                 "cancel control not found",
             )
         )
@@ -276,6 +297,7 @@ def _run_resolution_case(
     expected_candidate: ControlCandidate | None,
     expect_overlay: bool = True,
     expect_rejected_reason: str = "",
+    allow_any_rejection: bool = False,
 ) -> dict[str, Any]:
     target = resolve_help_target(
         decision,
@@ -316,6 +338,7 @@ def _run_resolution_case(
         overlay_rect=overlay_rect,
         rejected_reason=rejected_reason,
         expect_rejected_reason=expect_rejected_reason,
+        allow_any_rejection=allow_any_rejection,
         expect_overlay=expect_overlay,
     )
     return {
@@ -544,6 +567,25 @@ def _decision_duplicate_ambiguous_snap(
     payload = {
         "kind": "step",
         "instruction": "Click this button.",
+        "target": {
+            "x": norm[0],
+            "y": norm[1],
+            "width": norm[2],
+            "height": norm[3],
+        },
+    }
+    return _parse_live_help_decision(json.dumps(payload))
+
+
+def _decision_compound_model_rect(
+    capture: Capture,
+    candidates: list[ControlCandidate],
+):
+    union = _union_rect([candidate.rect for candidate in candidates])
+    norm = _norm_rect(union, capture)
+    payload = {
+        "kind": "step",
+        "instruction": f"Click {TARGET_TEXT}.",
         "target": {
             "x": norm[0],
             "y": norm[1],

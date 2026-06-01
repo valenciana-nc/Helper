@@ -855,6 +855,41 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id control type mismatch")
 
+    def test_generic_checkbox_target_id_accepts_checkbox_label_without_type_text(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "Enable precision mode", "checkbox", (10, 10, 200, 32)),
+            ],
+            model_rect=(10, 10, 200, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_generic_checkbox_target_id_rejects_wrong_button_type(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32)),
+            ],
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
     def test_target_id_foreground_duplicate_without_geometry_is_accepted(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1343,6 +1378,37 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 600, 40))
 
+    def test_snap_candidate_target_accepts_generic_checkbox_label_without_type_text(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "Enable precision mode", "checkbox", (10, 10, 200, 32)),
+            ],
+            model_rect=(10, 10, 200, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_snap_candidate_target_rejects_checkbox_intent_on_unlabeled_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32)),
+            ],
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNone(result)
+
     def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1782,6 +1848,25 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 600, 40))
+
+    def test_generic_checkbox_model_rect_does_not_highlight_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this checkbox.",
+                    "target": {"x": 10, "y": 10, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "", "button", (10, 10, 32, 32))],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
         from control_inventory import ControlCandidate

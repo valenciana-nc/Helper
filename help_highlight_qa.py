@@ -521,6 +521,26 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_checkbox_model_rect_rejects_button_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 32, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this checkbox.",
+                "target": {"x": 160, "y": 250, "width": 64, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "", "control_type": "button", "rect": [80, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -628,6 +648,25 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "model",
                 "quality_reason": "target lacks visible control boundary",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "compound_model_rect_over_multiple_buttons_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [60, 74, 80, 32], "label": "Save"},
+                {"rect": [160, 74, 80, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 120, "y": 231, "width": 360, "height": 106},
+            },
+            "candidates": [],
+            "expected": {
+                "source": "model",
+                "quality_reason": "target appears to contain multiple controls",
                 "overlay_emitted": False,
             },
         },

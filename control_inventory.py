@@ -133,6 +133,13 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "text",
         "textbox",
         "textarea",
+        "check",
+        "checkbox",
+        "radio",
+        "radiobutton",
+        "combo",
+        "combobox",
+        "dropdown",
         "type",
         "enter",
         "into",
@@ -158,9 +165,9 @@ _INSTRUCTION_STOPWORDS = frozenset(
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
-_TIGHT_ACTION_INTENT_WORDS = frozenset(
-    {"button", "icon", "link", "tab", "menu", "checkbox", "radio"}
-)
+_BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
+_ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
+_MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -858,6 +865,9 @@ def _text_match_score(
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     instruction_tokens = _tokenize_instruction(instruction)
+    control_intents = _instruction_control_intents(instruction)
+    if not _candidate_matches_control_intent(candidate, control_intents):
+        return 0.0
     if not instruction_tokens:
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
@@ -899,19 +909,25 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+    if not _candidate_matches_control_intent(candidate, control_intents):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id control type mismatch",
+        )
 
     if not instruction_tokens:
-        if _contains_tighter_same_intent_action(
-            selected=candidate,
-            candidates=candidates,
-            instruction_tokens=instruction_tokens,
-            control_intents=control_intents,
-        ):
-            return (
-                False,
-                geometry_score,
-                "target_id ambiguous",
-            )
         if _has_nearby_unlabeled_competitor(candidate, candidates):
             return (
                 False,
@@ -919,8 +935,6 @@ def _target_id_plausibility(
                 "target_id ambiguous unlabeled control",
             )
         if model_rect is not None and geometry_score >= TARGET_ID_GEOMETRY_FLOOR:
-            if not _candidate_matches_generic_control_intent(candidate, control_intents):
-                return False, geometry_score, "target_id control type mismatch"
             return True, max(0.82, geometry_score), ""
         return False, geometry_score, "target_id lacks instruction evidence"
 
@@ -928,17 +942,6 @@ def _target_id_plausibility(
         instruction_tokens=instruction_tokens,
         selected=candidate,
         candidates=candidates,
-    ):
-        return (
-            False,
-            max(text_score, geometry_score),
-            "target_id ambiguous",
-        )
-
-    if _contains_tighter_same_intent_action(
-        selected=candidate,
-        candidates=candidates,
-        instruction_tokens=instruction_tokens,
         control_intents=control_intents,
     ):
         return (
@@ -953,6 +956,7 @@ def _target_id_plausibility(
             selected=candidate,
             candidates=candidates,
             model_rect=model_rect,
+            control_intents=control_intents,
         )
         if ambiguous:
             return False, max(text_score, geometry_score), "target_id ambiguous"
@@ -970,6 +974,7 @@ def _target_id_plausibility(
             instruction_tokens=instruction_tokens,
             selected=candidate,
             candidates=candidates,
+            control_intents=control_intents,
         ):
             return (
                 False,
@@ -1017,6 +1022,7 @@ def _target_id_ambiguity(
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int] | None,
+    control_intents: set[str],
 ) -> tuple[bool, float]:
     selected_text = _text_evidence_score(
         instruction_tokens,
@@ -1032,6 +1038,8 @@ def _target_id_ambiguity(
         if candidate is selected or candidate.id == selected.id:
             continue
         if _same_visual_candidate(candidate, selected):
+            continue
+        if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         text_score = _text_evidence_score(
             instruction_tokens,
@@ -1073,11 +1081,14 @@ def _has_semantic_alternative(
     instruction_tokens: set[str],
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
+    control_intents: set[str],
 ) -> bool:
     if not instruction_tokens:
         return False
     for candidate in candidates:
         if candidate.id == selected.id:
+            continue
+        if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         score = _text_evidence_score(
             instruction_tokens,
@@ -1093,11 +1104,14 @@ def _has_visible_semantic_alternative(
     instruction_tokens: set[str],
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
+    control_intents: set[str],
 ) -> bool:
     if not instruction_tokens or _candidate_visible_text_tokens(selected):
         return False
     for candidate in candidates:
         if candidate.id == selected.id:
+            continue
+        if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
@@ -1120,8 +1134,8 @@ def _candidate_snap_score(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if (
-        not instruction_tokens
-        and not _candidate_matches_generic_control_intent(candidate, control_intents)
+        control_intents
+        and not _candidate_matches_control_intent(candidate, control_intents)
     ):
         return 0.0
     if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
@@ -1130,6 +1144,7 @@ def _candidate_snap_score(
         instruction_tokens=instruction_tokens,
         selected=candidate,
         candidates=candidates,
+        control_intents=control_intents,
     ):
         return 0.0
     if instruction_tokens and semantic_tokens and text_score <= 0:
@@ -1175,13 +1190,23 @@ def _contains_tighter_same_intent_action(
         if not _contains_rect(selected.rect, candidate.rect):
             continue
         if not instruction_tokens:
-            if "tight_action" in control_intents:
+            if candidate.control_type in control_intents:
                 return True
-            if _generic_intent_accepts_container(selected, control_intents):
+            if _candidate_matches_control_intent(selected, control_intents):
                 return False
             if control_intents:
                 return False
             return True
+        if (
+            control_intents
+            and candidate.control_type in control_intents
+            and not _candidate_matches_control_intent(selected, control_intents)
+        ):
+            candidate_tokens = _candidate_visible_text_tokens(candidate)
+            if not candidate_tokens:
+                return True
+            if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
+                return True
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
             continue
@@ -1193,29 +1218,37 @@ def _contains_tighter_same_intent_action(
 def _instruction_control_intents(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
     intents: set[str] = set()
-    if raw_tokens & _INPUT_INTENT_WORDS:
-        intents.add("input")
-    if raw_tokens & _TIGHT_ACTION_INTENT_WORDS:
-        intents.add("tight_action")
+    checkbox_requested = "checkbox" in raw_tokens or (
+        "check" in raw_tokens and "box" in raw_tokens
+    )
+    radio_requested = "radiobutton" in raw_tokens or "radio" in raw_tokens
+    input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
+    if checkbox_requested:
+        intents.add("checkbox")
+    if radio_requested:
+        intents.add("radiobutton")
+    if not checkbox_requested and input_requested:
+        intents.update(INPUT_CONTROL_TYPES)
+    if raw_tokens & {"combo", "combobox", "dropdown"}:
+        intents.add("combobox")
+    if not checkbox_requested and not radio_requested and "button" in raw_tokens:
+        intents.update(_BUTTON_INTENT_TYPES)
+    if "icon" in raw_tokens:
+        intents.update(_ICON_INTENT_TYPES)
+    if "link" in raw_tokens:
+        intents.add("hyperlink")
+    if "tab" in raw_tokens:
+        intents.add("tabitem")
+    if "menu" in raw_tokens:
+        intents.update(_MENU_INTENT_TYPES)
     return intents
 
 
-def _generic_intent_accepts_container(
-    selected: ControlCandidate,
-    control_intents: set[str],
-) -> bool:
-    return "input" in control_intents and selected.control_type in INPUT_CONTROL_TYPES
-
-
-def _candidate_matches_generic_control_intent(
+def _candidate_matches_control_intent(
     candidate: ControlCandidate,
     control_intents: set[str],
 ) -> bool:
-    if "tight_action" in control_intents:
-        return candidate.control_type in TIGHT_ACTION_CONTROL_TYPES
-    if "input" in control_intents:
-        return candidate.control_type in INPUT_CONTROL_TYPES
-    return True
+    return not control_intents or candidate.control_type in control_intents
 
 
 def _foreground_snap_conflict(
