@@ -25,6 +25,7 @@ SEMANTIC_MISMATCH_CAP = 0.41
 SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
 FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.35
+MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -111,6 +112,7 @@ def snap_to_control(
     confidence_floor: float = CONFIDENCE_FLOOR,
     desktop_factory=None,
     foreground_handle_provider=None,
+    topmost_handle_provider=None,
 ) -> SnapResult:
     """Snap a model-emitted rect to the nearest matching UIA control.
 
@@ -142,11 +144,22 @@ def snap_to_control(
     best_visible_result: SnapResult | None = None
     ranked: list[tuple[float, SnapResult, str, str, int]] = []
     own_process_result: SnapResult | None = None
+    occluded_result: SnapResult | None = None
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
     )
+    topmost_provider = topmost_handle_provider
+    if topmost_provider is None and desktop_factory is None:
+        topmost_provider = _topmost_window_handle_at_point
 
-    for control, rect, is_own_process, window_rank, foreground_known in _iter_candidates(
+    for (
+        control,
+        rect,
+        is_own_process,
+        window_rank,
+        foreground_known,
+        top_handle,
+    ) in _iter_candidates(
         desktop,
         search_rect,
         deadline,
@@ -161,6 +174,19 @@ def snap_to_control(
         visible_text = _control_visible_text(control)
         automation_id = _control_automation_id(control)
         semantic_text = visible_text or automation_id
+        if not _is_candidate_topmost(top_handle, rect, topmost_provider):
+            if (
+                occluded_result is None
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                occluded_result = SnapResult(
+                    rect=rect,
+                    confidence=0.0,
+                    source="uia",
+                    matched_text=text,
+                    rejected_reason="occluded target",
+                )
+            continue
         if is_own_process:
             if (
                 own_process_result is None
@@ -252,6 +278,8 @@ def snap_to_control(
             )
         if own_process_result is not None:
             return own_process_result
+        if occluded_result is not None:
+            return occluded_result
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -279,9 +307,9 @@ def _default_desktop():
 
 def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
     """BFS visible top-level windows and their descendants, yielding
-    ``(control, rect, is_own_process, window_rank, foreground_known)`` tuples
-    whose rect intersects ``search_rect``. Pruned by ``deadline`` and
-    ``_MAX_BFS_DEPTH``.
+    ``(control, rect, is_own_process, window_rank, foreground_known,
+    top_handle)`` tuples whose rect intersects ``search_rect``. Pruned by
+    ``deadline`` and ``_MAX_BFS_DEPTH``.
     """
     try:
         toplevels = list(desktop.windows(visible_only=True, enabled_only=True))
@@ -315,7 +343,7 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
                 return
             next_queue: list[tuple[object, tuple[int, int, int, int]]] = []
             for control, rect in queue:
-                yield control, rect, is_own_process, window_rank, foreground_known
+                yield control, rect, is_own_process, window_rank, foreground_known, top_handle
                 if time.monotonic() >= deadline:
                     return
                 try:
@@ -394,6 +422,15 @@ def _foreground_window_handle() -> int | None:
         return None
 
 
+def _topmost_window_handle_at_point(x: int, y: int) -> int | None:
+    try:
+        point = wintypes.POINT(int(x), int(y))
+        hwnd = int(ctypes.windll.user32.WindowFromPoint(point))
+    except Exception:
+        return None
+    return hwnd or None
+
+
 def _foreground_window_index(windows: list[object], foreground_handle: int | None) -> int | None:
     if foreground_handle is None:
         return None
@@ -409,6 +446,65 @@ def _candidate_window_rank(window_index: int, foreground_index: int | None) -> i
     if window_index == foreground_index:
         return 0
     return window_index + 1 if window_index < foreground_index else window_index
+
+
+def _is_candidate_topmost(top_handle: int | None, rect, topmost_handle_provider) -> bool:
+    if top_handle is None or topmost_handle_provider is None:
+        return True
+    expected_root = _root_window_handle(top_handle)
+    matches = 0
+    checked = 0
+    center_checked = False
+    center_matched = False
+    for index, (x, y) in enumerate(_sample_points(rect)):
+        actual = _safe_topmost_handle(topmost_handle_provider, x, y)
+        if actual is None:
+            continue
+        checked += 1
+        actual_root = _root_window_handle(actual)
+        if actual_root == expected_root:
+            matches += 1
+            if index == 0:
+                center_matched = True
+        if index == 0:
+            center_checked = True
+    if checked == 0:
+        return True
+    if center_checked and not center_matched:
+        return False
+    return (matches / checked) >= MIN_TOPMOST_SAMPLE_FRACTION
+
+
+def _safe_topmost_handle(provider, x: int, y: int) -> int | None:
+    try:
+        handle = provider(x, y)
+    except Exception:
+        return None
+    if not handle:
+        return None
+    try:
+        return int(handle)
+    except Exception:
+        return None
+
+
+def _root_window_handle(hwnd: int) -> int:
+    try:
+        root = int(ctypes.windll.user32.GetAncestor(int(hwnd), 2))
+    except Exception:
+        root = 0
+    return root or int(hwnd)
+
+
+def _sample_points(rect: tuple[int, int, int, int]) -> tuple[tuple[int, int], ...]:
+    x, y, width, height = rect
+    right = x + max(1, width) - 1
+    bottom = y + max(1, height) - 1
+    return (
+        (x + max(1, width) // 2, y + max(1, height) // 2),
+        (x + min(6, max(0, width - 1)), y + min(6, max(0, height - 1))),
+        (right - min(6, max(0, width - 1)), bottom - min(6, max(0, height - 1))),
+    )
 
 
 def _is_own_process_window(hwnd: int) -> bool:

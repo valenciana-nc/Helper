@@ -353,6 +353,32 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 80, 32))
         self.assertEqual(result.rejected_reason, "foreground target ambiguous")
 
+    def test_snap_rejects_occluded_background_target(self) -> None:
+        from rect_snap import snap_to_control
+
+        save = _make_button("Save", 100, 200, 80, 32)
+        background = _make_window("Background Editor", 0, 0, 400, 320, [save], handle=101)
+        blocking_dialog = _make_window("Blocking Dialog", 70, 170, 180, 100, [], handle=202)
+        desktop = _FakeDesktop([background, blocking_dialog])
+
+        def topmost_at(x: int, y: int) -> int:
+            if 70 <= x < 250 and 170 <= y < 270:
+                return 202
+            return 101
+
+        result = snap_to_control(
+            (100, 200, 80, 32),
+            "Click Save.",
+            desktop_factory=lambda: desktop,
+            topmost_handle_provider=topmost_at,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 80, 32))
+        self.assertEqual(result.matched_text, "Save")
+        self.assertEqual(result.rejected_reason, "occluded target")
+
     def test_snap_rejects_own_process_target_instead_of_raw_fallback(self) -> None:
         from rect_snap import snap_to_control
 
