@@ -1891,6 +1891,114 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "minimize_all_windows_target_id_accepts_show_desktop",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize all windows.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Desktop",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "hide_all_windows_target_id_accepts_show_desktop",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Hide all windows.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Desktop",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "minimize_all_windows_rejects_window_minimize_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Minimize"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize all windows.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Minimize",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "minimize_window_rejects_show_desktop_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Desktop",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "maximize_window_target_id_accepts_square_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

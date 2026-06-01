@@ -359,8 +359,13 @@ class HelpIntentLanguageTests(unittest.TestCase):
         from help_intents import tokenize_control, tokenize_instruction
 
         self.assertTrue({"minimize", "minus"}.issubset(tokenize_instruction("Minimize window")))
+        self.assertEqual(tokenize_instruction("Minimize all windows"), {"show_desktop"})
+        self.assertEqual(tokenize_instruction("Minimise all windows"), {"show_desktop"})
+        self.assertEqual(tokenize_instruction("Hide all windows"), {"show_desktop"})
+        self.assertTrue({"minimize", "minus"}.issubset(tokenize_instruction("Minimise window")))
         self.assertIn("maximize", tokenize_instruction("Maximize window"))
         self.assertTrue({"restore", "overlap"}.issubset(tokenize_instruction("Restore window")))
+        self.assertIn("show_desktop", tokenize_control("Show Desktop"))
         self.assertIn("minimize", tokenize_control("-"))
         self.assertIn("minimize", tokenize_control("\u2212"))
         self.assertIn("minimize", tokenize_control("\U0001f5d5"))
@@ -371,6 +376,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("restore", tokenize_control("\U0001f5d7"))
         self.assertNotIn("zoom_out", tokenize_control("Minimize"))
         self.assertNotIn("minimize", tokenize_control("Zoom out"))
+        self.assertNotIn("show_desktop", tokenize_instruction("Minimize window"))
+        self.assertNotIn("minimize", tokenize_instruction("Minimize all windows"))
 
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -7127,6 +7134,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_show_desktop_target_id_accepts_all_windows_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Minimize all windows.",
+            "Minimise all windows.",
+            "Hide all windows.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Show Desktop",
+                            "button",
+                            (120, 160, 120, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_show_desktop_aliases_do_not_cross_single_window_minimize(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Minimize all windows.", "Minimize", "about:blank - Google Chrome"),
+            ("Hide all windows.", "Minimize", "about:blank - Google Chrome"),
+            ("Minimize window.", "Show Desktop", "Taskbar"),
+        )
+        for instruction, label, window_title in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 120, 32),
+                            window_title=window_title,
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_window_control_text_match_overrides_nearby_toolbar_geometry(self) -> None:
         from control_inventory import ControlCandidate

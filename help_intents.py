@@ -58,12 +58,18 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
+    (re.compile(r"\bshow\s+desktop\b"), {"show_desktop"}),
     (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),
 )
 _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
     (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
 )
 _PHRASE_TOKEN_REWRITES = (
+    (
+        re.compile(r"\b(?:hide|minimi[sz]e)\s+all\s+windows\b"),
+        {"show_desktop"},
+        {"all", "hide", "minimise", "minimize", "minus", "windows"},
+    ),
     (
         re.compile(r"\bwi\s+fi\b"),
         {"internet", "network", "wifi"},
@@ -310,6 +316,7 @@ _TOKEN_ALIASES = {
     "meatballs": {"menu", "more", "options"},
     "mic": {"microphone"},
     "microphone": {"mic"},
+    "minimise": {"minimize", "minus"},
     "minimize": {"minus"},
     "minus": {"minimize", "zoom_out"},
     "more": {"menu", "options"},
