@@ -82,6 +82,29 @@ class OverlayGeometryTests(unittest.TestCase):
         assert point is not None
         self.assertEqual((point.x(), point.y()), (1000.0, 500.0))
 
+    def test_anchored_point_highlight_stays_on_anchor_screen_at_boundary(self) -> None:
+        from ui_overlay import (
+            OverlayHighlight,
+            highlight_visible_on_screen,
+            local_highlight_rect,
+        )
+
+        highlight = OverlayHighlight(
+            x=1895,
+            y=100,
+            width=48,
+            height=48,
+            label="Click",
+            anchor_x=1919,
+            anchor_y=124,
+        )
+        primary = QRect(0, 0, 1920, 1080)
+        secondary = QRect(1920, 0, 1920, 1080)
+
+        self.assertIsNotNone(local_highlight_rect(highlight.rect, secondary))
+        self.assertTrue(highlight_visible_on_screen(highlight, primary))
+        self.assertFalse(highlight_visible_on_screen(highlight, secondary))
+
     def test_label_clamps_inside_top_right_edge(self) -> None:
         from ui_overlay import place_label_rect
 

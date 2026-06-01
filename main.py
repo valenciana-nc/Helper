@@ -706,7 +706,9 @@ class DesktopActionDispatcher:
 class HelplerDesktopApp(QObject):
     widget_state_requested = pyqtSignal(str)
     caption_changed = pyqtSignal(str)
-    overlay_highlight_requested = pyqtSignal(int, int, int, int, str, int)
+    overlay_highlight_requested = pyqtSignal(
+        int, int, int, int, str, int, int, int
+    )
     overlay_clear_requested = pyqtSignal()
     help_overlay_clear_sync_requested = pyqtSignal(object)
     agent_message_received = pyqtSignal(str)
@@ -1652,6 +1654,8 @@ class HelplerDesktopApp(QObject):
             48,
             label,
             duration,
+            screen_x,
+            screen_y,
         )
 
 

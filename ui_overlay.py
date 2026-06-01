@@ -44,6 +44,8 @@ class OverlayHighlight:
     width: int
     height: int
     label: str = ""
+    anchor_x: int | None = None
+    anchor_y: int | None = None
 
     @property
     def rect(self) -> QRect:
@@ -91,6 +93,35 @@ def local_screen_point(
     return QPointF(
         (float(x) - native_screen.x()) / dpr,
         (float(y) - native_screen.y()) / dpr,
+    )
+
+
+def highlight_visible_on_screen(
+    highlight: OverlayHighlight,
+    screen_geometry: QRect,
+    *,
+    device_pixel_ratio: float = 1.0,
+    native_screen_geometry: QRect | None = None,
+) -> bool:
+    if highlight.anchor_x is not None and highlight.anchor_y is not None:
+        return (
+            local_screen_point(
+                highlight.anchor_x,
+                highlight.anchor_y,
+                screen_geometry,
+                device_pixel_ratio=device_pixel_ratio,
+                native_screen_geometry=native_screen_geometry,
+            )
+            is not None
+        )
+    return (
+        local_highlight_rect(
+            highlight.rect,
+            screen_geometry,
+            device_pixel_ratio=device_pixel_ratio,
+            native_screen_geometry=native_screen_geometry,
+        )
+        is not None
     )
 
 
@@ -237,8 +268,8 @@ class OverlayWindow(QWidget):
         self._highlights = [
             item
             for item in highlights
-            if local_highlight_rect(
-                item.rect,
+            if highlight_visible_on_screen(
+                item,
                 geometry,
                 device_pixel_ratio=dpr,
                 native_screen_geometry=native_geometry,
@@ -350,9 +381,21 @@ class OverlayManager(QObject):
         height: int,
         label: str = "",
         duration_ms: int = 3000,
+        anchor_x: int | None = None,
+        anchor_y: int | None = None,
     ) -> None:
         self.show_highlights(
-            [OverlayHighlight(x=x, y=y, width=width, height=height, label=label)],
+            [
+                OverlayHighlight(
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    label=label,
+                    anchor_x=anchor_x,
+                    anchor_y=anchor_y,
+                )
+            ],
             duration_ms=duration_ms,
         )
 
