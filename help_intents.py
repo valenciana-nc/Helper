@@ -34,6 +34,7 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*y\b"), {"redo"}),
     (re.compile(r"\bleft\s+arrow\b"), {"left_arrow"}),
     (re.compile(r"\bright\s+arrow\b"), {"right_arrow"}),
+    (re.compile(r"\bcheck\s+mark\b"), {"checkmark"}),
     (re.compile(r"\bexternal\s+link\b"), {"external", "open_new"}),
     (
         re.compile(r"\bopen\s+(?:in\s+)?(?:a\s+)?new\s+tab\b"),
@@ -105,6 +106,9 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u2606": {"bookmark", "favorite", "star"},
     "\u2661": {"favorite", "heart"},
     "\u2665": {"favorite", "heart"},
+    "\u2705": {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok"},
+    "\u2713": {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok"},
+    "\u2714": {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok"},
     "\u25b6": {"play"},
     "\u23f5": {"play"},
     "\u23f8": {"pause"},
@@ -183,6 +187,7 @@ _TOKEN_ALIASES = {
     "account": {"person", "profile", "user"},
     "add": {"create", "new", "plus"},
     "about": {"details", "info", "information"},
+    "apply": {"confirm", "ok", "okay"},
     "address": {"location", "url"},
     "arrow": {"caret", "chevron", "collapse", "disclosure", "expand"},
     "avatar": {"account", "person", "profile", "user"},
@@ -203,13 +208,14 @@ _TOKEN_ALIASES = {
     "caret": {"arrow", "chevron", "collapse", "disclosure", "expand"},
     "chevron": {"arrow", "caret", "collapse", "disclosure", "expand"},
     "choose": {"browse", "file", "select", "upload"},
+    "checkmark": {"apply", "complete", "confirm", "done", "finish", "ok", "okay", "tick"},
     "clear": {"x"},
     "clone": {"copy", "duplicate"},
     "clock": {"time"},
     "cog": {"options", "preferences", "settings"},
     "camera": {"video", "webcam"},
     "collapse": {"arrow", "caret", "chevron", "disclosure"},
-    "confirm": {"ok", "okay"},
+    "confirm": {"apply", "ok", "okay"},
     "continue": {"next", "proceed"},
     "copy": {"clone", "duplicate"},
     "complete": {"done", "finish"},
@@ -282,8 +288,8 @@ _TOKEN_ALIASES = {
     "notification": {"alerts", "bell", "notifications", "notify"},
     "notifications": {"alerts", "bell", "notification", "notify"},
     "notify": {"bell", "notification", "notifications"},
-    "ok": {"confirm", "okay"},
-    "okay": {"confirm", "ok"},
+    "ok": {"apply", "confirm", "okay"},
+    "okay": {"apply", "confirm", "ok"},
     "omnibox": {"address", "search", "url"},
     "open_new": {"external", "new_tab", "new_window"},
     "options": {"preferences", "settings"},
@@ -346,6 +352,7 @@ _TOKEN_ALIASES = {
     "dots": {"more", "options", "menu"},
     "trash": {"bin", "delete", "remove", "wastebasket"},
     "time": {"clock"},
+    "tick": {"checkmark"},
     "bin": {"delete", "remove"},
     "plus": {"add", "new", "create", "zoom_in"},
     "url": {"address", "location"},
@@ -566,6 +573,7 @@ _ZOOM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _EXTERNAL_LINK_ACTION_INTENT_TYPES = frozenset(
     {"button", "splitbutton", "hyperlink", "menuitem"}
 )
+_CONFIRM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -738,6 +746,8 @@ _EXTERNAL_LINK_ACTION_WORDS = frozenset(
     {"external", "launch", "new_tab", "new_window", "open_new"}
 )
 _EXTERNAL_LINK_CONTEXT_WORDS = frozenset({"new", "tab", "window"})
+_CONFIRM_ACTION_WORDS = frozenset({"apply", "checkmark", "confirm", "ok", "okay"})
+_CONFIRM_ACTION_CONTEXT_WORDS = frozenset({"mark", "selection"})
 _EDIT_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -779,6 +789,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
         filtered -= _ZOOM_ACTION_CONTEXT_WORDS
     if _external_link_action_requested(tokens):
         filtered -= _EXTERNAL_LINK_CONTEXT_WORDS
+    if _confirm_action_requested(tokens):
+        filtered -= _CONFIRM_ACTION_CONTEXT_WORDS
     dialog_dismiss_tokens = _dialog_dismiss_action_tokens(tokens)
     if dialog_dismiss_tokens:
         filtered.update(dialog_dismiss_tokens)
@@ -823,6 +835,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
     zoom_action_requested = _zoom_action_requested(raw_tokens)
     external_link_action_requested = _external_link_action_requested(raw_tokens)
+    confirm_action_requested = _confirm_action_requested(raw_tokens)
     edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -879,6 +892,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_ZOOM_ACTION_INTENT_TYPES)
     if external_link_action_requested:
         intents.update(_EXTERNAL_LINK_ACTION_INTENT_TYPES)
+    if confirm_action_requested:
+        intents.update(_CONFIRM_ACTION_INTENT_TYPES)
     if edit_action_requested:
         intents.update(_EDIT_ACTION_INTENT_TYPES)
     if (
@@ -890,6 +905,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not clear_action_requested
         and not zoom_action_requested
         and not external_link_action_requested
+        and not confirm_action_requested
         and not edit_action_requested
         and "button" in raw_tokens
     ):
@@ -988,6 +1004,8 @@ def _text_entry_action_requested(raw_tokens: set[str]) -> bool:
 
 
 def _checkbox_action_requested(raw_tokens: set[str]) -> bool:
+    if "checkmark" in raw_tokens:
+        return False
     if raw_tokens & _CHECKBOX_ACTION_WORDS:
         if "check" in raw_tokens and "for" in raw_tokens and "box" not in raw_tokens:
             return False
@@ -1038,6 +1056,10 @@ def _zoom_action_requested(raw_tokens: set[str]) -> bool:
 
 def _external_link_action_requested(raw_tokens: set[str]) -> bool:
     return bool(raw_tokens & _EXTERNAL_LINK_ACTION_WORDS)
+
+
+def _confirm_action_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _CONFIRM_ACTION_WORDS)
 
 
 def _dialog_dismiss_action_tokens(raw_tokens: set[str]) -> set[str]:

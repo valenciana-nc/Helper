@@ -1409,6 +1409,92 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "confirm_action_target_id_accepts_checkmark_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "OK"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Confirm selection.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2713", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "complete_action_target_id_accepts_check_mark_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Check mark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Complete task.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Check mark", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "apply_checkmark_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "OK"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Apply changes.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2713", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "checkbox_intent_rejects_checkmark_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "OK"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check this box.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2713", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "create_action_text_match_overrides_cancel_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

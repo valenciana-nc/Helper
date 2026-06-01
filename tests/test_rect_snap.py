@@ -165,6 +165,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         create_tokens = tokenize_instruction("Create item")
         finish_tokens = tokenize_instruction("Finish setup")
+        checkmark_tokens = tokenize_instruction("Click the check mark")
 
         self.assertTrue({"add", "create", "new"}.issubset(create_tokens))
         self.assertTrue({"add", "create", "new"}.issubset(tokenize_instruction("New item")))
@@ -172,6 +173,13 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"complete", "done", "finish"}.issubset(finish_tokens))
         self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_instruction("Complete setup")))
         self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_control("Done")))
+        self.assertTrue({"checkmark", "complete", "done", "finish"}.issubset(checkmark_tokens))
+        self.assertNotIn("mark", checkmark_tokens)
+        for icon in ("\u2705", "\u2713", "\u2714"):
+            with self.subTest(icon=icon):
+                self.assertTrue(
+                    {"checkmark", "confirm", "done", "ok"}.issubset(tokenize_control(icon))
+                )
 
     def test_auth_direction_aliases_do_not_cross_sign_in_and_out(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -204,6 +212,20 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("cancel", tokenize_control("Cancel"))
         self.assertNotIn("close", cancel_subscription_tokens)
         self.assertNotIn("dismiss", cancel_subscription_tokens)
+
+    def test_confirm_aliases_expand_to_apply_and_ok_language(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        confirm_tokens = tokenize_instruction("Confirm selection")
+        apply_tokens = tokenize_instruction("Apply changes")
+        checkmark_intents = instruction_control_intents("Click the check mark")
+
+        self.assertTrue({"apply", "confirm", "ok", "okay"}.issubset(confirm_tokens))
+        self.assertTrue({"apply", "confirm", "ok", "okay"}.issubset(apply_tokens))
+        self.assertTrue({"apply", "confirm", "ok", "okay"}.issubset(tokenize_control("OK")))
+        self.assertTrue({"apply", "confirm", "ok", "okay"}.issubset(tokenize_control("Apply")))
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(checkmark_intents))
+        self.assertNotIn("checkbox", checkmark_intents)
 
     def test_clipboard_action_aliases_expand_to_common_icon_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -2543,6 +2565,8 @@ class ControlInventoryTests(unittest.TestCase):
 
         cases = (
             ("Click Confirm.", "OK", "ok"),
+            ("Apply changes.", "OK", "ok"),
+            ("Confirm selection.", "Apply", "apply"),
             ("Click Previous.", "Back", "back"),
             ("Click Continue.", "Next", "next"),
             ("Click Sign in.", "Log in", "login"),
@@ -5996,6 +6020,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Finish setup.", "Done"),
             ("Complete setup.", "Done"),
             ("Click Done.", "Finish"),
+            ("Done.", "\u2713"),
+            ("Complete task.", "Check mark"),
+            ("Click the check mark.", "\u2714"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -6016,6 +6043,71 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 120, 32))
 
+    def test_confirm_checkmark_target_id_accepts_icons_and_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Confirm selection.", "\u2713", "button", (120, 160, 32, 32)),
+            ("Click OK.", "\u2714", "button", (120, 160, 32, 32)),
+            ("Apply changes.", "\u2705", "button", (120, 160, 32, 32)),
+            ("Complete task.", "Check mark", "button", (120, 160, 120, 32)),
+            ("Click the check mark.", "OK", "button", (120, 160, 80, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, control_type, rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_confirm_checkmark_aliases_do_not_cross_checkbox_intents(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        checkbox_instruction = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Check this box.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "\u2713", "button", (120, 160, 32, 32))],
+        )
+        confirm_instruction = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click OK.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "\u2713", "checkbox", (120, 160, 32, 32))],
+        )
+
+        self.assertEqual(checkbox_instruction.source, "target_id")
+        self.assertEqual(
+            checkbox_instruction.rejected_reason,
+            "target_id control type mismatch",
+        )
+        self.assertEqual(confirm_instruction.source, "target_id")
+        self.assertEqual(confirm_instruction.rejected_reason, "target_id control type mismatch")
+
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -6030,6 +6122,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Finish setup.",
                 ControlCandidate("c001", "Done", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Back", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Apply changes.",
+                ControlCandidate("c001", "\u2713", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
             ),
         )
         for instruction, expected, decoy in cases:
