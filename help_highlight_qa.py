@@ -10263,6 +10263,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_task_rejects_task_view_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Task View"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open task.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Task View",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "automation_id": "TaskViewButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_view_does_not_recover_to_task_view_over_tradingview",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10299,14 +10327,14 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "generic_view_model_rect_rejects_task_view",
+            "name": "generic_task_model_rect_rejects_task_view",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [20, 80, 120, 32], "label": "Task View"},
             ],
             "decision": {
                 "kind": "step",
-                "instruction": "Open view.",
+                "instruction": "Open task.",
                 "target": {"x": 20, "y": 80, "width": 120, "height": 32},
             },
             "candidates": [

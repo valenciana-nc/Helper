@@ -78,7 +78,6 @@ TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
 TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
-TASKBAR_TASK_VIEW_ALLOWED_TOKENS = frozenset({"task", "windows"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1135,7 +1134,7 @@ def _text_match_score(
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
-    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+    if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1219,7 +1218,7 @@ def _context_text_match_score(
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
-    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+    if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1356,7 +1355,7 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+    if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1945,14 +1944,23 @@ def _taskbar_start_button_action_mismatch(
 
 
 def _taskbar_task_view_action_mismatch(
+    instruction: str,
     instruction_tokens: set[str],
     candidate: ControlCandidate,
 ) -> bool:
     if not _looks_like_taskbar_task_view_button(candidate):
         return False
-    if "view" not in instruction_tokens:
+    if not (instruction_tokens & {"task", "view"}):
         return False
-    return not bool(instruction_tokens & TASKBAR_TASK_VIEW_ALLOWED_TOKENS)
+    if _instruction_mentions_task_view(instruction):
+        return False
+    return True
+
+
+def _instruction_mentions_task_view(instruction: str) -> bool:
+    normalized = " ".join((instruction or "").lower().split())
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+    return bool(re.search(r"\btask\s+view\b", normalized)) or "taskview" in compact
 
 
 def _looks_like_taskbar_task_view_button(candidate: ControlCandidate) -> bool:
@@ -2498,7 +2506,7 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
-    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+    if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -2824,7 +2832,7 @@ def _candidate_snap_semantic_mismatch(
         return False
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return True
-    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+    if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True

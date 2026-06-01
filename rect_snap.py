@@ -36,7 +36,6 @@ MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
-TASK_VIEW_ALLOWED_TOKENS = frozenset({"task", "windows"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
@@ -166,6 +165,7 @@ def snap_to_control(
             automation_id,
         )
         task_view_action_mismatch = _task_view_action_mismatch(
+            instruction,
             instruction_tokens,
             visible_text,
             automation_id,
@@ -705,16 +705,23 @@ def _start_button_action_mismatch(
 
 
 def _task_view_action_mismatch(
+    instruction: str,
     instruction_tokens: set[str],
     visible_text: str,
     automation_id: str,
 ) -> bool:
-    if "view" not in instruction_tokens:
+    if not (instruction_tokens & {"task", "view"}):
         return False
     control_tokens = _tokenize_control(" ".join((visible_text or "", automation_id or "")))
     if not {"task", "view"} <= control_tokens:
         return False
-    return not bool(instruction_tokens & TASK_VIEW_ALLOWED_TOKENS)
+    return not _instruction_mentions_task_view(instruction)
+
+
+def _instruction_mentions_task_view(instruction: str) -> bool:
+    normalized = " ".join((instruction or "").lower().split())
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+    return bool(re.search(r"\btask\s+view\b", normalized)) or "taskview" in compact
 
 
 def _browser_tab_auth_action_mismatch(

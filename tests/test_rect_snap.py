@@ -1096,16 +1096,37 @@ class SnapToControlTests(unittest.TestCase):
         desktop = _FakeDesktop([window])
         model_rect = (100, 560, 90, 40)
 
+        for instruction in ("Open view.", "Open task."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_task_view_phrase_still_snaps_taskbar_task_view_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        task_view = _make_button("Task View", 100, 560, 90, 40, automation_id="TaskViewButton")
+        window = _make_window("Taskbar", 0, 540, 800, 60, [task_view])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 560, 90, 40)
+
         result = snap_to_control(
             model_rect,
-            "Open view.",
+            "Open Task View.",
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
 
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, model_rect)
-        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+        self.assertFalse(result.rejected_reason)
 
     def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
         from rect_snap import snap_to_control
@@ -12215,6 +12236,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Click view.", "TradingView pinned", "target_id semantic mismatch"),
             ("Open view.", "Task View", "target_id semantic mismatch"),
             ("Click view.", "Task View", "target_id semantic mismatch"),
+            ("Open task.", "Task View", "target_id semantic mismatch"),
             ("Open Task View.", "Task View", ""),
         )
         for instruction, label, reason in cases:
@@ -12280,20 +12302,44 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
-    def test_generic_view_model_rect_rejects_task_view_snap(self) -> None:
+    def test_generic_task_or_view_model_rect_rejects_task_view_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Open view.",
-                    "target": {"x": 120, "y": 160, "width": 180, "height": 32},
-                }
-            ),
-            self._capture(),
-            [
+        for instruction in ("Open view.", "Open task."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Task View",
+                            "button",
+                            (120, 160, 180, 32),
+                            automation_id="TaskViewButton",
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_generic_task_text_match_ignores_task_view(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open task.",
+            candidates=[
                 ControlCandidate(
                     "c001",
                     "Task View",
@@ -12305,9 +12351,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "candidate_snap")
-        self.assertEqual(target.target_id, "c001")
-        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        self.assertIsNone(result)
 
     def test_compound_taskbar_app_names_still_match(self) -> None:
         from control_inventory import ControlCandidate
