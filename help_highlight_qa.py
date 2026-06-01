@@ -427,6 +427,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "loose_row_model_rect_snaps_to_tight_child_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Settings"},
+                {"rect": [40, 100, 80, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Settings", "control_type": "button", "rect": [40, 100, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [40, 100, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

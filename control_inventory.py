@@ -27,6 +27,7 @@ TARGET_ID_GEOMETRY_FLOOR = 0.72
 TARGET_ID_FOREGROUND_CONFLICT_GAP = 0.35
 CANDIDATE_SNAP_FLOOR = 0.50
 CANDIDATE_SNAP_MARGIN_PX = 60
+CONTAINING_ROW_SNAP_CAP = CANDIDATE_SNAP_FLOOR - TEXT_MATCH_GAP - 0.02
 MIN_VISIBLE_FRACTION = 0.20
 UNLABELED_COMPETITOR_MARGIN_PX = 96
 FOREGROUND_RANK_BONUS = 0.10
@@ -48,6 +49,17 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "splitbutton",
         "spinner",
         "headeritem",
+    }
+)
+TIGHT_ACTION_CONTROL_TYPES = frozenset(
+    {
+        "button",
+        "menuitem",
+        "tabitem",
+        "hyperlink",
+        "checkbox",
+        "radiobutton",
+        "splitbutton",
     }
 )
 
@@ -1089,7 +1101,46 @@ def _candidate_snap_score(
         + 0.14 * area_score
         + 0.08 * type_score
     )
-    return min(1.0, score + _foreground_rank_bonus(candidate, candidates))
+    final_score = score + _foreground_rank_bonus(candidate, candidates)
+    if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction_tokens=instruction_tokens,
+    ):
+        final_score = min(final_score, CONTAINING_ROW_SNAP_CAP)
+    return min(1.0, final_score)
+
+
+def _contains_tighter_same_intent_action(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction_tokens: set[str],
+) -> bool:
+    if selected.control_type not in ROW_LIKE_CONTROL_TYPES:
+        return False
+    selected_tokens = _candidate_semantic_tokens(selected)
+    selected_area = selected.rect[2] * selected.rect[3]
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        candidate_area = candidate.rect[2] * candidate.rect[3]
+        if selected_area < candidate_area * 1.8:
+            continue
+        if not _contains_rect(selected.rect, candidate.rect):
+            continue
+        candidate_tokens = _candidate_visible_text_tokens(candidate)
+        if not candidate_tokens:
+            continue
+        if instruction_tokens:
+            if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
+                return True
+            continue
+        if selected_tokens and candidate_tokens & selected_tokens:
+            return True
+    return False
 
 
 def _foreground_snap_conflict(

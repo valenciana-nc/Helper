@@ -1198,6 +1198,25 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.rect, (100, 100, 50, 24))
 
+    def test_snap_candidate_target_prefers_tight_action_inside_matching_row(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Settings.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Settings", "button", (20, 20, 70, 30)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c002")
+        self.assertEqual(result.rect, (20, 20, 70, 30))
+
     def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1541,6 +1560,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(calls)
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_loose_row_model_rect_snaps_to_tight_child_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings.",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Settings", "button", (20, 20, 70, 30)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rect, (20, 20, 70, 30))
+        self.assertFalse(target.rejected_reason)
 
     def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
         from control_inventory import ControlCandidate
