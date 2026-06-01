@@ -23,6 +23,7 @@ def run_probe(
     clean: bool = True,
     max_candidates: int = 80,
     min_candidates: int = 1,
+    min_actionable_candidates: int = 1,
 ) -> dict[str, Any]:
     if clean and artifacts_dir.exists():
         shutil.rmtree(artifacts_dir)
@@ -45,6 +46,7 @@ def run_probe(
         capture,
         resolved_candidates,
         min_candidates=min_candidates,
+        min_actionable_candidates=min_actionable_candidates,
     )
     (artifacts_dir / "candidates.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True),
@@ -58,11 +60,18 @@ def build_probe_summary(
     candidates: list[ControlCandidate],
     *,
     min_candidates: int = 0,
+    min_actionable_candidates: int = 0,
 ) -> dict[str, Any]:
     failures: list[str] = []
     if len(candidates) < max(0, min_candidates):
         failures.append(
             f"candidate count {len(candidates)} below required minimum {min_candidates}"
+        )
+    actionable_count = sum(1 for candidate in candidates if _is_actionable_candidate(candidate, capture))
+    if actionable_count < max(0, min_actionable_candidates):
+        failures.append(
+            "actionable candidate count "
+            f"{actionable_count} below required minimum {min_actionable_candidates}"
         )
     return {
         "capture": {
@@ -73,7 +82,9 @@ def build_probe_summary(
             "scale": capture.scale,
         },
         "candidate_count": len(candidates),
+        "actionable_candidate_count": actionable_count,
         "min_candidates": max(0, min_candidates),
+        "min_actionable_candidates": max(0, min_actionable_candidates),
         "passed": not failures,
         "failures": failures,
         "candidates": [
@@ -89,6 +100,24 @@ def build_probe_summary(
             for candidate in candidates
         ],
     }
+
+
+def _is_actionable_candidate(candidate: ControlCandidate, capture: Capture) -> bool:
+    if _looks_like_window_chrome(candidate, capture):
+        return False
+    return True
+
+
+def _looks_like_window_chrome(candidate: ControlCandidate, capture: Capture) -> bool:
+    text = " ".join((candidate.text or "").lower().split())
+    automation_id = (candidate.automation_id or "").lower()
+    titlebar_labels = {"close", "maximize", "minimize", "restore"}
+    if text not in titlebar_labels:
+        return False
+    if automation_id in {"view_1", "view_2", "view_3", "view_4"}:
+        return True
+    _x, y, _width, height = candidate.rect
+    return y <= capture.monitor_top + 48 and height <= 64
 
 
 def draw_candidate_overlay(
@@ -157,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifacts", type=Path, default=Path("logs/help_live_probe/latest"))
     parser.add_argument("--max-candidates", type=int, default=80)
     parser.add_argument("--min-candidates", type=int, default=1)
+    parser.add_argument("--min-actionable-candidates", type=int, default=1)
     args = parser.parse_args(argv)
 
     summary = run_probe(
@@ -164,10 +194,12 @@ def main(argv: list[str] | None = None) -> int:
         capture_provider=_capture_provider(args.capture),
         max_candidates=args.max_candidates,
         min_candidates=args.min_candidates,
+        min_actionable_candidates=args.min_actionable_candidates,
     )
     print(
         "Help live probe: "
-        f"{summary['candidate_count']} candidates, "
+        f"{summary['candidate_count']} candidates "
+        f"({summary['actionable_candidate_count']} actionable), "
         f"{summary['capture']['width']}x{summary['capture']['height']} "
         f"scale={summary['capture']['scale']:.3f}; "
         f"artifacts={args.artifacts}"

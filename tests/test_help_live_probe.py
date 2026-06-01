@@ -43,6 +43,7 @@ class HelpLiveProbeTests(unittest.TestCase):
         )
 
         self.assertEqual(summary["candidate_count"], 1)
+        self.assertEqual(summary["actionable_candidate_count"], 1)
         self.assertEqual(summary["capture"]["monitor_left"], -100)
         self.assertEqual(summary["candidates"][0]["image_box"], (10, 20, 30, 30))
         self.assertTrue(summary["passed"])
@@ -58,6 +59,42 @@ class HelpLiveProbeTests(unittest.TestCase):
             summary["failures"],
             ["candidate count 0 below required minimum 1"],
         )
+
+    def test_build_probe_summary_fails_for_window_chrome_only(self) -> None:
+        from help_live_probe import build_probe_summary
+
+        summary = build_probe_summary(
+            _capture(),
+            [
+                ControlCandidate("c001", "Minimize", "button", (-100, 20, 30, 24), automation_id="view_1"),
+                ControlCandidate("c002", "Restore", "button", (-68, 20, 30, 24), automation_id="view_3"),
+                ControlCandidate("c003", "Close", "button", (-36, 20, 30, 24), automation_id="view_4"),
+            ],
+            min_candidates=1,
+            min_actionable_candidates=1,
+        )
+
+        self.assertFalse(summary["passed"])
+        self.assertEqual(summary["candidate_count"], 3)
+        self.assertEqual(summary["actionable_candidate_count"], 0)
+        self.assertEqual(
+            summary["failures"],
+            ["actionable candidate count 0 below required minimum 1"],
+        )
+
+    def test_build_probe_summary_counts_dialog_close_as_actionable(self) -> None:
+        from help_live_probe import build_probe_summary
+
+        summary = build_probe_summary(
+            _capture(),
+            [
+                ControlCandidate("c001", "Close", "button", (-80, 80, 60, 24), automation_id="closeDialog"),
+            ],
+            min_actionable_candidates=1,
+        )
+
+        self.assertTrue(summary["passed"])
+        self.assertEqual(summary["actionable_candidate_count"], 1)
 
     def test_run_probe_writes_artifacts(self) -> None:
         from help_live_probe import run_probe
@@ -77,6 +114,7 @@ class HelpLiveProbeTests(unittest.TestCase):
             self.assertTrue((root / "controls_overlay.png").exists())
 
         self.assertEqual(summary["candidate_count"], 1)
+        self.assertEqual(summary["actionable_candidate_count"], 1)
         self.assertTrue(summary["passed"])
         self.assertEqual(payload["candidates"][0]["id"], "c001")
 
@@ -94,7 +132,13 @@ class HelpLiveProbeTests(unittest.TestCase):
             payload = json.loads((root / "candidates.json").read_text(encoding="utf-8"))
 
         self.assertFalse(summary["passed"])
-        self.assertEqual(payload["failures"], ["candidate count 0 below required minimum 1"])
+        self.assertEqual(
+            payload["failures"],
+            [
+                "candidate count 0 below required minimum 1",
+                "actionable candidate count 0 below required minimum 1",
+            ],
+        )
 
 
 if __name__ == "__main__":
