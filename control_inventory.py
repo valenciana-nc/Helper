@@ -890,6 +890,16 @@ def _target_id_plausibility(
     )
 
     if not instruction_tokens:
+        if _contains_tighter_same_intent_action(
+            selected=candidate,
+            candidates=candidates,
+            instruction_tokens=instruction_tokens,
+        ):
+            return (
+                False,
+                geometry_score,
+                "target_id ambiguous",
+            )
         if _has_nearby_unlabeled_competitor(candidate, candidates):
             return (
                 False,
@@ -1130,7 +1140,6 @@ def _contains_tighter_same_intent_action(
 ) -> bool:
     if selected.control_type not in ROW_LIKE_CONTROL_TYPES:
         return False
-    selected_tokens = _candidate_semantic_tokens(selected)
     selected_area = selected.rect[2] * selected.rect[3]
     for candidate in candidates:
         if candidate.id == selected.id:
@@ -1142,14 +1151,12 @@ def _contains_tighter_same_intent_action(
             continue
         if not _contains_rect(selected.rect, candidate.rect):
             continue
+        if not instruction_tokens:
+            return True
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
             continue
-        if instruction_tokens:
-            if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
-                return True
-            continue
-        if selected_tokens and candidate_tokens & selected_tokens:
+        if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
 

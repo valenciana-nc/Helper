@@ -800,6 +800,25 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_generic_target_id_rejects_row_containing_tight_actions(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this button.",
+            candidates=[
+                ControlCandidate("c001", "Account row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Edit", "button", (450, 20, 60, 30)),
+                ControlCandidate("c003", "Delete", "button", (520, 20, 70, 30)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
     def test_target_id_foreground_duplicate_without_geometry_is_accepted(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1235,6 +1254,21 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c002")
         self.assertEqual(result.rect, (20, 20, 70, 30))
 
+    def test_snap_candidate_target_rejects_generic_row_containing_tight_actions(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this button.",
+            candidates=[
+                ControlCandidate("c001", "Account row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Edit", "button", (450, 20, 60, 30)),
+                ControlCandidate("c003", "Delete", "button", (520, 20, 70, 30)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNone(result)
+
     def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1627,6 +1661,29 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rect, (20, 20, 70, 30))
         self.assertFalse(target.rejected_reason)
+
+    def test_generic_row_model_rect_with_actions_downgrades_no_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this button.",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Account row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Edit", "button", (450, 20, 60, 30)),
+                ControlCandidate("c003", "Delete", "button", (520, 20, 70, 30)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
         from control_inventory import ControlCandidate

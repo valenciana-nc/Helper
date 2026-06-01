@@ -474,6 +474,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_row_model_rect_with_actions_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Account row"},
+                {"rect": [470, 100, 60, 32], "label": "Edit"},
+                {"rect": [540, 100, 80, 32], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Account row", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Edit", "control_type": "button", "rect": [470, 100, 60, 32]},
+                {"id": "c003", "text": "Delete", "control_type": "button", "rect": [540, 100, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
