@@ -850,6 +850,231 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_list_item_model_rect_snaps_to_listitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this list item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_list_item_broad_group_rejects_multiple_listitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "General"},
+                {"rect": [20, 120, 180, 32], "label": "Privacy"},
+                {"rect": [20, 160, 180, 32], "label": "Billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this list item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "General", "control_type": "listitem", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Privacy", "control_type": "listitem", "rect": [20, 120, 180, 32]},
+                {"id": "c003", "text": "Billing", "control_type": "listitem", "rect": [20, 160, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_tree_item_model_rect_snaps_to_treeitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this tree item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "treeitem", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_tree_item_broad_group_rejects_multiple_treeitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "src"},
+                {"rect": [20, 120, 180, 32], "label": "tests"},
+                {"rect": [20, 160, 180, 32], "label": "docs"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this tree item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "src", "control_type": "treeitem", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "tests", "control_type": "treeitem", "rect": [20, 120, 180, 32]},
+                {"id": "c003", "text": "docs", "control_type": "treeitem", "rect": [20, 160, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "compact_menuitem_model_rect_snaps_to_menuitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 28], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this menuitem.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "menuitem", "rect": [20, 80, 180, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "compact_menuitem_broad_group_rejects_multiple_menuitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 28], "label": "Open"},
+                {"rect": [20, 116, 180, 28], "label": "Save"},
+                {"rect": [20, 152, 180, 28], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this menuitem.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Open", "control_type": "menuitem", "rect": [20, 80, 180, 28]},
+                {"id": "c002", "text": "Save", "control_type": "menuitem", "rect": [20, 116, 180, 28]},
+                {"id": "c003", "text": "Close", "control_type": "menuitem", "rect": [20, 152, 180, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "compact_tabitem_model_rect_snaps_to_tabitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this tabitem.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Settings", "control_type": "tabitem", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "compact_tabitem_broad_group_rejects_multiple_tabitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "General"},
+                {"rect": [180, 80, 160, 32], "label": "Privacy"},
+                {"rect": [340, 80, 160, 32], "label": "Billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this tabitem.",
+                "target": {"x": 20, "y": 80, "width": 480, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "General", "control_type": "tabitem", "rect": [20, 80, 160, 32]},
+                {"id": "c002", "text": "Privacy", "control_type": "tabitem", "rect": [180, 80, 160, 32]},
+                {"id": "c003", "text": "Billing", "control_type": "tabitem", "rect": [340, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "compact_headeritem_model_rect_snaps_to_headeritem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 28], "label": "Status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this headeritem.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Status", "control_type": "headeritem", "rect": [20, 80, 160, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 160, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "compact_headeritem_broad_group_rejects_multiple_headeritems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 28], "label": "Name"},
+                {"rect": [180, 80, 160, 28], "label": "Status"},
+                {"rect": [340, 80, 160, 28], "label": "Owner"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this headeritem.",
+                "target": {"x": 20, "y": 80, "width": 480, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Name", "control_type": "headeritem", "rect": [20, 80, 160, 28]},
+                {"id": "c002", "text": "Status", "control_type": "headeritem", "rect": [180, 80, 160, 28]},
+                {"id": "c003", "text": "Owner", "control_type": "headeritem", "rect": [340, 80, 160, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

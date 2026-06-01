@@ -59,17 +59,18 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "here", "there", "highlighted", "shown", "indicated", "selected",
         "area", "spot", "place", "location",
-        "button", "icon", "link", "hyperlink", "tab", "menu", "item", "option",
+        "button", "icon", "link", "hyperlink", "tab", "list", "tree", "menu", "item", "option",
         "header", "heading", "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
-        "radio", "radiobutton", "combo", "combobox", "dropdown",
+        "radio", "radiobutton", "splitbutton", "combo", "combobox", "dropdown",
         "slider", "spinner", "spinbox", "stepper",
         "drop", "down", "arrow", "caret", "chevron",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
         "top", "bottom", "left", "right", "upper", "lower",
         "middle", "center", "corner", "side", "row", "column",
+        "listitem", "treeitem", "menuitem", "tabitem", "headeritem",
     }
 )
 
@@ -93,6 +94,8 @@ _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
+_LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
+_TREE_ITEM_INTENT_TYPES = frozenset({"treeitem"})
 _SWITCH_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -759,12 +762,24 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")
+    if "tabitem" in raw_tokens:
+        intents.add("tabitem")
+    if "listitem" in raw_tokens or ("list" in raw_tokens and "item" in raw_tokens):
+        intents.update(_LIST_ITEM_INTENT_TYPES)
+    if "treeitem" in raw_tokens or ("tree" in raw_tokens and "item" in raw_tokens):
+        intents.update(_TREE_ITEM_INTENT_TYPES)
     if "option" in raw_tokens:
         intents.update(_OPTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")
+    if "headeritem" in raw_tokens:
+        intents.add("headeritem")
     if "menu" in raw_tokens:
         intents.update(_MENU_INTENT_TYPES)
+    if "menuitem" in raw_tokens:
+        intents.add("menuitem")
+    if "splitbutton" in raw_tokens:
+        intents.add("splitbutton")
     return intents
 
 

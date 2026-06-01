@@ -509,6 +509,91 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 140, 28))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_generic_list_item_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        item = _make_button(
+            "Settings",
+            100,
+            200,
+            160,
+            32,
+            control_type="ListItem",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [item])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 160, 32),
+            "Click this list item.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 160, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_generic_tree_item_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        item = _make_button(
+            "Settings",
+            100,
+            200,
+            160,
+            32,
+            control_type="TreeItem",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [item])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 160, 32),
+            "Click this tree item.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 160, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_compact_control_type_words_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("listitem", "ListItem", (100, 200, 160, 32)),
+            ("treeitem", "TreeItem", (100, 200, 160, 32)),
+            ("menuitem", "MenuItem", (100, 200, 160, 28)),
+            ("tabitem", "TabItem", (100, 200, 140, 32)),
+            ("headeritem", "HeaderItem", (100, 200, 140, 28)),
+            ("splitbutton", "SplitButton", (100, 200, 160, 32)),
+        )
+        for word, control_type, rect in cases:
+            with self.subTest(word=word):
+                item = _make_button(
+                    "Settings",
+                    rect[0],
+                    rect[1],
+                    rect[2],
+                    rect[3],
+                    control_type=control_type,
+                )
+                window = _make_window("App", 0, 0, 800, 600, [item])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    f"Click this {word}.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1556,6 +1641,70 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 140, 28))
 
+    def test_generic_list_item_target_id_accepts_listitem_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this list item.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_generic_tree_item_target_id_accepts_treeitem_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this tree item.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "treeitem", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_compact_control_type_target_ids_accept_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("listitem", "listitem", (10, 10, 160, 32)),
+            ("treeitem", "treeitem", (10, 10, 160, 32)),
+            ("menuitem", "menuitem", (10, 10, 160, 28)),
+            ("tabitem", "tabitem", (10, 10, 140, 32)),
+            ("headeritem", "headeritem", (10, 10, 140, 28)),
+            ("splitbutton", "splitbutton", (10, 10, 160, 32)),
+        )
+        for word, control_type, rect in cases:
+            with self.subTest(word=word):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=f"Click this {word}.",
+                    candidates=[
+                        ControlCandidate("c001", "Settings", control_type, rect),
+                    ],
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -2373,6 +2522,100 @@ class ControlInventoryTests(unittest.TestCase):
         )
 
         self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_generic_list_item(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this list item.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_snap_candidate_target_rejects_broad_list_item_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this list item.",
+            candidates=[
+                ControlCandidate("c001", "General", "listitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Privacy", "listitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_generic_tree_item(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this tree item.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "treeitem", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_snap_candidate_target_rejects_broad_tree_item_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this tree item.",
+            candidates=[
+                ControlCandidate("c001", "src", "treeitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "tests", "treeitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "docs", "treeitem", (10, 90, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_compact_control_type_words(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("listitem", "listitem", (10, 10, 160, 32)),
+            ("treeitem", "treeitem", (10, 10, 160, 32)),
+            ("menuitem", "menuitem", (10, 10, 160, 28)),
+            ("tabitem", "tabitem", (10, 10, 140, 32)),
+            ("headeritem", "headeritem", (10, 10, 140, 28)),
+            ("splitbutton", "splitbutton", (10, 10, 160, 32)),
+        )
+        for word, control_type, rect in cases:
+            with self.subTest(word=word):
+                result = snap_candidate_target(
+                    instruction=f"Click this {word}.",
+                    candidates=[
+                        ControlCandidate("c001", "Settings", control_type, rect),
+                    ],
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
 
     def test_snap_candidate_target_allows_toggle_sidebar_button_label(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -3251,6 +3494,90 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 140, 28))
 
+    def test_generic_list_item_model_rect_highlights_listitem(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this list item.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 160, 32))
+
+    def test_generic_tree_item_model_rect_highlights_treeitem(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this tree item.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Settings", "treeitem", (10, 10, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 160, 32))
+
+    def test_compact_control_type_model_rect_highlights_exact_type(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("listitem", "listitem", (10, 10, 160, 32)),
+            ("treeitem", "treeitem", (10, 10, 160, 32)),
+            ("menuitem", "menuitem", (10, 10, 160, 28)),
+            ("tabitem", "tabitem", (10, 10, 140, 32)),
+            ("headeritem", "headeritem", (10, 10, 140, 28)),
+            ("splitbutton", "splitbutton", (10, 10, 160, 32)),
+        )
+        for word, control_type, rect in cases:
+            with self.subTest(word=word):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": f"Click this {word}.",
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", "Settings", control_type, rect),
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
     def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -3314,6 +3641,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "Docs", "hyperlink", (10, 10, 120, 28)),
                 ControlCandidate("c002", "Support", "hyperlink", (10, 46, 120, 28)),
                 ControlCandidate("c003", "Pricing", "hyperlink", (10, 82, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_list_item_broad_group_rejects_multiple_listitems(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this list item.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "General", "listitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Privacy", "listitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_tree_item_broad_group_rejects_multiple_treeitems(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this tree item.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "src", "treeitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "tests", "treeitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "docs", "treeitem", (10, 90, 160, 32)),
             ],
         )
 
