@@ -84,6 +84,9 @@ MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
 )
 EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
 OPEN_VIEW_REQUEST_WORDS = frozenset({"open", "show", "view"})
+GENERIC_OBJECT_REQUEST_WORDS = frozenset(
+    {"click", "go", "hit", "navigate", "press", "tap", "visit"}
+)
 CONFIRM_ACTION_WORDS = frozenset(
     {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
 )
@@ -91,6 +94,7 @@ CANCEL_ACTION_WORDS = frozenset({"cancel"})
 CONFIRM_CANCEL_ACTION_WORDS = CONFIRM_ACTION_WORDS | CANCEL_ACTION_WORDS
 ADD_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
 REMOVE_ACTION_WORDS = frozenset({"bin", "delete", "remove", "trash", "wastebasket"})
+PAY_ACTION_WORDS = frozenset({"checkout", "pay"})
 CONFIRM_OBJECT_STOPWORDS = frozenset(
     {
         "a",
@@ -127,6 +131,7 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
         "select",
     }
 )
+GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"on", "to"})
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
@@ -366,6 +371,10 @@ OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     frozenset({"print", "printer"}),
     frozenset({"reject"}),
     frozenset({"share"}),
+)
+GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES + (
+    ADD_ACTION_WORDS - frozenset({"new"}),
+    PAY_ACTION_WORDS,
 )
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
@@ -2140,6 +2149,10 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _candidate_action_for_generic_object_request_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _confirm_action_context_mismatch(instruction, visible_text, automation_id)
         or _filter_reset_action_mismatch(
             instruction,
@@ -2274,6 +2287,39 @@ def _candidate_action_for_open_view_mismatch(instruction: str, candidate_text: s
     if not instruction_objects:
         return False
     for family in OPEN_VIEW_CANDIDATE_ACTION_FAMILIES:
+        if not (candidate_raw_tokens & family):
+            continue
+        if instruction_raw_tokens & family:
+            return False
+        candidate_objects = _object_token_variants(
+            _action_object_tokens(candidate_raw_tokens, family, ACTION_OBJECT_STOPWORDS)
+        )
+        if instruction_objects & candidate_objects:
+            return True
+    return False
+
+
+def _candidate_action_for_generic_object_request_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not (instruction_raw_tokens & GENERIC_OBJECT_REQUEST_WORDS):
+        return False
+    instruction_tokens = _tokenize_instruction(instruction) | instruction_raw_tokens
+    candidate_raw_tokens = _tokens_from_text(candidate_text)
+    if not candidate_raw_tokens:
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            instruction_tokens,
+            GENERIC_OBJECT_REQUEST_WORDS,
+            GENERIC_OBJECT_REQUEST_STOPWORDS,
+        )
+    )
+    if not instruction_objects:
+        return False
+    for family in GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES:
         if not (candidate_raw_tokens & family):
             continue
         if instruction_raw_tokens & family:
