@@ -3004,6 +3004,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_app_rejects_socialapp_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "SocialApp"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open app.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "SocialApp",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bare_ai_model_rect_rejects_atlas_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Atlas.ai"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open ai.",
+                "target": {"x": 20, "y": 80, "width": 76, "height": 54},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Atlas.ai",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "socialapp_wording_accepts_socialapp_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "SocialApp"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open SocialApp.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "SocialApp",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 76, 54],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "maximize_window_target_id_accepts_square_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

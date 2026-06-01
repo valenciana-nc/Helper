@@ -88,6 +88,21 @@ PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS = frozenset(
 )
 PROGRAM_MANAGER_ABOUT_WORDS = frozenset({"about", "details", "info", "information"})
 PROGRAM_MANAGER_NEW_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
+PROGRAM_MANAGER_GENERIC_NAME_WORDS = frozenset(
+    {
+        "ai",
+        "app",
+        "apps",
+        "application",
+        "applications",
+        "dev",
+        "installer",
+        "launcher",
+        "main",
+        "source",
+        "system",
+    }
+)
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -2142,6 +2157,14 @@ def _program_manager_desktop_item_action_mismatch(
             - {token for token in text_tokens if token.isdigit()}
         )
         if not instruction_tokens & distinctive_tokens:
+            return True
+    if instruction_tokens & PROGRAM_MANAGER_GENERIC_NAME_WORDS & text_tokens:
+        distinctive_tokens = (
+            text_tokens
+            - PROGRAM_MANAGER_GENERIC_NAME_WORDS
+            - {token for token in text_tokens if token.isdigit()}
+        )
+        if distinctive_tokens and not instruction_tokens & distinctive_tokens:
             return True
     return False
 

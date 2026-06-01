@@ -1280,6 +1280,14 @@ class SnapToControlTests(unittest.TestCase):
             ("Open desktop.", "Docker Desktop"),
             ("Open about.", "Learn about this picture"),
             ("Create new.", "New Pandora (1)"),
+            ("Open app.", "SocialApp"),
+            ("Open ai.", "Atlas.ai"),
+            ("Open dev.", "Limitles.dev"),
+            ("Open source.", "tweetpilot-source"),
+            ("Open main.", "awesome-system-prompts-main"),
+            ("Open system.", "awesome-system-prompts-main"),
+            ("Open installer.", "MinecraftInstaller"),
+            ("Open launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -1307,6 +1315,13 @@ class SnapToControlTests(unittest.TestCase):
             ("Open this picture.", "Learn about this picture"),
             ("Open Pandora.", "New Pandora (1)"),
             ("Open New Pandora.", "New Pandora (1)"),
+            ("Open SocialApp.", "SocialApp"),
+            ("Open Atlas.", "Atlas.ai"),
+            ("Open Limitles.", "Limitles.dev"),
+            ("Open tweetpilot source.", "tweetpilot-source"),
+            ("Open awesome prompts.", "awesome-system-prompts-main"),
+            ("Open Minecraft installer.", "MinecraftInstaller"),
+            ("Open Rockstar launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10348,6 +10363,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open new.", "New Pandora (1)"),
             ("Create new.", "New Pandora (1)"),
             ("Add new.", "New Pandora (1)"),
+            ("Open app.", "SocialApp"),
+            ("Open ai.", "Atlas.ai"),
+            ("Open dev.", "Limitles.dev"),
+            ("Open source.", "tweetpilot-source"),
+            ("Open main.", "awesome-system-prompts-main"),
+            ("Open system.", "awesome-system-prompts-main"),
+            ("Open installer.", "MinecraftInstaller"),
+            ("Open launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10385,6 +10408,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open learn about this picture.", "Learn about this picture"),
             ("Open Pandora.", "New Pandora (1)"),
             ("Open New Pandora.", "New Pandora (1)"),
+            ("Open SocialApp.", "SocialApp"),
+            ("Open Atlas.", "Atlas.ai"),
+            ("Open Limitles.", "Limitles.dev"),
+            ("Open tweetpilot source.", "tweetpilot-source"),
+            ("Open awesome prompts.", "awesome-system-prompts-main"),
+            ("Open Minecraft installer.", "MinecraftInstaller"),
+            ("Open Rockstar launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10419,6 +10449,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open desktop.", "Docker Desktop"),
             ("Open about.", "Learn about this picture"),
             ("Open new.", "New Pandora (1)"),
+            ("Open app.", "SocialApp"),
+            ("Open ai.", "Atlas.ai"),
+            ("Open dev.", "Limitles.dev"),
+            ("Open source.", "tweetpilot-source"),
+            ("Open main.", "awesome-system-prompts-main"),
+            ("Open system.", "awesome-system-prompts-main"),
+            ("Open installer.", "MinecraftInstaller"),
+            ("Open launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10446,6 +10484,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open desktop.", "Docker Desktop"),
             ("Open about.", "Learn about this picture"),
             ("Open new.", "New Pandora (1)"),
+            ("Open app.", "SocialApp"),
+            ("Open ai.", "Atlas.ai"),
+            ("Open dev.", "Limitles.dev"),
+            ("Open source.", "tweetpilot-source"),
+            ("Open main.", "awesome-system-prompts-main"),
+            ("Open system.", "awesome-system-prompts-main"),
+            ("Open installer.", "MinecraftInstaller"),
+            ("Open launcher.", "Rockstar Games Launcher"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):

@@ -52,6 +52,21 @@ PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS = frozenset(
 )
 PROGRAM_MANAGER_ABOUT_WORDS = frozenset({"about", "details", "info", "information"})
 PROGRAM_MANAGER_NEW_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
+PROGRAM_MANAGER_GENERIC_NAME_WORDS = frozenset(
+    {
+        "ai",
+        "app",
+        "apps",
+        "application",
+        "applications",
+        "dev",
+        "installer",
+        "launcher",
+        "main",
+        "source",
+        "system",
+    }
+)
 BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
 BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
 BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
@@ -868,6 +883,14 @@ def _program_manager_desktop_item_action_mismatch(
             - {token for token in control_tokens if token.isdigit()}
         )
         if not instruction_tokens & distinctive_tokens:
+            return True
+    if instruction_tokens & PROGRAM_MANAGER_GENERIC_NAME_WORDS & control_tokens:
+        distinctive_tokens = (
+            control_tokens
+            - PROGRAM_MANAGER_GENERIC_NAME_WORDS
+            - {token for token in control_tokens if token.isdigit()}
+        )
+        if distinctive_tokens and not instruction_tokens & distinctive_tokens:
             return True
     return False
 
