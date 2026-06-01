@@ -32,6 +32,8 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*shift\s*\+?\s*z\b"), {"redo"}),
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*z\b"), {"undo"}),
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*y\b"), {"redo"}),
+    (re.compile(r"\bzoom\s+in\b"), {"zoom_in"}),
+    (re.compile(r"\bzoom\s+out\b"), {"zoom_out"}),
 )
 _AUTH_DIRECTION_TOKEN_REWRITES = (
     (
@@ -48,9 +50,11 @@ _AUTH_DIRECTION_TOKEN_REWRITES = (
 
 _SYMBOL_TOKEN_ALIASES = {
     "?": {"help", "mark", "question"},
-    "+": {"add", "create", "new", "plus"},
+    "+": {"add", "create", "new", "plus", "zoom_in"},
+    "-": {"minus", "zoom_out"},
     "...": {"dot", "dots", "ellipsis", "menu", "more", "options"},
     "\u00d7": {"clear", "close", "dismiss", "x"},
+    "\u2212": {"minus", "zoom_out"},
     "\u2026": {"dot", "dots", "ellipsis", "menu", "more", "options"},
     "\u22ee": {"dot", "dots", "kebab", "menu", "more", "options"},
     "\u22ef": {"dot", "dots", "ellipsis", "menu", "more", "options"},
@@ -201,6 +205,7 @@ _TOKEN_ALIASES = {
     "meatballs": {"menu", "more", "options"},
     "mic": {"microphone"},
     "microphone": {"mic"},
+    "minus": {"zoom_out"},
     "more": {"menu", "options"},
     "new": {"add", "create", "plus"},
     "next": {"continue", "proceed"},
@@ -259,13 +264,15 @@ _TOKEN_ALIASES = {
     "trash": {"bin", "delete", "remove", "wastebasket"},
     "time": {"clock"},
     "bin": {"delete", "remove"},
-    "plus": {"add", "new", "create"},
+    "plus": {"add", "new", "create", "zoom_in"},
     "url": {"address", "location"},
     "video": {"camera", "webcam"},
     "volume": {"sound", "speaker"},
     "webcam": {"camera", "video"},
     "wastebasket": {"bin", "delete", "remove", "trash"},
     "x": {"clear", "close", "dismiss"},
+    "zoomin": {"zoom_in"},
+    "zoomout": {"zoom_out"},
 }
 
 _INSTRUCTION_STOPWORDS = frozenset(
@@ -472,6 +479,7 @@ _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _EDIT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "hyperlink", "menuitem"})
 _FORMAT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _HISTORY_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
+_ZOOM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -635,7 +643,11 @@ _CLEAR_ACTION_WORDS = frozenset({"clear"})
 _CLEAR_ACTION_CONTEXT_WORDS = frozenset(
     {"box", "field", "find", "input", "query", "search", "text", "textbox", "textarea"}
 )
+_DIALOG_DISMISS_ACTION_WORDS = frozenset({"cancel", "close", "dismiss"})
+_DIALOG_DISMISS_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
 _HISTORY_ACTION_WORDS = frozenset({"redo", "undo"})
+_ZOOM_ACTION_WORDS = frozenset({"zoom_in", "zoom_out"})
+_ZOOM_ACTION_CONTEXT_WORDS = frozenset({"in", "out", "zoom"})
 _EDIT_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -673,6 +685,11 @@ def tokenize_instruction(instruction: str) -> set[str]:
         filtered.update(tokens & _FORMAT_SINGLE_LETTER_WORDS)
     if _clear_action_requested(tokens):
         filtered -= _CLEAR_ACTION_CONTEXT_WORDS
+    if _zoom_action_requested(tokens):
+        filtered -= _ZOOM_ACTION_CONTEXT_WORDS
+    dialog_dismiss_tokens = _dialog_dismiss_action_tokens(tokens)
+    if dialog_dismiss_tokens:
+        filtered.update(dialog_dismiss_tokens)
     if _edit_action_requested(tokens):
         filtered.update({"edit", "pencil"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
@@ -710,6 +727,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     format_action_requested = _format_action_requested(raw_tokens)
     clear_action_requested = _clear_action_requested(raw_tokens)
     history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
+    zoom_action_requested = _zoom_action_requested(raw_tokens)
     edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -762,6 +780,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_BUTTON_INTENT_TYPES)
     if history_action_requested:
         intents.update(_HISTORY_ACTION_INTENT_TYPES)
+    if zoom_action_requested:
+        intents.update(_ZOOM_ACTION_INTENT_TYPES)
     if edit_action_requested:
         intents.update(_EDIT_ACTION_INTENT_TYPES)
     if (
@@ -771,6 +791,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not password_visibility_requested
         and not format_action_requested
         and not clear_action_requested
+        and not zoom_action_requested
         and not edit_action_requested
         and "button" in raw_tokens
     ):
@@ -899,6 +920,21 @@ def _format_action_requested(raw_tokens: set[str]) -> bool:
 
 def _clear_action_requested(raw_tokens: set[str]) -> bool:
     return bool(raw_tokens & _CLEAR_ACTION_WORDS)
+
+
+def _zoom_action_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _ZOOM_ACTION_WORDS)
+
+
+def _dialog_dismiss_action_tokens(raw_tokens: set[str]) -> set[str]:
+    if not (raw_tokens & _DIALOG_DISMISS_CONTEXT_WORDS):
+        return set()
+    meaningful_tokens = raw_tokens - _DIALOG_DISMISS_CONTEXT_WORDS - _INSTRUCTION_STOPWORDS
+    if not (meaningful_tokens & _DIALOG_DISMISS_ACTION_WORDS):
+        return set()
+    if meaningful_tokens - _DIALOG_DISMISS_ACTION_WORDS:
+        return set()
+    return {"cancel", "close", "dismiss"}
 
 
 def _edit_action_requested(raw_tokens: set[str]) -> bool:

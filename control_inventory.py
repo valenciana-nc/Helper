@@ -17,6 +17,7 @@ from help_intents import (
     expand_token_aliases as _expand_token_aliases,
     instruction_control_intents as _instruction_control_intents,
     menu_segment_intent as _menu_segment_intent,
+    tokenize_control as _tokenize_control,
     tokenize_instruction as _tokenize_instruction,
     tokens_from_text as _tokens_from_text,
 )
@@ -436,6 +437,13 @@ def resolve_candidate_target(
 
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
+    dialog_dismiss = _single_dialog_dismiss_candidate(
+        instruction=instruction,
+        candidates=candidates,
+        model_rect=model_rect,
+    )
+    if dialog_dismiss is not None:
+        return dialog_dismiss
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
         if control_intents and not _candidate_matches_control_intent(candidate, control_intents):
@@ -873,6 +881,57 @@ def _context_text_match_score(
     return min(max(score, 0.0), 1.0)
 
 
+def _single_dialog_dismiss_candidate(
+    *,
+    instruction: str,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int] | None,
+) -> TargetResolution | None:
+    instruction_tokens = _tokenize_instruction(instruction)
+    if not instruction_tokens or instruction_tokens - {"cancel", "close", "dismiss"}:
+        return None
+    raw_tokens = _tokens_from_text(instruction)
+    dismiss_candidates: list[ControlCandidate] = []
+    preferred: list[ControlCandidate] = []
+    for candidate in candidates:
+        if candidate.control_type not in {"button", "splitbutton", "menuitem"}:
+            continue
+        candidate_tokens = _candidate_visible_text_tokens(candidate)
+        if not (candidate_tokens & {"cancel", "close", "dismiss", "x"}):
+            continue
+        dismiss_candidates.append(candidate)
+        if (
+            ("cancel" in raw_tokens and "cancel" in candidate_tokens)
+            or ("close" in raw_tokens and candidate_tokens & {"close", "x"})
+            or ("dismiss" in raw_tokens and "dismiss" in candidate_tokens)
+        ):
+            preferred.append(candidate)
+    selected = preferred or dismiss_candidates
+    if len(selected) != 1:
+        if not selected:
+            return None
+        candidate = sorted(selected, key=_candidate_sort_key)[0]
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=TEXT_MATCH_FLOOR,
+            source="text_match",
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason="ambiguous text match",
+        )
+    candidate = selected[0]
+    confidence = TEXT_MATCH_FLOOR
+    if model_rect is not None:
+        confidence = min(1.0, confidence + 0.05 * _proximity_score(candidate.rect, model_rect))
+    return TargetResolution(
+        rect=candidate.rect,
+        confidence=confidence,
+        source="text_match",
+        matched_text=candidate.descriptor,
+        target_id=candidate.id,
+    )
+
+
 def _target_id_plausibility(
     *,
     instruction: str,
@@ -995,11 +1054,11 @@ def _candidate_identity_tokens(candidate: ControlCandidate) -> set[str]:
 
 
 def _candidate_visible_text_tokens(candidate: ControlCandidate) -> set[str]:
-    return _expand_token_aliases(_tokens_from_text(candidate.text))
+    return _tokenize_control(candidate.text)
 
 
 def _candidate_automation_tokens(candidate: ControlCandidate) -> set[str]:
-    return _expand_token_aliases(_tokens_from_text(candidate.automation_id))
+    return _tokenize_control(candidate.automation_id)
 
 
 def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:

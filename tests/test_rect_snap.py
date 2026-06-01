@@ -181,6 +181,21 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("logout", sign_in_tokens)
         self.assertNotIn("signout", log_in_tokens)
 
+    def test_dialog_dismiss_aliases_stay_contextual(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        close_dialog_tokens = tokenize_instruction("Close the dialog")
+        dismiss_modal_tokens = tokenize_instruction("Dismiss modal")
+        cancel_dialog_tokens = tokenize_instruction("Cancel the dialog")
+        cancel_subscription_tokens = tokenize_instruction("Cancel subscription")
+
+        self.assertEqual(close_dialog_tokens, {"cancel", "close", "dismiss"})
+        self.assertEqual(dismiss_modal_tokens, {"cancel", "close", "dismiss"})
+        self.assertEqual(cancel_dialog_tokens, {"cancel", "close", "dismiss"})
+        self.assertIn("cancel", tokenize_control("Cancel"))
+        self.assertNotIn("close", cancel_subscription_tokens)
+        self.assertNotIn("dismiss", cancel_subscription_tokens)
+
     def test_clipboard_action_aliases_expand_to_common_icon_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -259,6 +274,27 @@ class HelpIntentLanguageTests(unittest.TestCase):
             )
         )
         self.assertIn("delete", tokenize_control("Wastebasket"))
+
+    def test_zoom_aliases_expand_to_directional_icon_language(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        zoom_in_tokens = tokenize_instruction("Zoom in")
+        zoom_out_tokens = tokenize_instruction("Zoom out")
+
+        self.assertEqual(zoom_in_tokens, {"zoom_in"})
+        self.assertEqual(zoom_out_tokens, {"zoom_out"})
+        self.assertTrue(
+            {"button", "splitbutton", "menuitem"}.issubset(
+                instruction_control_intents("Zoom in")
+            )
+        )
+        self.assertIn("zoom_in", tokenize_control("+"))
+        self.assertIn("zoom_in", tokenize_control("Plus"))
+        self.assertIn("zoom_out", tokenize_control("-"))
+        self.assertIn("zoom_out", tokenize_control("\u2212"))
+        self.assertIn("zoom_out", tokenize_control("Minus"))
+        self.assertNotIn("zoom_in", tokenize_control("Add"))
+        self.assertNotIn("zoom_out", tokenize_control("Remove"))
 
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -426,10 +462,12 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         cases = (
             ("?", {"help", "mark", "question"}),
-            ("+", {"add", "create", "new", "plus"}),
+            ("+", {"add", "create", "new", "plus", "zoom_in"}),
+            ("-", {"minus", "zoom_out"}),
             ("...", {"dot", "dots", "ellipsis", "menu", "more", "options"}),
             ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
             ("\u00d7", {"clear", "close", "dismiss", "x"}),
+            ("\u2212", {"minus", "zoom_out"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
@@ -5612,6 +5650,108 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
 
+    def test_dialog_dismiss_target_id_accepts_contextual_cancel_and_close_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Close the dialog.", "Cancel"),
+            ("Dismiss the dialog.", "Cancel"),
+            ("Cancel the dialog.", "Close"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_dialog_dismiss_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close the dialog.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Cancel", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Details", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_dialog_dismiss_prefers_exact_action_when_cancel_and_close_exist(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Close the dialog.", "c002", (280, 160, 100, 32)),
+            ("Cancel the dialog.", "c001", (120, 160, 100, 32)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 260, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", "Cancel", "button", (120, 160, 100, 32)),
+                        ControlCandidate("c002", "Close", "button", (280, 160, 100, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, target_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_domain_cancel_does_not_match_close_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Cancel subscription.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Close", "button", (120, 160, 100, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
     def test_clipboard_action_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -5932,6 +6072,94 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_zoom_target_id_accepts_directional_icon_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Zoom in.", "+", (120, 160, 32, 32)),
+            ("Zoom in.", "Plus", (120, 160, 70, 32)),
+            ("Zoom out.", "-", (120, 160, 32, 32)),
+            ("Zoom out.", "\u2212", (120, 160, 32, 32)),
+            ("Zoom out.", "Minus", (120, 160, 80, 32)),
+            ("Click minus.", "-", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_zoom_text_match_overrides_fit_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Zoom in.", ControlCandidate("c001", "+", "button", (120, 160, 32, 32))),
+            ("Zoom out.", ControlCandidate("c001", "-", "button", (120, 160, 32, 32))),
+            ("Zoom out.", ControlCandidate("c001", "\u2212", "button", (120, 160, 32, 32))),
+        )
+        for instruction, expected in cases:
+            with self.subTest(instruction=instruction, label=expected.text):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        expected,
+                        ControlCandidate("c002", "Fit", "button", (300, 160, 100, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_zoom_alias_rejects_add_and_remove_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Zoom in.", "Add"),
+            ("Zoom out.", "Remove"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_transfer_and_refresh_alias_target_id_accepts_matching_action(self) -> None:
         from control_inventory import ControlCandidate

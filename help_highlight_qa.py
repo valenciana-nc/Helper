@@ -1522,6 +1522,71 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_dialog_target_id_accepts_cancel_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "close_dialog_text_match_overrides_details_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Cancel"},
+                {"rect": [180, 80, 100, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Details", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cancel_subscription_rejects_close_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Cancel subscription.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Close", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "clear_search_target_id_accepts_x_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1607,6 +1672,115 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_in_target_id_accepts_plus_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "+"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom in.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "+", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_out_target_id_accepts_minus_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "-"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom out.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "-", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_in_text_match_overrides_fit_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "+"},
+                {"rect": [180, 80, 100, 32], "label": "Fit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom in.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "+", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Fit", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_out_text_match_overrides_fit_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "-"},
+                {"rect": [180, 80, 100, 32], "label": "Fit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom out.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "-", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Fit", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "zoom_in_rejects_add_button_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Add"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom in.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Add", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
