@@ -5734,6 +5734,141 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_platform_target_id_rejects_unnamed_openai_platform_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open platform.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://platform.openai.com/settings/organization/billing/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "claude_platform_target_id_rejects_openai_platform_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Claude platform.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://platform.openai.com/settings/organization/billing/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "specific_claude_platform_accepts_matching_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Claude platform.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://platform.claude.com/workspaces/default/cost",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_cloud_target_id_rejects_unnamed_google_cloud_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cloud.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "specific_google_cloud_accepts_matching_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Google Cloud.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "specific_supabase_dashboard_rejects_stripe_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

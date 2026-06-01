@@ -6343,6 +6343,26 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Unnamed bookmark for "
                 "https://www.name.com/account/domain/details/s2client.dev/dns",
             ),
+            (
+                "Open platform.",
+                "Unnamed bookmark for "
+                "https://platform.openai.com/settings/organization/billing/overview",
+            ),
+            (
+                "Open cloud.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open org.",
+                "Unnamed bookmark for "
+                "https://supabase.com/dashboard/org/bowdgieoawwjypixwsbx",
+            ),
+            (
+                "Open Claude platform.",
+                "Unnamed bookmark for "
+                "https://platform.openai.com/settings/organization/billing/overview",
+            ),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -6386,13 +6406,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Unnamed bookmark for "
             "https://dash.cloudflare.com/5ae1354de89966fd627a61a76aa3e6dd/home/overview"
         )
+        google_cloud = (
+            "Unnamed bookmark for "
+            "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646"
+        )
+        claude_platform = (
+            "Unnamed bookmark for https://platform.claude.com/workspaces/default/cost"
+        )
+        openai_platform = (
+            "Unnamed bookmark for "
+            "https://platform.openai.com/settings/organization/billing/overview"
+        )
         cases = (
             ("Open Stripe dashboard.", stripe, ""),
             ("Open Supabase dashboard.", supabase, ""),
+            ("Open Supabase org.", supabase, ""),
             ("Open Cloudflare overview.", cloudflare, ""),
+            ("Open Google Cloud.", google_cloud, ""),
+            ("Open Google Cloud credentials.", google_cloud, ""),
+            ("Open Claude platform.", claude_platform, ""),
             ("Open Stripe dashboard.", supabase, "target_id semantic mismatch"),
             ("Open Supabase dashboard.", stripe, "target_id semantic mismatch"),
             ("Open Cloudflare overview.", stripe, "target_id semantic mismatch"),
+            ("Open Claude platform.", openai_platform, "target_id semantic mismatch"),
+            ("Open Claude platform.", stripe, "target_id semantic mismatch"),
         )
         for instruction, label, reason in cases:
             with self.subTest(instruction=instruction, label=label):
