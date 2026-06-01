@@ -628,6 +628,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_automation_only_target_id_rejects_when_visible_alternative_matches(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32), automation_id="saveButton"),
+                ControlCandidate("c002", "Save", "button", (120, 10, 80, 32)),
+            ],
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
     def test_target_id_duplicate_label_without_geometry_is_rejected(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1264,6 +1282,31 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 {
                     "kind": "step",
                     "instruction": "Click Save.",
+                    "target": {"x": 10, "y": 10, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "", "button", (10, 10, 32, 32), automation_id="saveButton"),
+                ControlCandidate("c002", "Save", "button", (120, 10, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rect, (120, 10, 80, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_automation_only_target_id_recovers_to_visible_text_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
                     "target": {"x": 10, "y": 10, "width": 32, "height": 32},
                 }
             ),

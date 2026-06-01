@@ -888,6 +888,17 @@ def _target_id_plausibility(
             return True, max(0.82, geometry_score), ""
         return False, geometry_score, "target_id lacks instruction evidence"
 
+    if _has_visible_semantic_alternative(
+        instruction_tokens=instruction_tokens,
+        selected=candidate,
+        candidates=candidates,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+
     if text_score >= TARGET_ID_TEXT_FLOOR:
         ambiguous, _gap = _target_id_ambiguity(
             instruction_tokens=instruction_tokens,
