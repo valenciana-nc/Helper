@@ -4618,6 +4618,86 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(target.rect, (180, 94, 280, 36))
         self.assertFalse(target.rejected_reason)
 
+    def test_text_entry_action_recovers_from_wrong_blank_field_when_labeled_field_matches(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Type into Password.",
+                        "target_id": "wrong",
+                        "target": {"x": 100, "y": 94, "width": 260, "height": 36},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate("wrong", "", "edit", (100, 94, 260, 36)),
+                ControlCandidate("label", "Password", "text", (420, 100, 90, 24)),
+                ControlCandidate("field", "", "edit", (520, 94, 260, 36)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "field")
+        self.assertEqual(target.rect, (520, 94, 260, 36))
+        self.assertFalse(target.rejected_reason)
+
+    def test_text_entry_action_recovers_from_password_visibility_button_target(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Enter the password.",
+                        "target_id": "show",
+                        "target": {"x": 430, "y": 98, "width": 28, "height": 28},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate("label", "Password", "text", (80, 100, 90, 24)),
+                ControlCandidate("field", "", "edit", (180, 94, 280, 36)),
+                ControlCandidate("show", "Show password", "button", (430, 98, 28, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "field")
+        self.assertEqual(target.rect, (180, 94, 280, 36))
+        self.assertFalse(target.rejected_reason)
+
     def test_text_entry_wording_keeps_explicit_enter_button_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 

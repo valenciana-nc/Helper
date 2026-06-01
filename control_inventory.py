@@ -2348,10 +2348,7 @@ def _target_id_plausibility(
 ) -> tuple[bool, float, str]:
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
-    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
-        candidate,
-        candidates,
-    )
+    semantic_tokens = _candidate_semantic_tokens_with_field_label(candidate, candidates)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return (
@@ -2879,6 +2876,16 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
         return visible_tokens | inferred_tokens
     automation_tokens = _candidate_automation_tokens(candidate)
     return automation_tokens | inferred_tokens
+
+
+def _candidate_semantic_tokens_with_field_label(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    return _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+        candidate,
+        candidates,
+    )
 
 
 def _nearby_field_label_tokens(
@@ -5575,7 +5582,7 @@ def _target_id_ambiguity(
 ) -> tuple[bool, float]:
     selected_text = _text_evidence_score(
         instruction_tokens,
-        _candidate_semantic_tokens(selected),
+        _candidate_semantic_tokens_with_field_label(selected, candidates),
     )
     selected_geometry = (
         _geometry_agreement(selected.rect, model_rect) if model_rect is not None else 0.0
@@ -5693,7 +5700,7 @@ def _target_id_ambiguity(
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
-        candidate_tokens = _candidate_semantic_tokens(candidate)
+        candidate_tokens = _candidate_semantic_tokens_with_field_label(candidate, candidates)
         if _gmail_tab_selected_over_generic_mail_decoy(
             instruction_tokens=instruction_tokens,
             selected_has_gmail_tab_evidence=selected_has_gmail_tab_evidence,
@@ -5967,7 +5974,7 @@ def _has_semantic_alternative(
             continue
         score = _text_evidence_score(
             instruction_tokens,
-            _candidate_semantic_tokens(candidate),
+            _candidate_semantic_tokens_with_field_label(candidate, candidates),
         )
         if score >= TARGET_ID_TEXT_FLOOR:
             return True
@@ -6078,9 +6085,11 @@ def _has_visible_semantic_alternative(
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
-        if not visible_tokens:
+        label_tokens = _nearby_field_label_tokens(candidate, candidates)
+        alternative_tokens = visible_tokens | label_tokens
+        if not alternative_tokens:
             continue
-        if _text_evidence_score(instruction_tokens, visible_tokens) >= TARGET_ID_TEXT_FLOOR:
+        if _text_evidence_score(instruction_tokens, alternative_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
 
@@ -6355,6 +6364,20 @@ def _contains_tighter_same_intent_action(
         if selected_area < candidate_area * 1.8:
             continue
         if not _contains_rect(selected.rect, candidate.rect):
+            continue
+        if (
+            selected.control_type in LABELLED_FIELD_CONTROL_TYPES
+            and _candidate_matches_control_intent(
+                selected,
+                control_intents,
+                instruction=instruction,
+            )
+            and not _candidate_matches_control_intent(
+                candidate,
+                control_intents,
+                instruction=instruction,
+            )
+        ):
             continue
         if not instruction_tokens:
             if candidate.control_type in control_intents:

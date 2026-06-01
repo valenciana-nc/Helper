@@ -7626,6 +7626,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "text_entry_recovers_from_wrong_blank_field_when_labeled_field_matches",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 94, 260, 36], "label": ""},
+                {"rect": [420, 100, 90, 24], "label": "Password"},
+                {"rect": [520, 94, 260, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type into Password.",
+                "target_id": "wrong",
+                "target": {"x": 100, "y": 94, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "", "control_type": "edit", "rect": [100, 94, 260, 36]},
+                {"id": "label", "text": "Password", "control_type": "text", "rect": [420, 100, 90, 24]},
+                {"id": "field", "text": "", "control_type": "edit", "rect": [520, 94, 260, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "field",
+                "rect": [520, 94, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "text_entry_recovers_from_password_visibility_button_target",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 100, 90, 24], "label": "Password"},
+                {"rect": [180, 94, 280, 36], "label": ""},
+                {"rect": [430, 98, 28, 28], "label": "Show"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enter the password.",
+                "target_id": "show",
+                "target": {"x": 430, "y": 98, "width": 28, "height": 28},
+            },
+            "candidates": [
+                {"id": "label", "text": "Password", "control_type": "text", "rect": [80, 100, 90, 24]},
+                {"id": "field", "text": "", "control_type": "edit", "rect": [180, 94, 280, 36]},
+                {"id": "show", "text": "Show password", "control_type": "button", "rect": [430, 98, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "field",
+                "rect": [180, 94, 280, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "password_visibility_target_id_accepts_visibility_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
