@@ -2027,6 +2027,199 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "calendar_action_target_id_accepts_date_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Date"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open calendar.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Date", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "date_picker_target_id_accepts_calendar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Calendar"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open date picker.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Calendar", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "calendar_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "D"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open calendar.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4c5", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "calendar_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Date"},
+                {"rect": [180, 80, 140, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open calendar.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Date", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clock_action_target_id_accepts_time_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Time"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open clock.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Time", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "home_action_target_id_accepts_house_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "House"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go home.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "House", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "house_action_target_id_accepts_home_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Home"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the house.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Home", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "home_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "H"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go home.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f3e0", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "home_alias_rejects_ambiguous_home_and_house_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "House"},
+                {"rect": [180, 80, 100, 32], "label": "Home"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go home.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "House", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Home", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
