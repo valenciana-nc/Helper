@@ -22,6 +22,7 @@ def run_probe(
     candidates: list[ControlCandidate] | None = None,
     clean: bool = True,
     max_candidates: int = 80,
+    min_candidates: int = 1,
 ) -> dict[str, Any]:
     if clean and artifacts_dir.exists():
         shutil.rmtree(artifacts_dir)
@@ -40,7 +41,11 @@ def run_probe(
     overlay = draw_candidate_overlay(capture, resolved_candidates, base=screen)
     overlay.save(artifacts_dir / "controls_overlay.png")
 
-    summary = build_probe_summary(capture, resolved_candidates)
+    summary = build_probe_summary(
+        capture,
+        resolved_candidates,
+        min_candidates=min_candidates,
+    )
     (artifacts_dir / "candidates.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -51,7 +56,14 @@ def run_probe(
 def build_probe_summary(
     capture: Capture,
     candidates: list[ControlCandidate],
+    *,
+    min_candidates: int = 0,
 ) -> dict[str, Any]:
+    failures: list[str] = []
+    if len(candidates) < max(0, min_candidates):
+        failures.append(
+            f"candidate count {len(candidates)} below required minimum {min_candidates}"
+        )
     return {
         "capture": {
             "width": capture.width,
@@ -61,6 +73,9 @@ def build_probe_summary(
             "scale": capture.scale,
         },
         "candidate_count": len(candidates),
+        "min_candidates": max(0, min_candidates),
+        "passed": not failures,
+        "failures": failures,
         "candidates": [
             {
                 "id": candidate.id,
@@ -141,12 +156,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--artifacts", type=Path, default=Path("logs/help_live_probe/latest"))
     parser.add_argument("--max-candidates", type=int, default=80)
+    parser.add_argument("--min-candidates", type=int, default=1)
     args = parser.parse_args(argv)
 
     summary = run_probe(
         artifacts_dir=args.artifacts,
         capture_provider=_capture_provider(args.capture),
         max_candidates=args.max_candidates,
+        min_candidates=args.min_candidates,
     )
     print(
         "Help live probe: "
@@ -155,9 +172,10 @@ def main(argv: list[str] | None = None) -> int:
         f"scale={summary['capture']['scale']:.3f}; "
         f"artifacts={args.artifacts}"
     )
-    return 0
+    for failure in summary.get("failures", []):
+        print(f"- {failure}")
+    return 0 if summary.get("passed") else 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

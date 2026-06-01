@@ -45,6 +45,19 @@ class HelpLiveProbeTests(unittest.TestCase):
         self.assertEqual(summary["candidate_count"], 1)
         self.assertEqual(summary["capture"]["monitor_left"], -100)
         self.assertEqual(summary["candidates"][0]["image_box"], (10, 20, 30, 30))
+        self.assertTrue(summary["passed"])
+
+    def test_build_probe_summary_fails_below_minimum_candidates(self) -> None:
+        from help_live_probe import build_probe_summary
+
+        summary = build_probe_summary(_capture(), [], min_candidates=1)
+
+        self.assertFalse(summary["passed"])
+        self.assertEqual(summary["candidate_count"], 0)
+        self.assertEqual(
+            summary["failures"],
+            ["candidate count 0 below required minimum 1"],
+        )
 
     def test_run_probe_writes_artifacts(self) -> None:
         from help_live_probe import run_probe
@@ -64,9 +77,25 @@ class HelpLiveProbeTests(unittest.TestCase):
             self.assertTrue((root / "controls_overlay.png").exists())
 
         self.assertEqual(summary["candidate_count"], 1)
+        self.assertTrue(summary["passed"])
         self.assertEqual(payload["candidates"][0]["id"], "c001")
+
+    def test_run_probe_records_failure_when_no_candidates(self) -> None:
+        from help_live_probe import run_probe
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            summary = run_probe(
+                artifacts_dir=root,
+                capture_provider=_capture,
+                candidates=[],
+                min_candidates=1,
+            )
+            payload = json.loads((root / "candidates.json").read_text(encoding="utf-8"))
+
+        self.assertFalse(summary["passed"])
+        self.assertEqual(payload["failures"], ["candidate count 0 below required minimum 1"])
 
 
 if __name__ == "__main__":
     unittest.main()
-
