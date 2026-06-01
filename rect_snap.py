@@ -168,6 +168,7 @@ def snap_to_control(
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
     control_type_mismatch_result: SnapResult | None = None
+    contained_control_intent_results: list[SnapResult] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
     )
@@ -253,6 +254,13 @@ def snap_to_control(
             source="uia",
             matched_text=text,
         )
+        if (
+            control_intents
+            and not instruction_tokens
+            and _contains_rect(_expand_rect(model_rect, 4), rect)
+            and not any(item.rect == result.rect for item in contained_control_intent_results)
+        ):
+            contained_control_intent_results.append(result)
         ranked.append((score, result, semantic_text, ctype, window_rank))
         if (
             visible_text
@@ -297,6 +305,12 @@ def snap_to_control(
         return foreground_conflict
 
     if best_result is None or best_score < confidence_floor:
+        contained_result = _single_contained_control_intent_result(
+            contained_control_intent_results,
+            confidence_floor=confidence_floor,
+        )
+        if contained_result is not None:
+            return contained_result
         if (
             best_result is not None
             and _semantic_mismatch(
@@ -834,6 +848,31 @@ def _expand_rect(
 ) -> tuple[int, int, int, int]:
     x, y, w, h = rect
     return (x - margin, y - margin, w + 2 * margin, h + 2 * margin)
+
+
+def _contains_rect(
+    outer: tuple[int, int, int, int],
+    inner: tuple[int, int, int, int],
+) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ox <= ix and oy <= iy and ox + ow >= ix + iw and oy + oh >= iy + ih
+
+
+def _single_contained_control_intent_result(
+    results: list[SnapResult],
+    *,
+    confidence_floor: float,
+) -> SnapResult | None:
+    if len(results) != 1:
+        return None
+    result = results[0]
+    return SnapResult(
+        rect=result.rect,
+        confidence=max(confidence_floor, result.confidence),
+        source=result.source,
+        matched_text=result.matched_text,
+    )
 
 
 def _intersects(

@@ -402,6 +402,44 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 32, 32))
         self.assertEqual(result.rejected_reason, "control type mismatch")
 
+    def test_snap_uses_single_checkbox_inside_loose_row(self) -> None:
+        from rect_snap import snap_to_control
+
+        checkbox = _make_button("Done", 24, 34, 20, 20, control_type="CheckBox")
+        row = _make_button("Task row", 10, 10, 600, 80, control_type="ListItem")
+        window = _make_window("Tasks", 0, 0, 800, 600, [row, checkbox])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (10, 10, 600, 80),
+            "Click this checkbox.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (24, 34, 20, 20))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
+        from rect_snap import snap_to_control
+
+        first = _make_button("Done", 24, 24, 20, 20, control_type="CheckBox")
+        second = _make_button("Archived", 24, 52, 20, 20, control_type="CheckBox")
+        row = _make_button("Task row", 10, 10, 600, 80, control_type="ListItem")
+        window = _make_window("Tasks", 0, 0, 800, 600, [row, first, second])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (10, 10, 600, 80),
+            "Click this checkbox.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "control type mismatch")
+
     def test_snap_rejects_background_duplicate_when_foreground_is_plausible(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1495,6 +1533,40 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_snap_candidate_target_uses_single_checkbox_inside_loose_row(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "Task row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Done", "checkbox", (24, 34, 20, 20)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c002")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (24, 34, 20, 20))
+
+    def test_snap_candidate_target_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this checkbox.",
+            candidates=[
+                ControlCandidate("c001", "Task row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Done", "checkbox", (24, 24, 20, 20)),
+                ControlCandidate("c003", "Archived", "checkbox", (24, 52, 20, 20)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNone(result)
+
     def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1953,6 +2025,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_checkbox_row_model_rect_highlights_single_checkbox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this checkbox.",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Task row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Done", "checkbox", (24, 34, 20, 20)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (24, 34, 20, 20))
 
     def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
         from control_inventory import ControlCandidate

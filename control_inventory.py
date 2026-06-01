@@ -608,10 +608,38 @@ def snap_candidate_target(
             ranked.append((score, candidate))
 
     if not ranked:
+        contained = _single_contained_control_intent_candidate(
+            candidates=candidates,
+            model_rect=model_rect,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+        )
+        if contained is not None:
+            return TargetResolution(
+                rect=contained.rect,
+                confidence=confidence_floor,
+                source="candidate_snap",
+                matched_text=contained.descriptor,
+                target_id=contained.id,
+            )
         return None
     ranked.sort(key=lambda item: item[0], reverse=True)
     best_score, candidate = ranked[0]
     if best_score < confidence_floor:
+        contained = _single_contained_control_intent_candidate(
+            candidates=candidates,
+            model_rect=model_rect,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+        )
+        if contained is not None:
+            return TargetResolution(
+                rect=contained.rect,
+                confidence=confidence_floor,
+                source="candidate_snap",
+                matched_text=contained.descriptor,
+                target_id=contained.id,
+            )
         if _candidate_snap_semantic_mismatch(
             candidate=candidate,
             instruction_tokens=instruction_tokens,
@@ -1213,6 +1241,30 @@ def _contains_tighter_same_intent_action(
         if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
+
+
+def _single_contained_control_intent_candidate(
+    *,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int],
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> ControlCandidate | None:
+    if instruction_tokens or not control_intents:
+        return None
+    bounds = _expand_rect(model_rect, 4)
+    contained: list[ControlCandidate] = []
+    for candidate in candidates:
+        if not _candidate_matches_control_intent(candidate, control_intents):
+            continue
+        if not _contains_rect(bounds, candidate.rect):
+            continue
+        if any(_same_visual_candidate(candidate, existing) for existing in contained):
+            continue
+        contained.append(candidate)
+        if len(contained) > 1:
+            return None
+    return contained[0] if contained else None
 
 
 def _instruction_control_intents(instruction: str) -> set[str]:

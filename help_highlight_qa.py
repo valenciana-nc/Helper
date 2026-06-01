@@ -541,6 +541,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_checkbox_row_model_rect_snaps_to_single_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Task row"},
+                {"rect": [34, 110, 20, 20], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this checkbox.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Task row", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Done", "control_type": "checkbox", "rect": [34, 110, 20, 20]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [34, 110, 20, 20],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
