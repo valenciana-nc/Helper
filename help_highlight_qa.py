@@ -4634,6 +4634,100 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "sort_direction_rejects_opposite_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Z to A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sort A to Z.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Z to A", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "search_instruction_rejects_filter_action_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Filter users"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Search users.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Filter users", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "remove_instruction_rejects_add_action_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Add member"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Remove member.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Add member", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "second_card_duplicate_action_rejects_first_card_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 300, 100], "label": "Billing"},
+                {"rect": [230, 70, 60, 30], "label": "Save"},
+                {"rect": [10, 130, 300, 100], "label": "Billing"},
+                {"rect": [230, 190, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the second Billing card.",
+                "target_id": "save1",
+                "target": {"x": 230, "y": 70, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "card1", "text": "Billing", "control_type": "listitem", "rect": [10, 10, 300, 100]},
+                {"id": "save1", "text": "Save", "control_type": "button", "rect": [230, 70, 60, 30]},
+                {"id": "card2", "text": "Billing", "control_type": "listitem", "rect": [10, 130, 300, 100]},
+                {"id": "save2", "text": "Save", "control_type": "button", "rect": [230, 190, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "save2",
+                "rect": [230, 190, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "bold_action_target_id_accepts_b_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -8178,6 +8272,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "moved_browser_reload_rejects_dashboard_widget_refresh_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [96, 108, 34, 34], "label": "Browser reload"},
+                {"rect": [420, 320, 100, 32], "label": "Widget refresh"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the dashboard widget.",
+                "target_id": "c001",
+                "target": {"x": 96, "y": 108, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Reload",
+                    "control_type": "button",
+                    "rect": [96, 108, 34, 34],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Refresh",
+                    "control_type": "button",
+                    "rect": [420, 320, 100, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 320, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_reload_rejects_chart_refresh_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -8287,6 +8417,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "untitled_browser_site_info_rejects_app_site_info_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [90, 20, 28, 34], "label": "Browser site info"},
+                {"rect": [420, 180, 110, 32], "label": "App site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open site info in the app.",
+                "target_id": "c001",
+                "target": {"x": 90, "y": 20, "width": 28, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "site_info_lock",
+                    "control_type": "button",
+                    "rect": [90, 20, 28, 34],
+                },
+                {
+                    "id": "c002",
+                    "text": "Site info",
+                    "control_type": "button",
+                    "rect": [420, 180, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 180, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "titlebar_minimize_rejects_app_panel_minimize_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -8320,6 +8485,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c002",
                 "rect": [620, 140, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "moved_titlebar_minimize_rejects_app_panel_minimize_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [910, 100, 30, 30], "label": "Window minimize"},
+                {"rect": [620, 240, 110, 32], "label": "Panel minimize"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize the panel in the app.",
+                "target_id": "c001",
+                "target": {"x": 910, "y": 100, "width": 30, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Minimize",
+                    "control_type": "button",
+                    "rect": [910, 100, 30, 30],
+                    "automation_id": "Minimize",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Minimize panel",
+                    "control_type": "button",
+                    "rect": [620, 240, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [620, 240, 110, 32],
                 "overlay_emitted": True,
             },
         },

@@ -2419,6 +2419,14 @@ class SnapToControlTests(unittest.TestCase):
             ("Open file.", "Save file"),
             ("Open file.", "Export file"),
             ("Open file.", "Import file"),
+            ("Remove member.", "Add member"),
+            ("Add member.", "Remove member"),
+            ("Approve request.", "Reject request"),
+            ("Reject request.", "Approve request"),
+            ("Sort by name.", "Filter by name"),
+            ("Filter by name.", "Sort by name"),
+            ("Refresh feed.", "Reload page"),
+            ("Reload page.", "Refresh feed"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -2445,6 +2453,10 @@ class SnapToControlTests(unittest.TestCase):
             ("Apply changes.", "Cancel changes", "App"),
             ("Cancel changes.", "Apply changes", "App"),
             ("Apply filter.", "Apply coupon", "App"),
+            ("Sort A to Z.", "Z to A", "App"),
+            ("Sort Z to A.", "A to Z", "App"),
+            ("Search users.", "Filter users", "App"),
+            ("Filter users.", "Search users", "App"),
             ("Open new tab.", "New window", "GitHub - Google Chrome"),
             ("Open new window.", "New tab", "GitHub - Google Chrome"),
             ("Favorite this item.", "Bookmark this tab", "GitHub - Google Chrome"),
@@ -2673,6 +2685,45 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, (700, 80, 40, 36))
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_app_local_wording_does_not_snap_moved_browser_chrome(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Refresh the dashboard widget.",
+                _make_button("Reload", 96, 108, 34, 34),
+                "Dashboard - Google Chrome",
+                (96, 108, 34, 34),
+            ),
+            (
+                "Minimize the panel in the app.",
+                _make_button("Minimize", 910, 100, 30, 30, automation_id="Minimize"),
+                "Dashboard - Google Chrome",
+                (910, 100, 30, 30),
+            ),
+            (
+                "Open site info in the app.",
+                _make_button("site_info_lock", 90, 8, 28, 34),
+                "",
+                (90, 8, 28, 34),
+            ),
+        )
+        for instruction, button, window_title, rect in cases:
+            with self.subTest(instruction=instruction):
+                window = _make_window(window_title, 0, 0, 1200, 800, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
         from rect_snap import snap_to_control
@@ -5270,6 +5321,14 @@ class ControlInventoryTests(unittest.TestCase):
             ("Delete message.", "Send message"),
             ("Save document.", "Delete document"),
             ("Download file.", "Upload file"),
+            ("Remove member.", "Add member"),
+            ("Add member.", "Remove member"),
+            ("Approve request.", "Reject request"),
+            ("Reject request.", "Approve request"),
+            ("Sort by name.", "Filter by name"),
+            ("Filter by name.", "Sort by name"),
+            ("Refresh feed.", "Reload page"),
+            ("Reload page.", "Refresh feed"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -8153,6 +8212,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Refresh the dashboard widget.",
+                ControlCandidate(
+                    "c001",
+                    "Reload",
+                    "button",
+                    (96, 108, 34, 34),
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Refresh",
+                    "button",
+                    (420, 320, 100, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
                 "Refresh the chart.",
                 ControlCandidate(
                     "c001",
@@ -8213,6 +8289,22 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "button",
                     (90, 8, 28, 34),
                     window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Site info",
+                    "button",
+                    (420, 180, 110, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Open site info in the app.",
+                ControlCandidate(
+                    "c001",
+                    "site_info_lock",
+                    "button",
+                    (90, 8, 28, 34),
                 ),
                 ControlCandidate(
                     "c002",
@@ -8285,6 +8377,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "Minimize panel",
                     "button",
                     (620, 140, 110, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Minimize the panel in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Minimize",
+                    "button",
+                    (910, 100, 30, 30),
+                    automation_id="Minimize",
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Minimize panel",
+                    "button",
+                    (620, 240, 110, 32),
                     window_title="Dashboard - Google Chrome",
                 ),
             ),
@@ -11210,6 +11320,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Apply changes.", "Cancel changes", "App"),
             ("Cancel changes.", "Apply changes", "App"),
             ("Apply filter.", "Apply coupon", "App"),
+            ("Sort A to Z.", "Z to A", "App"),
+            ("Sort Z to A.", "A to Z", "App"),
+            ("Search users.", "Filter users", "App"),
+            ("Filter users.", "Search users", "App"),
             ("Open new tab.", "New window", "GitHub - Google Chrome"),
             ("Open new window.", "New tab", "GitHub - Google Chrome"),
             ("Open file.", "Save file", "App"),
@@ -11293,6 +11407,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             ("Edit profile.", "Edit profile"),
             ("Apply filter.", "Apply filter"),
+            ("Sort A to Z.", "A to Z"),
+            ("Sort Z to A.", "Z to A"),
+            ("Search users.", "Search users"),
+            ("Filter users.", "Filter users"),
             ("Open new tab.", "New tab"),
             ("Open new window.", "New window"),
             ("Open file.", "Open file"),
@@ -16252,6 +16370,105 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected_rect)
+
+    def test_contextual_duplicate_scopes_require_requested_position_or_surface(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            (
+                "Click Save in the second Billing card.",
+                "save1",
+                "save2",
+                [
+                    ControlCandidate("card1", "Billing", "listitem", (10, 10, 300, 100)),
+                    ControlCandidate("save1", "Save", "button", (230, 70, 60, 30)),
+                    ControlCandidate("card2", "Billing", "listitem", (10, 130, 300, 100)),
+                    ControlCandidate("save2", "Save", "button", (230, 190, 60, 30)),
+                ],
+            ),
+            (
+                "Click Delete in the right Details section.",
+                "del1",
+                "del2",
+                [
+                    ControlCandidate("leftsec", "Details", "listitem", (10, 10, 300, 100)),
+                    ControlCandidate("del1", "Delete", "button", (230, 70, 60, 30)),
+                    ControlCandidate("rightsec", "Details", "listitem", (350, 10, 300, 100)),
+                    ControlCandidate("del2", "Delete", "button", (570, 70, 60, 30)),
+                ],
+            ),
+            (
+                "Click Sort in the Name column.",
+                "sort_age",
+                "sort_name",
+                [
+                    ControlCandidate("name_col", "Name", "headeritem", (10, 10, 200, 40)),
+                    ControlCandidate("sort_name", "Sort", "button", (170, 16, 32, 28)),
+                    ControlCandidate("age_col", "Age", "headeritem", (220, 10, 200, 40)),
+                    ControlCandidate("sort_age", "Sort", "button", (380, 16, 32, 28)),
+                ],
+            ),
+            (
+                "Click Save in the toolbar.",
+                "ft_save",
+                "tb_save",
+                [
+                    ControlCandidate("toolbar", "Main toolbar", "toolbar", (0, 0, 800, 48)),
+                    ControlCandidate("tb_save", "Save", "button", (20, 8, 60, 30)),
+                    ControlCandidate("footer", "Footer", "pane", (0, 500, 800, 80)),
+                    ControlCandidate("ft_save", "Save", "button", (20, 520, 60, 30)),
+                ],
+            ),
+            (
+                "Click Settings in the account menu.",
+                "side_settings",
+                "menu_settings",
+                [
+                    ControlCandidate("sidebar", "Sidebar", "pane", (0, 50, 180, 500)),
+                    ControlCandidate("side_settings", "Settings", "button", (20, 80, 100, 30)),
+                    ControlCandidate("menu", "Account menu", "menu", (500, 50, 180, 200)),
+                    ControlCandidate("menu_settings", "Settings", "button", (520, 80, 100, 30)),
+                ],
+            ),
+        )
+        for instruction, wrong_id, correct_id, candidates in cases:
+            with self.subTest(instruction=instruction):
+                wrong = next(candidate for candidate in candidates if candidate.id == wrong_id)
+                correct = next(candidate for candidate in candidates if candidate.id == correct_id)
+
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                correct_target = resolve_candidate_target(
+                    target_id=correct_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertIn(
+                    wrong_target.rejected_reason,
+                    {"target_id ambiguous", "target_id semantic mismatch"},
+                )
+                if wrong_snap is not None:
+                    self.assertEqual(wrong_snap.target_id, wrong_id)
+                    self.assertEqual(wrong_snap.rejected_reason, "candidate semantic mismatch")
+                self.assertIsNotNone(correct_target)
+                assert correct_target is not None
+                self.assertEqual(correct_target.source, "target_id")
+                self.assertEqual(correct_target.target_id, correct_id)
+                self.assertFalse(correct_target.rejected_reason)
+                self.assertEqual(correct_target.rect, correct.rect)
 
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate

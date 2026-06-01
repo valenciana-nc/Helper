@@ -100,6 +100,8 @@ CONFIRM_ACTION_WORDS = frozenset(
 )
 CANCEL_ACTION_WORDS = frozenset({"cancel"})
 CONFIRM_CANCEL_ACTION_WORDS = CONFIRM_ACTION_WORDS | CANCEL_ACTION_WORDS
+ADD_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
+REMOVE_ACTION_WORDS = frozenset({"bin", "delete", "remove", "trash", "wastebasket"})
 CONFIRM_OBJECT_STOPWORDS = frozenset(
     {
         "a",
@@ -144,12 +146,18 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "area",
         "box",
         "card",
+        "column",
+        "columns",
         "dialog",
+        "footer",
         "form",
         "grid",
         "group",
+        "header",
         "list",
         "listitem",
+        "menu",
+        "menus",
         "modal",
         "panel",
         "pane",
@@ -157,6 +165,8 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "rows",
         "section",
         "table",
+        "toolbar",
+        "toolbars",
     }
 )
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
@@ -174,6 +184,37 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
         "within",
         "with",
     }
+)
+CONTEXTUAL_DUPLICATE_POSITION_WORDS = frozenset(
+    {
+        "1",
+        "1st",
+        "2",
+        "2nd",
+        "3",
+        "3rd",
+        "4",
+        "4th",
+        "5",
+        "5th",
+        "bottom",
+        "first",
+        "last",
+        "left",
+        "lower",
+        "right",
+        "second",
+        "third",
+        "top",
+        "upper",
+    }
+)
+CONTEXTUAL_DUPLICATE_ORDINAL_WORDS = (
+    frozenset({"1", "1st", "first"}),
+    frozenset({"2", "2nd", "second"}),
+    frozenset({"3", "3rd", "third"}),
+    frozenset({"4", "4th"}),
+    frozenset({"5", "5th"}),
 )
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
@@ -227,7 +268,7 @@ BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
     {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
-    {"bookmarks", "downloads", "extensions", "history", "home", "sidepanel"}
+    {"bookmarks", "downloads", "extensions", "history", "home", "reload", "sidepanel"}
 )
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
@@ -346,6 +387,10 @@ STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
 SEARCH_ACTION_WORDS = frozenset({"find", "search"})
 SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
+SORT_ASCENDING_WORDS = frozenset({"ascending"})
+SORT_DESCENDING_WORDS = frozenset({"descending"})
+SEARCH_FILTER_SEARCH_WORDS = frozenset({"find", "search"})
+SEARCH_FILTER_FILTER_WORDS = frozenset({"filter", "funnel"})
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -429,7 +474,9 @@ ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
         "table",
     }
 )
-CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset({"dialog"})
+CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
+    {"column", "dialog", "footer", "header", "menu", "toolbar"}
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -440,8 +487,13 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"clone", "copy", "duplicate"}),
     frozenset({"clipboard", "paste"}),
     frozenset({"edit", "pencil"}),
+    frozenset({"filter", "funnel"}),
     frozenset({"print", "printer"}),
+    frozenset({"approve"}),
+    frozenset({"reject"}),
+    frozenset({"refresh", "reload"}),
     frozenset({"share"}),
+    frozenset({"sort"}),
 )
 AMBIGUOUS_EXACT_ACTION_ALIAS_FAMILIES = (frozenset({"print", "printer"}),)
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
@@ -2578,7 +2630,8 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     if automation_id.startswith("view_") or automation_id in BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS:
         return True
     text_tokens = _tokens_from_text(candidate.text)
-    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and candidate.rect[1] <= 72)
+    compact_toolbar_shape = max(candidate.rect[2], candidate.rect[3]) <= 56
+    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and compact_toolbar_shape)
 
 
 def _browser_chrome_app_context_mismatch(
@@ -2609,14 +2662,14 @@ def _instruction_requests_app_local_surface(
 def _looks_like_browser_chrome_surface(candidate: ControlCandidate) -> bool:
     if _looks_like_os_chrome_surface(candidate):
         return True
+    if _looks_like_browser_site_information_chrome_button(candidate):
+        return True
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     if _looks_like_browser_toolbar_button(candidate) or _looks_like_browser_menu_button(candidate):
         return True
     if _looks_like_browser_profile_chrome_button(candidate):
-        return True
-    if _looks_like_browser_site_information_chrome_button(candidate):
         return True
     return candidate.control_type == "tabitem" and candidate.rect[1] <= 72
 
@@ -2628,21 +2681,28 @@ def _looks_like_os_chrome_surface(candidate: ControlCandidate) -> bool:
 def _looks_like_window_titlebar_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
-    if candidate.rect[1] > 44:
-        return False
     raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
-    return bool(raw_tokens & {"close", "maximize", "minimize", "minimise", "restore"})
+    if not (raw_tokens & {"close", "maximize", "minimize", "minimise", "restore"}):
+        return False
+    if candidate.rect[1] <= 44:
+        return True
+    compact_titlebar_shape = candidate.rect[2] <= 72 and candidate.rect[3] <= 48
+    window_tokens = _tokens_from_text(candidate.window_title)
+    return bool(compact_titlebar_shape and window_tokens & BROWSER_PROFILE_WINDOW_WORDS)
 
 
 def _looks_like_browser_site_information_chrome_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
+    raw_text = " ".join((candidate.text or "", candidate.automation_id or "")).lower()
+    raw_tokens = _tokens_from_text(raw_text)
+    compact_chrome_shape = max(candidate.rect[2], candidate.rect[3]) <= 64
+    if "site_info_lock" in raw_text and compact_chrome_shape:
+        return True
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
-    raw_text = " ".join((candidate.text or "", candidate.automation_id or "")).lower()
-    raw_tokens = _tokens_from_text(raw_text)
-    if "site_info_lock" in raw_text or {"site", "info", "lock"} <= raw_tokens:
+    if {"site", "info", "lock"} <= raw_tokens:
         return True
     if candidate.rect[1] > 72:
         return False
@@ -3465,6 +3525,9 @@ def _explicit_action_context_mismatch(
         _edit_action_context_mismatch(instruction, candidate)
         or _confirm_action_context_mismatch(instruction, candidate)
         or _filter_reset_action_mismatch(instruction, candidate)
+        or _sort_direction_action_mismatch(instruction, candidate.descriptor)
+        or _search_filter_action_mismatch(instruction, candidate.descriptor)
+        or _add_remove_action_mismatch(instruction, candidate.descriptor)
         or _file_action_context_mismatch(instruction, candidate.descriptor)
         or _same_action_family_object_mismatch(instruction, candidate.descriptor)
         or _same_action_family_window_context_mismatch(instruction, candidate)
@@ -3505,6 +3568,45 @@ def _filter_reset_action_mismatch(
     if candidate_tokens & FILTER_RESET_ALLOWED_CONTROL_WORDS:
         return False
     return bool(candidate_tokens & FILTER_RESET_OBJECT_ONLY_WORDS)
+
+
+def _sort_direction_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokenize_instruction(instruction) | _tokens_from_text(instruction)
+    candidate_tokens = _tokenize_control(candidate_text) | _tokens_from_text(candidate_text)
+    requested_ascending = bool(instruction_tokens & SORT_ASCENDING_WORDS)
+    requested_descending = bool(instruction_tokens & SORT_DESCENDING_WORDS)
+    candidate_ascending = bool(candidate_tokens & SORT_ASCENDING_WORDS)
+    candidate_descending = bool(candidate_tokens & SORT_DESCENDING_WORDS)
+    if requested_ascending == requested_descending:
+        return False
+    if candidate_ascending == candidate_descending:
+        return False
+    return requested_ascending != candidate_ascending
+
+
+def _search_filter_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokenize_instruction(instruction) | _tokens_from_text(instruction)
+    candidate_tokens = _tokenize_control(candidate_text) | _tokens_from_text(candidate_text)
+    requested_search = bool(instruction_tokens & SEARCH_FILTER_SEARCH_WORDS)
+    requested_filter = bool(instruction_tokens & SEARCH_FILTER_FILTER_WORDS)
+    candidate_search = bool(candidate_tokens & SEARCH_FILTER_SEARCH_WORDS)
+    candidate_filter = bool(candidate_tokens & SEARCH_FILTER_FILTER_WORDS)
+    if requested_search and not requested_filter and candidate_filter and not candidate_search:
+        return True
+    return bool(requested_filter and not requested_search and candidate_search and not candidate_filter)
+
+
+def _add_remove_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    candidate_tokens = _tokens_from_text(candidate_text)
+    requested_add = bool(instruction_tokens & ADD_ACTION_WORDS)
+    requested_remove = bool(instruction_tokens & REMOVE_ACTION_WORDS)
+    candidate_add = bool(candidate_tokens & ADD_ACTION_WORDS)
+    candidate_remove = bool(candidate_tokens & REMOVE_ACTION_WORDS)
+    return bool(
+        (requested_add and not requested_remove and candidate_remove and not candidate_add)
+        or (requested_remove and not requested_add and candidate_add and not candidate_remove)
+    )
 
 
 def _confirm_action_context_mismatch(
@@ -3833,6 +3935,9 @@ def _unresolved_contextual_duplicate_mismatch(
     if not has_duplicate:
         return False
     evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    requested_positions = requested_context & CONTEXTUAL_DUPLICATE_POSITION_WORDS
+    if requested_positions and not (requested_positions <= evidence_tokens):
+        return True
     return not bool(requested_context & evidence_tokens)
 
 
@@ -3845,6 +3950,9 @@ def _candidate_satisfies_contextual_duplicate_request(
     if not requested_context:
         return False
     evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    requested_positions = requested_context & CONTEXTUAL_DUPLICATE_POSITION_WORDS
+    if requested_positions and not (requested_positions <= evidence_tokens):
+        return False
     return bool(requested_context & evidence_tokens)
 
 
@@ -3881,6 +3989,7 @@ def _contextual_duplicate_evidence_tokens(
 ) -> set[str]:
     tokens = set(_candidate_semantic_tokens(candidate))
     tokens.update(_tokenize_control(candidate.window_title))
+    tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
@@ -3889,8 +3998,67 @@ def _contextual_duplicate_evidence_tokens(
         if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
             continue
         tokens.update(_candidate_semantic_tokens(context))
+        tokens.update(_tokens_from_text(context.descriptor))
+        tokens.update(_tokens_from_text(context.control_type))
         tokens.update(_tokenize_control(context.window_title))
     return _object_token_variants(tokens)
+
+
+def _contextual_duplicate_position_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return set()
+    duplicates = [
+        item
+        for item in candidates
+        if not _same_visual_candidate(item, candidate)
+        and item.control_type == candidate.control_type
+        and _contextual_duplicate_key(item) == duplicate_key
+    ]
+    duplicates.append(candidate)
+    distinct: dict[str, ControlCandidate] = {}
+    for item in duplicates:
+        distinct.setdefault(item.id, item)
+    ordered = sorted(
+        distinct.values(),
+        key=lambda item: (
+            item.window_rank,
+            item.rect[1],
+            item.rect[0],
+            item.depth,
+            item.id,
+        ),
+    )
+    if len(ordered) < 2:
+        return set()
+    tokens: set[str] = set()
+    try:
+        index = next(index for index, item in enumerate(ordered) if item.id == candidate.id)
+    except StopIteration:
+        return set()
+    if index < len(CONTEXTUAL_DUPLICATE_ORDINAL_WORDS):
+        tokens.update(CONTEXTUAL_DUPLICATE_ORDINAL_WORDS[index])
+    if index == len(ordered) - 1:
+        tokens.add("last")
+
+    centers = [(item, _center(item.rect)) for item in ordered]
+    xs = [center[0] for _item, center in centers]
+    ys = [center[1] for _item, center in centers]
+    cx, cy = _center(candidate.rect)
+    if max(xs) - min(xs) >= max(8, candidate.rect[2] // 4):
+        if cx == min(xs):
+            tokens.add("left")
+        if cx == max(xs):
+            tokens.add("right")
+    if max(ys) - min(ys) >= max(8, candidate.rect[3] // 4):
+        if cy == min(ys):
+            tokens.update({"top", "upper"})
+        if cy == max(ys):
+            tokens.update({"bottom", "lower"})
+    return tokens
 
 
 def _exact_action_word_alternative_mismatch(
