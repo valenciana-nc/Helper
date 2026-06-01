@@ -1497,6 +1497,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "filter_action_target_id_accepts_funnel_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Funnel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Filter results.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Funnel", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "funnel_action_target_id_accepts_filter_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click funnel.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Filter", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sort_ascending_target_id_accepts_a_to_z_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "A to Z"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sort ascending.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "A to Z", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sort_descending_target_id_accepts_z_to_a_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Z to A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sort descending.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Z to A", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "filter_text_match_overrides_search_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Funnel"},
+                {"rect": [180, 80, 220, 32], "label": "Search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Filter results.",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Funnel", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Search", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sort_text_match_overrides_filter_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "A to Z"},
+                {"rect": [180, 80, 100, 32], "label": "Filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sort ascending.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "A to Z", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Filter", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "download_action_target_id_accepts_export_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

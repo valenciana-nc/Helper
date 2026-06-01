@@ -26,6 +26,11 @@ _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SEPARATOR_RE = re.compile(r"[_\-.]+")
 _WHITESPACE_RE = re.compile(r"\s+")
 
+_PHRASE_TOKEN_ALIAS_PATTERNS = (
+    (re.compile(r"\ba\s+(?:to\s+)?z\b"), {"ascending", "sort"}),
+    (re.compile(r"\bz\s+(?:to\s+)?a\b"), {"descending", "sort"}),
+)
+
 _SYMBOL_TOKEN_ALIASES = {
     "?": {"help", "mark", "question"},
     "+": {"add", "create", "new", "plus"},
@@ -138,9 +143,11 @@ _TOKEN_ALIASES = {
     "files": {"attach", "attachment", "browse", "choose", "documents", "file", "select", "upload"},
     "filing": {"archive", "cabinet"},
     "find": {"search"},
+    "filter": {"funnel"},
     "floppy": {"save"},
     "folder": {"directory"},
     "folders": {"directories", "directory", "folder"},
+    "funnel": {"filter"},
     "gear": {"options", "preferences", "settings"},
     "home": {"house"},
     "house": {"home"},
@@ -737,6 +744,10 @@ def tokens_from_text(text: str) -> set[str]:
     spaced = _CAMEL_RE.sub(" ", value)
     spaced = _SEPARATOR_RE.sub(" ", spaced)
     tokens = set(_TOKEN_RE.findall(spaced.lower()))
+    phrase_text = _WHITESPACE_RE.sub(" ", spaced.lower()).strip()
+    for pattern, aliases in _PHRASE_TOKEN_ALIAS_PATTERNS:
+        if pattern.search(phrase_text):
+            tokens.update(aliases)
     if tokens:
         return tokens
     compact = _WHITESPACE_RE.sub("", value)

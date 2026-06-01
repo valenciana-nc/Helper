@@ -176,6 +176,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("archive", tokenize_control("File cabinet"))
         self.assertIn("archive", tokenize_control("Filing cabinet"))
 
+    def test_filter_and_sort_aliases_expand_to_toolbar_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("funnel", tokenize_instruction("Filter results"))
+        self.assertIn("filter", tokenize_instruction("Click funnel"))
+        self.assertTrue({"ascending", "sort"}.issubset(tokenize_instruction("Click A to Z")))
+        self.assertTrue({"descending", "sort"}.issubset(tokenize_instruction("Click Z to A")))
+        self.assertTrue({"ascending", "sort"}.issubset(tokenize_control("A to Z")))
+        self.assertTrue({"descending", "sort"}.issubset(tokenize_control("Z to A")))
+
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -5433,6 +5443,76 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Cut selection.",
                 ControlCandidate("c001", "Scissors", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Copy", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_filter_and_sort_target_id_accepts_common_toolbar_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Filter results.", "Funnel", (120, 160, 100, 32)),
+            ("Click funnel.", "Filter", (120, 160, 100, 32)),
+            ("Sort ascending.", "A to Z", (120, 160, 100, 32)),
+            ("Sort descending.", "Z to A", (120, 160, 100, 32)),
+            ("Click A to Z.", "Sort ascending", (120, 160, 150, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_filter_and_sort_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Filter results.",
+                ControlCandidate("c001", "Funnel", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Search", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Sort ascending.",
+                ControlCandidate("c001", "A to Z", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Filter", "button", (300, 160, 100, 32)),
             ),
         )
         for instruction, expected, decoy in cases:
