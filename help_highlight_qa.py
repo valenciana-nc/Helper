@@ -423,6 +423,20 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {"source": "model", "quality_reason": "target appears visually empty", "overlay_emitted": False},
         },
         {
+            "name": "noisy_model_rect_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"kind": "checker", "rect": [60, 80, 100, 50]},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 120, "y": 250, "width": 200, "height": 156},
+            },
+            "candidates": [],
+            "expected": {"source": "model", "quality_reason": "target appears visually noisy", "overlay_emitted": False},
+        },
+        {
             "name": "text_only_model_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -688,6 +702,16 @@ def _make_capture(scenario: dict[str, Any]) -> Capture:
         if item.get("kind") == "text":
             if label:
                 draw.text((box[0], box[1]), label, fill=item.get("fill", "black"))
+            continue
+        if item.get("kind") == "checker":
+            tile = max(2, int(item.get("tile", 4)))
+            for y in range(box[1], box[3], tile):
+                for x in range(box[0], box[2], tile):
+                    fill = "black" if ((x + y) // tile) % 2 else "white"
+                    draw.rectangle(
+                        (x, y, min(x + tile - 1, box[2] - 1), min(y + tile - 1, box[3] - 1)),
+                        fill=fill,
+                    )
             continue
         draw.rectangle(box, outline="black", fill=item.get("fill", "#f8fafc"), width=1)
         if label:

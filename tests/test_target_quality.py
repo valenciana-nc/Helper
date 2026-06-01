@@ -87,6 +87,48 @@ class TargetQualityTests(unittest.TestCase):
         self.assertTrue(quality.accepted)
         self.assertGreaterEqual(quality.visual_activity, 0.035)
 
+    def test_rejects_noisy_model_rect_without_candidate_evidence(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (200, 120), "white")
+        draw = ImageDraw.Draw(img)
+        for y in range(30, 60, 4):
+            for x in range(40, 100, 4):
+                color = "black" if ((x + y) // 4) % 2 else "white"
+                draw.rectangle((x, y, x + 3, y + 3), fill=color)
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 60, 30),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears visually noisy")
+        self.assertGreater(quality.visual_activity, 0.40)
+
+    def test_accepts_noisy_candidate_rect_with_uia_evidence(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (200, 120), "white")
+        draw = ImageDraw.Draw(img)
+        for y in range(30, 60, 4):
+            for x in range(40, 100, 4):
+                color = "black" if ((x + y) // 4) % 2 else "white"
+                draw.rectangle((x, y, x + 3, y + 3), fill=color)
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 60, 30),
+            source="target_id",
+            confidence=1.0,
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_rejects_candidate_rect_on_blank_space(self) -> None:
         from target_quality import evaluate_target_quality
 

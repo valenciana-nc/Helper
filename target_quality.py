@@ -10,6 +10,8 @@ from screen import Capture
 MIN_VISIBLE_FRACTION = 0.35
 MODEL_EMPTY_VISUAL_FLOOR = 0.035
 MODEL_BOUNDARY_ACTIVITY_FLOOR = 0.10
+MODEL_NOISY_VISUAL_CEILING = 0.40
+MODEL_NOISY_BOUNDARY_FLOOR = 0.25
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 MAX_TARGET_AREA_FRACTION = 0.25
 
@@ -88,6 +90,18 @@ def evaluate_target_quality(
             return TargetQuality(
                 accepted=False,
                 reason="target lacks visible control boundary",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
+        if (
+            visual_activity > MODEL_NOISY_VISUAL_CEILING
+            and boundary_activity > MODEL_NOISY_BOUNDARY_FLOOR
+        ):
+            return TargetQuality(
+                accepted=False,
+                reason="target appears visually noisy",
                 visible_fraction=visible_fraction,
                 visual_activity=visual_activity,
                 boundary_activity=boundary_activity,
