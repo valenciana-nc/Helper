@@ -41,6 +41,9 @@ BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
     {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
 )
+TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
+    {"icons", "notification_area", "system_tray", "tray"}
+)
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -174,6 +177,10 @@ def snap_to_control(
             visible_text,
             automation_id,
         )
+        hidden_icons_action_mismatch = _hidden_icons_action_mismatch(
+            instruction_tokens,
+            visible_text,
+        )
         browser_tab_auth_action_mismatch = _browser_tab_auth_action_mismatch(
             instruction_tokens,
             ctype,
@@ -191,6 +198,7 @@ def snap_to_control(
         semantic_action_mismatch = (
             start_button_action_mismatch
             or task_view_action_mismatch
+            or hidden_icons_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
             or site_information_action_mismatch
@@ -732,6 +740,18 @@ def _task_view_action_mismatch(
     if not {"task", "view"} <= control_tokens:
         return False
     return not _instruction_mentions_task_view(instruction)
+
+
+def _hidden_icons_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+) -> bool:
+    if "hidden" not in instruction_tokens:
+        return False
+    control_tokens = _tokenize_control(visible_text or "")
+    if not {"hidden", "icons"} <= control_tokens:
+        return False
+    return not bool(instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS)
 
 
 def _instruction_mentions_task_view(instruction: str) -> bool:

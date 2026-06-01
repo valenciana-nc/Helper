@@ -1128,6 +1128,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertFalse(result.rejected_reason)
 
+    def test_bare_hidden_does_not_snap_taskbar_hidden_icons_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        hidden_icons = _make_button("Show Hidden Icons", 100, 560, 90, 40)
+        window = _make_window("Taskbar", 0, 540, 800, 60, [hidden_icons])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 560, 90, 40)
+
+        result = snap_to_control(
+            model_rect,
+            "Open hidden.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
         from rect_snap import snap_to_control
 
@@ -11978,6 +11997,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Open system tray.",
             "Open notification area.",
             "Show hidden icons.",
+            "Open hidden icons.",
         )
         for instruction in cases:
             with self.subTest(instruction=instruction):
@@ -12014,6 +12034,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open notifications.", "Show Hidden Icons"),
             ("Open notification area.", "Bell"),
             ("Open system tray.", "System Settings"),
+            ("Open hidden.", "Show Hidden Icons"),
+            ("Click hidden.", "Show Hidden Icons"),
             ("Show history.", "Show Hidden Icons"),
             ("Show password.", "Show Hidden Icons"),
         )
@@ -12042,6 +12064,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_bare_hidden_text_match_ignores_show_hidden_icons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open hidden.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Show Hidden Icons",
+                    "button",
+                    (120, 160, 32, 32),
+                    window_title="Taskbar",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
+    def test_bare_hidden_model_rect_rejects_show_hidden_icons_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open hidden.",
+                    "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Show Hidden Icons",
+                    "button",
+                    (120, 160, 32, 32),
+                    window_title="Taskbar",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_network_target_id_accepts_wifi_language(self) -> None:
         from control_inventory import ControlCandidate
