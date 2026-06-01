@@ -249,6 +249,40 @@ WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
         "users",
     }
 )
+ACTION_CONTEXT_OBJECT_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
+    {
+        "card",
+        "cards",
+        "dialog",
+        "dialogs",
+        "drawer",
+        "drawers",
+        "form",
+        "forms",
+        "grid",
+        "grids",
+        "modal",
+        "modals",
+        "page",
+        "pages",
+        "pane",
+        "panes",
+        "panel",
+        "panels",
+        "section",
+        "sections",
+        "sidebar",
+        "sidebars",
+        "table",
+        "tables",
+        "toolbar",
+        "toolbars",
+        "view",
+        "views",
+        "window",
+        "windows",
+    }
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -1041,6 +1075,7 @@ def resolve_candidate_target(
                 if not _contains_tighter_same_intent_action(
                     selected=candidate,
                     candidates=candidates,
+                    instruction=instruction,
                     instruction_tokens=instruction_tokens,
                     control_intents=control_intents,
                 ):
@@ -1049,6 +1084,7 @@ def resolve_candidate_target(
             elif _contains_tighter_same_intent_action(
                 selected=candidate,
                 candidates=candidates,
+                instruction=instruction,
                 instruction_tokens=instruction_tokens,
                 control_intents=control_intents,
             ):
@@ -1971,6 +2007,7 @@ def _target_id_plausibility(
     if _contains_tighter_same_intent_action(
         selected=candidate,
         candidates=candidates,
+        instruction=instruction,
         instruction_tokens=instruction_tokens,
         control_intents=control_intents,
     ):
@@ -1995,6 +2032,7 @@ def _target_id_plausibility(
         and not _contains_tighter_same_intent_action(
             selected=candidate,
             candidates=candidates,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             control_intents=control_intents,
         )
@@ -3096,6 +3134,24 @@ def _action_object_tokens(
     }
 
 
+def _instruction_action_object_tokens(
+    instruction: str,
+    action_tokens: frozenset[str],
+) -> set[str]:
+    tokens = set(_tokenize_instruction(instruction))
+    raw_tokens = _tokens_from_text(instruction)
+    tokens.update(raw_tokens & ACTION_CONTEXT_OBJECT_WORDS)
+    objects = _action_object_tokens(tokens, action_tokens, ACTION_OBJECT_STOPWORDS)
+    objects.update(_file_identity_object_tokens(raw_tokens))
+    if action_tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS):
+        objects -= {"add", "create", "new", "plus"}
+    return objects
+
+
+def _file_identity_object_tokens(tokens: set[str]) -> set[str]:
+    return set(FILE_IDENTITY_WORDS) if tokens & FILE_IDENTITY_WORDS else set()
+
+
 def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
     instruction_kind = _file_action_kind(_tokens_from_text(instruction), is_instruction=True)
     if not instruction_kind:
@@ -3128,12 +3184,18 @@ def _same_action_family_object_mismatch(instruction: str, candidate_text: str) -
     for family in EXCLUSIVE_ACTION_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
-        if _same_action_object_mismatch(
-            _tokenize_instruction(instruction),
-            _tokenize_control(candidate_text),
-            family,
-            ACTION_OBJECT_STOPWORDS,
-        ):
+        instruction_objects = _object_token_variants(
+            _instruction_action_object_tokens(instruction, family)
+        )
+        control_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_control(candidate_text),
+                family,
+                ACTION_OBJECT_STOPWORDS,
+            )
+            | _file_identity_object_tokens(control_raw_tokens)
+        )
+        if instruction_objects and control_objects and not (instruction_objects & control_objects):
             return True
     return False
 
@@ -3162,11 +3224,7 @@ def _same_action_family_window_context_mismatch(
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
-            _action_object_tokens(
-                _tokenize_instruction(instruction),
-                family,
-                ACTION_OBJECT_STOPWORDS,
-            )
+            _instruction_action_object_tokens(instruction, family)
         )
         if not instruction_objects:
             continue
@@ -3198,11 +3256,7 @@ def _contained_row_action_context_mismatch(
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
-            _action_object_tokens(
-                _tokenize_instruction(instruction),
-                family,
-                ACTION_OBJECT_STOPWORDS,
-            )
+            _instruction_action_object_tokens(instruction, family)
         )
         if not instruction_objects:
             continue
@@ -4226,6 +4280,7 @@ def _candidate_snap_score(
         if not _contains_tighter_same_intent_action(
             selected=candidate,
             candidates=candidates,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             control_intents=control_intents,
         ):
@@ -4234,6 +4289,7 @@ def _candidate_snap_score(
     if _contains_tighter_same_intent_action(
         selected=candidate,
         candidates=candidates,
+        instruction=instruction,
         instruction_tokens=instruction_tokens,
         control_intents=control_intents,
     ):
@@ -4245,6 +4301,7 @@ def _contains_tighter_same_intent_action(
     *,
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
+    instruction: str,
     instruction_tokens: set[str],
     control_intents: set[str],
 ) -> bool:
@@ -4279,6 +4336,12 @@ def _contains_tighter_same_intent_action(
         ):
             if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
                 continue
+            if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
+                continue
+            if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+                continue
+            if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+                continue
             if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
                 continue
             if _disclosure_state_action_mismatch(instruction_tokens, candidate):
@@ -4291,6 +4354,12 @@ def _contains_tighter_same_intent_action(
             if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
                 return True
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
+            continue
+        if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -4350,6 +4419,12 @@ def _single_contained_control_intent_candidate(
         ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
+            continue
+        if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue

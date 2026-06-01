@@ -2410,6 +2410,10 @@ class SnapToControlTests(unittest.TestCase):
             ("Download report.", "Download invoice", "App"),
             ("Copy coupon.", "Copy address", "App"),
             ("Send invite.", "Send email", "App"),
+            ("Save document.", "Save profile", "App"),
+            ("Save card.", "Save profile", "App"),
+            ("Delete section.", "Delete account", "App"),
+            ("Archive card.", "Archive email", "App"),
             ("Delete account.", "Delete", "Messages"),
             ("Show sidebar.", "Hide sidebar", "App"),
             ("Hide sidebar.", "Show sidebar", "App"),
@@ -10585,6 +10589,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Download report.", "Download invoice", "App"),
             ("Copy coupon.", "Copy address", "App"),
             ("Send invite.", "Send email", "App"),
+            ("Save document.", "Save profile", "App"),
+            ("Save card.", "Save profile", "App"),
+            ("Delete section.", "Delete account", "App"),
+            ("Archive card.", "Archive email", "App"),
             ("Delete account.", "Delete", "Messages"),
             ("Show sidebar.", "Hide sidebar", "App"),
             ("Hide sidebar.", "Show sidebar", "App"),
@@ -10658,9 +10666,12 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Bookmark this tab.", "Bookmark this tab"),
             ("Add bookmark.", "Bookmark this tab"),
             ("Save document.", "Save file"),
+            ("Save card.", "Save card"),
             ("Delete account.", "Delete"),
             ("Delete account.", "Delete", "Accounts"),
+            ("Delete section.", "Delete section"),
             ("Copy coupon.", "Copy"),
+            ("Archive card.", "Archive card"),
             ("Show sidebar.", "Show sidebar"),
             ("Hide sidebar.", "Hide sidebar"),
             ("Open details.", "Open details"),
@@ -15420,7 +15431,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        for instruction in ("Open view.", "Open task."):
+        for instruction in ("Open view.", "Open task.", "Click view button.", "Click task button."):
             with self.subTest(instruction=instruction):
                 target = resolve_help_target(
                     self._decision(
@@ -16018,6 +16029,46 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_fresh_snap_rejects_address_bar_url_content_wording(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        address = _make_button(
+            "about:blank | Address and search bar",
+            120,
+            160,
+            260,
+            32,
+            control_type="Edit",
+        )
+        desktop = _FakeDesktop(
+            [_make_window("about:blank - Google Chrome", 0, 0, 1000, 600, [address])]
+        )
+
+        for instruction in ("Open about.", "Open blank.", "Show info."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 260, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=lambda rect, text: snap_to_control(
+                        rect,
+                        text,
+                        desktop_factory=lambda: desktop,
+                        timeout_ms=2000,
+                    ),
+                )
+
+                self.assertEqual(target.source, "snap")
+                self.assertEqual(target.matched_text, "about:blank | Address and search bar")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_browser_about_blank_tab_rejects_site_info_wording(self) -> None:
         from control_inventory import ControlCandidate

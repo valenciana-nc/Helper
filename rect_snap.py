@@ -222,6 +222,40 @@ WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
         "users",
     }
 )
+ACTION_CONTEXT_OBJECT_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
+    {
+        "card",
+        "cards",
+        "dialog",
+        "dialogs",
+        "drawer",
+        "drawers",
+        "form",
+        "forms",
+        "grid",
+        "grids",
+        "modal",
+        "modals",
+        "page",
+        "pages",
+        "pane",
+        "panes",
+        "panel",
+        "panels",
+        "section",
+        "sections",
+        "sidebar",
+        "sidebars",
+        "table",
+        "tables",
+        "toolbar",
+        "toolbars",
+        "view",
+        "views",
+        "window",
+        "windows",
+    }
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -270,6 +304,12 @@ BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "u
 BROWSER_PAGE_TARGET_WORDS = frozenset({"page", "webpage"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
+BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
+    {"address", "bar", "location", "omnibox", "search", "url"}
+)
+BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
+    {"address", "find", "location", "omnibox", "search", "url"}
+)
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
@@ -516,6 +556,13 @@ def snap_to_control(
             window_title,
             rect,
         )
+        browser_address_bar_content_mismatch = _browser_address_bar_content_mismatch(
+            instruction,
+            instruction_tokens,
+            semantic_text,
+            ctype,
+            window_title,
+        )
         browser_new_tab_action_mismatch = _browser_new_tab_action_mismatch(
             instruction,
             instruction_tokens,
@@ -630,6 +677,7 @@ def snap_to_control(
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
             or browser_profile_page_action_mismatch
+            or browser_address_bar_content_mismatch
             or browser_new_tab_action_mismatch
             or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
@@ -1373,6 +1421,44 @@ def _browser_profile_page_action_mismatch(
     return bool(raw_control_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
 
 
+def _browser_address_bar_content_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if not _looks_like_browser_address_bar(semantic_text, ctype, window_title):
+        return False
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
+    if not (instruction_tokens & control_tokens):
+        return False
+    return not _instruction_requests_browser_address_bar(instruction)
+
+
+def _looks_like_browser_address_bar(
+    semantic_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"edit", "combobox"}:
+        return False
+    raw_tokens = _tokens_from_text(semantic_text or "")
+    if {"address", "bar"} <= raw_tokens:
+        return True
+    window_tokens = _tokens_from_text(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return bool(raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}))
+
+
+def _instruction_requests_browser_address_bar(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
+        return True
+    return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
+
+
 def _browser_new_tab_action_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -1816,6 +1902,24 @@ def _action_object_tokens(
     }
 
 
+def _instruction_action_object_tokens(
+    instruction: str,
+    action_tokens: frozenset[str],
+) -> set[str]:
+    tokens = set(_tokenize_instruction(instruction))
+    raw_tokens = _tokens_from_text(instruction)
+    tokens.update(raw_tokens & ACTION_CONTEXT_OBJECT_WORDS)
+    objects = _action_object_tokens(tokens, action_tokens, ACTION_OBJECT_STOPWORDS)
+    objects.update(_file_identity_object_tokens(raw_tokens))
+    if action_tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS):
+        objects -= {"add", "create", "new", "plus"}
+    return objects
+
+
+def _file_identity_object_tokens(tokens: set[str]) -> set[str]:
+    return set(FILE_IDENTITY_WORDS) if tokens & FILE_IDENTITY_WORDS else set()
+
+
 def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
     instruction_kind = _file_action_kind(_tokens_from_text(instruction), is_instruction=True)
     if not instruction_kind:
@@ -1848,12 +1952,18 @@ def _same_action_family_object_mismatch(instruction: str, candidate_text: str) -
     for family in EXCLUSIVE_ACTION_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
-        if _same_action_object_mismatch(
-            _tokenize_instruction(instruction),
-            _tokenize_control(candidate_text),
-            family,
-            ACTION_OBJECT_STOPWORDS,
-        ):
+        instruction_objects = _object_token_variants(
+            _instruction_action_object_tokens(instruction, family)
+        )
+        control_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_control(candidate_text),
+                family,
+                ACTION_OBJECT_STOPWORDS,
+            )
+            | _file_identity_object_tokens(control_raw_tokens)
+        )
+        if instruction_objects and control_objects and not (instruction_objects & control_objects):
             return True
     return False
 
@@ -1883,11 +1993,7 @@ def _same_action_family_window_context_mismatch(
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
-            _action_object_tokens(
-                _tokenize_instruction(instruction),
-                family,
-                ACTION_OBJECT_STOPWORDS,
-            )
+            _instruction_action_object_tokens(instruction, family)
         )
         if not instruction_objects:
             continue

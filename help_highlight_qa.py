@@ -5107,6 +5107,69 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "save_card_target_id_rejects_save_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Save profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save card.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save profile", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "save_document_model_rect_rejects_save_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Save profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save profile", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "archive_card_model_rect_rejects_archive_email_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Archive email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive card.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Archive email", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "save_action_target_id_accepts_floppy_disk_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -12693,6 +12756,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Open task.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Task View",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "automation_id": "TaskViewButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_view_button_model_rect_rejects_task_view_contained_fallback",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Task View"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click view button.",
                 "target": {"x": 20, "y": 80, "width": 120, "height": 32},
             },
             "candidates": [
