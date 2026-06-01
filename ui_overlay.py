@@ -125,6 +125,25 @@ def highlight_visible_on_screen(
     )
 
 
+def filter_highlights_for_screen(
+    highlights: list[OverlayHighlight],
+    screen_geometry: QRect,
+    *,
+    device_pixel_ratio: float = 1.0,
+    native_screen_geometry: QRect | None = None,
+) -> list[OverlayHighlight]:
+    return [
+        item
+        for item in highlights
+        if highlight_visible_on_screen(
+            item,
+            screen_geometry,
+            device_pixel_ratio=device_pixel_ratio,
+            native_screen_geometry=native_screen_geometry,
+        )
+    ]
+
+
 def screen_device_pixel_ratio(screen) -> float:
     try:
         return _safe_device_pixel_ratio(float(screen.devicePixelRatio()))
@@ -265,17 +284,12 @@ class OverlayWindow(QWidget):
         geometry = self.geometry()
         dpr = screen_device_pixel_ratio(self._screen)
         native_geometry = screen_native_geometry(self._screen)
-        self._highlights = [
-            item
-            for item in highlights
-            if highlight_visible_on_screen(
-                item,
-                geometry,
-                device_pixel_ratio=dpr,
-                native_screen_geometry=native_geometry,
-            )
-            is not None
-        ]
+        self._highlights = filter_highlights_for_screen(
+            highlights,
+            geometry,
+            device_pixel_ratio=dpr,
+            native_screen_geometry=native_geometry,
+        )
         if self._highlights:
             self.show()
             self.raise_()

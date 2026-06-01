@@ -93,6 +93,7 @@ class SnapResult:
     confidence: float
     source: str  # "uia" | "model"
     matched_text: str = ""
+    rejected_reason: str = ""
 
 
 def snap_to_control(
@@ -126,6 +127,7 @@ def snap_to_control(
 
     best_score = 0.0
     best_result: SnapResult | None = None
+    best_semantic_text = ""
 
     for control, rect in _iter_candidates(desktop, search_rect, deadline):
         ctype = _control_type(control)
@@ -134,9 +136,10 @@ def snap_to_control(
         if not _is_enabled(control) or not _is_visible(control):
             continue
         text = _control_text(control)
+        semantic_text = _control_semantic_text(control)
         score = _score(
             rect=rect,
-            text=text,
+            semantic_text=semantic_text,
             ctype=ctype,
             model_rect=model_rect,
             model_center=model_center,
@@ -145,11 +148,27 @@ def snap_to_control(
         )
         if score > best_score:
             best_score = score
+            best_semantic_text = semantic_text
             best_result = SnapResult(
                 rect=rect, confidence=score, source="uia", matched_text=text
             )
 
     if best_result is None or best_score < confidence_floor:
+        if (
+            best_result is not None
+            and _semantic_mismatch(
+                best_semantic_text,
+                instruction_tokens,
+            )
+            and _iou(best_result.rect, model_rect) >= 0.65
+        ):
+            return SnapResult(
+                rect=best_result.rect,
+                confidence=best_score,
+                source="uia",
+                matched_text=best_result.matched_text,
+                rejected_reason="candidate semantic mismatch",
+            )
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -264,6 +283,37 @@ def _control_text(control) -> str:
     return " | ".join(parts)
 
 
+def _control_visible_text(control) -> str:
+    parts: list[str] = []
+    try:
+        text = (control.window_text() or "").strip()
+        if text:
+            parts.append(text)
+    except Exception:
+        pass
+    try:
+        name = (getattr(control.element_info, "name", "") or "").strip()
+        if name and name not in parts:
+            parts.append(name)
+    except Exception:
+        pass
+    return " | ".join(parts)
+
+
+def _control_automation_id(control) -> str:
+    try:
+        return (getattr(control.element_info, "automation_id", "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _control_semantic_text(control) -> str:
+    visible = _control_visible_text(control)
+    if visible:
+        return visible
+    return _control_automation_id(control)
+
+
 def _is_enabled(control) -> bool:
     try:
         return bool(control.is_enabled())
@@ -296,6 +346,11 @@ def _tokenize_control(text: str) -> set[str]:
     return _expand_token_aliases(set(_TOKEN_RE.findall((text or "").lower())))
 
 
+def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
+    control_tokens = _tokenize_control(text)
+    return bool(instruction_tokens and control_tokens and not (instruction_tokens & control_tokens))
+
+
 def _expand_token_aliases(tokens: set[str]) -> set[str]:
     expanded = set(tokens)
     for token in tokens:
@@ -306,7 +361,7 @@ def _expand_token_aliases(tokens: set[str]) -> set[str]:
 def _score(
     *,
     rect: tuple[int, int, int, int],
-    text: str,
+    semantic_text: str,
     ctype: str,
     model_rect: tuple[int, int, int, int],
     model_center: tuple[int, int],
@@ -319,7 +374,7 @@ def _score(
     distance = ((cx - mx) ** 2 + (cy - my) ** 2) ** 0.5
     proximity = max(0.0, 1.0 - min(1.0, distance / diagonal))
 
-    control_tokens = _tokenize_control(text)
+    control_tokens = _tokenize_control(semantic_text)
     overlap = instruction_tokens & control_tokens
     if instruction_tokens and control_tokens:
         text_score = len(overlap) / max(1, len(instruction_tokens))

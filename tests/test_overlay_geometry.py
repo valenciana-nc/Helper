@@ -105,6 +105,28 @@ class OverlayGeometryTests(unittest.TestCase):
         self.assertTrue(highlight_visible_on_screen(highlight, primary))
         self.assertFalse(highlight_visible_on_screen(highlight, secondary))
 
+    def test_filter_removes_anchored_highlight_from_secondary_screen(self) -> None:
+        from ui_overlay import OverlayHighlight, filter_highlights_for_screen
+
+        secondary = QRect(1920, 0, 1920, 1080)
+        highlight = OverlayHighlight(
+            x=1895,
+            y=100,
+            width=48,
+            height=48,
+            label="Click",
+            anchor_x=1919,
+            anchor_y=124,
+        )
+
+        visible = filter_highlights_for_screen(
+            [highlight],
+            secondary,
+            native_screen_geometry=secondary,
+        )
+
+        self.assertEqual(visible, [])
+
     def test_label_clamps_inside_top_right_edge(self) -> None:
         from ui_overlay import place_label_rect
 

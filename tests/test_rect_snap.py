@@ -234,8 +234,29 @@ class SnapToControlTests(unittest.TestCase):
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
-        self.assertEqual(result.source, "model")
+        self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_snap_rejects_visible_text_conflict_despite_matching_automation_id(self) -> None:
+        from rect_snap import snap_to_control
+
+        cancel = _make_button("Cancel", 100, 200, 60, 30, automation_id="saveButton")
+        window = _make_window("App", 0, 0, 800, 600, [cancel])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 200, 60, 30)
+
+        result = snap_to_control(
+            model_rect,
+            "Click Save",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+        self.assertIn("saveButton", result.matched_text)
 
     def test_snap_uses_common_ui_label_synonyms(self) -> None:
         from rect_snap import snap_to_control
@@ -1171,6 +1192,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(calls)
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_rejected_fresh_snap_does_not_fall_back_to_raw_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        model_rect = (120, 160, 80, 32)
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 120, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=model_rect,
+                confidence=0.41,
+                source="uia",
+                matched_text="Cancel saveButton",
+                rejected_reason="candidate semantic mismatch",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, model_rect)
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_oversized_model_rect_is_rejected(self) -> None:
         from help_session import resolve_help_target

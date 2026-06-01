@@ -47,6 +47,7 @@ CANDIDATE_EMPTY_RETRY_SEC = 0.08
 UIA_BACKED_TARGET_SOURCES = frozenset(
     {"target_id", "text_match", "candidate_snap", "snap"}
 )
+MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -237,6 +238,15 @@ def resolve_help_target(
         log.exception("snap_to_control raised")
         snap = SnapResult(rect=model_rect, confidence=0.0, source="model")
 
+    if snap.rejected_reason:
+        return TargetResolution(
+            rect=snap.rect,
+            confidence=snap.confidence,
+            source="snap",
+            matched_text=snap.matched_text,
+            rejected_reason=snap.rejected_reason,
+        )
+
     if snap.source == "uia":
         if candidates:
             return TargetResolution(
@@ -304,7 +314,13 @@ def _guard_revalidated_target(
     """Reject rechecks that no longer point near the originally resolved target."""
     if target.rejected_reason:
         return target
-    if _within_revalidation_drift(previous_target.rect, target.rect):
+    if _same_revalidation_geometry(previous_target.rect, target.rect):
+        return target
+    if (
+        _within_revalidation_drift(previous_target.rect, target.rect)
+        and _revalidation_overlap_fraction(previous_target.rect, target.rect)
+        >= MIN_REVALIDATION_OVERLAP_FRACTION
+    ):
         return target
     if not decision.target_id or target.source != "target_id":
         return replace(target, rejected_reason="current screen recheck target changed")
@@ -320,6 +336,8 @@ def _guard_revalidated_target(
         not independent.rejected_reason
         and _same_revalidated_target(target, independent)
         and _within_revalidation_drift(previous_target.rect, target.rect)
+        and _revalidation_overlap_fraction(previous_target.rect, target.rect)
+        >= MIN_REVALIDATION_OVERLAP_FRACTION
     ):
         return target
     if _same_revalidation_geometry(previous_target.rect, target.rect):
@@ -346,6 +364,19 @@ def _same_revalidation_geometry(
     max_drift = max(8.0, min(a[2], a[3], b[2], b[3]) * 0.35)
     distance = ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
     return distance <= max_drift
+
+
+def _revalidation_overlap_fraction(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> float:
+    inter = _intersection_rect(a, b)
+    if inter is None:
+        return 0.0
+    inter_area = inter[2] * inter[3]
+    a_area = max(1, a[2] * a[3])
+    b_area = max(1, b[2] * b[3])
+    return inter_area / max(1, min(a_area, b_area))
 
 
 def _within_revalidation_drift(
