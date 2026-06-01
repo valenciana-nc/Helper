@@ -604,11 +604,11 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(tokenize_instruction("Open tab search"), {"tab_search"})
         self.assertEqual(tokenize_instruction("Open Windows search"), {"windows_search"})
         self.assertEqual(tokenize_instruction("Search Windows"), {"windows_search"})
-        self.assertTrue(
-            {"find", "search", "tab_search", "tabs"}.issubset(
-                tokenize_control("Search tabs")
-            )
-        )
+        search_tabs_tokens = tokenize_control("Search tabs")
+        self.assertTrue({"find", "search", "tab_search"}.issubset(search_tabs_tokens))
+        self.assertNotIn("tabs", search_tabs_tokens)
+        self.assertIn("tabitem", instruction_control_intents("Show tabs"))
+        self.assertIn("tabitem", instruction_control_intents("Highlight tabs"))
         self.assertNotIn("tabitem", instruction_control_intents("Open tab search"))
         self.assertNotIn("windows_search", tokenize_control("Search tabs"))
 
@@ -8527,6 +8527,89 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_tabs_do_not_resolve_to_tab_search_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Search tabs",
+                "button",
+                (120, 160, 100, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+            ControlCandidate(
+                "c002",
+                "about:blank",
+                "tabitem",
+                (240, 160, 220, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+        ]
+        for instruction in ("Show tabs.", "Highlight tabs."):
+            with self.subTest(instruction=instruction):
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=None,
+                )
+                self.assertIsNone(text_target)
+
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(
+                    target.rejected_reason,
+                    "target_id control type mismatch",
+                )
+
+    def test_explicit_tab_search_text_match_accepts_search_tabs_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Search tabs",
+                "button",
+                (120, 160, 100, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+            ControlCandidate(
+                "c002",
+                "about:blank",
+                "tabitem",
+                (240, 160, 220, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+        ]
+        for instruction in ("Open tab search.", "Search tabs."):
+            with self.subTest(instruction=instruction):
+                target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=None,
+                )
+
+                self.assertIsNotNone(target)
+                assert target is not None
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
 
     def test_generic_search_rejects_ambiguous_tab_and_windows_search_targets(self) -> None:
         from control_inventory import ControlCandidate

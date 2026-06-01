@@ -60,7 +60,7 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
     (
         re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
-        {"find", "search", "tab_search", "tabs"},
+        {"find", "search", "tab_search"},
     ),
     (re.compile(r"\bshow\s+desktop\b"), {"show_desktop"}),
     (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),
@@ -1012,7 +1012,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_DISCLOSURE_INTENT_TYPES)
     if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
-    if "tab" in raw_tokens:
+    if raw_tokens & {"tab", "tabs"}:
         intents.add("tabitem")
     if "tabitem" in raw_tokens:
         intents.add("tabitem")

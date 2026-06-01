@@ -2123,6 +2123,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_tabs_rejects_chrome_tab_search_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Search tabs"},
+                {"rect": [180, 80, 220, 32], "label": "about:blank"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Highlight tabs.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "about:blank",
+                    "control_type": "tabitem",
+                    "rect": [180, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "tab_search_rejects_windows_search_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
