@@ -2761,6 +2761,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_desktop_rejects_show_desktop_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 12, 32], "label": "Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open desktop.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Desktop",
+                    "control_type": "button",
+                    "rect": [20, 80, 12, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bare_desktop_model_rect_rejects_show_desktop_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 12, 32], "label": "Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click desktop.",
+                "target": {"x": 20, "y": 80, "width": 12, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Desktop",
+                    "control_type": "button",
+                    "rect": [20, 80, 12, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "maximize_window_target_id_accepts_square_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

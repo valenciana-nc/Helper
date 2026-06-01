@@ -362,6 +362,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(tokenize_instruction("Minimize all windows"), {"show_desktop"})
         self.assertEqual(tokenize_instruction("Minimise all windows"), {"show_desktop"})
         self.assertEqual(tokenize_instruction("Hide all windows"), {"show_desktop"})
+        self.assertIn("show_desktop", tokenize_instruction("Show desktop"))
         self.assertTrue({"minimize", "minus"}.issubset(tokenize_instruction("Minimise window")))
         self.assertIn("maximize", tokenize_instruction("Maximize window"))
         self.assertTrue({"restore", "overlap"}.issubset(tokenize_instruction("Restore window")))
@@ -377,6 +378,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("zoom_out", tokenize_control("Minimize"))
         self.assertNotIn("minimize", tokenize_control("Zoom out"))
         self.assertNotIn("show_desktop", tokenize_instruction("Minimize window"))
+        self.assertNotIn("show_desktop", tokenize_instruction("Open desktop"))
         self.assertNotIn("minimize", tokenize_instruction("Minimize all windows"))
 
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
@@ -1146,6 +1148,48 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_bare_desktop_does_not_snap_taskbar_show_desktop_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        show_desktop = _make_button("Show Desktop", 100, 560, 12, 40)
+        window = _make_window("Taskbar", 0, 540, 800, 60, [show_desktop])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 560, 12, 40)
+
+        for instruction in ("Open desktop.", "Click desktop."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_show_desktop_phrase_still_snaps_taskbar_show_desktop_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        show_desktop = _make_button("Show Desktop", 100, 560, 12, 40)
+        window = _make_window("Taskbar", 0, 540, 800, 60, [show_desktop])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 560, 12, 40)
+
+        for instruction in ("Show desktop.", "Minimize all windows.", "Hide all windows."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertFalse(result.rejected_reason)
 
     def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
         from rect_snap import snap_to_control
@@ -9944,6 +9988,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from help_session import resolve_help_target
 
         cases = (
+            "Show desktop.",
             "Minimize all windows.",
             "Minimise all windows.",
             "Hide all windows.",
@@ -9983,6 +10028,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Minimize all windows.", "Minimize", "about:blank - Google Chrome"),
             ("Hide all windows.", "Minimize", "about:blank - Google Chrome"),
             ("Minimize window.", "Show Desktop", "Taskbar"),
+            ("Open desktop.", "Show Desktop", "Taskbar"),
+            ("Click desktop.", "Show Desktop", "Taskbar"),
         )
         for instruction, label, window_title in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10009,6 +10056,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_bare_desktop_text_match_ignores_show_desktop(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open desktop.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Show Desktop",
+                    "button",
+                    (120, 160, 12, 32),
+                    window_title="Taskbar",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
+    def test_bare_desktop_model_rect_rejects_show_desktop_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open desktop.",
+                    "target": {
+                        "x": 120,
+                        "y": 160,
+                        "width": 12,
+                        "height": 32,
+                    },
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Show Desktop",
+                    "button",
+                    (120, 160, 12, 32),
+                    window_title="Taskbar",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_window_control_text_match_overrides_nearby_toolbar_geometry(self) -> None:
         from control_inventory import ControlCandidate

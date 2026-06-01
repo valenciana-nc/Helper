@@ -81,6 +81,7 @@ TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
 TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
     {"icons", "notification_area", "system_tray", "tray"}
 )
+TASKBAR_SHOW_DESKTOP_REQUEST_WORDS = frozenset({"show_desktop"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1142,6 +1143,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -1229,6 +1232,8 @@ def _context_text_match_score(
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1374,6 +1379,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -2009,6 +2020,17 @@ def _taskbar_hidden_icons_action_mismatch(
     return not bool(instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS)
 
 
+def _taskbar_show_desktop_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_taskbar_show_desktop_button(candidate):
+        return False
+    if "desktop" not in instruction_tokens:
+        return False
+    return not bool(instruction_tokens & TASKBAR_SHOW_DESKTOP_REQUEST_WORDS)
+
+
 def _looks_like_taskbar_hidden_icons_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
@@ -2017,6 +2039,16 @@ def _looks_like_taskbar_hidden_icons_button(candidate: ControlCandidate) -> bool
         return False
     text_tokens = _tokens_from_text(candidate.text)
     return {"hidden", "icons"} <= text_tokens
+
+
+def _looks_like_taskbar_show_desktop_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    text_tokens = _candidate_visible_text_tokens(candidate)
+    return "show_desktop" in text_tokens or {"show", "desktop"} <= text_tokens
 
 
 def _looks_like_taskbar_start_button(candidate: ControlCandidate) -> bool:
@@ -2573,6 +2605,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2902,6 +2936,8 @@ def _candidate_snap_semantic_mismatch(
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return True
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
         return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True

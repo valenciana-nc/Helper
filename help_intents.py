@@ -45,6 +45,7 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
         {"external", "new_window", "open_new"},
     ),
     (re.compile(r"\bopen\s+in\s+new\b"), {"external", "open_new"}),
+    (re.compile(r"\bshow\s+(?:the\s+)?desktop\b"), {"show_desktop"}),
     (re.compile(r"\bzoom\s+in\b"), {"zoom_in"}),
     (re.compile(r"\bzoom\s+out\b"), {"zoom_out"}),
 )
