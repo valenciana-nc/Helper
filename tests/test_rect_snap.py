@@ -130,6 +130,39 @@ def _make_window(
     )
 
 
+class HelpIntentLanguageTests(unittest.TestCase):
+    def test_file_action_aliases_expand_to_browse_language(self) -> None:
+        from help_intents import tokenize_instruction
+
+        tokens = tokenize_instruction("Upload a file")
+
+        self.assertIn("browse", tokens)
+        self.assertIn("choose", tokens)
+        self.assertIn("attach", tokens)
+
+    def test_picker_and_selector_intents_split_by_context(self) -> None:
+        from help_intents import instruction_control_intents
+
+        date_picker_intents = instruction_control_intents("Open the date picker")
+        country_selector_intents = instruction_control_intents("Open the country selector")
+
+        self.assertTrue(
+            {"button", "splitbutton", "edit", "combobox"}.issubset(date_picker_intents)
+        )
+        self.assertEqual(country_selector_intents, {"combobox"})
+
+    def test_iconic_disclosure_and_menu_launcher_intents(self) -> None:
+        from help_intents import instruction_control_intents, menu_segment_intent
+
+        chevron_intents = instruction_control_intents("Click the chevron")
+        overflow_intents = instruction_control_intents("Open the overflow menu")
+        menu_item_intents = instruction_control_intents("Open the file menu")
+
+        self.assertTrue({"button", "splitbutton"}.issubset(chevron_intents))
+        self.assertEqual(overflow_intents, {"button", "splitbutton"})
+        self.assertTrue(menu_segment_intent(menu_item_intents))
+
+
 class SnapToControlTests(unittest.TestCase):
     def test_snaps_to_nearby_button_with_matching_text(self) -> None:
         from rect_snap import snap_to_control
