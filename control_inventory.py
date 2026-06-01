@@ -296,6 +296,9 @@ BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
     {"bookmarks", "downloads", "extensions", "history", "home", "reload", "sidepanel"}
 )
+BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS = frozenset(
+    {"copy", "print", "save", "share"}
+)
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
@@ -2712,6 +2715,12 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
         return True
     text_tokens = _tokens_from_text(candidate.text)
     compact_toolbar_shape = max(candidate.rect[2], candidate.rect[3]) <= 56
+    if (
+        automation_id in BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS
+        and compact_toolbar_shape
+        and candidate.rect[1] <= 72
+    ):
+        return True
     return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and compact_toolbar_shape)
 
 
@@ -2732,6 +2741,8 @@ def _instruction_requests_app_local_surface(
     raw_tokens: set[str],
 ) -> bool:
     if raw_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
+        return True
+    if raw_tokens & ACTION_OBJECT_ALIAS_CONTEXT_WORDS:
         return True
     text = (instruction or "").lower()
     return bool(

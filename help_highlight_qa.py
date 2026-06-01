@@ -4470,6 +4470,39 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "share_selected_text_recovers_from_generic_chrome_share_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 80, 32], "label": "Share"},
+                {"rect": [760, 8, 42, 34], "label": "Share"},
+                {"rect": [220, 210, 460, 260], "label": "Body text"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Share selected text.",
+                "target_id": "chrome_share",
+                "target": {"x": 760, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {"id": "editor_share", "text": "Share", "control_type": "button", "rect": [120, 160, 80, 32]},
+                {
+                    "id": "chrome_share",
+                    "text": "Share",
+                    "control_type": "button",
+                    "rect": [760, 8, 42, 34],
+                    "automation_id": "share",
+                    "window_title": "Chrome",
+                },
+                {"id": "body", "text": "Body text", "control_type": "edit", "rect": [220, 210, 460, 260]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "editor_share",
+                "rect": [120, 160, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "cut_action_target_id_accepts_scissors_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -15357,6 +15357,54 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("editor_save", "Save", "button", (120, 160, 80, 32)),
                 ControlCandidate("page_save", "Save page", "button", (760, 8, 80, 34)),
             ),
+            (
+                "Share selected text.",
+                ControlCandidate("editor_share", "Share", "button", (120, 160, 80, 32)),
+                ControlCandidate(
+                    "chrome_share",
+                    "Share",
+                    "button",
+                    (760, 8, 42, 34),
+                    automation_id="share",
+                    window_title="Chrome",
+                ),
+            ),
+            (
+                "Print selected text.",
+                ControlCandidate("editor_print", "Print", "button", (120, 160, 80, 32)),
+                ControlCandidate(
+                    "chrome_print",
+                    "Print",
+                    "button",
+                    (760, 8, 42, 34),
+                    automation_id="print",
+                    window_title="Chrome",
+                ),
+            ),
+            (
+                "Save selected text.",
+                ControlCandidate("editor_save", "Save", "button", (120, 160, 80, 32)),
+                ControlCandidate(
+                    "chrome_save",
+                    "Save",
+                    "button",
+                    (760, 8, 42, 34),
+                    automation_id="save",
+                    window_title="Chrome",
+                ),
+            ),
+            (
+                "Copy selected text.",
+                ControlCandidate("editor_copy", "Copy", "button", (120, 160, 80, 32)),
+                ControlCandidate(
+                    "chrome_copy",
+                    "Copy",
+                    "button",
+                    (760, 8, 42, 34),
+                    automation_id="copy",
+                    window_title="Chrome",
+                ),
+            ),
         )
         for instruction, expected, wrong in cases:
             with self.subTest(instruction=instruction):
