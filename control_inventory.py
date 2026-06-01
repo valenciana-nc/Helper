@@ -218,6 +218,7 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
         "with",
     }
 )
+CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS = frozenset({"field", "fields", "invoice", "invoices"})
 CONTEXTUAL_DUPLICATE_POSITION_WORDS = frozenset(
     {
         "1",
@@ -952,7 +953,46 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 )
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
-SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane", "window"})
+SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
+SURFACE_CONTEXT_TYPE_WORDS = {
+    "group": frozenset({"group"}),
+    "headeritem": frozenset({"column", "header", "heading"}),
+    "menu": frozenset({"menu"}),
+    "pane": frozenset({"pane"}),
+    "toolbar": frozenset({"toolbar"}),
+    "window": frozenset({"window"}),
+}
+CONTAINED_CONTROL_REQUEST_WORDS = frozenset(
+    {
+        "arrow",
+        "bar",
+        "button",
+        "checkbox",
+        "combo",
+        "combobox",
+        "dropdown",
+        "edit",
+        "field",
+        "headeritem",
+        "hyperlink",
+        "icon",
+        "input",
+        "item",
+        "link",
+        "menuitem",
+        "option",
+        "radio",
+        "radiobutton",
+        "slider",
+        "spinner",
+        "splitbutton",
+        "switch",
+        "tab",
+        "tabitem",
+        "textbox",
+        "toggle",
+    }
+)
 COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -1337,11 +1377,17 @@ def resolve_candidate_target(
         return dialog_dismiss
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
-        if control_intents and not _candidate_matches_control_intent(
+        matches_control_intent = _candidate_matches_control_intent(
             candidate,
             control_intents,
             instruction=instruction,
-        ):
+        ) or _contextual_action_candidate_matches_surface_request(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+        )
+        if control_intents and not matches_control_intent:
             score = _context_text_match_score(
                 instruction,
                 instruction_tokens,
@@ -1353,11 +1399,7 @@ def resolve_candidate_target(
             score = _text_match_score(instruction, candidate, candidates, model_rect)
         score += _foreground_rank_bonus(candidate, candidates, model_rect=model_rect)
         if score > 0:
-            if not _candidate_matches_control_intent(
-                candidate,
-                control_intents,
-                instruction=instruction,
-            ):
+            if not matches_control_intent:
                 contained = _single_contained_control_intent_candidate(
                     candidates=candidates,
                     model_rect=candidate.rect,
@@ -1877,6 +1919,8 @@ def _text_match_score(
         return 0.0
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
+    if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR
         if model_rect is not None:
@@ -2037,6 +2081,8 @@ def _context_text_match_score(
     if _browser_tab_generic_section_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
+        return 0.0
+    if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -2417,6 +2463,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
         )
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return (
@@ -3089,6 +3141,40 @@ def _combobox_dropdown_arrow_match(
     if control_tokens and not (control_tokens & COMBOBOX_DROPDOWN_ARROW_CONTROL_WORDS):
         return False
     return _has_adjacent_combobox(candidate, candidates)
+
+
+def _dropdown_option_launcher_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    dropdown_requested = (
+        "dropdown" in raw_tokens
+        or "combobox" in raw_tokens
+        or "combo" in raw_tokens
+        or {"drop", "down"} <= raw_tokens
+    )
+    if not dropdown_requested:
+        return False
+    if raw_tokens & {"menuitem", "option", "options"}:
+        return False
+    if candidate.control_type != "menuitem":
+        return False
+    candidate_tokens = _candidate_visible_text_tokens(candidate)
+    if not candidate_tokens:
+        return False
+    for launcher in candidates:
+        if launcher.id == candidate.id or _same_visual_candidate(launcher, candidate):
+            continue
+        if launcher.control_type not in {"combobox", "edit"}:
+            continue
+        launcher_tokens = _candidate_visible_text_tokens(launcher)
+        if not launcher_tokens:
+            continue
+        if _text_evidence_score(candidate_tokens, launcher_tokens) >= TARGET_ID_TEXT_FLOOR:
+            return True
+    return False
 
 
 def _has_combobox_dropdown_arrow_button(
@@ -4284,10 +4370,10 @@ def _unresolved_contextual_duplicate_mismatch(
     if not has_duplicate:
         return False
     evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
-    requested_positions = requested_context & CONTEXTUAL_DUPLICATE_POSITION_WORDS
-    if requested_positions and not (requested_positions <= evidence_tokens):
-        return True
-    return not bool(requested_context & evidence_tokens)
+    return not _contextual_duplicate_request_matches_evidence(
+        requested_context,
+        evidence_tokens,
+    )
 
 
 def _candidate_satisfies_contextual_duplicate_request(
@@ -4299,9 +4385,41 @@ def _candidate_satisfies_contextual_duplicate_request(
     if not requested_context:
         return False
     evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    return _contextual_duplicate_request_matches_evidence(
+        requested_context,
+        evidence_tokens,
+    )
+
+
+def _contextual_action_candidate_matches_surface_request(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    if not visible_tokens or not (instruction_tokens & visible_tokens):
+        return False
+    return _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    )
+
+
+def _contextual_duplicate_request_matches_evidence(
+    requested_context: set[str],
+    evidence_tokens: set[str],
+) -> bool:
     requested_positions = requested_context & CONTEXTUAL_DUPLICATE_POSITION_WORDS
     if requested_positions and not (requested_positions <= evidence_tokens):
         return False
+    required_identity = requested_context - requested_positions - CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    required_identity -= CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS
+    if required_identity:
+        return required_identity <= evidence_tokens
     return bool(requested_context & evidence_tokens)
 
 
@@ -4337,8 +4455,10 @@ def _contextual_duplicate_evidence_tokens(
     candidates: list[ControlCandidate],
 ) -> set[str]:
     tokens = set(_candidate_semantic_tokens(candidate))
+    tokens.update(_surface_context_type_tokens(candidate.control_type))
     tokens.update(_tokenize_control(candidate.window_title))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
+    tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
     if any(candidate.window_rank > other.window_rank for other in candidates):
         tokens.add("modal")
     for context in candidates:
@@ -4351,8 +4471,36 @@ def _contextual_duplicate_evidence_tokens(
         tokens.update(_candidate_semantic_tokens(context))
         tokens.update(_tokens_from_text(context.descriptor))
         tokens.update(_tokens_from_text(context.control_type))
+        tokens.update(_surface_context_type_tokens(context.control_type))
         tokens.update(_tokenize_control(context.window_title))
     return _object_token_variants(tokens)
+
+
+def _surface_context_type_tokens(control_type: str) -> set[str]:
+    tokens = set(_tokens_from_text(control_type))
+    tokens.update(SURFACE_CONTEXT_TYPE_WORDS.get(control_type, frozenset()))
+    return tokens
+
+
+def _contextual_duplicate_aligned_header_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    cx, _cy = _center(candidate.rect)
+    tokens: set[str] = set()
+    for header in candidates:
+        if header.id == candidate.id or header.control_type != "headeritem":
+            continue
+        if header.rect[1] > candidate.rect[1]:
+            continue
+        header_left, _header_top, header_width, _header_height = header.rect
+        if not (header_left - 2 <= cx <= header_left + header_width + 2):
+            continue
+        tokens.update(_candidate_semantic_tokens(header))
+        tokens.update(_tokens_from_text(header.descriptor))
+        tokens.update(_surface_context_type_tokens(header.control_type))
+        tokens.update(_tokenize_control(header.window_title))
+    return tokens
 
 
 def _contextual_duplicate_position_tokens(
@@ -5413,6 +5561,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         return min(1.0, 0.45 * iou + 0.30 * proximity + 0.20)
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
@@ -5423,6 +5573,12 @@ def _candidate_snap_score(
             candidate,
             control_intents,
             instruction=instruction,
+        )
+        and not _contextual_action_candidate_matches_surface_request(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
         )
     ):
         return 0.0
@@ -5585,6 +5741,7 @@ def _instruction_requests_contained_surface_action(
         _candidate_semantic_tokens(selected)
         | _tokens_from_text(selected.descriptor)
         | _tokens_from_text(selected.control_type)
+        | _surface_context_type_tokens(selected.control_type)
     )
     return bool(_object_token_variants(requested_surfaces) & _object_token_variants(selected_tokens))
 
@@ -5696,6 +5853,15 @@ def _single_contained_control_intent_candidate(
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
+        if _container_only_request_blocks_contained_candidate(
+            instruction=instruction,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+            candidate=candidate,
+            candidates=candidates,
+            model_rect=model_rect,
+        ):
+            continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
             continue
         if _browser_chrome_app_context_mismatch(instruction, candidate):
@@ -5756,6 +5922,8 @@ def _single_contained_control_intent_candidate(
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
+        if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
+            continue
         if instruction_tokens and not _contained_control_intent_has_evidence(
             candidate=candidate,
             candidates=candidates,
@@ -5772,6 +5940,48 @@ def _single_contained_control_intent_candidate(
     if contained_actions:
         return contained_actions[0]
     return contained[0] if contained else None
+
+
+def _container_only_request_blocks_contained_candidate(
+    *,
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+        return False
+    if raw_tokens & {"for", "in", "inside", "on", "within"}:
+        return False
+    if raw_tokens & CONTAINED_CONTROL_REQUEST_WORDS:
+        return False
+    if not _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    ):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if instruction_tokens & candidate_tokens:
+        return False
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        if _geometry_agreement(context.rect, model_rect) < TARGET_ID_GEOMETRY_FLOOR:
+            continue
+        context_tokens = (
+            _candidate_semantic_tokens(context)
+            | _tokens_from_text(context.descriptor)
+            | _surface_context_type_tokens(context.control_type)
+        )
+        if _text_evidence_score(instruction_tokens, _object_token_variants(context_tokens)) >= TARGET_ID_TEXT_FLOOR:
+            return True
+    return False
 
 
 def _contained_control_intent_has_evidence(

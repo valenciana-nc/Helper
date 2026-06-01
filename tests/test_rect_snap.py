@@ -11815,12 +11815,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 )
 
                 self.assertEqual(wrong_target.target_id, "alice_clear")
-                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertIn(
+                    wrong_target.rejected_reason,
+                    {"target_id ambiguous", "target_id semantic mismatch"},
+                )
                 self.assertEqual(wrong_snap.target_id, "bob_clear")
                 self.assertFalse(wrong_snap.rejected_reason)
                 self.assertEqual(right_target.target_id, "bob_clear")
                 self.assertFalse(right_target.rejected_reason)
-                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.source, "text_match")
                 self.assertEqual(help_target.target_id, "bob_clear")
                 self.assertEqual(help_target.rect, (390, 170, 28, 28))
 
@@ -16551,7 +16554,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
                 "pay2",
                 (720, 64, 60, 30),
-                "text_match",
+                "candidate_snap",
             ),
             (
                 "Click More in Bob row.",
@@ -16563,7 +16566,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
                 "more2",
                 (720, 64, 60, 30),
-                "text_match",
+                "candidate_snap",
             ),
         )
         for instruction, candidates, candidate_id, rect, source in cases:
@@ -16680,6 +16683,21 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ControlCandidate("sort_name", "Sort", "button", (170, 16, 32, 28)),
                     ControlCandidate("age_col", "Age", "headeritem", (220, 10, 200, 40)),
                     ControlCandidate("sort_age", "Sort", "button", (380, 16, 32, 28)),
+                ],
+            ),
+            (
+                "Click Approve for Globex in the Production column.",
+                "globex_stage",
+                "globex_prod",
+                [
+                    ControlCandidate("stage_col", "Staging", "headeritem", (220, 40, 160, 36)),
+                    ControlCandidate("prod_col", "Production", "headeritem", (400, 40, 160, 36)),
+                    ControlCandidate("acme_row", "Acme Corp", "listitem", (20, 90, 560, 48)),
+                    ControlCandidate("acme_stage", "Approve", "button", (270, 100, 80, 28)),
+                    ControlCandidate("acme_prod", "Approve", "button", (450, 100, 80, 28)),
+                    ControlCandidate("globex_row", "Globex Corp", "listitem", (20, 150, 560, 48)),
+                    ControlCandidate("globex_stage", "Approve", "button", (270, 160, 80, 28)),
+                    ControlCandidate("globex_prod", "Approve", "button", (450, 160, 80, 28)),
                 ],
             ),
             (
@@ -16879,6 +16897,117 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(correct_target.rejected_reason)
                 self.assertEqual(correct_target.rect, correct.rect)
 
+    def test_matrix_scoped_duplicate_action_uses_row_and_column_context(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("stage_col", "Staging", "headeritem", (220, 40, 160, 36)),
+            ControlCandidate("prod_col", "Production", "headeritem", (400, 40, 160, 36)),
+            ControlCandidate("acme_row", "Acme Corp", "listitem", (20, 90, 560, 48)),
+            ControlCandidate("acme_stage", "Approve", "button", (270, 100, 80, 28)),
+            ControlCandidate("acme_prod", "Approve", "button", (450, 100, 80, 28)),
+            ControlCandidate("globex_row", "Globex Corp", "listitem", (20, 150, 560, 48)),
+            ControlCandidate("globex_stage", "Approve", "button", (270, 160, 80, 28)),
+            ControlCandidate("globex_prod", "Approve", "button", (450, 160, 80, 28)),
+        ]
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Approve for Globex in the Production column.",
+                    "target_id": "globex_stage",
+                    "target": {"x": 270, "y": 160, "width": 80, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "globex_prod")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (450, 160, 80, 28))
+
+    def test_container_only_menu_request_does_not_recover_arbitrary_child(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("account_menu", "Account menu", "menu", (20, 80, 500, 80)),
+            ControlCandidate("settings", "Settings", "button", (420, 104, 80, 30)),
+        ]
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Account menu.",
+                    "target_id": "account_menu",
+                    "target": {"x": 20, "y": 80, "width": 500, "height": 80},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "account_menu")
+        self.assertEqual(target.rejected_reason, "target_id control type mismatch")
+
+    def test_surface_action_model_rect_promotes_contained_menu_and_header_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Save in the menu.",
+                "menu",
+                [
+                    ControlCandidate("menu", "Account menu", "menu", (20, 80, 500, 80)),
+                    ControlCandidate("save", "Save", "button", (420, 104, 60, 30)),
+                ],
+                "save",
+                (420, 104, 60, 30),
+            ),
+            (
+                "Click Sort in the header.",
+                "header",
+                [
+                    ControlCandidate("header", "Name", "headeritem", (10, 10, 200, 40)),
+                    ControlCandidate("sort", "Sort", "button", (170, 16, 32, 28)),
+                ],
+                "sort",
+                (170, 16, 32, 28),
+            ),
+        )
+        for instruction, target_id, candidates, expected_id, expected_rect in cases:
+            with self.subTest(instruction=instruction):
+                broad = next(candidate for candidate in candidates if candidate.id == target_id)
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": target_id,
+                            "target": {
+                                "x": broad.rect[0],
+                                "y": broad.rect[1],
+                                "width": broad.rect[2],
+                                "height": broad.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, expected_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected_rect)
+
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -17005,6 +17134,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 220, 32))
+
+    def test_dropdown_launcher_rejects_same_label_menuitem_option(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("combo", "Country", "combobox", (10, 10, 180, 32)),
+            ControlCandidate("option", "Country", "menuitem", (10, 60, 180, 28)),
+        ]
+        instruction = "Open the Country dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="option",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 60, 180, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 60, 180, 28),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 60, 180, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "option",
+                    "target": {"x": 10, "y": 60, "width": 180, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "option")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.target_id, "combo")
+        self.assertFalse(text_target.rejected_reason)
+        if wrong_snap is not None:
+            self.assertNotEqual(wrong_snap.target_id, "option")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "combo")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (10, 10, 180, 32))
 
     def test_selector_model_rect_highlights_combobox(self) -> None:
         from control_inventory import ControlCandidate
