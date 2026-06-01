@@ -13999,6 +13999,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "popup_context_recovers_to_automation_only_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 70, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings popup"},
+                {"rect": [630, 160, 32, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the popup.",
+                "target_id": "main_save",
+                "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "main_save", "text": "Save", "control_type": "button", "rect": [100, 100, 70, 30]},
+                {"id": "popup", "text": "Settings popup", "control_type": "window", "rect": [420, 80, 300, 120]},
+                {
+                    "id": "popup_save",
+                    "text": "",
+                    "automation_id": "save_button",
+                    "control_type": "button",
+                    "rect": [630, 160, 32, 32],
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "popup_save",
+                "rect": [630, 160, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "card_context_recovers_from_modal_duplicate_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

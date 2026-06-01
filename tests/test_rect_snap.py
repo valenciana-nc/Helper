@@ -16823,6 +16823,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
             ),
             (
+                "Click Save in the popup.",
+                "main_save",
+                "popup_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("popup", "Settings popup", "window", (420, 80, 300, 120)),
+                    ControlCandidate(
+                        "popup_save",
+                        "",
+                        "button",
+                        (630, 160, 32, 32),
+                        automation_id="save_button",
+                    ),
+                ],
+            ),
+            (
                 "Click Save in the toast.",
                 "main_save",
                 "toast_save",
@@ -17007,6 +17024,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected_rect)
+
+    def test_surface_context_recovers_to_automation_only_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("main_save", "Save", "button", (100, 100, 70, 30)),
+            ControlCandidate("popup", "Settings popup", "window", (420, 80, 300, 120)),
+            ControlCandidate(
+                "popup_save",
+                "",
+                "button",
+                (630, 160, 32, 32),
+                automation_id="save_button",
+            ),
+        ]
+
+        wrong_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save in the popup.",
+                    "target_id": "main_save",
+                    "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        correct_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save in the popup.",
+                    "target_id": "popup_save",
+                    "target": {"x": 630, "y": 160, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "text_match")
+        self.assertEqual(wrong_target.target_id, "popup_save")
+        self.assertFalse(wrong_target.rejected_reason)
+        self.assertEqual(wrong_target.rect, (630, 160, 32, 32))
+        self.assertEqual(correct_target.source, "target_id")
+        self.assertEqual(correct_target.target_id, "popup_save")
+        self.assertFalse(correct_target.rejected_reason)
+        self.assertEqual(correct_target.rect, (630, 160, 32, 32))
 
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate

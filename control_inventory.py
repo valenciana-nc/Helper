@@ -1896,6 +1896,13 @@ def _text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
     if _object_only_action_context_mismatch(instruction, candidate):
@@ -2058,6 +2065,13 @@ def _context_text_match_score(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
@@ -2393,6 +2407,17 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -2561,6 +2586,10 @@ def _target_id_plausibility(
         selected=candidate,
         candidates=candidates,
         control_intents=control_intents,
+    ) and not _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
     ):
         return (
             False,
@@ -4399,14 +4428,64 @@ def _contextual_action_candidate_matches_surface_request(
 ) -> bool:
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
-    visible_tokens = _candidate_visible_text_tokens(candidate)
-    if not visible_tokens or not (instruction_tokens & visible_tokens):
+    if not _contextual_action_tokens(instruction_tokens, candidate):
         return False
     return _candidate_satisfies_contextual_duplicate_request(
         instruction,
         candidate,
         candidates,
     )
+
+
+def _contextual_surface_action_alternative_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"in", "inside", "on", "within"}):
+        return False
+    if not (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS):
+        return False
+    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    if not requested_context:
+        return False
+    if _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        return False
+    action_tokens = _contextual_action_tokens(instruction_tokens, candidate)
+    if not action_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        other_action_tokens = _contextual_action_tokens(instruction_tokens, other)
+        if not (action_tokens & other_action_tokens):
+            continue
+        if _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            other,
+            candidates,
+        ):
+            return True
+    return False
+
+
+def _contextual_action_tokens(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> set[str]:
+    if not instruction_tokens:
+        return set()
+    return instruction_tokens & _candidate_semantic_tokens(candidate)
 
 
 def _contextual_duplicate_request_matches_evidence(
@@ -5056,6 +5135,13 @@ def _target_id_ambiguity(
             continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
+        if _contextual_surface_action_alternative_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+        ):
+            continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
@@ -5542,6 +5628,13 @@ def _candidate_snap_score(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
