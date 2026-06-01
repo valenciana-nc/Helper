@@ -168,6 +168,7 @@ GMAIL_TAB_SERVICE_RE = re.compile(
     re.IGNORECASE,
 )
 GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
+MAIL_TAB_EXPLICIT_WORDS = frozenset({"email", "inbox", "mail", "recibidos"})
 SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
 UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
     {
@@ -1117,6 +1118,8 @@ def _text_match_score(
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -1190,6 +1193,8 @@ def _context_text_match_score(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1357,6 +1362,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -2052,6 +2063,8 @@ def _target_id_ambiguity(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+            continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
         if _gmail_tab_selected_over_generic_mail_decoy(
             instruction_tokens=instruction_tokens,
@@ -2095,6 +2108,24 @@ def _gmail_tab_selected_over_generic_mail_decoy(
         return False
     if _has_explicit_gmail_tab_evidence(candidate):
         return False
+    overlap = instruction_tokens & candidate_tokens
+    return bool(overlap) and overlap <= GMAIL_TAB_REQUEST_WORDS
+
+
+def _mail_tab_account_reference_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type != "tabitem":
+        return False
+    if not (instruction_tokens & GMAIL_TAB_REQUEST_WORDS):
+        return False
+    if _has_explicit_gmail_tab_evidence(candidate):
+        return False
+    raw_tokens = _tokens_from_text(candidate.text)
+    if raw_tokens & MAIL_TAB_EXPLICIT_WORDS:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
     overlap = instruction_tokens & candidate_tokens
     return bool(overlap) and overlap <= GMAIL_TAB_REQUEST_WORDS
 
@@ -2172,6 +2203,8 @@ def _has_semantic_alternative(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+            continue
         score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -2236,6 +2269,8 @@ def _has_visible_semantic_alternative(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+            continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
             continue
@@ -2296,6 +2331,8 @@ def _candidate_snap_score(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
@@ -2383,6 +2420,8 @@ def _contains_tighter_same_intent_action(
                 continue
             if _disclosure_state_action_mismatch(instruction_tokens, candidate):
                 continue
+            if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+                continue
             candidate_tokens = _candidate_visible_text_tokens(candidate)
             if not candidate_tokens:
                 return True
@@ -2391,6 +2430,8 @@ def _contains_tighter_same_intent_action(
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
@@ -2424,6 +2465,8 @@ def _single_contained_control_intent_candidate(
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         if instruction_tokens and not _contained_control_intent_has_evidence(
             candidate=candidate,
@@ -2520,6 +2563,10 @@ def _same_snap_intent(
         return False
     if _disclosure_state_action_mismatch(instruction_tokens, second):
         return False
+    if _mail_tab_account_reference_mismatch(instruction_tokens, first):
+        return False
+    if _mail_tab_account_reference_mismatch(instruction_tokens, second):
+        return False
     first_score = _text_evidence_score(
         instruction_tokens,
         _candidate_semantic_tokens(first),
@@ -2583,6 +2630,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

@@ -8707,6 +8707,68 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "gmail_instruction_rejects_email_address_account_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 184, 32], "label": "Cloudflare account"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gmail.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "gmail_text_match_recovers_from_email_address_account_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 184, 32], "label": "Cloudflare account"},
+                {"rect": [240, 80, 184, 32], "label": "Gmail tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gmail.",
+                "target": {"x": 20, "y": 80, "width": 184, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [240, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [240, 80, 184, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "gmail_tab_target_id_wins_over_mail_decoys",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

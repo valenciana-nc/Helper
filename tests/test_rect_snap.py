@@ -7767,8 +7767,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - "
             "Memory usage - 270 MB"
         )
+        cloudflare_email_tab = (
+            "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | "
+            "Cloudflare - Memory usage - 580 MB"
+        )
         cases = (
             ("Open Gmail.", "Mail", "button", "target_id semantic mismatch"),
+            ("Open Gmail.", cloudflare_email_tab, "tabitem", "target_id semantic mismatch"),
+            ("Open mail.", cloudflare_email_tab, "tabitem", "target_id semantic mismatch"),
+            ("Open email.", cloudflare_email_tab, "tabitem", "target_id semantic mismatch"),
             ("Type your email.", gmail_tab, "tabitem", "target_id control type mismatch"),
         )
         for instruction, label, control_type, reason in cases:
@@ -7792,6 +7799,75 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
+
+    def test_gmail_text_match_recovers_from_email_address_tab_to_gmail_tab(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Gmail.",
+                    "target": {"x": 120, "y": 160, "width": 184, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "DNS | Records | limitles.dev | "
+                    "Abelnavarrocarreon@gmail.com's Account | Cloudflare - "
+                    "Memory usage - 580 MB",
+                    "tabitem",
+                    (120, 160, 184, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - "
+                    "Memory usage - 270 MB",
+                    "tabitem",
+                    (360, 160, 184, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (360, 160, 184, 32))
+
+    def test_gmail_model_rect_rejects_email_address_tab_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Gmail.",
+                    "target": {"x": 120, "y": 160, "width": 184, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "DNS | Records | limitles.dev | "
+                    "Abelnavarrocarreon@gmail.com's Account | Cloudflare - "
+                    "Memory usage - 580 MB",
+                    "tabitem",
+                    (120, 160, 184, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_gmail_tab_target_id_wins_over_generic_mail_decoys(self) -> None:
         from control_inventory import ControlCandidate
