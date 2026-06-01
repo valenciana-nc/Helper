@@ -13723,7 +13723,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "pay2", "text": "Pay", "control_type": "button", "rect": [730, 144, 60, 30]},
             ],
             "expected": {
-                "source": "candidate_snap",
+                "source": "text_match",
                 "target_id": "pay2",
                 "rect": [730, 144, 60, 30],
                 "overlay_emitted": True,
@@ -14042,6 +14042,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "text_match",
                 "target_id": "popover_save",
+                "rect": [630, 160, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "notification_context_recovers_from_main_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Main content"},
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings notification"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the notification.",
+                "target_id": "main_save",
+                "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "main", "text": "Main content", "control_type": "pane", "rect": [20, 80, 300, 120]},
+                {"id": "main_save", "text": "Save", "control_type": "button", "rect": [230, 160, 60, 30]},
+                {"id": "notification", "text": "Settings notification", "control_type": "pane", "rect": [420, 80, 300, 120]},
+                {"id": "notification_save", "text": "Save", "control_type": "button", "rect": [630, 160, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "notification_save",
                 "rect": [630, 160, 60, 30],
                 "overlay_emitted": True,
             },

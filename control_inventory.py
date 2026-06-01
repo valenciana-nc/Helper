@@ -183,6 +183,7 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "menu",
         "menus",
         "modal",
+        "notification",
         "panel",
         "pane",
         "popover",
@@ -532,6 +533,7 @@ CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
         "header",
         "menu",
         "modal",
+        "notification",
         "panel",
         "pane",
         "popover",
@@ -950,6 +952,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 )
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
+SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane", "window"})
 COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -1904,6 +1907,12 @@ def _text_match_score(
         candidate,
     ):
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
         if _same_label_duplicate_has_stronger_geometry(
@@ -2046,6 +2055,12 @@ def _context_text_match_score(
     if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
         instruction,
         candidate,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
     ):
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
@@ -5480,6 +5495,7 @@ def _contains_tighter_same_intent_action(
     if (
         selected.control_type not in ROW_LIKE_CONTROL_TYPES
         and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
+        and not _instruction_requests_contained_surface_action(instruction, selected)
     ):
         return False
     if selected.control_type in ROW_CONTEXT_CONTROL_TYPES and _explicit_container_target_request(
@@ -5551,6 +5567,26 @@ def _contains_tighter_same_intent_action(
         if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
+
+
+def _instruction_requests_contained_surface_action(
+    instruction: str,
+    selected: ControlCandidate,
+) -> bool:
+    if selected.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"in", "inside", "on", "within"}):
+        return False
+    requested_surfaces = raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    if not requested_surfaces:
+        return False
+    selected_tokens = (
+        _candidate_semantic_tokens(selected)
+        | _tokens_from_text(selected.descriptor)
+        | _tokens_from_text(selected.control_type)
+    )
+    return bool(_object_token_variants(requested_surfaces) & _object_token_variants(selected_tokens))
 
 
 def _contains_tighter_row_action_candidate(

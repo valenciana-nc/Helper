@@ -16551,7 +16551,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
                 "pay2",
                 (720, 64, 60, 30),
-                "candidate_snap",
+                "text_match",
             ),
             (
                 "Click More in Bob row.",
@@ -16824,6 +16824,17 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
                     ControlCandidate("banner", "Settings banner", "pane", (420, 80, 300, 120)),
                     ControlCandidate("banner_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the notification.",
+                "main_save",
+                "notification_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("notification", "Settings notification", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("notification_save", "Save", "button", (630, 160, 60, 30)),
                 ],
             ),
         )
