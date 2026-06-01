@@ -181,6 +181,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("webcam", tokenize_control("Camera"))
         self.assertIn("camera", tokenize_control("Webcam"))
 
+    def test_cart_action_aliases_expand_to_basket_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("basket", tokenize_instruction("Open cart"))
+        self.assertIn("cart", tokenize_instruction("Open basket"))
+        self.assertIn("bag", tokenize_instruction("Open cart"))
+        self.assertIn("cart", tokenize_control("Basket"))
+        self.assertIn("basket", tokenize_control("Shopping bag"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -221,6 +230,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
             ("\U0001f4f7", {"camera", "video", "webcam"}),
+            ("\U0001f6d2", {"bag", "basket", "cart"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5439,6 +5449,82 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_cart_action_alias_target_id_accepts_common_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open cart.", "Basket", (120, 160, 100, 32)),
+            ("Open basket.", "Cart", (120, 160, 100, 32)),
+            ("Open cart.", "Shopping bag", (120, 160, 130, 32)),
+            ("Open cart.", "\U0001f6d2", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_cart_action_alias_text_match_overrides_shopping_options_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open cart.",
+                    "target": {"x": 300, "y": 160, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Basket", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Shopping options", "button", (300, 160, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_cart_alias_rejects_ambiguous_cart_and_basket_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open cart.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Basket", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Cart", "button", (280, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_favorite_action_alias_target_id_accepts_star_button(self) -> None:
         from control_inventory import ControlCandidate

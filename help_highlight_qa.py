@@ -1782,6 +1782,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "cart_action_target_id_accepts_basket_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Basket"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cart.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Basket", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "basket_action_target_id_accepts_cart_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Cart"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open basket.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cart", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cart_action_target_id_accepts_shopping_bag_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 130, 32], "label": "Shopping bag"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cart.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Shopping bag", "control_type": "button", "rect": [20, 80, 130, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 130, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cart_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "C"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cart.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f6d2", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cart_action_text_match_overrides_shopping_options_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Basket"},
+                {"rect": [180, 80, 160, 32], "label": "Shopping options"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cart.",
+                "target": {"x": 180, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Basket", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Shopping options", "control_type": "button", "rect": [180, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cart_alias_rejects_ambiguous_cart_and_basket_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Basket"},
+                {"rect": [180, 80, 100, 32], "label": "Cart"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open cart.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Basket", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Cart", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
