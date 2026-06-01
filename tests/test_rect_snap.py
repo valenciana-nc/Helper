@@ -2361,6 +2361,20 @@ class SnapToControlTests(unittest.TestCase):
             ("Delete account.", "Delete", "Messages"),
             ("Show sidebar.", "Hide sidebar", "App"),
             ("Hide sidebar.", "Show sidebar", "App"),
+            ("Open details.", "Close details", "App"),
+            ("Close details.", "Open details", "App"),
+            ("Mute microphone.", "Unmute microphone", "App"),
+            ("Unmute microphone.", "Mute microphone", "App"),
+            ("Lock account.", "Unlock account", "App"),
+            ("Unlock account.", "Lock account", "App"),
+            ("Archive email.", "Unarchive email", "App"),
+            ("Unarchive email.", "Archive email", "App"),
+            ("Subscribe channel.", "Unsubscribe channel", "App"),
+            ("Unsubscribe channel.", "Subscribe channel", "App"),
+            ("Connect account.", "Disconnect account", "App"),
+            ("Disconnect account.", "Connect account", "App"),
+            ("Start recording.", "Stop recording", "App"),
+            ("Stop recording.", "Start recording", "App"),
         )
         for instruction, label, window_title in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -8521,7 +8535,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        for instruction in ("Open has.", "Click has."):
+        for instruction in ("Open has.", "Click has.", "Click access button."):
             with self.subTest(instruction=instruction):
                 target = resolve_help_target(
                     self._decision(
@@ -10417,6 +10431,20 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Delete account.", "Delete", "Messages"),
             ("Show sidebar.", "Hide sidebar", "App"),
             ("Hide sidebar.", "Show sidebar", "App"),
+            ("Open details.", "Close details", "App"),
+            ("Close details.", "Open details", "App"),
+            ("Mute microphone.", "Unmute microphone", "App"),
+            ("Unmute microphone.", "Mute microphone", "App"),
+            ("Lock account.", "Unlock account", "App"),
+            ("Unlock account.", "Lock account", "App"),
+            ("Archive email.", "Unarchive email", "App"),
+            ("Unarchive email.", "Archive email", "App"),
+            ("Subscribe channel.", "Unsubscribe channel", "App"),
+            ("Unsubscribe channel.", "Subscribe channel", "App"),
+            ("Connect account.", "Disconnect account", "App"),
+            ("Disconnect account.", "Connect account", "App"),
+            ("Start recording.", "Stop recording", "App"),
+            ("Stop recording.", "Start recording", "App"),
         )
         for instruction, label, window_title in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10467,6 +10495,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Copy coupon.", "Copy"),
             ("Show sidebar.", "Show sidebar"),
             ("Hide sidebar.", "Hide sidebar"),
+            ("Open details.", "Open details"),
+            ("Close details.", "Close details"),
+            ("Mute microphone.", "Mute microphone"),
+            ("Unmute microphone.", "Unmute microphone"),
+            ("Archive email.", "Archive email"),
+            ("Unarchive email.", "Unarchive email"),
+            ("Unlock account.", "Lock"),
         )
         for case in cases:
             if len(case) == 2:
@@ -10491,6 +10526,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
                 self.assertEqual(target.source, "target_id")
                 self.assertFalse(target.rejected_reason)
+
+    def test_generic_action_snap_checks_containing_row_context(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Profile", "listitem", (100, 40, 520, 72), window_title="App"),
+            ControlCandidate("p", "Edit", "button", (560, 60, 60, 32), window_title="App"),
+            ControlCandidate("r2", "Message from Alice", "listitem", (100, 120, 520, 72), window_title="App"),
+            ControlCandidate("m", "Edit", "button", (560, 140, 60, 32), window_title="App"),
+        ]
+
+        wrong_snap = snap_candidate_target(
+            instruction="Edit profile.",
+            candidates=candidates,
+            model_rect=(560, 140, 60, 32),
+        )
+        right_snap = snap_candidate_target(
+            instruction="Edit profile.",
+            candidates=candidates,
+            model_rect=(560, 60, 60, 32),
+        )
+        wrong_help = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Edit profile.",
+                    "target": {"x": 560, "y": 140, "width": 60, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNone(wrong_snap)
+        self.assertEqual(right_snap.source, "candidate_snap")
+        self.assertEqual(right_snap.target_id, "p")
+        self.assertFalse(right_snap.rejected_reason)
+        self.assertEqual(wrong_help.source, "candidate_snap")
+        self.assertFalse(wrong_help.target_id)
+        self.assertEqual(wrong_help.rejected_reason, "candidate snapshot no match")
+
+    def test_turn_on_off_checkbox_polarity_rejects_opposite_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ("Turn on notifications.", "Turn off notifications"),
+            ("Turn off notifications.", "Turn on notifications"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidate = ControlCandidate(
+                    "c001",
+                    label,
+                    "checkbox",
+                    (120, 160, 220, 32),
+                    window_title="App",
+                )
+
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=(120, 160, 220, 32),
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_sign_out_alias_target_id_accepts_logout_button(self) -> None:
         from control_inventory import ControlCandidate

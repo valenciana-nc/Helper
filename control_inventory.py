@@ -107,6 +107,9 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
         "select",
     }
 )
+ROW_CONTEXT_OBJECT_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset(
+    {"by", "for", "from", "in", "of", "on", "with"}
+)
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
@@ -121,6 +124,21 @@ CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", 
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
+REVERSIBLE_ACTION_POLARITY_PAIRS = (
+    (frozenset({"archive"}), frozenset({"unarchive"})),
+    (frozenset({"connect"}), frozenset({"disconnect"})),
+    (frozenset({"lock"}), frozenset({"unlock"})),
+    (frozenset({"mute"}), frozenset({"unmute"})),
+    (frozenset({"open"}), frozenset({"close"})),
+    (frozenset({"select"}), frozenset({"deselect"})),
+    (frozenset({"start"}), frozenset({"stop"})),
+    (frozenset({"subscribe"}), frozenset({"unsubscribe"})),
+)
+REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
+    word for pair in REVERSIBLE_ACTION_POLARITY_PAIRS for words in pair for word in words
+)
+TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
+TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -525,6 +543,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
     }
 )
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
+ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
 COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -1777,6 +1796,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _explicit_action_context_mismatch(instruction, candidate):
         return (
             False,
@@ -2749,6 +2774,11 @@ def _checkbox_state_action_mismatch(
     instruction: str,
     candidate: ControlCandidate,
 ) -> bool:
+    turn_instruction = _turn_on_off_action_kind(instruction)
+    turn_control = _turn_on_off_action_kind(candidate.descriptor)
+    if turn_instruction and turn_control:
+        return turn_instruction != turn_control
+
     instruction_tokens = _tokens_from_text(instruction)
     requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
     requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
@@ -2761,6 +2791,14 @@ def _checkbox_state_action_mismatch(
     if control_on == control_off:
         return False
     return requested_on != control_on
+
+
+def _turn_on_off_action_kind(text: str) -> str:
+    has_on = bool(TURN_ON_RE.search(text or ""))
+    has_off = bool(TURN_OFF_RE.search(text or ""))
+    if has_on == has_off:
+        return ""
+    return "on" if has_on else "off"
 
 
 def _navigation_media_transport_action_mismatch(
@@ -2791,6 +2829,7 @@ def _explicit_action_context_mismatch(
         or _same_action_family_object_mismatch(instruction, candidate.descriptor)
         or _same_action_family_window_context_mismatch(instruction, candidate)
         or _generic_visibility_polarity_action_mismatch(instruction, candidate.descriptor)
+        or _reversible_action_polarity_mismatch(instruction, candidate.descriptor)
         or _new_tab_window_action_mismatch(instruction, candidate.descriptor)
         or _browser_tab_bookmark_action_mismatch(instruction, instruction_tokens, candidate)
         or _browser_tab_contextual_item_mismatch(instruction, candidate)
@@ -2968,6 +3007,73 @@ def _same_action_family_window_context_mismatch(
     return False
 
 
+def _contained_row_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    control_raw_tokens = _tokens_from_text(candidate.descriptor)
+    if not instruction_raw_tokens or not control_raw_tokens:
+        return False
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if not (instruction_raw_tokens & family and control_raw_tokens & family):
+            continue
+        instruction_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_instruction(instruction),
+                family,
+                ACTION_OBJECT_STOPWORDS,
+            )
+        )
+        if not instruction_objects:
+            continue
+        control_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_control(candidate.descriptor),
+                family,
+                ACTION_OBJECT_STOPWORDS,
+            )
+        )
+        if control_objects:
+            continue
+        row_objects = _contained_row_context_objects(candidate, candidates)
+        if not row_objects:
+            continue
+        if instruction_objects & row_objects:
+            return False
+        return True
+    return False
+
+
+def _contained_row_context_objects(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    containers = [
+        item
+        for item in candidates
+        if item.id != candidate.id
+        and item.control_type in ROW_CONTEXT_CONTROL_TYPES
+        and item.descriptor
+        and _contains_rect(_expand_rect(item.rect, 2), candidate.rect)
+    ]
+    containers.sort(key=lambda item: item.rect[2] * item.rect[3])
+    for container in containers:
+        objects = _object_token_variants(
+            _action_object_tokens(
+                _tokenize_control(container.descriptor),
+                frozenset(),
+                ROW_CONTEXT_OBJECT_STOPWORDS,
+            )
+        ) & WINDOW_CONTEXT_OBJECT_WORDS
+        if objects:
+            return objects
+    return set()
+
+
 def _generic_visibility_polarity_action_mismatch(
     instruction: str,
     candidate_text: str,
@@ -2997,6 +3103,50 @@ def _generic_visibility_polarity_action_mismatch(
         ACTION_OBJECT_STOPWORDS,
     )
     return bool(instruction_objects or control_objects)
+
+
+def _reversible_action_polarity_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_kind = _reversible_action_polarity_kind(_tokens_from_text(instruction))
+    if not instruction_kind:
+        return False
+    control_kind = _reversible_action_polarity_kind(_tokens_from_text(candidate_text))
+    if not control_kind:
+        return False
+    instruction_family, instruction_side = instruction_kind.split(":", 1)
+    control_family, control_side = control_kind.split(":", 1)
+    if instruction_family != control_family or instruction_side == control_side:
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokens_from_text(instruction),
+            REVERSIBLE_ACTION_POLARITY_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    control_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokens_from_text(candidate_text),
+            REVERSIBLE_ACTION_POLARITY_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    if instruction_objects and control_objects:
+        return True
+    return not instruction_objects and not control_objects
+
+
+def _reversible_action_polarity_kind(tokens: set[str]) -> str:
+    for index, (positive_words, negative_words) in enumerate(REVERSIBLE_ACTION_POLARITY_PAIRS):
+        requested_positive = bool(tokens & positive_words)
+        requested_negative = bool(tokens & negative_words)
+        if requested_positive == requested_negative:
+            continue
+        side = "positive" if requested_positive else "negative"
+        return f"{index}:{side}"
+    return ""
 
 
 def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
@@ -3241,6 +3391,8 @@ def _target_id_ambiguity(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+            continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
@@ -3457,6 +3609,8 @@ def _has_semantic_alternative(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+            continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
@@ -3552,6 +3706,8 @@ def _has_visible_semantic_alternative(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
@@ -3649,6 +3805,8 @@ def _candidate_snap_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _explicit_action_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -3810,6 +3968,12 @@ def _single_contained_control_intent_candidate(
             continue
         if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
             continue
+        if _browser_extension_access_action_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
@@ -3827,6 +3991,8 @@ def _single_contained_control_intent_candidate(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
@@ -4086,6 +4252,8 @@ def _candidate_snap_semantic_mismatch(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return True
+    if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_action_context_mismatch(instruction, candidate):
         return True

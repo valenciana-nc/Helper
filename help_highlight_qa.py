@@ -1749,6 +1749,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "turn_on_notifications_target_id_rejects_turn_off_notifications_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 210, 32], "label": "Turn off notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Turn on notifications.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Turn off notifications", "control_type": "checkbox", "rect": [20, 80, 210, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "choice_wording_wrong_target_id_recovers_to_radio",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4645,6 +4666,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "archive_email_model_rect_rejects_unarchive_email_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 170, 32], "label": "Unarchive email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive email.",
+                "target": {"x": 20, "y": 80, "width": 170, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Unarchive email", "control_type": "button", "rect": [20, 80, 170, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "share_text_match_overrides_export_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4969,6 +5011,69 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 80, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "mute_microphone_target_id_rejects_unmute_microphone_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Unmute microphone"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute microphone.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Unmute microphone", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "start_recording_target_id_rejects_stop_recording_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Stop recording"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Start recording.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Stop recording", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "connect_account_target_id_rejects_disconnect_account_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 190, 32], "label": "Disconnect account"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Connect account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Disconnect account", "control_type": "button", "rect": [20, 80, 190, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
@@ -5490,6 +5595,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "edit_profile_model_rect_rejects_edit_button_in_message_row",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 40, 520, 72], "label": "Profile"},
+                {"rect": [560, 60, 60, 32], "label": "Edit"},
+                {"rect": [100, 120, 520, 72], "label": "Message from Alice"},
+                {"rect": [560, 140, 60, 32], "label": "Edit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit profile.",
+                "target": {"x": 560, "y": 140, "width": 60, "height": 32},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Profile", "control_type": "listitem", "rect": [100, 40, 520, 72]},
+                {"id": "p", "text": "Edit", "control_type": "button", "rect": [560, 60, 60, 32]},
+                {"id": "r2", "text": "Message from Alice", "control_type": "listitem", "rect": [100, 120, 520, 72]},
+                {"id": "m", "text": "Edit", "control_type": "button", "rect": [560, 140, 60, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
                 "overlay_emitted": False,
             },
         },
@@ -6245,6 +6376,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Show sidebar", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "open_details_model_rect_rejects_close_details_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Close details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open details.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Close details", "control_type": "button", "rect": [20, 80, 150, 32]},
             ],
             "expected": {
                 "source": "candidate_snap",
@@ -8042,6 +8194,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "control_type": "button",
                     "rect": [20, 80, 180, 32],
                     "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_access_button_model_rect_rejects_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Codex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click access button.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Codex\nHas access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "GitHub - Google Chrome",
                 },
             ],
             "expected": {

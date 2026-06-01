@@ -109,6 +109,21 @@ CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", 
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
+REVERSIBLE_ACTION_POLARITY_PAIRS = (
+    (frozenset({"archive"}), frozenset({"unarchive"})),
+    (frozenset({"connect"}), frozenset({"disconnect"})),
+    (frozenset({"lock"}), frozenset({"unlock"})),
+    (frozenset({"mute"}), frozenset({"unmute"})),
+    (frozenset({"open"}), frozenset({"close"})),
+    (frozenset({"select"}), frozenset({"deselect"})),
+    (frozenset({"start"}), frozenset({"stop"})),
+    (frozenset({"subscribe"}), frozenset({"unsubscribe"})),
+)
+REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
+    word for pair in REVERSIBLE_ACTION_POLARITY_PAIRS for words in pair for word in words
+)
+TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
+TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -1500,18 +1515,32 @@ def _checkbox_state_action_mismatch(
     visible_text: str,
     automation_id: str,
 ) -> bool:
+    control_text = " ".join((visible_text or "", automation_id or ""))
+    turn_instruction = _turn_on_off_action_kind(instruction)
+    turn_control = _turn_on_off_action_kind(control_text)
+    if turn_instruction and turn_control:
+        return turn_instruction != turn_control
+
     instruction_tokens = _tokens_from_text(instruction)
     requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
     requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if requested_on == requested_off:
         return False
 
-    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    control_tokens = _tokens_from_text(control_text)
     control_on = bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
     control_off = bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if control_on == control_off:
         return False
     return requested_on != control_on
+
+
+def _turn_on_off_action_kind(text: str) -> str:
+    has_on = bool(TURN_ON_RE.search(text or ""))
+    has_off = bool(TURN_OFF_RE.search(text or ""))
+    if has_on == has_off:
+        return ""
+    return "on" if has_on else "off"
 
 
 def _navigation_media_transport_action_mismatch(
@@ -1555,6 +1584,10 @@ def _explicit_action_context_mismatch(
             window_title,
         )
         or _generic_visibility_polarity_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _reversible_action_polarity_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
@@ -1785,6 +1818,50 @@ def _generic_visibility_polarity_action_mismatch(
         ACTION_OBJECT_STOPWORDS,
     )
     return bool(instruction_objects or control_objects)
+
+
+def _reversible_action_polarity_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_kind = _reversible_action_polarity_kind(_tokens_from_text(instruction))
+    if not instruction_kind:
+        return False
+    control_kind = _reversible_action_polarity_kind(_tokens_from_text(candidate_text))
+    if not control_kind:
+        return False
+    instruction_family, instruction_side = instruction_kind.split(":", 1)
+    control_family, control_side = control_kind.split(":", 1)
+    if instruction_family != control_family or instruction_side == control_side:
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokens_from_text(instruction),
+            REVERSIBLE_ACTION_POLARITY_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    control_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokens_from_text(candidate_text),
+            REVERSIBLE_ACTION_POLARITY_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    if instruction_objects and control_objects:
+        return True
+    return not instruction_objects and not control_objects
+
+
+def _reversible_action_polarity_kind(tokens: set[str]) -> str:
+    for index, (positive_words, negative_words) in enumerate(REVERSIBLE_ACTION_POLARITY_PAIRS):
+        requested_positive = bool(tokens & positive_words)
+        requested_negative = bool(tokens & negative_words)
+        if requested_positive == requested_negative:
+            continue
+        side = "positive" if requested_positive else "negative"
+        return f"{index}:{side}"
+    return ""
 
 
 def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
