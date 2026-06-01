@@ -53,6 +53,21 @@ class TargetQualityTests(unittest.TestCase):
                 self.assertFalse(quality.accepted)
                 self.assertEqual(quality.reason, "target appears visually empty")
 
+    def test_rejects_blank_model_rect_even_with_snap_fallback_score(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (200, 120), "white"))
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 60, 30),
+            source="model",
+            confidence=0.41,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears visually empty")
+
     def test_accepts_structured_model_rect(self) -> None:
         from target_quality import evaluate_target_quality
 
@@ -123,6 +138,24 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target lacks visible control boundary")
         self.assertGreaterEqual(quality.visual_activity, 0.035)
+
+    def test_rejects_text_only_model_rect_even_with_snap_fallback_score(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 120), "white")
+        draw = ImageDraw.Draw(img)
+        draw.text((44, 38), "Save changes now", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 130, 30),
+            source="model",
+            confidence=0.41,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target lacks visible control boundary")
 
     def test_rejects_mostly_outside_capture(self) -> None:
         from target_quality import evaluate_target_quality
