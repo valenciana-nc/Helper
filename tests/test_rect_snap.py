@@ -762,6 +762,31 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertIn("Dismiss", labels)
         self.assertNotIn("Save changes", labels)
 
+    def test_collect_skips_candidate_when_click_center_is_occluded(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        save = _make_button("Save changes", 40, 40, 120, 30)
+        background = _make_window("Background Editor", 0, 0, 240, 140, [save], handle=101)
+        dismiss = _make_button("Dismiss", 90, 45, 80, 30)
+        foreground = _make_window("Blocking Dialog", 80, 35, 100, 50, [dismiss], handle=202)
+        desktop = _FakeDesktop([background, foreground])
+
+        def topmost_at(x: int, y: int) -> int:
+            if 80 <= x < 180 and 35 <= y < 85:
+                return 202
+            return 101
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            topmost_handle_provider=topmost_at,
+            timeout_ms=2000,
+        )
+
+        labels = [candidate.text for candidate in candidates]
+        self.assertIn("Dismiss", labels)
+        self.assertNotIn("Save changes", labels)
+
     def test_snap_candidate_target_reuses_collected_candidate_snapshot(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 

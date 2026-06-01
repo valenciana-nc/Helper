@@ -28,6 +28,7 @@ MIN_VISIBLE_FRACTION = 0.20
 UNLABELED_COMPETITOR_MARGIN_PX = 96
 FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.18
+MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -341,16 +342,27 @@ def _is_candidate_topmost(
     expected_root = _root_window_handle(top_handle)
     if expected_root is None:
         return True
-    checked = False
-    for x, y in _sample_points(rect):
+    matches = 0
+    checked = 0
+    center_checked = False
+    center_matched = False
+    for index, (x, y) in enumerate(_sample_points(rect)):
         actual = _safe_topmost_handle(topmost_handle_provider, x, y)
         if actual is None:
             continue
-        checked = True
+        checked += 1
         actual_root = _root_window_handle(actual)
         if actual_root == expected_root:
-            return True
-    return not checked
+            matches += 1
+            if index == 0:
+                center_matched = True
+        if index == 0:
+            center_checked = True
+    if checked == 0:
+        return True
+    if center_checked and not center_matched:
+        return False
+    return (matches / checked) >= MIN_TOPMOST_SAMPLE_FRACTION
 
 
 def _safe_topmost_handle(
