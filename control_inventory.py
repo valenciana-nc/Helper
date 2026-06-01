@@ -677,16 +677,18 @@ def resolve_candidate_target(
                 instruction,
                 instruction_tokens,
                 candidate,
+                candidates,
                 model_rect,
             )
         else:
-            score = _text_match_score(instruction, candidate, model_rect)
+            score = _text_match_score(instruction, candidate, candidates, model_rect)
         score += _foreground_rank_bonus(candidate, candidates)
         if score > 0:
             if not _candidate_matches_control_intent(candidate, control_intents):
                 contained = _single_contained_control_intent_candidate(
                     candidates=candidates,
                     model_rect=candidate.rect,
+                    instruction=instruction,
                     instruction_tokens=instruction_tokens,
                     control_intents=control_intents,
                 )
@@ -775,6 +777,7 @@ def snap_candidate_target(
         contained = _single_contained_control_intent_candidate(
             candidates=candidates,
             model_rect=model_rect,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             control_intents=control_intents,
         )
@@ -793,6 +796,7 @@ def snap_candidate_target(
         contained = _single_contained_control_intent_candidate(
             candidates=candidates,
             model_rect=model_rect,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
             control_intents=control_intents,
         )
@@ -806,6 +810,7 @@ def snap_candidate_target(
             )
         if _candidate_snap_semantic_mismatch(
             candidate=candidate,
+            candidates=candidates,
             instruction=instruction,
             instruction_tokens=instruction_tokens,
             model_rect=model_rect,
@@ -1055,6 +1060,7 @@ def _candidate_sort_key(candidate: ControlCandidate) -> tuple[int, int, int, int
 def _text_match_score(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     instruction_tokens = _tokenize_instruction(instruction)
@@ -1080,6 +1086,8 @@ def _text_match_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1128,6 +1136,7 @@ def _context_text_match_score(
     instruction: str,
     instruction_tokens: set[str],
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     if not instruction_tokens:
@@ -1149,6 +1158,8 @@ def _context_text_match_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1284,6 +1295,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _close_tab_action_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -1581,6 +1598,34 @@ def _browser_new_tab_bookmark_action_mismatch(
     if candidate_tokens & BROWSER_BOOKMARK_ACTION_WORDS:
         return False
     return bool(candidate_tokens & BROWSER_NEW_TAB_WORDS)
+
+
+def _close_tab_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"close", "dismiss"} and raw_tokens & {"tab", "tabs", "tabitem"}):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if not (candidate_tokens & {"close", "dismiss", "x"}):
+        return False
+    return not _close_button_has_tab_context(candidate, candidates)
+
+
+def _close_button_has_tab_context(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    for other in candidates:
+        if other.id == candidate.id or other.control_type != "tabitem":
+            continue
+        if _contains_rect(_expand_rect(other.rect, 8), candidate.rect):
+            return True
+        if _intersects(_expand_rect(other.rect, 8), candidate.rect):
+            return True
+    return False
 
 
 def _looks_like_hidden_bookmarks_overflow_button(candidate: ControlCandidate) -> bool:
@@ -1934,6 +1979,8 @@ def _target_id_ambiguity(
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
+        if _close_tab_action_mismatch(instruction, candidate, candidates):
+            continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_extension_access_action_mismatch(
@@ -2050,6 +2097,8 @@ def _has_semantic_alternative(
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
+        if _close_tab_action_mismatch(instruction, candidate, candidates):
+            continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_extension_access_action_mismatch(
@@ -2110,6 +2159,8 @@ def _has_visible_semantic_alternative(
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
+        if _close_tab_action_mismatch(instruction, candidate, candidates):
+            continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_extension_access_action_mismatch(
@@ -2166,6 +2217,8 @@ def _candidate_snap_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -2288,6 +2341,7 @@ def _single_contained_control_intent_candidate(
     *,
     candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int],
+    instruction: str,
     instruction_tokens: set[str],
     control_intents: set[str],
 ) -> ControlCandidate | None:
@@ -2301,6 +2355,8 @@ def _single_contained_control_intent_candidate(
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         if not _contains_rect(bounds, candidate.rect):
+            continue
+        if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -2411,6 +2467,7 @@ def _same_snap_intent(
 def _candidate_snap_semantic_mismatch(
     *,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
     instruction: str,
     instruction_tokens: set[str],
     model_rect: tuple[int, int, int, int],
@@ -2435,6 +2492,8 @@ def _candidate_snap_semantic_mismatch(
     ):
         return True
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return True

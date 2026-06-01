@@ -9219,6 +9219,64 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (286, 8, 24, 24))
 
+    def test_close_tab_rejects_window_close_button_without_tab_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Docs - Project Plan",
+                "tabitem",
+                (100, 0, 220, 40),
+                window_title="about:blank - Google Chrome",
+            ),
+            ControlCandidate(
+                "c002",
+                "Close",
+                "button",
+                (900, 0, 46, 40),
+                window_title="about:blank - Google Chrome",
+            ),
+        ]
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Close tab.",
+            candidates=candidates,
+            model_rect=None,
+        )
+        self.assertIsNone(text_target)
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close tab.",
+                    "target_id": "c002",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+        snap = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close tab.",
+                    "target": {"x": 900, "y": 0, "width": 46, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        self.assertEqual(snap.source, "candidate_snap")
+        self.assertEqual(snap.rejected_reason, "candidate snapshot no match")
+
     def test_close_window_wrong_target_id_recovers_to_foreground_close(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

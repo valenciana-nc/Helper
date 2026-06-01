@@ -2793,6 +2793,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_tab_rejects_window_close_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 20, 220, 40], "label": "Docs - Project Plan"},
+                {"rect": [900, 20, 46, 40], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Docs - Project Plan",
+                    "control_type": "tabitem",
+                    "rect": [100, 20, 220, 40],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [900, 20, 46, 40],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c002",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "close_dialog_duplicate_buttons_stay_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
