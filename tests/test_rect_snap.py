@@ -799,6 +799,35 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertTrue(any(candidate.text == "Enable sync" for candidate in candidates))
 
+    def test_visible_parent_is_not_pruned_by_automation_only_child_glyph(self) -> None:
+        from control_inventory import collect_control_candidates
+
+        glyph = _FakeControl(
+            text="",
+            control_type="Button",
+            rect=_FakeRect(104, 104, 124, 124),
+            automation_id="saveChangesIcon",
+        )
+        parent = _FakeControl(
+            text="Save changes",
+            control_type="Button",
+            rect=_FakeRect(100, 100, 240, 132),
+            children=[glyph],
+        )
+        window = _make_window("Editor", 0, 0, 800, 600, [parent])
+        desktop = _FakeDesktop([window])
+
+        candidates = collect_control_candidates(
+            self._capture(),
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertGreaterEqual(len(candidates), 2)
+        self.assertEqual(candidates[0].text, "Save changes")
+        self.assertEqual(candidates[0].rect, (100, 100, 140, 32))
+        self.assertTrue(any(candidate.automation_id == "saveChangesIcon" for candidate in candidates))
+
     def test_collect_prioritizes_foreground_window_before_screen_position(self) -> None:
         from control_inventory import collect_control_candidates
 

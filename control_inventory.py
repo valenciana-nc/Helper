@@ -754,7 +754,8 @@ def _prune_dominated_candidates(candidates: list[ControlCandidate]) -> list[Cont
             out.append(candidate)
             continue
         candidate_area = candidate.rect[2] * candidate.rect[3]
-        candidate_tokens = _candidate_identity_tokens(candidate)
+        candidate_visible_tokens = _candidate_visible_text_tokens(candidate)
+        candidate_tokens = candidate_visible_tokens or _candidate_automation_tokens(candidate)
         dominated = False
         for other in candidates:
             if other is candidate:
@@ -766,7 +767,11 @@ def _prune_dominated_candidates(candidates: list[ControlCandidate]) -> list[Cont
                 continue
             if not _contains_rect(candidate.rect, other.rect):
                 continue
-            other_tokens = _candidate_identity_tokens(other)
+            other_tokens = (
+                _candidate_visible_text_tokens(other)
+                if candidate_visible_tokens
+                else _candidate_semantic_tokens(other)
+            )
             if candidate_tokens and not (other_tokens and candidate_tokens & other_tokens):
                 continue
             dominated = True
@@ -777,7 +782,7 @@ def _prune_dominated_candidates(candidates: list[ControlCandidate]) -> list[Cont
 
 
 def _candidate_sort_key(candidate: ControlCandidate) -> tuple[int, int, int, int, int, int]:
-    text_penalty = 0 if candidate.descriptor else 1
+    text_penalty = 0 if candidate.text.strip() else 1 if candidate.automation_id.strip() else 2
     x, y, width, height = candidate.rect
     return (candidate.window_rank, text_penalty, y, x, width * height, candidate.depth)
 
