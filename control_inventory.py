@@ -168,8 +168,53 @@ FILE_PICKER_ACTION_WORDS = frozenset(
     {"attach", "attachment", "browse", "choose", "paperclip", "picker", "select", "upload"}
 )
 FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
+ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
+    {
+        "content",
+        "message",
+        "messages",
+        "paragraph",
+        "paragraphs",
+        "selection",
+        "selected",
+        "text",
+        "word",
+        "words",
+    }
+)
 BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
 BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
+BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
+    {
+        "app",
+        "application",
+        "in_app",
+        "in_page",
+        "nav",
+        "navigation",
+        "sidebar",
+        "wizard",
+    }
+)
+BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
+    {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
+)
+BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
+    {"bookmarks", "downloads", "extensions", "history", "sidepanel"}
+)
+BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
+    {
+        "back",
+        "bookmarks",
+        "download",
+        "downloads",
+        "extensions",
+        "forward",
+        "history",
+        "reload",
+        "refresh",
+    }
+)
 CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
@@ -354,6 +399,7 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"print", "printer"}),
     frozenset({"share"}),
 )
+AMBIGUOUS_EXACT_ACTION_ALIAS_FAMILIES = (frozenset({"print", "printer"}),)
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
@@ -1120,7 +1166,7 @@ def resolve_candidate_target(
             )
         else:
             score = _text_match_score(instruction, candidate, candidates, model_rect)
-        score += _foreground_rank_bonus(candidate, candidates)
+        score += _foreground_rank_bonus(candidate, candidates, model_rect=model_rect)
         if score > 0:
             if not _candidate_matches_control_intent(
                 candidate,
@@ -1535,6 +1581,14 @@ def _text_match_score(
         instruction=instruction,
     ):
         return 0.0
+    if _contains_tighter_row_action_candidate(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if not instruction_tokens:
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
@@ -1552,6 +1606,8 @@ def _text_match_score(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_chrome_app_context_mismatch(instruction, candidate):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
@@ -1614,6 +1670,17 @@ def _text_match_score(
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
+        return 0.0
+    if _object_only_action_context_mismatch(instruction, candidate):
+        return 0.0
+    if _action_object_alias_context_requested(
+        instruction
+    ) and _exact_action_word_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        None,
+    ) and not _ambiguous_exact_action_alias_alternative(instruction, candidate, candidates):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
@@ -1650,8 +1717,15 @@ def _text_match_score(
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+    if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
+        instruction,
+        candidate,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        if _same_label_duplicate_has_stronger_geometry(candidate, candidates, model_rect):
+            score = min(score, TEXT_MATCH_FLOOR - 0.01)
     return min(max(score, 0.0), 1.0)
 
 
@@ -1679,6 +1753,8 @@ def _context_text_match_score(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_chrome_app_context_mismatch(instruction, candidate):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
@@ -1742,6 +1818,17 @@ def _context_text_match_score(
         return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
+    if _object_only_action_context_mismatch(instruction, candidate):
+        return 0.0
+    if _action_object_alias_context_requested(
+        instruction
+    ) and _exact_action_word_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        None,
+    ) and not _ambiguous_exact_action_alias_alternative(instruction, candidate, candidates):
+        return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -1766,8 +1853,15 @@ def _context_text_match_score(
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+    if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
+        instruction,
+        candidate,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        if _same_label_duplicate_has_stronger_geometry(candidate, candidates, model_rect):
+            score = min(score, TEXT_MATCH_FLOOR - 0.01)
     return min(max(score, 0.0), 1.0)
 
 
@@ -1881,6 +1975,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_profile_page_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_chrome_app_context_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2046,6 +2146,35 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _object_only_action_context_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _action_object_alias_context_requested(
+        instruction
+    ) and _exact_action_word_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        reason = (
+            "target_id ambiguous"
+            if _ambiguous_exact_action_alias_alternative(
+                instruction,
+                candidate,
+                candidates,
+                control_intents,
+            )
+            else "target_id semantic mismatch"
+        )
+        return (
+            False,
+            text_score,
+            reason,
+        )
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return (
             False,
@@ -2085,9 +2214,27 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if model_rect is not None and _same_label_duplicate_has_stronger_geometry(
+        candidate,
+        candidates,
+        model_rect,
+    ):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+    if _contains_tighter_row_action_candidate(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -2377,7 +2524,45 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
-    return (candidate.automation_id or "").strip().lower().startswith("view_")
+    automation_id = (candidate.automation_id or "").strip().lower()
+    if automation_id.startswith("view_") or automation_id in BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS:
+        return True
+    text_tokens = _tokens_from_text(candidate.text)
+    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and candidate.rect[1] <= 72)
+
+
+def _browser_chrome_app_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS:
+        return False
+    if not _instruction_requests_app_local_surface(instruction, raw_tokens):
+        return False
+    return _looks_like_browser_chrome_surface(candidate)
+
+
+def _instruction_requests_app_local_surface(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    if raw_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\bin\s+(?:the\s+)?app\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
+
+
+def _looks_like_browser_chrome_surface(candidate: ControlCandidate) -> bool:
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    if _looks_like_browser_toolbar_button(candidate) or _looks_like_browser_menu_button(candidate):
+        return True
+    return candidate.control_type == "tabitem" and candidate.rect[1] <= 72
 
 
 def _browser_menu_button_action_mismatch(
@@ -3317,6 +3502,60 @@ def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool
     return bool(control_kind and instruction_kind != control_kind)
 
 
+def _object_only_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not instruction_raw_tokens:
+        return False
+    candidate_raw_tokens = _tokens_from_text(candidate.descriptor)
+    if not candidate_raw_tokens:
+        return False
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if not (instruction_raw_tokens & family):
+            continue
+        if (
+            family & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS)
+            and not (instruction_raw_tokens & ACTION_OBJECT_ALIAS_CONTEXT_WORDS)
+        ):
+            continue
+        if candidate_raw_tokens & family:
+            return False
+        instruction_objects = _object_token_variants(
+            _instruction_action_object_tokens(instruction, family)
+        )
+        if not instruction_objects:
+            continue
+        candidate_objects = _object_token_variants(candidate_raw_tokens & instruction_objects)
+        if not candidate_objects:
+            continue
+        candidate_non_objects = (
+            candidate_raw_tokens
+            - instruction_objects
+            - ACTION_OBJECT_STOPWORDS
+            - FILE_IDENTITY_WORDS
+        )
+        if not candidate_non_objects:
+            return True
+    return False
+
+
+def _action_object_alias_context_requested(instruction: str) -> bool:
+    return bool(_tokens_from_text(instruction) & ACTION_OBJECT_ALIAS_CONTEXT_WORDS)
+
+
+def _exact_visible_action_word_match(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    candidate_words = _literal_words_from_text(candidate.descriptor)
+    if not instruction_words or not candidate_words:
+        return False
+    return any(instruction_words & candidate_words & family for family in EXCLUSIVE_ACTION_FAMILIES)
+
+
 def _file_action_kind(tokens: set[str], *, is_instruction: bool) -> str:
     fileish = bool(tokens & FILE_IDENTITY_WORDS)
     pickerish = bool(tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS))
@@ -3554,6 +3793,39 @@ def _exact_action_word_alternative_mismatch(
             ):
                 continue
             if not (_candidate_semantic_tokens(other) & family):
+                continue
+            if _literal_words_from_text(other.descriptor) & exact_words:
+                return True
+    return False
+
+
+def _ambiguous_exact_action_alias_alternative(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if not instruction_words:
+        return False
+    candidate_words = _literal_words_from_text(candidate.descriptor)
+    candidate_semantic = _candidate_semantic_tokens(candidate)
+    for family in AMBIGUOUS_EXACT_ACTION_ALIAS_FAMILIES:
+        exact_words = instruction_words & family
+        if not exact_words or not (candidate_semantic & family):
+            continue
+        if candidate_words & exact_words:
+            return False
+        if not (candidate_words & family):
+            continue
+        for other in candidates:
+            if other.id == candidate.id or _same_visual_candidate(other, candidate):
+                continue
+            if control_intents is not None and not _candidate_matches_control_intent(
+                other,
+                control_intents,
+                instruction=instruction,
+            ):
                 continue
             if _literal_words_from_text(other.descriptor) & exact_words:
                 return True
@@ -3906,7 +4178,7 @@ def _target_id_ambiguity(
         _geometry_agreement(selected.rect, model_rect) if model_rect is not None else 0.0
     )
     selected_score = selected_text + 0.30 * selected_geometry
-    selected_score += _foreground_rank_bonus(selected, candidates)
+    selected_score += _foreground_rank_bonus(selected, candidates, model_rect=model_rect)
     closest_gap = 1.0
     selected_has_gmail_tab_evidence = _has_explicit_gmail_tab_evidence(selected)
     for candidate in candidates:
@@ -3927,6 +4199,8 @@ def _target_id_ambiguity(
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
+            continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -3992,6 +4266,8 @@ def _target_id_ambiguity(
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
+        if _object_only_action_context_mismatch(instruction, candidate):
+            continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -4011,7 +4287,7 @@ def _target_id_ambiguity(
             _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
         )
         score = text_score + 0.30 * geometry
-        score += _foreground_rank_bonus(candidate, candidates)
+        score += _foreground_rank_bonus(candidate, candidates, model_rect=model_rect)
         gap = selected_score - score
         closest_gap = min(closest_gap, gap)
         if (
@@ -4118,11 +4394,51 @@ def _has_explicit_gmail_tab_evidence(candidate: ControlCandidate) -> bool:
 def _foreground_rank_bonus(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
+    *,
+    model_rect: tuple[int, int, int, int] | None = None,
+    suppress_for_stronger_geometry: bool = True,
 ) -> float:
     ranks = {item.window_rank for item in candidates}
     if len(ranks) < 2:
         return 0.0
+    if suppress_for_stronger_geometry and model_rect is not None and _same_label_duplicate_has_stronger_geometry(
+        candidate,
+        candidates,
+        model_rect,
+    ):
+        return 0.0
     return FOREGROUND_RANK_BONUS if candidate.window_rank == min(ranks) else 0.0
+
+
+def _same_label_duplicate_has_stronger_geometry(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int],
+) -> bool:
+    candidate_key = _candidate_semantic_key(candidate)
+    if not candidate_key:
+        return False
+    candidate_geometry = _geometry_agreement(candidate.rect, model_rect)
+    candidate_center_inside = _center_inside(candidate.rect, _expand_rect(model_rect, 8))
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.window_rank == candidate.window_rank:
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        if _candidate_semantic_key(other) != candidate_key:
+            continue
+        other_geometry = _geometry_agreement(other.rect, model_rect)
+        other_center_inside = _center_inside(other.rect, _expand_rect(model_rect, 8))
+        if other_center_inside and not candidate_center_inside:
+            return True
+        if (
+            other_geometry >= TARGET_ID_GEOMETRY_FLOOR
+            and other_geometry > candidate_geometry + TEXT_MATCH_GAP
+        ):
+            return True
+    return False
 
 
 def _has_semantic_alternative(
@@ -4151,6 +4467,8 @@ def _has_semantic_alternative(
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
+            continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -4215,6 +4533,8 @@ def _has_semantic_alternative(
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
+            continue
+        if _object_only_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -4256,6 +4576,8 @@ def _has_visible_semantic_alternative(
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
             continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
+            continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
         if _browser_address_bar_content_mismatch(
@@ -4319,6 +4641,8 @@ def _has_visible_semantic_alternative(
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
+            continue
+        if _object_only_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -4362,6 +4686,8 @@ def _candidate_snap_score(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _browser_chrome_app_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -4429,6 +4755,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _explicit_action_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _object_only_action_context_mismatch(instruction, candidate):
+        return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -4473,7 +4801,12 @@ def _candidate_snap_score(
         + 0.14 * area_score
         + 0.08 * type_score
     )
-    final_score = score + _foreground_rank_bonus(candidate, candidates)
+    final_score = score + _foreground_rank_bonus(
+        candidate,
+        candidates,
+        model_rect=model_rect,
+        suppress_for_stronger_geometry=False,
+    )
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
             selected=candidate,
@@ -4485,6 +4818,14 @@ def _candidate_snap_score(
             return 0.0
         return min(final_score, CONTAINING_ROW_SNAP_CAP)
     if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        final_score = min(final_score, CONTAINING_ROW_SNAP_CAP)
+    if _contains_tighter_row_action_candidate(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -4579,6 +4920,55 @@ def _contains_tighter_same_intent_action(
     return False
 
 
+def _contains_tighter_row_action_candidate(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    if selected.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if _explicit_container_target_request(
+        instruction,
+        control_intents,
+        selected.control_type,
+    ) and not _instruction_requests_contained_row_action(instruction):
+        return False
+    selected_area = selected.rect[2] * selected.rect[3]
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        candidate_area = candidate.rect[2] * candidate.rect[3]
+        if selected_area < candidate_area * 1.8:
+            continue
+        if not _contains_rect(_expand_rect(selected.rect, 2), candidate.rect):
+            continue
+        if _contained_row_action_candidate_matches(candidate, instruction_tokens):
+            return True
+    return False
+
+
+def _contained_row_action_candidate_matches(
+    candidate: ControlCandidate,
+    instruction_tokens: set[str],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    return bool(visible_tokens and instruction_tokens & visible_tokens)
+
+
+def _instruction_requests_contained_row_action(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+        return False
+    return bool(raw_tokens & {"for", "in", "inside", "on", "within"})
+
+
 def _explicit_container_target_request(
     instruction: str,
     control_intents: set[str],
@@ -4605,19 +4995,28 @@ def _single_contained_control_intent_candidate(
     if not control_intents:
         return None
     bounds = _expand_rect(model_rect, 4)
+    contained_actions: list[ControlCandidate] = []
     contained: list[ControlCandidate] = []
     for candidate in candidates:
         if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
             continue
-        if not _candidate_matches_control_intent(
+        matches_intent = _candidate_matches_control_intent(
             candidate,
             control_intents,
             instruction=instruction,
-        ):
+        )
+        matches_row_action = (
+            _instruction_requests_contained_row_action(instruction)
+            and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
+            and _contained_row_action_candidate_matches(candidate, instruction_tokens)
+        )
+        if not matches_intent and not matches_row_action:
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
+            continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -4669,6 +5068,8 @@ def _single_contained_control_intent_candidate(
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
             continue
+        if _object_only_action_context_mismatch(instruction, candidate):
+            continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -4680,11 +5081,14 @@ def _single_contained_control_intent_candidate(
             instruction_tokens=instruction_tokens,
         ):
             continue
-        if any(_same_visual_candidate(candidate, existing) for existing in contained):
+        target_bucket = contained_actions if matches_row_action and not matches_intent else contained
+        if any(_same_visual_candidate(candidate, existing) for existing in target_bucket):
             continue
-        contained.append(candidate)
-        if len(contained) > 1:
+        target_bucket.append(candidate)
+        if len(target_bucket) > 1:
             return None
+    if contained_actions:
+        return contained_actions[0]
     return contained[0] if contained else None
 
 
@@ -4874,6 +5278,8 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _browser_profile_page_action_mismatch(instruction, candidate):
         return True
+    if _browser_chrome_app_context_mismatch(instruction, candidate):
+        return True
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _browser_address_bar_content_mismatch(
@@ -4939,6 +5345,8 @@ def _candidate_snap_semantic_mismatch(
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_action_context_mismatch(instruction, candidate):
+        return True
+    if _object_only_action_context_mismatch(instruction, candidate):
         return True
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return True

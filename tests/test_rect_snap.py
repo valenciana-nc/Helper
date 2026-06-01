@@ -337,12 +337,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         clear_text_tokens = tokenize_instruction("Clear text")
         clear_text_intents = instruction_control_intents("Clear text")
+        delete_selected_text_intents = instruction_control_intents("Delete selected text")
         delete_tokens = tokenize_instruction("Delete item")
 
         self.assertTrue({"clear", "x"}.issubset(clear_text_tokens))
         self.assertNotIn("text", clear_text_tokens)
         self.assertTrue({"button", "splitbutton"}.issubset(clear_text_intents))
         self.assertNotIn("edit", clear_text_intents)
+        self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(delete_selected_text_intents))
+        self.assertNotIn("edit", delete_selected_text_intents)
         self.assertIn("clear", tokenize_control("\u00d7"))
         self.assertIn("clear", tokenize_control("X"))
         self.assertIn("close", tokenize_control("X"))
@@ -8071,6 +8074,89 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "settings")
         self.assertFalse(help_target.rejected_reason)
 
+    def test_browser_chrome_controls_do_not_steal_app_local_targets(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open the Reports tab in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Reports - MyApp",
+                    "tabitem",
+                    (80, 0, 220, 40),
+                    window_title="MyApp - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Reports",
+                    "tabitem",
+                    (260, 110, 120, 32),
+                    window_title="MyApp - Google Chrome",
+                ),
+            ),
+            (
+                "Open Downloads in the sidebar.",
+                ControlCandidate(
+                    "c001",
+                    "Downloads",
+                    "button",
+                    (880, 8, 42, 34),
+                    automation_id="downloads",
+                    window_title="Reports - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Downloads",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="Reports - Google Chrome",
+                ),
+            ),
+            (
+                "Go forward in the wizard.",
+                ControlCandidate(
+                    "c001",
+                    "Forward",
+                    "button",
+                    (52, 8, 34, 34),
+                    automation_id="view_1002",
+                    window_title="Onboarding - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Forward",
+                    "button",
+                    (420, 540, 110, 32),
+                    window_title="Onboarding - Google Chrome",
+                ),
+            ),
+        )
+        for instruction, chrome_control, app_control in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": chrome_control.id,
+                            "target": {
+                                "x": chrome_control.rect[0],
+                                "y": chrome_control.rect[1],
+                                "width": chrome_control.rect[2],
+                                "height": chrome_control.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [chrome_control, app_control],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, app_control.id)
+                self.assertFalse(target.rejected_reason)
+
     def test_explicit_settings_tab_wording_still_accepts_browser_tab_title(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -14716,6 +14802,113 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertIsNone(snap_target)
         self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
+    def test_selected_text_actions_recover_to_toolbar_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Delete selected text.", "Delete"),
+            ("Share selected text.", "Share"),
+            ("Print selected text.", "Print"),
+            ("Save selected text.", "Save"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 300, "y": 160, "width": 220, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", label, "button", (120, 160, 100, 32)),
+                        ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_file_action_requests_reject_object_only_file_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Save file.", "Save"),
+            ("Download file.", "Download"),
+            ("Attach file.", "Attach"),
+        )
+        for instruction, action_label in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    ControlCandidate("c001", "File", "button", (120, 160, 150, 32)),
+                    ControlCandidate("c002", action_label, "button", (320, 160, 170, 32)),
+                ]
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidates[0].rect,
+                )
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                            "target": {
+                                "x": candidates[0].rect[0],
+                                "y": candidates[0].rect[1],
+                                "width": candidates[0].rect[2],
+                                "height": candidates[0].rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c002")
+                self.assertFalse(target.rejected_reason)
+
+    def test_selected_file_actions_prefer_exact_action_over_alias_neighbor(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Download selected file.", "Upload", "Download"),
+            ("Attach selected file.", "Upload", "Attach"),
+            ("Upload selected file.", "Attach", "Upload"),
+        )
+        for instruction, decoy_label, action_label in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                            "target": {"x": 120, "y": 160, "width": 150, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", decoy_label, "button", (120, 160, 150, 32)),
+                        ControlCandidate("c002", action_label, "button", (320, 160, 170, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c002")
+                self.assertFalse(target.rejected_reason)
+
     def test_security_control_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -15724,6 +15917,93 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, candidate_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (578, 186, 28, 28))
+
+    def test_row_scoped_action_model_rect_promotes_contained_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Pay for Beta invoice row.",
+                [
+                    ControlCandidate("r1", "INV-001 Acme Pending", "listitem", (10, 10, 800, 40)),
+                    ControlCandidate("pay1", "Pay", "button", (720, 14, 60, 30)),
+                    ControlCandidate("r2", "INV-002 Beta Pending", "listitem", (10, 60, 800, 40)),
+                    ControlCandidate("pay2", "Pay", "button", (720, 64, 60, 30)),
+                ],
+                "pay2",
+                (720, 64, 60, 30),
+                "candidate_snap",
+            ),
+            (
+                "Click More in Bob row.",
+                [
+                    ControlCandidate("r1", "Alice", "listitem", (10, 10, 800, 40)),
+                    ControlCandidate("more1", "More", "button", (720, 14, 60, 30)),
+                    ControlCandidate("r2", "Bob", "listitem", (10, 60, 800, 40)),
+                    ControlCandidate("more2", "More", "button", (720, 64, 60, 30)),
+                ],
+                "more2",
+                (720, 64, 60, 30),
+                "text_match",
+            ),
+        )
+        for instruction, candidates, candidate_id, rect, source in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 10, "y": 60, "width": 800, "height": 40},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, source)
+                self.assertEqual(target.target_id, candidate_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Save button in the modal.",
+                    "target": {"x": 360, "y": 200, "width": 260, "height": 120},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "bg",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Editor",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "modal",
+                    "Save",
+                    "button",
+                    (400, 240, 80, 32),
+                    window_title="Save changes",
+                    window_rank=1,
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "modal")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (400, 240, 80, 32))
 
     def test_selector_wrong_target_id_recovers_to_combobox(self) -> None:
         from control_inventory import ControlCandidate

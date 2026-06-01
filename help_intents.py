@@ -882,6 +882,30 @@ _MEDIA_STOP_WORDS = frozenset({"stop"})
 _CLIPBOARD_ACTION_WORDS = frozenset(
     {"clipboard", "copy", "cut", "paste", "scissor", "scissors"}
 )
+_TEXT_OBJECT_ACTION_INTENT_TYPES = frozenset(
+    {"button", "splitbutton", "hyperlink", "menuitem"}
+)
+_TEXT_OBJECT_ACTION_WORDS = frozenset(
+    {
+        "archive",
+        "bin",
+        "cabinet",
+        "delete",
+        "disk",
+        "filing",
+        "floppy",
+        "print",
+        "printer",
+        "remove",
+        "save",
+        "share",
+        "trash",
+        "wastebasket",
+    }
+)
+_TEXT_OBJECT_WORDS = frozenset(
+    {"content", "message", "paragraph", "selection", "selected", "text", "word", "words"}
+)
 _FORMAT_ACTION_WORDS = frozenset(
     {
         "bold",
@@ -1004,6 +1028,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
     clipboard_action_requested = _clipboard_action_requested(raw_tokens)
+    text_object_action_requested = _text_object_action_requested(raw_tokens)
     format_action_requested = _format_action_requested(raw_tokens)
     clear_action_requested = _clear_action_requested(raw_tokens)
     selection_action_requested = _selection_action_requested(raw_tokens)
@@ -1044,6 +1069,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or disclosure_requested
         or password_visibility_requested
         or clipboard_action_requested
+        or text_object_action_requested
         or format_action_requested
         or clear_action_requested
         or selection_action_requested
@@ -1068,6 +1094,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not explicit_button_requested
         and not password_visibility_requested
         and not clipboard_action_requested
+        and not text_object_action_requested
         and not format_action_requested
         and not clear_action_requested
         and not selection_action_requested
@@ -1093,6 +1120,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_BUTTON_INTENT_TYPES)
     if clipboard_action_requested:
         intents.update(_CLIPBOARD_ACTION_INTENT_TYPES)
+    if text_object_action_requested:
+        intents.update(_TEXT_OBJECT_ACTION_INTENT_TYPES)
     if format_action_requested:
         intents.update(_FORMAT_ACTION_INTENT_TYPES)
     if clear_action_requested:
@@ -1115,6 +1144,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not split_button_requested
         and not password_visibility_requested
         and not clipboard_action_requested
+        and not text_object_action_requested
         and not format_action_requested
         and not clear_action_requested
         and not selection_action_requested
@@ -1282,6 +1312,14 @@ def _media_control_requested(raw_tokens: set[str]) -> bool:
 
 def _clipboard_action_requested(raw_tokens: set[str]) -> bool:
     if not (raw_tokens & _CLIPBOARD_ACTION_WORDS):
+        return False
+    return not bool(raw_tokens & _TEXT_ENTRY_ACTION_WORDS)
+
+
+def _text_object_action_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _TEXT_OBJECT_ACTION_WORDS):
+        return False
+    if not (raw_tokens & _TEXT_OBJECT_WORDS):
         return False
     return not bool(raw_tokens & _TEXT_ENTRY_ACTION_WORDS)
 

@@ -1986,6 +1986,78 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "save_file_wrong_target_id_recovers_from_object_to_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "File"},
+                {"rect": [220, 80, 120, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save file.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "File", "control_type": "button", "rect": [20, 80, 150, 32]},
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [220, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [220, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "download_file_wrong_target_id_recovers_from_object_to_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "File"},
+                {"rect": [220, 80, 140, 32], "label": "Download"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Download file.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "File", "control_type": "button", "rect": [20, 80, 150, 32]},
+                {"id": "c002", "text": "Download", "control_type": "button", "rect": [220, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [220, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "attach_selected_file_prefers_exact_action_over_upload",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Upload"},
+                {"rect": [220, 80, 120, 32], "label": "Attach"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach selected file.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Upload", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Attach", "control_type": "button", "rect": [220, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [220, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "check_for_updates_button_remains_clickable",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7952,6 +8024,79 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_tab_strip_rejects_in_app_tab_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 220, 40], "label": "Reports browser tab"},
+                {"rect": [260, 110, 120, 32], "label": "Reports app tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Reports tab in the app.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 20, "width": 220, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Reports - MyApp",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 220, 40],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Reports",
+                    "control_type": "tabitem",
+                    "rect": [260, 110, 120, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [260, 110, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_forward_rejects_wizard_navigation_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 34, 34], "label": "Browser forward"},
+                {"rect": [420, 540, 110, 32], "label": "Wizard forward"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go forward in the wizard.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 20, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Forward",
+                    "control_type": "button",
+                    "rect": [20, 20, 34, 34],
+                    "automation_id": "view_1002",
+                    "window_title": "Onboarding - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Forward",
+                    "control_type": "button",
+                    "rect": [420, 540, 110, 32],
+                    "window_title": "Onboarding - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 540, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_settings_model_rect_rejects_unnamed_bookmark_snap",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -12793,6 +12938,70 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c002",
                 "rect": [478, 106, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_pay_action_promotes_contained_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 800, 40], "label": "INV-001 Acme Pending"},
+                {"rect": [730, 84, 60, 30], "label": "Pay"},
+                {"rect": [20, 140, 800, 40], "label": "INV-002 Beta Pending"},
+                {"rect": [730, 144, 60, 30], "label": "Pay"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Beta invoice row.",
+                "target": {"x": 20, "y": 140, "width": 800, "height": 40},
+            },
+            "candidates": [
+                {"id": "r1", "text": "INV-001 Acme Pending", "control_type": "listitem", "rect": [20, 80, 800, 40]},
+                {"id": "pay1", "text": "Pay", "control_type": "button", "rect": [730, 84, 60, 30]},
+                {"id": "r2", "text": "INV-002 Beta Pending", "control_type": "listitem", "rect": [20, 140, 800, 40]},
+                {"id": "pay2", "text": "Pay", "control_type": "button", "rect": [730, 144, 60, 30]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "pay2",
+                "rect": [730, 144, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_label_modal_button_uses_geometry_over_foreground_rank",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+                {"rect": [400, 240, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Save button in the modal.",
+                "target": {"x": 360, "y": 200, "width": 260, "height": 120},
+            },
+            "candidates": [
+                {
+                    "id": "bg",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "modal",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [400, 240, 80, 32],
+                    "window_title": "Save changes",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "modal",
+                "rect": [400, 240, 80, 32],
                 "overlay_emitted": True,
             },
         },

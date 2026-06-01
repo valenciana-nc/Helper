@@ -124,6 +124,20 @@ FILE_PICKER_ACTION_WORDS = frozenset(
     {"attach", "attachment", "browse", "choose", "paperclip", "picker", "select", "upload"}
 )
 FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
+ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
+    {
+        "content",
+        "message",
+        "messages",
+        "paragraph",
+        "paragraphs",
+        "selection",
+        "selected",
+        "text",
+        "word",
+        "words",
+    }
+)
 BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
 BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
 CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
@@ -350,6 +364,28 @@ BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
 )
 BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
+)
+BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
+    {"app", "application", "in_app", "in_page", "nav", "navigation", "sidebar", "wizard"}
+)
+BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
+    {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
+)
+BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
+    {"bookmarks", "downloads", "extensions", "history", "sidepanel"}
+)
+BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
+    {
+        "back",
+        "bookmarks",
+        "download",
+        "downloads",
+        "extensions",
+        "forward",
+        "history",
+        "reload",
+        "refresh",
+    }
 )
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
@@ -599,6 +635,14 @@ def snap_to_control(
             window_title,
             rect,
         )
+        browser_chrome_app_context_mismatch = _browser_chrome_app_context_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+            ctype,
+            window_title,
+            rect,
+        )
         browser_address_bar_content_mismatch = _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -683,6 +727,10 @@ def snap_to_control(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        object_only_action_context_mismatch = _object_only_action_context_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,
             instruction_tokens,
@@ -725,6 +773,7 @@ def snap_to_control(
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
             or browser_profile_page_action_mismatch
+            or browser_chrome_app_context_mismatch
             or browser_address_bar_content_mismatch
             or browser_new_tab_action_mismatch
             or browser_extension_access_action_mismatch
@@ -739,6 +788,7 @@ def snap_to_control(
             or navigation_backup_action_mismatch
             or explicit_action_context_mismatch
             or exclusive_action_family_mismatch
+            or object_only_action_context_mismatch
             or clear_close_action_mismatch
             or close_context_action_mismatch
             or unparsed_visible_text_action_mismatch
@@ -1470,6 +1520,69 @@ def _browser_profile_page_action_mismatch(
     return bool(raw_control_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
 
 
+def _browser_chrome_app_context_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS:
+        return False
+    if not _instruction_requests_app_local_surface(instruction, raw_tokens):
+        return False
+    return _looks_like_browser_chrome_surface(visible_text, automation_id, ctype, window_title, rect)
+
+
+def _instruction_requests_app_local_surface(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    if raw_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\bin\s+(?:the\s+)?app\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
+
+
+def _looks_like_browser_chrome_surface(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    if _looks_like_browser_toolbar_button(visible_text, automation_id, ctype, window_title, rect):
+        return True
+    return ctype == "tabitem" and rect[1] <= 72
+
+
+def _looks_like_browser_toolbar_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    automation_key = (automation_id or "").strip().lower()
+    if automation_key.startswith("view_") or automation_key in BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS:
+        return True
+    text_tokens = _tokens_from_text(visible_text or "")
+    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and rect[1] <= 72)
+
+
 def _browser_address_bar_content_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -1993,6 +2106,37 @@ def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool
         return False
     control_kind = _file_action_kind(_tokens_from_text(candidate_text), is_instruction=False)
     return bool(control_kind and instruction_kind != control_kind)
+
+
+def _object_only_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not instruction_raw_tokens:
+        return False
+    candidate_raw_tokens = _tokens_from_text(candidate_text)
+    if not candidate_raw_tokens:
+        return False
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if not (instruction_raw_tokens & family):
+            continue
+        if candidate_raw_tokens & family:
+            return False
+        instruction_objects = _object_token_variants(
+            _instruction_action_object_tokens(instruction, family)
+        )
+        if not instruction_objects:
+            continue
+        candidate_objects = _object_token_variants(candidate_raw_tokens & instruction_objects)
+        if not candidate_objects:
+            continue
+        candidate_non_objects = (
+            candidate_raw_tokens
+            - instruction_objects
+            - ACTION_OBJECT_STOPWORDS
+            - FILE_IDENTITY_WORDS
+        )
+        if not candidate_non_objects:
+            return True
+    return False
 
 
 def _file_action_kind(tokens: set[str], *, is_instruction: bool) -> str:

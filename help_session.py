@@ -180,6 +180,12 @@ def resolve_help_target(
             model_rect=model_rect,
         )
         if text_target is not None and not text_target.rejected_reason:
+            if (
+                target is not None
+                and target.rejected_reason == "target_id ambiguous"
+                and text_target.target_id == target.target_id
+            ):
+                return target
             return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
 
         if target is not None and target.rejected_reason == "target_id semantic mismatch":
