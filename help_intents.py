@@ -24,6 +24,22 @@ SPINNER_CONTROL_TYPES = frozenset({"spinner"})
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SEPARATOR_RE = re.compile(r"[_\-.]+")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+_SYMBOL_TOKEN_ALIASES = {
+    "?": {"help", "mark", "question"},
+    "+": {"add", "create", "new", "plus"},
+    "...": {"dot", "dots", "ellipsis", "menu", "more", "options"},
+    "\u00d7": {"close", "dismiss", "x"},
+    "\u2026": {"dot", "dots", "ellipsis", "menu", "more", "options"},
+    "\u22ee": {"dot", "dots", "kebab", "menu", "more", "options"},
+    "\u22ef": {"dot", "dots", "ellipsis", "menu", "more", "options"},
+    "\u2699": {"cog", "gear", "options", "preferences", "settings"},
+    "\u2715": {"close", "dismiss", "x"},
+    "\u2716": {"close", "dismiss", "x"},
+    "\U0001f50d": {"find", "lens", "magnifier", "magnifying", "search"},
+    "\U0001f50e": {"find", "lens", "magnifier", "magnifying", "search"},
+}
 
 _TOKEN_ALIASES = {
     "account": {"profile", "user"},
@@ -539,9 +555,18 @@ def tokenize_control(text: str) -> set[str]:
 
 
 def tokens_from_text(text: str) -> set[str]:
-    spaced = _CAMEL_RE.sub(" ", text or "")
+    value = text or ""
+    spaced = _CAMEL_RE.sub(" ", value)
     spaced = _SEPARATOR_RE.sub(" ", spaced)
-    return set(_TOKEN_RE.findall(spaced.lower()))
+    tokens = set(_TOKEN_RE.findall(spaced.lower()))
+    if tokens:
+        return tokens
+    compact = _WHITESPACE_RE.sub("", value)
+    symbol_tokens: set[str] = set()
+    for symbol, aliases in _SYMBOL_TOKEN_ALIASES.items():
+        if symbol in compact:
+            symbol_tokens.update(aliases)
+    return symbol_tokens
 
 
 def expand_token_aliases(tokens: set[str]) -> set[str]:

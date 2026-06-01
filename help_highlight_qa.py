@@ -1829,6 +1829,92 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "symbol_question_mark_target_id_highlights_help_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "?"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the question mark.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "?", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "symbol_question_mark_text_match_overrides_wrong_help_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "?"},
+                {"rect": [100, 80, 80, 32], "label": "Help"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the question mark.",
+                "target": {"x": 100, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "?", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Help", "control_type": "button", "rect": [100, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "symbol_plus_target_id_highlights_add_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "+"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Add a new item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "+", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "symbol_ellipsis_target_id_highlights_more_options_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "..."},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the more options menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "...", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "disclosure_broad_row_highlights_chevron_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -140,6 +140,22 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("choose", tokens)
         self.assertIn("attach", tokens)
 
+    def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
+        from help_intents import tokens_from_text
+
+        cases = (
+            ("?", {"help", "mark", "question"}),
+            ("+", {"add", "create", "new", "plus"}),
+            ("...", {"dot", "dots", "ellipsis", "menu", "more", "options"}),
+            ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
+            ("\u00d7", {"close", "dismiss", "x"}),
+            ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
+            ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(tokens_from_text(text), expected)
+
     def test_picker_and_selector_intents_split_by_context(self) -> None:
         from help_intents import instruction_control_intents
 
@@ -4911,6 +4927,81 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_symbol_only_question_mark_target_id_accepts_without_model_rect(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the question mark.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "?", "button", (120, 160, 32, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_symbol_only_text_match_overrides_wrong_model_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the question mark.",
+                    "target": {"x": 220, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "?", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Help", "button", (220, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_symbol_only_action_buttons_match_instruction_text(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Add a new item.", "+", (120, 160, 32, 32)),
+            ("Open the more options menu.", "...", (120, 160, 32, 32)),
+            ("Close the dialog.", "\u00d7", (120, 160, 32, 32)),
+            ("Open settings.", "\u2699", (120, 160, 32, 32)),
+            ("Search.", "\U0001f50d", (120, 160, 32, 32)),
+        )
+        for instruction, text, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", text, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
 
     def test_disclosure_broad_row_highlights_single_button(self) -> None:
         from control_inventory import ControlCandidate
