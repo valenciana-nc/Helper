@@ -498,6 +498,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_field_model_rect_with_clear_action_highlights_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 40], "label": "Search"},
+                {"rect": [586, 86, 28, 28], "label": "Clear"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this field.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 40},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Search", "control_type": "edit", "rect": [20, 80, 600, 40]},
+                {"id": "c002", "text": "Clear", "control_type": "button", "rect": [586, 86, 28, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 600, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

@@ -130,6 +130,9 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "field",
         "input",
         "box",
+        "text",
+        "textbox",
+        "textarea",
         "type",
         "enter",
         "into",
@@ -153,6 +156,11 @@ _INSTRUCTION_STOPWORDS = frozenset(
 )
 
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
+INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
+_INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
+_TIGHT_ACTION_INTENT_WORDS = frozenset(
+    {"button", "icon", "link", "tab", "menu", "checkbox", "radio"}
+)
 
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -578,6 +586,7 @@ def snap_candidate_target(
     search_rect = _expand_rect(model_rect, margin_px)
     ranked: list[tuple[float, ControlCandidate]] = []
     instruction_tokens = _tokenize_instruction(instruction)
+    control_intents = _instruction_control_intents(instruction)
     for candidate in candidates:
         if not _intersects(candidate.rect, search_rect):
             continue
@@ -585,6 +594,7 @@ def snap_candidate_target(
             candidate=candidate,
             candidates=candidates,
             instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
             model_rect=model_rect,
         )
         if score > 0:
@@ -883,6 +893,7 @@ def _target_id_plausibility(
     model_rect: tuple[int, int, int, int] | None,
 ) -> tuple[bool, float, str]:
     instruction_tokens = _tokenize_instruction(instruction)
+    control_intents = _instruction_control_intents(instruction)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     geometry_score = (
@@ -894,6 +905,7 @@ def _target_id_plausibility(
             selected=candidate,
             candidates=candidates,
             instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
         ):
             return (
                 False,
@@ -907,6 +919,8 @@ def _target_id_plausibility(
                 "target_id ambiguous unlabeled control",
             )
         if model_rect is not None and geometry_score >= TARGET_ID_GEOMETRY_FLOOR:
+            if not _candidate_matches_generic_control_intent(candidate, control_intents):
+                return False, geometry_score, "target_id control type mismatch"
             return True, max(0.82, geometry_score), ""
         return False, geometry_score, "target_id lacks instruction evidence"
 
@@ -925,6 +939,7 @@ def _target_id_plausibility(
         selected=candidate,
         candidates=candidates,
         instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
     ):
         return (
             False,
@@ -1097,12 +1112,18 @@ def _candidate_snap_score(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
     instruction_tokens: set[str],
+    control_intents: set[str],
     model_rect: tuple[int, int, int, int],
 ) -> float:
     iou = _iou(candidate.rect, model_rect)
     proximity = _proximity_score(candidate.rect, model_rect)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if (
+        not instruction_tokens
+        and not _candidate_matches_generic_control_intent(candidate, control_intents)
+    ):
+        return 0.0
     if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
         return 0.0
     if _has_visible_semantic_alternative(
@@ -1127,6 +1148,7 @@ def _candidate_snap_score(
         selected=candidate,
         candidates=candidates,
         instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
     ):
         final_score = min(final_score, CONTAINING_ROW_SNAP_CAP)
     return min(1.0, final_score)
@@ -1137,6 +1159,7 @@ def _contains_tighter_same_intent_action(
     selected: ControlCandidate,
     candidates: list[ControlCandidate],
     instruction_tokens: set[str],
+    control_intents: set[str],
 ) -> bool:
     if selected.control_type not in ROW_LIKE_CONTROL_TYPES:
         return False
@@ -1152,6 +1175,12 @@ def _contains_tighter_same_intent_action(
         if not _contains_rect(selected.rect, candidate.rect):
             continue
         if not instruction_tokens:
+            if "tight_action" in control_intents:
+                return True
+            if _generic_intent_accepts_container(selected, control_intents):
+                return False
+            if control_intents:
+                return False
             return True
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
@@ -1159,6 +1188,34 @@ def _contains_tighter_same_intent_action(
         if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
+
+
+def _instruction_control_intents(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    intents: set[str] = set()
+    if raw_tokens & _INPUT_INTENT_WORDS:
+        intents.add("input")
+    if raw_tokens & _TIGHT_ACTION_INTENT_WORDS:
+        intents.add("tight_action")
+    return intents
+
+
+def _generic_intent_accepts_container(
+    selected: ControlCandidate,
+    control_intents: set[str],
+) -> bool:
+    return "input" in control_intents and selected.control_type in INPUT_CONTROL_TYPES
+
+
+def _candidate_matches_generic_control_intent(
+    candidate: ControlCandidate,
+    control_intents: set[str],
+) -> bool:
+    if "tight_action" in control_intents:
+        return candidate.control_type in TIGHT_ACTION_CONTROL_TYPES
+    if "input" in control_intents:
+        return candidate.control_type in INPUT_CONTROL_TYPES
+    return True
 
 
 def _foreground_snap_conflict(

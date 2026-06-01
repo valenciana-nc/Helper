@@ -819,6 +819,42 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this field.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 600, 40)),
+                ControlCandidate("c002", "Clear", "button", (570, 14, 28, 28)),
+            ],
+            model_rect=(10, 10, 600, 40),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 600, 40))
+
+    def test_generic_field_target_id_rejects_wrong_button_type(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this field.",
+            candidates=[
+                ControlCandidate("c001", "Clear", "button", (570, 14, 28, 28)),
+            ],
+            model_rect=(570, 14, 28, 28),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
     def test_target_id_foreground_duplicate_without_geometry_is_accepted(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1269,6 +1305,44 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this field.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 600, 40)),
+                ControlCandidate("c002", "Clear", "button", (570, 14, 28, 28)),
+            ],
+            model_rect=(10, 10, 600, 40),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 600, 40))
+
+    def test_snap_candidate_target_accepts_generic_text_box_without_placeholder_match(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this text box.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 600, 40)),
+                ControlCandidate("c002", "Clear", "button", (570, 14, 28, 28)),
+            ],
+            model_rect=(10, 10, 600, 40),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 600, 40))
+
     def test_snap_candidate_target_ignores_same_visual_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1684,6 +1758,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_field_model_rect_with_clear_action_highlights_field(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this field.",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 40},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Search", "edit", (10, 10, 600, 40)),
+                ControlCandidate("c002", "Clear", "button", (570, 14, 28, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 600, 40))
 
     def test_generic_model_rect_rejects_background_snap_when_foreground_is_plausible(self) -> None:
         from control_inventory import ControlCandidate

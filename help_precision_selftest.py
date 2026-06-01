@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import io
 import json
 import os
@@ -353,8 +354,23 @@ def run_child_window(title: str) -> int:
     window.show()
     window.raise_()
     window.activateWindow()
+    _force_window_to_front(window)
     _process_events(app, CHILD_READY_SETTLE_SEC)
+    _force_window_to_front(window)
     return app.exec()
+
+
+def _force_window_to_front(window: QWidget) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        hwnd = int(window.winId())
+        user32 = ctypes.windll.user32
+        user32.ShowWindow(hwnd, 1)
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+        user32.SetForegroundWindow(hwnd)
+    except Exception:
+        return
 
 
 def _build_window(title: str) -> QWidget:
