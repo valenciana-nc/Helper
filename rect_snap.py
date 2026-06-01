@@ -60,6 +60,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "button", "icon", "link", "tab", "menu", "item", "header", "heading",
         "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
+        "toggle", "switch",
         "radio", "radiobutton", "combo", "combobox", "dropdown",
         "drop", "down", "arrow", "caret", "chevron",
         "open", "type", "enter", "into",
@@ -86,6 +87,25 @@ _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
+_SWITCH_ACTION_CONTEXT_WORDS = frozenset(
+    {
+        "account",
+        "app",
+        "application",
+        "branch",
+        "context",
+        "organization",
+        "org",
+        "profile",
+        "project",
+        "tab",
+        "team",
+        "user",
+        "view",
+        "window",
+        "workspace",
+    }
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
@@ -684,12 +704,17 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     checkbox_requested = "checkbox" in raw_tokens or (
         "check" in raw_tokens and "box" in raw_tokens
     )
+    toggle_requested = "toggle" in raw_tokens
+    switch_requested = (
+        "switch" in raw_tokens
+        and not (raw_tokens & _SWITCH_ACTION_CONTEXT_WORDS)
+    )
     radio_requested = "radiobutton" in raw_tokens or "radio" in raw_tokens
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
     input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
-    if checkbox_requested:
+    if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
     if radio_requested:
         intents.add("radiobutton")
