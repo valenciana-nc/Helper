@@ -458,6 +458,43 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (24, 34, 20, 20))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_prefers_splitbutton_menu_segment(self) -> None:
+        from rect_snap import snap_to_control
+
+        split = _make_button("Export", 100, 100, 180, 32, control_type="SplitButton")
+        primary = _make_button("Export", 100, 100, 140, 32, control_type="Button")
+        menu = _make_button("Export menu", 240, 100, 40, 32, control_type="MenuItem")
+        window = _make_window("Toolbar", 0, 0, 800, 600, [split, primary, menu])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 100, 180, 32),
+            "Open the Export menu.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_splitbutton_menu_without_precise_segment(self) -> None:
+        from rect_snap import snap_to_control
+
+        split = _make_button("Export", 100, 100, 180, 32, control_type="SplitButton")
+        window = _make_window("Toolbar", 0, 0, 800, 600, [split])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 100, 180, 32),
+            "Open the Export menu.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "compound target ambiguous")
+
     def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1032,6 +1069,46 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_menu_target_id_rejects_broad_splitbutton_with_menu_segment(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Open the Export menu.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
+    def test_text_match_prefers_splitbutton_menu_segment(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open the Export menu.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c003")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1569,6 +1646,39 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_snap_candidate_target_prefers_splitbutton_menu_segment(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Open the Export menu.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c003")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+
+    def test_snap_candidate_target_rejects_splitbutton_menu_without_precise_segment(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Open the Export menu.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNone(result)
+
     def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -2069,7 +2179,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rect, (20, 20, 70, 30))
         self.assertFalse(target.rejected_reason)
@@ -2094,10 +2204,61 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rect, (20, 20, 70, 30))
         self.assertFalse(target.rejected_reason)
+
+    def test_splitbutton_target_id_recovers_to_menu_segment(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the Export menu.",
+                    "target_id": "c001",
+                    "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c003")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (240, 100, 40, 32))
+
+    def test_splitbutton_model_rect_highlights_menu_segment(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the Export menu.",
+                    "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c003")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (240, 100, 40, 32))
 
     def test_generic_row_model_rect_with_actions_downgrades_no_overlay(self) -> None:
         from control_inventory import ControlCandidate

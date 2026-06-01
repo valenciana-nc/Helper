@@ -170,6 +170,7 @@ def snap_to_control(
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
     control_type_mismatch_result: SnapResult | None = None
+    compound_target_result: SnapResult | None = None
     contained_control_intent_results: list[tuple[SnapResult, str]] = []
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
     foreground_handle = _safe_foreground_handle(
@@ -257,6 +258,19 @@ def snap_to_control(
         )
         if foreground_known and window_rank == 0:
             score = min(1.0, score + FOREGROUND_RANK_BONUS)
+        if ctype == "splitbutton" and _menu_segment_intent(control_intents):
+            score = min(score, SEMANTIC_MISMATCH_CAP)
+            if (
+                compound_target_result is None
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                compound_target_result = SnapResult(
+                    rect=rect,
+                    confidence=score,
+                    source="uia",
+                    matched_text=text,
+                    rejected_reason="compound target ambiguous",
+                )
         result = SnapResult(
             rect=rect,
             confidence=score,
@@ -266,6 +280,7 @@ def snap_to_control(
         if (
             control_intents
             and _contains_rect(_expand_rect(model_rect, 4), rect)
+            and not (ctype == "splitbutton" and _menu_segment_intent(control_intents))
             and not any(item.rect == result.rect for item, _text in contained_control_intent_results)
         ):
             contained_control_intent_results.append((result, semantic_text))
@@ -342,6 +357,8 @@ def snap_to_control(
             return occluded_result
         if control_type_mismatch_result is not None:
             return control_type_mismatch_result
+        if compound_target_result is not None:
+            return compound_target_result
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -685,6 +702,10 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     if "menu" in raw_tokens:
         intents.update(_MENU_INTENT_TYPES)
     return intents
+
+
+def _menu_segment_intent(control_intents: set[str]) -> bool:
+    return "menuitem" in control_intents
 
 
 def _tokenize_control(text: str) -> set[str]:

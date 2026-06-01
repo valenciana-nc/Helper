@@ -460,7 +460,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "c002", "text": "Settings", "control_type": "button", "rect": [40, 100, 80, 32]},
             ],
             "expected": {
-                "source": "candidate_snap",
+                "source": "text_match",
                 "target_id": "c002",
                 "rect": [40, 100, 80, 32],
                 "overlay_emitted": True,
@@ -484,7 +484,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "c002", "text": "Settings", "control_type": "button", "rect": [40, 100, 80, 32]},
             ],
             "expected": {
-                "source": "candidate_snap",
+                "source": "text_match",
                 "target_id": "c002",
                 "rect": [40, 100, 80, 32],
                 "overlay_emitted": True,
@@ -731,6 +731,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "model",
                 "quality_reason": "target appears to contain multiple controls",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "splitbutton_menu_model_rect_snaps_to_menu_segment",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Export"},
+                {"rect": [240, 100, 40, 32], "label": "v"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Export menu.",
+                "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Export", "control_type": "splitbutton", "rect": [100, 100, 180, 32]},
+                {"id": "c002", "text": "Export", "control_type": "button", "rect": [100, 100, 140, 32]},
+                {"id": "c003", "text": "Export menu", "control_type": "menuitem", "rect": [240, 100, 40, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c003",
+                "rect": [240, 100, 40, 32],
+                "overlay_emitted": True,
             },
         },
         {

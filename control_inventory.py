@@ -175,6 +175,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
 )
 
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
+COMPOSITE_ACTION_CONTROL_TYPES = frozenset({"splitbutton"})
 INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -573,6 +574,22 @@ def resolve_candidate_target(
                 if contained is None:
                     continue
                 candidate = contained
+            elif _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
+                if not _contains_tighter_same_intent_action(
+                    selected=candidate,
+                    candidates=candidates,
+                    instruction_tokens=instruction_tokens,
+                    control_intents=control_intents,
+                ):
+                    continue
+                score = min(score, CONTAINING_ROW_SNAP_CAP)
+            elif _contains_tighter_same_intent_action(
+                selected=candidate,
+                candidates=candidates,
+                instruction_tokens=instruction_tokens,
+                control_intents=control_intents,
+            ):
+                score = min(score, CONTAINING_ROW_SNAP_CAP)
             ranked.append((score, candidate))
 
     if not ranked:
@@ -1007,6 +1024,21 @@ def _target_id_plausibility(
             max(text_score, geometry_score),
             "target_id control type mismatch",
         )
+    if (
+        _menu_segment_intent(control_intents)
+        and candidate.control_type == "splitbutton"
+        and not _contains_tighter_same_intent_action(
+            selected=candidate,
+            candidates=candidates,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+        )
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
 
     if not instruction_tokens:
         if _has_nearby_unlabeled_competitor(candidate, candidates):
@@ -1240,6 +1272,15 @@ def _candidate_snap_score(
         + 0.08 * type_score
     )
     final_score = score + _foreground_rank_bonus(candidate, candidates)
+    if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
+        if not _contains_tighter_same_intent_action(
+            selected=candidate,
+            candidates=candidates,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+        ):
+            return 0.0
+        return min(final_score, CONTAINING_ROW_SNAP_CAP)
     if _contains_tighter_same_intent_action(
         selected=candidate,
         candidates=candidates,
@@ -1257,7 +1298,10 @@ def _contains_tighter_same_intent_action(
     instruction_tokens: set[str],
     control_intents: set[str],
 ) -> bool:
-    if selected.control_type not in ROW_LIKE_CONTROL_TYPES:
+    if (
+        selected.control_type not in ROW_LIKE_CONTROL_TYPES
+        and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
+    ):
         return False
     selected_area = selected.rect[2] * selected.rect[3]
     for candidate in candidates:
@@ -1308,6 +1352,8 @@ def _single_contained_control_intent_candidate(
     bounds = _expand_rect(model_rect, 4)
     contained: list[ControlCandidate] = []
     for candidate in candidates:
+        if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
+            continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         if not _contains_rect(bounds, candidate.rect):
@@ -1381,6 +1427,10 @@ def _candidate_matches_control_intent(
     control_intents: set[str],
 ) -> bool:
     return not control_intents or candidate.control_type in control_intents
+
+
+def _menu_segment_intent(control_intents: set[str]) -> bool:
+    return "menuitem" in control_intents
 
 
 def _foreground_snap_conflict(
