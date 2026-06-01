@@ -6679,6 +6679,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
             ),
+            (
+                "Open unnamed.",
+                "Unnamed bookmark for https://github.com",
+            ),
+            (
+                "Open unnamed bookmark.",
+                "Unnamed bookmark for https://github.com",
+            ),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -7199,6 +7207,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
             ),
+            (
+                "Open unnamed.",
+                "Unnamed bookmark for https://github.com",
+            ),
+            (
+                "Open unnamed bookmark.",
+                "Unnamed bookmark for https://github.com",
+            ),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -7239,6 +7255,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Open organization.",
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
+            ),
+            (
+                "Open unnamed.",
+                "Unnamed bookmark for https://github.com",
+            ),
+            (
+                "Open unnamed bookmark.",
+                "Unnamed bookmark for https://github.com",
             ),
         )
         for instruction, label in cases:
