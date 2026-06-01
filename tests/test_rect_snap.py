@@ -1000,6 +1000,33 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.matched_text, "Cancel")
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
+    def test_candidate_snapshot_miss_does_not_call_fresh_snapper(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        calls: list[bool] = []
+
+        def snapper(_rect, _instruction):
+            calls.append(True)
+            raise AssertionError("fresh snapper should not run after candidate snapshot no-match")
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 420, "y": 420, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Cancel", "button", (120, 160, 80, 32))],
+            snapper=snapper,
+        )
+
+        self.assertFalse(calls)
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
     def test_oversized_model_rect_is_rejected(self) -> None:
         from help_session import resolve_help_target
         from rect_snap import SnapResult

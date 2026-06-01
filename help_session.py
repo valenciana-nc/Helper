@@ -203,6 +203,13 @@ def resolve_help_target(
         return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
     if candidate_snap is not None:
         return candidate_snap
+    if candidates:
+        return TargetResolution(
+            rect=model_rect,
+            confidence=0.0,
+            source="candidate_snap",
+            rejected_reason="candidate snapshot no match",
+        )
 
     try:
         snap = snapper(model_rect, decision.instruction)
@@ -211,6 +218,14 @@ def resolve_help_target(
         snap = SnapResult(rect=model_rect, confidence=0.0, source="model")
 
     if snap.source == "uia":
+        if candidates:
+            return TargetResolution(
+                rect=snap.rect,
+                confidence=snap.confidence,
+                source="snap",
+                matched_text=snap.matched_text,
+                rejected_reason="fresh snap inconsistent with candidate snapshot",
+            )
         return _maybe_clip_resolution_to_capture(TargetResolution(
             rect=snap.rect,
             confidence=snap.confidence,
