@@ -6325,7 +6325,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         for instruction in (
             "Open OpenAI settings.",
             "Open billing settings.",
-            "Open organization settings.",
+            "Open OpenAI organization settings.",
             "Open billing.",
         ):
             with self.subTest(instruction=instruction):
@@ -6450,12 +6450,68 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
             ),
             (
+                "Open latest.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open asset.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open nav.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open ref.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open manage.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open 1136461419546617.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
                 "Open platform.",
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
             ),
             (
+                "Open organization.",
+                "Unnamed bookmark for "
+                "https://platform.openai.com/settings/organization/billing/overview",
+            ),
+            (
                 "Open cloud.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open credentials.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open project.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open client.",
                 "Unnamed bookmark for "
                 "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
             ),
@@ -6968,55 +7024,93 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (420, 160, 180, 32))
 
-    def test_generic_page_text_match_ignores_unnamed_url_bookmark(self) -> None:
+    def test_generic_route_text_match_ignores_unnamed_url_bookmark_terms(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
-        result = resolve_candidate_target(
-            target_id="",
-            instruction="Open page.",
-            candidates=[
-                ControlCandidate(
-                    "c001",
-                    "Unnamed bookmark for "
-                    "https://business.facebook.com/latest/?asset_id=1136461419546617"
-                    "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
-                    "button",
-                    (120, 160, 220, 32),
-                    window_title="about:blank - Google Chrome",
-                )
-            ],
+        cases = (
+            (
+                "Open page.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
+                "Open project.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials"
+                "?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open organization.",
+                "Unnamed bookmark for "
+                "https://platform.openai.com/settings/organization/billing/overview",
+            ),
         )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
 
-        self.assertIsNone(result)
+                self.assertIsNone(result)
 
-    def test_generic_page_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
+    def test_generic_route_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Open page.",
-                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
-                }
+        cases = (
+            (
+                "Open page.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
             ),
-            self._capture(),
-            [
-                ControlCandidate(
-                    "c001",
-                    "Unnamed bookmark for "
-                    "https://business.facebook.com/latest/?asset_id=1136461419546617"
-                    "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
-                    "button",
-                    (120, 160, 220, 32),
-                    window_title="about:blank - Google Chrome",
-                )
-            ],
+            (
+                "Open project.",
+                "Unnamed bookmark for "
+                "https://console.cloud.google.com/apis/credentials"
+                "?project=gen-lang-client-0559993646",
+            ),
+            (
+                "Open organization.",
+                "Unnamed bookmark for "
+                "https://platform.openai.com/settings/organization/billing/overview",
+            ),
         )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
 
-        self.assertEqual(target.source, "candidate_snap")
-        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_extension_access_target_id_requires_named_extension(self) -> None:
         from control_inventory import ControlCandidate

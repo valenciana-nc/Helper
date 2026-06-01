@@ -5755,6 +5755,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "specific_openai_organization_settings_accepts_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open OpenAI organization settings.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://platform.openai.com/settings/organization/billing/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_settings_text_match_prefers_visible_settings_over_unnamed_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5845,6 +5872,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Open page.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://business.facebook.com/latest/?asset_id=1136461419546617&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_query_word_target_id_rejects_unnamed_business_facebook_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open asset.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://business.facebook.com/latest/?asset_id=1136461419546617&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_numeric_id_target_id_rejects_unnamed_business_facebook_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open 1136461419546617.",
                 "target_id": "c001",
             },
             "candidates": [
@@ -5971,6 +6052,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_organization_target_id_rejects_unnamed_openai_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open organization.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://platform.openai.com/settings/organization/billing/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "claude_platform_target_id_rejects_openai_platform_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -6033,6 +6141,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Open cloud.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_project_target_id_rejects_unnamed_google_cloud_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open project.",
                 "target_id": "c001",
             },
             "candidates": [

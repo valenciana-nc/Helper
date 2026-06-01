@@ -204,13 +204,17 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "acct",
         "add",
         "all",
+        "ap",
         "app",
         "application",
+        "asset",
         "base",
         "campaign",
+        "client",
         "cloud",
         "com",
         "create",
+        "credentials",
         "dashboard",
         "default",
         "dev",
@@ -219,8 +223,13 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "http",
         "https",
         "house",
+        "id",
         "launcher",
+        "latest",
+        "manage",
+        "mbs",
         "medium",
+        "nav",
         "new",
         "owned",
         "overview",
@@ -229,7 +238,10 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "platform",
         "plus",
         "profile",
+        "project",
+        "ref",
         "org",
+        "organization",
         "source",
         "utm",
         "user",
@@ -244,21 +256,25 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "a",
         "an",
         "and",
+        "ap",
         "app",
         "application",
         "account",
         "acct",
         "add",
         "all",
+        "asset",
         "base",
         "bookmark",
         "browser",
         "campaign",
         "chrome",
         "click",
+        "client",
         "cloud",
         "com",
         "create",
+        "credentials",
         "dashboard",
         "default",
         "dev",
@@ -271,16 +287,22 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "http",
         "https",
         "house",
+        "id",
         "in",
         "launch",
         "launcher",
+        "latest",
+        "manage",
+        "mbs",
         "medium",
+        "nav",
         "new",
         "owned",
         "open",
         "option",
         "options",
         "org",
+        "organization",
         "overview",
         "page",
         "person",
@@ -288,6 +310,8 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "preference",
         "preferences",
         "profile",
+        "project",
+        "ref",
         "setting",
         "settings",
         "source",
@@ -1927,7 +1951,7 @@ def _unnamed_bookmark_generic_route_mismatch(
     overlap = instruction_tokens & candidate_tokens
     if not overlap:
         return False
-    if not overlap <= UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS:
+    if not all(_is_unnamed_bookmark_generic_route_token(token) for token in overlap):
         return False
     if _instruction_names_unnamed_bookmark_destination(instruction, candidate):
         return False
@@ -1937,6 +1961,12 @@ def _unnamed_bookmark_generic_route_mismatch(
 def _looks_like_unnamed_bookmark(candidate: ControlCandidate) -> bool:
     return candidate.control_type in {"button", "splitbutton"} and bool(
         UNNAMED_BOOKMARK_RE.search(candidate.text or "")
+    )
+
+
+def _is_unnamed_bookmark_generic_route_token(token: str) -> bool:
+    return token in UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS or (
+        token.isdigit() and len(token) >= 5
     )
 
 
