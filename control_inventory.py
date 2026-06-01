@@ -66,6 +66,17 @@ TASKBAR_APP_GENERIC_REQUEST_WORDS = frozenset(
 TASKBAR_APP_STATUS_CONTEXT_WORDS = frozenset(
     {"and", "backed", "backup", "personal", "sync", "synced", "up"}
 )
+TASKBAR_WIDGET_STATUS_IDENTITY_WORDS = frozenset({"weather", "widgets"})
+TASKBAR_NETWORK_STATUS_IDENTITY_WORDS = frozenset(
+    {"internet", "network", "wifi", "wireless"}
+)
+TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
+    {"audio", "realtek", "sound", "speaker", "speakers", "volume"}
+)
+TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
+TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
+TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
+TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"drive", "one"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1514,6 +1525,12 @@ def _taskbar_app_state_action_mismatch(
         and text_tokens & TASKBAR_APP_STATE_WORDS
     ):
         return True
+    if _taskbar_status_label_action_mismatch(
+        instruction_tokens,
+        text_tokens,
+        candidate,
+    ):
+        return True
     identity_tokens = _taskbar_app_identity_tokens(candidate)
     if identity_tokens and instruction_tokens & identity_tokens:
         return False
@@ -1625,6 +1642,42 @@ def _taskbar_app_generic_status_request(
         and meaningful_tokens
         <= (TASKBAR_APP_STATUS_CONTEXT_WORDS | TASKBAR_APP_GENERIC_REQUEST_WORDS)
     )
+
+
+def _taskbar_status_label_action_mismatch(
+    instruction_tokens: set[str],
+    text_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    identity_tokens = _taskbar_status_identity_tokens(text_tokens, candidate)
+    if not identity_tokens:
+        return False
+    if instruction_tokens & identity_tokens:
+        return False
+    overlap = instruction_tokens & text_tokens
+    return bool(overlap)
+
+
+def _taskbar_status_identity_tokens(
+    text_tokens: set[str],
+    candidate: ControlCandidate,
+) -> frozenset[str]:
+    automation_id = (candidate.automation_id or "").strip().lower()
+    if "widgets" in text_tokens or automation_id == "widgetsbutton":
+        return TASKBAR_WIDGET_STATUS_IDENTITY_WORDS
+    if text_tokens & {"internet", "network"}:
+        return TASKBAR_NETWORK_STATUS_IDENTITY_WORDS
+    if text_tokens & {"audio", "realtek", "speakers", "volume"}:
+        return TASKBAR_VOLUME_STATUS_IDENTITY_WORDS
+    if text_tokens & {"battery", "power"}:
+        return TASKBAR_POWER_STATUS_IDENTITY_WORDS
+    if "clock" in text_tokens:
+        return TASKBAR_CLOCK_STATUS_IDENTITY_WORDS
+    if "search" in text_tokens and automation_id == "searchgleambutton":
+        return TASKBAR_SEARCH_STATUS_IDENTITY_WORDS
+    if {"drive", "one"} <= text_tokens:
+        return TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS
+    return frozenset()
 
 
 def _target_id_ambiguity(

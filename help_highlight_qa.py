@@ -7282,6 +7282,145 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_widget_temperature_rejects_taskbar_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Widgets 64F"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open 64.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Widgets 64\u00b0F Clear",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "automation_id": "WidgetsButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_power_remaining_rejects_taskbar_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Battery status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open remaining.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Power Battery status: 80% remaining\r\nFully smart charged",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_volume_percent_model_rect_rejects_taskbar_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Volume 24%"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open 24%.",
+                "target": {"x": 20, "y": 80, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Volume Speakers (Realtek(R) Audio): 24%",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_search_gleam_word_rejects_taskbar_search_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Search gleam"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open reef.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search - World Reef Awareness Day",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SearchGleamButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_battery_status_still_highlights_power_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Battery status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open battery.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Power Battery status: 80% remaining\r\nFully smart charged",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "email_target_id_accepts_envelope_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

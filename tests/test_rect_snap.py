@@ -6810,6 +6810,152 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "candidate_snap")
                 self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
+    def test_generic_taskbar_tray_status_words_reject_dynamic_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open 64.", "Widgets 64\u00b0F Clear", ""),
+            ("Open access.", "Network StarLink\nInternet access", ""),
+            ("Open 24%.", "Volume Speakers (Realtek(R) Audio): 24%", ""),
+            (
+                "Open status.",
+                "Power Battery status: 80% remaining\r\nFully smart charged",
+                "",
+            ),
+            (
+                "Open remaining.",
+                "Power Battery status: 80% remaining\r\nFully smart charged",
+                "",
+            ),
+            (
+                "Open smart charged.",
+                "Power Battery status: 80% remaining\r\nFully smart charged",
+                "",
+            ),
+            ("Open AM.", "Clock 5:04 AM\n\u200e6/\u200e1/\u200e2026", ""),
+            ("Open 2026.", "Clock 5:04 AM\n\u200e6/\u200e1/\u200e2026", ""),
+            ("Open reef.", "Search - World Reef Awareness Day", "SearchGleamButton"),
+            (
+                "Open awareness day.",
+                "Search - World Reef Awareness Day",
+                "SearchGleamButton",
+            ),
+        )
+        for instruction, label, automation_id in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            automation_id=automation_id,
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_named_taskbar_tray_status_labels_still_match_stable_identity(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open weather.", "Widgets 64\u00b0F Clear", ""),
+            ("Open widgets.", "Widgets 64\u00b0F Clear", ""),
+            ("Open internet access.", "Network StarLink\nInternet access", ""),
+            ("Open network.", "Network StarLink\nInternet access", ""),
+            ("Open volume.", "Volume Speakers (Realtek(R) Audio): 24%", ""),
+            ("Open speakers.", "Volume Speakers (Realtek(R) Audio): 24%", ""),
+            ("Open Realtek.", "Volume Speakers (Realtek(R) Audio): 24%", ""),
+            (
+                "Open battery.",
+                "Power Battery status: 80% remaining\r\nFully smart charged",
+                "",
+            ),
+            (
+                "Open power.",
+                "Power Battery status: 80% remaining\r\nFully smart charged",
+                "",
+            ),
+            ("Open clock.", "Clock 5:04 AM\n\u200e6/\u200e1/\u200e2026", ""),
+            ("Open time.", "Clock 5:04 AM\n\u200e6/\u200e1/\u200e2026", ""),
+            ("Open search.", "Search - World Reef Awareness Day", "SearchGleamButton"),
+        )
+        for instruction, label, automation_id in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            automation_id=automation_id,
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_generic_taskbar_tray_status_words_reject_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open 24%.", "Volume Speakers (Realtek(R) Audio): 24%", ""),
+            ("Open reef.", "Search - World Reef Awareness Day", "SearchGleamButton"),
+        )
+        for instruction, label, automation_id in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            automation_id=automation_id,
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
     def test_mail_target_id_accepts_envelope_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
