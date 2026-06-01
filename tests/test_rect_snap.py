@@ -6194,6 +6194,125 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (420, 160, 180, 32))
 
+    def test_extension_access_target_id_requires_named_extension(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        claude_access = "Open Claude\nWants access to this site"
+        codex_access = "Codex\nHas access to this site"
+        cases = (
+            ("Open site.", claude_access, "target_id semantic mismatch"),
+            ("Open this site.", claude_access, "target_id semantic mismatch"),
+            ("Open access.", claude_access, "target_id semantic mismatch"),
+            ("Open site access.", claude_access, "target_id semantic mismatch"),
+            ("Grant access.", claude_access, "target_id semantic mismatch"),
+            ("Grant Claude access.", claude_access, ""),
+            ("Allow Claude on this site.", claude_access, ""),
+            ("Open Claude.", claude_access, ""),
+            ("Grant Claude access.", codex_access, "target_id semantic mismatch"),
+            ("Open Codex.", codex_access, ""),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_site_information_target_id_requires_info_or_lock_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open site.", "target_id semantic mismatch"),
+            ("Open this site.", "target_id semantic mismatch"),
+            ("Open site access.", "target_id semantic mismatch"),
+            ("Open site information.", ""),
+            ("Click the site info button.", ""),
+            ("Click the lock icon.", ""),
+            ("Click the padlock icon.", ""),
+        )
+        for instruction, reason in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "View site information",
+                            "button",
+                            (120, 160, 160, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_site_information_text_match_recovers_from_extension_access_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open site information.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Open Claude\nWants access to this site",
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "View site information",
+                    "button",
+                    (420, 160, 160, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (420, 160, 160, 32))
+
     def test_info_target_id_accepts_common_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

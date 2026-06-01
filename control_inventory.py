@@ -75,6 +75,44 @@ BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
+BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
+BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
+    {
+        "access",
+        "button",
+        "control",
+        "extension",
+        "has",
+        "open",
+        "site",
+        "this",
+        "to",
+        "wants",
+    }
+)
+BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS = frozenset(
+    {
+        "access",
+        "allow",
+        "button",
+        "click",
+        "control",
+        "enable",
+        "extension",
+        "give",
+        "grant",
+        "has",
+        "open",
+        "request",
+        "site",
+        "this",
+        "to",
+        "wants",
+    }
+)
+SITE_INFORMATION_REQUEST_WORDS = frozenset(
+    {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
+)
 GMAIL_TAB_SERVICE_RE = re.compile(
     r"(?:^|[\s\-\|\u2013\u2014])gmail(?:$|[\s\-\|\u2013\u2014])",
     re.IGNORECASE,
@@ -934,6 +972,14 @@ def _text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_extension_access_action_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
+    if _site_information_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
@@ -974,6 +1020,14 @@ def _context_text_match_score(
     if not instruction_tokens:
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_extension_access_action_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
+    if _site_information_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _unnamed_bookmark_generic_route_mismatch(
         instruction,
@@ -1065,6 +1119,22 @@ def _target_id_plausibility(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_extension_access_action_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _site_information_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1245,6 +1315,84 @@ def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
     return bool(text_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS)
 
 
+def _browser_extension_access_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_extension_access_button(candidate):
+        return False
+    if not (instruction_tokens & BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS):
+        return False
+    if _instruction_names_browser_extension_access_target(instruction, candidate):
+        return False
+    return True
+
+
+def _looks_like_browser_extension_access_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    return bool(BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS <= text_tokens)
+
+
+def _browser_extension_access_target_tokens(candidate: ControlCandidate) -> set[str]:
+    tokens = _tokens_from_text(candidate.text)
+    return {
+        token
+        for token in tokens - BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS
+        if len(token) > 1 and not token.isdigit()
+    }
+
+
+def _instruction_names_browser_extension_access_target(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    target_tokens = _browser_extension_access_target_tokens(candidate)
+    if not target_tokens:
+        return False
+    raw_words = set(re.findall(r"[a-z0-9]+", (instruction or "").lower()))
+    instruction_specific = {
+        word
+        for word in raw_words - BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS
+        if len(word) > 1 and not word.isdigit()
+    }
+    if not instruction_specific:
+        return False
+    target_text = (candidate.text or "").lower()
+    target_compact = re.sub(r"[^a-z0-9]+", "", target_text)
+    for word in instruction_specific:
+        if word in target_tokens:
+            return True
+        if len(word) >= 4 and word in target_compact:
+            return True
+    return False
+
+
+def _site_information_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_site_information_button(candidate):
+        return False
+    if "site" not in instruction_tokens:
+        return False
+    return not bool(instruction_tokens & SITE_INFORMATION_REQUEST_WORDS)
+
+
+def _looks_like_site_information_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return "site_info_lock" in _candidate_visible_text_tokens(candidate)
+
+
 def _taskbar_app_state_action_mismatch(
     instruction_tokens: set[str],
     candidate: ControlCandidate,
@@ -1358,6 +1506,14 @@ def _target_id_ambiguity(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_extension_access_action_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
+        if _site_information_action_mismatch(instruction_tokens, candidate):
+            continue
         if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
@@ -1446,6 +1602,14 @@ def _has_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_extension_access_action_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
+        if _site_information_action_mismatch(instruction_tokens, candidate):
+            continue
         if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
@@ -1478,6 +1642,14 @@ def _has_visible_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_extension_access_action_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
+        if _site_information_action_mismatch(instruction_tokens, candidate):
+            continue
         if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
@@ -1506,6 +1678,14 @@ def _candidate_snap_score(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_extension_access_action_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
+    if _site_information_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _unnamed_bookmark_generic_route_mismatch(
         instruction,
@@ -1737,6 +1917,14 @@ def _candidate_snap_semantic_mismatch(
     if not instruction_tokens or not semantic_tokens:
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_extension_access_action_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return True
+    if _site_information_action_mismatch(instruction_tokens, candidate):
         return True
     if _unnamed_bookmark_generic_route_mismatch(
         instruction,

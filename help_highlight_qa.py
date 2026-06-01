@@ -5318,6 +5318,149 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_access_rejects_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Claude"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open access.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Open Claude\nWants access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "specific_claude_access_accepts_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Claude"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Grant Claude access.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Open Claude\nWants access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "claude_access_rejects_codex_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Codex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Grant Claude access.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Codex\nHas access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_site_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open site.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "site_information_recovers_from_extension_access_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Claude"},
+                {"rect": [300, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open site information.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Open Claude\nWants access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [300, 80, 160, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [300, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "favorite_symbol_target_id_accepts_star_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
