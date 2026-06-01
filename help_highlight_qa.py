@@ -2026,6 +2026,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_toggle_wording_recovers_from_state_action_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Notifications"},
+                {"rect": [320, 100, 190, 32], "label": "Enable notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enable notifications toggle.",
+                "target_id": "button",
+                "target": {"x": 320, "y": 100, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "checkbox", "text": "Notifications", "control_type": "checkbox", "rect": [100, 100, 180, 32]},
+                {"id": "button", "text": "Enable notifications", "control_type": "button", "rect": [320, 100, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "checkbox",
+                "rect": [100, 100, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "state_action_target_id_rejects_opposite_checkbox_label",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

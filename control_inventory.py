@@ -1943,6 +1943,12 @@ def _text_match_score(
         return 0.0
     if _history_action_mismatch(instruction, candidate):
         return 0.0
+    if _explicit_checkbox_like_control_type_mismatch(
+        instruction,
+        candidate,
+        control_intents,
+    ):
+        return 0.0
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
@@ -2154,6 +2160,12 @@ def _context_text_match_score(
     if _audio_output_polarity_action_mismatch(instruction, candidate):
         return 0.0
     if _history_action_mismatch(instruction, candidate):
+        return 0.0
+    if _explicit_checkbox_like_control_type_mismatch(
+        instruction,
+        candidate,
+        _instruction_control_intents(instruction),
+    ):
         return 0.0
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
@@ -2536,6 +2548,16 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _explicit_checkbox_like_control_type_mismatch(
+        instruction,
+        candidate,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
         )
     if _checkbox_state_action_mismatch(instruction, candidate):
         return (
@@ -4010,6 +4032,25 @@ def _checkbox_state_action_mismatch(
     if control_on == control_off:
         return False
     return requested_on != control_on
+
+
+def _explicit_checkbox_like_control_type_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    control_intents: set[str],
+) -> bool:
+    if "checkbox" not in control_intents:
+        return False
+    if candidate.control_type == "checkbox":
+        return False
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    explicit_checkbox = "checkbox" in raw_tokens or {"check", "box"} <= raw_tokens
+    explicit_toggle_or_switch = bool(raw_tokens & {"switch", "toggle"}) and not bool(
+        raw_tokens & {"button", "buttons"}
+    )
+    return explicit_checkbox or explicit_toggle_or_switch
 
 
 def _turn_on_off_action_kind(text: str) -> str:
@@ -6138,6 +6179,12 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _history_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _explicit_checkbox_like_control_type_mismatch(
+        instruction,
+        candidate,
+        control_intents,
+    ):
+        return 0.0
     if _checkbox_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
@@ -6734,7 +6781,11 @@ def _state_action_button_matches_checkbox_intent(
         return False
 
     instruction_tokens = _tokens_from_text(instruction)
-    if "checkbox" in instruction_tokens or {"check", "box"} <= instruction_tokens:
+    if (
+        "checkbox" in instruction_tokens
+        or {"check", "box"} <= instruction_tokens
+        or bool(instruction_tokens & {"switch", "toggle"})
+    ):
         return False
     requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
     requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
@@ -6911,6 +6962,12 @@ def _candidate_snap_semantic_mismatch(
     if _audio_output_polarity_action_mismatch(instruction, candidate):
         return True
     if _history_action_mismatch(instruction, candidate):
+        return True
+    if _explicit_checkbox_like_control_type_mismatch(
+        instruction,
+        candidate,
+        _instruction_control_intents(instruction),
+    ):
         return True
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True

@@ -4720,28 +4720,34 @@ class ControlInventoryTests(unittest.TestCase):
             def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
                 return x, y
 
-        target = resolve_help_target(
-            _parse_live_help_decision(
-                json.dumps(
-                    {
-                        "kind": "step",
-                        "instruction": "Enable notifications checkbox.",
-                        "target_id": "button",
-                        "target": {"x": 320, "y": 100, "width": 190, "height": 32},
-                    }
+        for instruction in (
+            "Enable notifications checkbox.",
+            "Enable notifications toggle.",
+            "Enable notifications switch.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    _parse_live_help_decision(
+                        json.dumps(
+                            {
+                                "kind": "step",
+                                "instruction": instruction,
+                                "target_id": "button",
+                                "target": {"x": 320, "y": 100, "width": 190, "height": 32},
+                            }
+                        )
+                    ),
+                    Capture(),
+                    [
+                        ControlCandidate("checkbox", "Notifications", "checkbox", (100, 100, 180, 32)),
+                        ControlCandidate("button", "Enable notifications", "button", (320, 100, 190, 32)),
+                    ],
                 )
-            ),
-            Capture(),
-            [
-                ControlCandidate("checkbox", "Notifications", "checkbox", (100, 100, 180, 32)),
-                ControlCandidate("button", "Enable notifications", "button", (320, 100, 190, 32)),
-            ],
-        )
 
-        self.assertEqual(target.source, "text_match")
-        self.assertEqual(target.target_id, "checkbox")
-        self.assertEqual(target.rect, (100, 100, 180, 32))
-        self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "checkbox")
+                self.assertEqual(target.rect, (100, 100, 180, 32))
+                self.assertFalse(target.rejected_reason)
 
     def test_state_action_target_id_accepts_matching_action_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
