@@ -1379,6 +1379,80 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_menu_button_rejects_browser_back_button_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "Back"},
+                {"rect": [120, 80, 40, 34], "label": "Chrome"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click menu button.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "automation_id": "view_1001",
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [120, 80, 40, 34],
+                    "automation_id": "view_1007",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_menu_button_model_rect_rejects_browser_back_button_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "Back"},
+                {"rect": [120, 80, 40, 34], "label": "Chrome"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click menu button.",
+                "target": {"x": 20, "y": 80, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "automation_id": "view_1001",
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [120, 80, 40, 34],
+                    "automation_id": "view_1007",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "bare_hidden_rejects_hidden_bookmarks_overflow",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -116,6 +116,25 @@ BROWSER_MENU_BUTTON_TOKENS = frozenset(
     {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
 )
 BROWSER_MENU_CONTROL_INTENTS = frozenset({"button", "menuitem", "splitbutton"})
+BROWSER_MENU_REQUEST_WORDS = frozenset({"menu", "more", "options", "overflow"})
+BROWSER_MENU_SPECIFIC_CONTEXT_WORDS = frozenset(
+    {
+        "account",
+        "all",
+        "avatar",
+        "bookmark",
+        "bookmarks",
+        "download",
+        "downloads",
+        "file",
+        "history",
+        "person",
+        "profile",
+        "tab",
+        "tabs",
+        "user",
+    }
+)
 BROWSER_HIDDEN_BOOKMARKS_WORDS = frozenset({"bookmarks", "hidden"})
 BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS = frozenset(
     {"menu", "more", "options", "preferences", "settings"}
@@ -1085,6 +1104,8 @@ def _text_match_score(
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_menu_button_action_mismatch(instruction, candidate):
+        return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
         instruction_tokens,
@@ -1162,6 +1183,8 @@ def _context_text_match_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -1297,6 +1320,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_menu_button_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -1613,6 +1642,28 @@ def _looks_like_browser_menu_button(candidate: ControlCandidate) -> bool:
     if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     return _tokens_from_text(candidate.text) == {"chrome"}
+
+
+def _browser_menu_button_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & BROWSER_MENU_REQUEST_WORDS):
+        return False
+    if raw_tokens & BROWSER_MENU_SPECIFIC_CONTEXT_WORDS:
+        return False
+    if not (
+        raw_tokens
+        & {"browser", "button", "chrome", "menu", "more", "options", "overflow"}
+    ):
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    if _looks_like_browser_menu_button(candidate):
+        return False
+    return candidate.control_type in BROWSER_MENU_CONTROL_INTENTS
 
 
 def _hidden_bookmarks_overflow_action_mismatch(
@@ -2064,6 +2115,8 @@ def _target_id_ambiguity(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -2206,6 +2259,8 @@ def _has_semantic_alternative(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -2274,6 +2329,8 @@ def _has_visible_semantic_alternative(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -2339,6 +2396,8 @@ def _candidate_snap_score(
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_menu_button_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_address_bar_content_mismatch(
         instruction,
         instruction_tokens,
@@ -2507,6 +2566,8 @@ def _single_contained_control_intent_candidate(
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
+        if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
@@ -2647,6 +2708,8 @@ def _candidate_snap_semantic_mismatch(
     model_rect: tuple[int, int, int, int],
 ) -> bool:
     semantic_tokens = _candidate_semantic_tokens(candidate)
+    if _browser_menu_button_action_mismatch(instruction, candidate):
+        return True
     if not instruction_tokens or not semantic_tokens:
         return False
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
@@ -2654,6 +2717,8 @@ def _candidate_snap_semantic_mismatch(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _browser_address_bar_content_mismatch(
         instruction,

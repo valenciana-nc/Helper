@@ -12470,6 +12470,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
 
+    def test_generic_menu_button_rejects_browser_navigation_toolbar_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        back = ControlCandidate(
+            "c001",
+            "Back",
+            "button",
+            (120, 160, 34, 34),
+            automation_id="view_1001",
+            window_title="about:blank - Google Chrome",
+        )
+        chrome = ControlCandidate(
+            "c002",
+            "Chrome",
+            "button",
+            (300, 160, 40, 34),
+            automation_id="view_1007",
+            window_title="about:blank - Google Chrome",
+        )
+        cases = (
+            (
+                {
+                    "kind": "step",
+                    "instruction": "Click menu button.",
+                    "target_id": "c001",
+                },
+                "target_id",
+                "target_id semantic mismatch",
+            ),
+            (
+                {
+                    "kind": "step",
+                    "instruction": "Click menu button.",
+                    "target": {"x": 120, "y": 160, "width": 34, "height": 34},
+                },
+                "candidate_snap",
+                "candidate semantic mismatch",
+            ),
+            (
+                {
+                    "kind": "step",
+                    "instruction": "Click menu button.",
+                    "target_id": "c002",
+                    "target": {"x": 300, "y": 160, "width": 40, "height": 34},
+                },
+                "target_id",
+                "",
+            ),
+        )
+        for decision, source, reason in cases:
+            with self.subTest(decision=decision):
+                target = resolve_help_target(
+                    self._decision(decision),
+                    self._capture(),
+                    [back, chrome],
+                )
+
+                self.assertEqual(target.source, source)
+                self.assertEqual(target.rejected_reason, reason)
+
     def test_generic_browser_menu_wording_rejects_hidden_bookmarks_overflow(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
