@@ -1765,6 +1765,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "paste_into_search_field_recovers_from_toolbar_paste_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 500, 40], "label": "Search"},
+                {"rect": [20, 20, 90, 32], "label": "Paste"},
+                {"rect": [586, 166, 28, 28], "label": "Clear"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into the search field.",
+                "target_id": "paste",
+                "target": {"x": 20, "y": 20, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "search", "text": "Search", "control_type": "edit", "rect": [120, 160, 500, 40]},
+                {"id": "paste", "text": "Paste", "control_type": "button", "rect": [20, 20, 90, 32]},
+                {"id": "clear", "text": "Clear", "control_type": "button", "rect": [586, 166, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "search",
+                "rect": [120, 160, 500, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "search_bar_plain_button_rejects_overlay",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -13448,6 +13474,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_back_wording_recovers_from_page_local_back_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [16, 16, 32, 32], "label": "Back"},
+                {"rect": [80, 160, 96, 36], "label": "Back"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the browser Back button.",
+                "target_id": "page_back",
+                "target": {"x": 80, "y": 160, "width": 96, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "browser_back",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [16, 16, 32, 32],
+                    "automation_id": "view_back",
+                    "window_title": "Docs - Google Chrome",
+                },
+                {
+                    "id": "page_back",
+                    "text": "Back",
+                    "control_type": "button",
+                    "rect": [80, 160, 96, 36],
+                    "window_title": "Docs - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "browser_back",
+                "rect": [16, 16, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "undo_action_rejects_back_arrow_alias_collision",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14027,6 +14090,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "popup_save",
                 "rect": [630, 160, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "positional_duplicate_action_recovers_requested_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 32, 32], "label": "edit icon"},
+                {"rect": [150, 100, 32, 32], "label": "edit icon"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the second edit button.",
+                "target_id": "edit1",
+                "target": {"x": 100, "y": 100, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "edit1",
+                    "text": "",
+                    "automation_id": "editButton",
+                    "control_type": "button",
+                    "rect": [100, 100, 32, 32],
+                },
+                {
+                    "id": "edit2",
+                    "text": "",
+                    "automation_id": "editButton",
+                    "control_type": "button",
+                    "rect": [150, 100, 32, 32],
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit2",
+                "rect": [150, 100, 32, 32],
                 "overlay_emitted": True,
             },
         },

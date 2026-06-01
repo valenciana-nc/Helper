@@ -607,6 +607,10 @@ _INSTRUCTION_STOPWORDS = frozenset(
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
 _ADDRESS_BAR_INTENT_WORDS = frozenset({"address", "url", "location", "omnibox"})
 _SEARCH_BAR_INTENT_WORDS = frozenset({"filter", "find", "query", "search"})
+_TEXT_ENTRY_TARGET_WORDS = (
+    _INPUT_INTENT_WORDS | _ADDRESS_BAR_INTENT_WORDS | _SEARCH_BAR_INTENT_WORDS | frozenset({"bar"})
+)
+_CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = _TEXT_ENTRY_TARGET_WORDS - frozenset({"text"})
 _TEXT_ENTRY_ACTION_WORDS = frozenset({"enter", "type"})
 _TEXT_ENTRY_BLOCKING_WORDS = frozenset(
     {
@@ -993,6 +997,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
     if _format_action_requested(tokens):
         filtered -= _FORMAT_ACTION_CONTEXT_WORDS
         filtered.update(tokens & _FORMAT_SINGLE_LETTER_WORDS)
+    if _clipboard_action_targets_text_entry(tokens):
+        filtered -= _CLIPBOARD_ACTION_WORDS
     if _clear_action_requested(tokens):
         filtered -= _CLEAR_ACTION_CONTEXT_WORDS
     if _zoom_action_requested(tokens):
@@ -1044,6 +1050,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
     clipboard_action_requested = _clipboard_action_requested(raw_tokens)
+    clipboard_text_entry_target_requested = _clipboard_action_targets_text_entry(raw_tokens)
     text_object_action_requested = _text_object_action_requested(raw_tokens)
     format_action_requested = _format_action_requested(raw_tokens)
     clear_action_requested = _clear_action_requested(raw_tokens)
@@ -1110,7 +1117,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and input_requested
         and not explicit_button_requested
         and not password_visibility_requested
-        and not clipboard_action_requested
+        and not (clipboard_action_requested and not clipboard_text_entry_target_requested)
         and not text_object_action_requested
         and not format_action_requested
         and not clear_action_requested
@@ -1135,7 +1142,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("splitbutton")
     if password_visibility_requested:
         intents.update(_BUTTON_INTENT_TYPES)
-    if clipboard_action_requested:
+    if clipboard_action_requested and not clipboard_text_entry_target_requested:
         intents.update(_CLIPBOARD_ACTION_INTENT_TYPES)
     if text_object_action_requested:
         intents.update(_TEXT_OBJECT_ACTION_INTENT_TYPES)
@@ -1331,6 +1338,19 @@ def _clipboard_action_requested(raw_tokens: set[str]) -> bool:
     if not (raw_tokens & _CLIPBOARD_ACTION_WORDS):
         return False
     return not bool(raw_tokens & _TEXT_ENTRY_ACTION_WORDS)
+
+
+def _clipboard_action_targets_text_entry(raw_tokens: set[str]) -> bool:
+    if "paste" not in raw_tokens:
+        return False
+    if not (raw_tokens & _CLIPBOARD_TEXT_ENTRY_TARGET_WORDS):
+        return False
+    if raw_tokens & {"selected", "selection"} and not (raw_tokens & _INPUT_INTENT_WORDS - {"text"}):
+        return False
+    return bool(
+        raw_tokens & {"in", "into", "to"}
+        or raw_tokens & _CLIPBOARD_TEXT_ENTRY_TARGET_WORDS
+    )
 
 
 def _text_object_action_requested(raw_tokens: set[str]) -> bool:

@@ -264,6 +264,24 @@ DUPLICATE_ACTION_WORDS = frozenset({"clone", "duplicate"})
 CLIPBOARD_COPY_EXACT_CONTEXT_WORDS = frozenset(
     {"address", "link", "links", "selected", "selection", "text", "url", "urls"}
 )
+CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
+    {
+        "address",
+        "bar",
+        "box",
+        "field",
+        "filter",
+        "find",
+        "input",
+        "location",
+        "omnibox",
+        "query",
+        "search",
+        "textbox",
+        "textarea",
+        "url",
+    }
+)
 ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
     {
         "content",
@@ -306,6 +324,9 @@ BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
 )
 BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
     {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
+)
+BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS = frozenset(
+    {"browser", "brave", "chrome", "edge", "toolbar"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
     {"bookmarks", "downloads", "extensions", "history", "home", "reload", "sidepanel"}
@@ -1838,6 +1859,8 @@ def _text_match_score(
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
+    if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
         instruction_tokens,
@@ -1895,6 +1918,13 @@ def _text_match_score(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _positional_action_duplicate_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _contextual_surface_action_alternative_mismatch(
         instruction,
@@ -1964,6 +1994,13 @@ def _text_match_score(
         candidates,
     ):
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
         if _same_label_duplicate_has_stronger_geometry(
@@ -2007,6 +2044,8 @@ def _context_text_match_score(
     if _browser_chrome_app_context_mismatch(instruction, candidate):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
+        return 0.0
+    if _browser_navigation_chrome_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -2066,6 +2105,13 @@ def _context_text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _positional_action_duplicate_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
     if _contextual_surface_action_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -2119,6 +2165,13 @@ def _context_text_match_score(
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if _candidate_satisfies_contextual_duplicate_request(
         instruction,
+        candidate,
+        candidates,
+    ):
+        score = max(score, TEXT_MATCH_FLOOR + 0.04)
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
         candidate,
         candidates,
     ):
@@ -2265,6 +2318,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _browser_address_bar_content_mismatch(
         instruction,
         instruction_tokens,
@@ -2407,6 +2466,17 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _positional_action_duplicate_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _contextual_surface_action_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -2504,6 +2574,13 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return True, max(0.86, text_score, geometry_score), ""
     if model_rect is not None and _same_label_duplicate_has_stronger_geometry(
         candidate,
         candidates,
@@ -2588,6 +2665,11 @@ def _target_id_plausibility(
         control_intents=control_intents,
     ) and not _candidate_satisfies_contextual_duplicate_request(
         instruction,
+        candidate,
+        candidates,
+    ) and not _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
         candidate,
         candidates,
     ):
@@ -2836,6 +2918,21 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     ):
         return True
     return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and compact_toolbar_shape)
+
+
+def _browser_navigation_chrome_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS):
+        return False
+    if not (raw_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if not (candidate_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    return not _looks_like_browser_toolbar_button(candidate)
 
 
 def _browser_chrome_app_context_mismatch(
@@ -3979,6 +4076,22 @@ def _clipboard_copy_context_mismatch(instruction: str, candidate_text: str) -> b
     return False
 
 
+def _clipboard_text_entry_target_request(instruction: str) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if "paste" not in instruction_raw_tokens:
+        return False
+    if not (instruction_raw_tokens & CLIPBOARD_TEXT_ENTRY_TARGET_WORDS):
+        return False
+    if instruction_raw_tokens & {"selected", "selection"} and not (
+        instruction_raw_tokens & {"box", "field", "input", "textbox", "textarea"}
+    ):
+        return False
+    return bool(
+        instruction_raw_tokens & {"in", "into", "to"}
+        or instruction_raw_tokens & CLIPBOARD_TEXT_ENTRY_TARGET_WORDS
+    )
+
+
 def _confirm_action_context_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -4084,6 +4197,11 @@ def _object_only_action_context_mismatch(
 ) -> bool:
     instruction_raw_tokens = _tokens_from_text(instruction)
     if not instruction_raw_tokens:
+        return False
+    if (
+        _clipboard_text_entry_target_request(instruction)
+        and candidate.control_type in {"combobox", "edit", "spinner"}
+    ):
         return False
     candidate_raw_tokens = _tokens_from_text(candidate.descriptor)
     if not candidate_raw_tokens:
@@ -4639,6 +4757,144 @@ def _contextual_duplicate_position_tokens(
     return tokens
 
 
+def _positional_action_duplicate_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_positions = _positional_action_request_tokens(instruction)
+    if not requested_positions:
+        return False
+    if not _positional_action_duplicate_action_tokens(instruction_tokens, candidate):
+        return False
+    position_tokens = _positional_action_duplicate_position_tokens(
+        candidate,
+        candidates,
+        instruction_tokens,
+    )
+    if not position_tokens:
+        return False
+    return not (requested_positions <= position_tokens)
+
+
+def _candidate_satisfies_positional_action_duplicate_request(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_positions = _positional_action_request_tokens(instruction)
+    if not requested_positions:
+        return False
+    position_tokens = _positional_action_duplicate_position_tokens(
+        candidate,
+        candidates,
+        instruction_tokens,
+    )
+    if not position_tokens:
+        return False
+    return requested_positions <= position_tokens
+
+
+def _positional_action_request_tokens(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (
+        raw_tokens & CONTAINED_CONTROL_REQUEST_WORDS
+        or raw_tokens & {"buttons", "controls", "icons"}
+    ):
+        return set()
+    requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+    if raw_tokens & {"arrow", "caret", "chevron"}:
+        requested -= {"left", "right"}
+    return requested
+
+
+def _positional_action_duplicate_position_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction_tokens: set[str],
+) -> set[str]:
+    duplicates = _positional_action_duplicate_candidates(
+        candidate,
+        candidates,
+        instruction_tokens,
+    )
+    if len(duplicates) < 2:
+        return set()
+    ordered = sorted(
+        duplicates,
+        key=lambda item: (
+            item.window_rank,
+            item.rect[1],
+            item.rect[0],
+            item.depth,
+            item.id,
+        ),
+    )
+    try:
+        index = next(index for index, item in enumerate(ordered) if item.id == candidate.id)
+    except StopIteration:
+        return set()
+    tokens: set[str] = set()
+    if index < len(CONTEXTUAL_DUPLICATE_ORDINAL_WORDS):
+        tokens.update(CONTEXTUAL_DUPLICATE_ORDINAL_WORDS[index])
+    if index == len(ordered) - 1:
+        tokens.add("last")
+
+    centers = [(item, _center(item.rect)) for item in ordered]
+    xs = [center[0] for _item, center in centers]
+    ys = [center[1] for _item, center in centers]
+    cx, cy = _center(candidate.rect)
+    if max(xs) - min(xs) >= max(8, candidate.rect[2] // 4):
+        if cx == min(xs):
+            tokens.add("left")
+        if cx == max(xs):
+            tokens.add("right")
+    if max(ys) - min(ys) >= max(8, candidate.rect[3] // 4):
+        if cy == min(ys):
+            tokens.update({"top", "upper"})
+        if cy == max(ys):
+            tokens.update({"bottom", "lower"})
+    return tokens
+
+
+def _positional_action_duplicate_candidates(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction_tokens: set[str],
+) -> list[ControlCandidate]:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return []
+    action_tokens = _positional_action_duplicate_action_tokens(instruction_tokens, candidate)
+    if not action_tokens:
+        return []
+    duplicates: list[ControlCandidate] = []
+    for item in candidates:
+        if item.control_type != candidate.control_type:
+            continue
+        if item.id != candidate.id and _same_visual_candidate(item, candidate):
+            continue
+        item_action_tokens = _positional_action_duplicate_action_tokens(instruction_tokens, item)
+        if action_tokens & item_action_tokens:
+            duplicates.append(item)
+    distinct: dict[str, ControlCandidate] = {}
+    for item in duplicates:
+        distinct.setdefault(item.id, item)
+    return list(distinct.values())
+
+
+def _positional_action_duplicate_action_tokens(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> set[str]:
+    return (
+        instruction_tokens
+        & _candidate_semantic_tokens(candidate)
+        - CONTEXTUAL_DUPLICATE_POSITION_WORDS
+    )
+
+
 def _exact_action_word_alternative_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -5077,6 +5333,8 @@ def _target_id_ambiguity(
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
+        if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -5134,6 +5392,13 @@ def _target_id_ambiguity(
         if _navigation_backup_action_mismatch(instruction, candidate):
             continue
         if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+            continue
+        if _positional_action_duplicate_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+        ):
             continue
         if _contextual_surface_action_alternative_mismatch(
             instruction,
@@ -5352,6 +5617,8 @@ def _has_semantic_alternative(
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
+        if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+            continue
         if _browser_address_bar_content_mismatch(
             instruction,
             instruction_tokens,
@@ -5459,6 +5726,8 @@ def _has_visible_semantic_alternative(
         if _browser_chrome_app_context_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
+        if _browser_navigation_chrome_action_mismatch(instruction, candidate):
             continue
         if _browser_address_bar_content_mismatch(
             instruction,
@@ -5571,6 +5840,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+        return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
         instruction_tokens,
@@ -5628,6 +5899,13 @@ def _candidate_snap_score(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _positional_action_duplicate_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _contextual_surface_action_alternative_mismatch(
         instruction,
@@ -5703,6 +5981,13 @@ def _candidate_snap_score(
         suppress_for_stronger_geometry=False,
     )
     if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
@@ -5960,6 +6245,8 @@ def _single_contained_control_intent_candidate(
         if _browser_chrome_app_context_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
+        if _browser_navigation_chrome_action_mismatch(instruction, candidate):
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
@@ -6266,6 +6553,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_chrome_app_context_mismatch(instruction, candidate):
         return True
     if _browser_menu_button_action_mismatch(instruction, candidate):
+        return True
+    if _browser_navigation_chrome_action_mismatch(instruction, candidate):
         return True
     if _browser_address_bar_content_mismatch(
         instruction,
