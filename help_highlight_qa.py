@@ -7442,6 +7442,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_all_rejects_browser_profile_all_hint",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open all.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "automation_id": "view_1018",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "chrome_profile_rejects_plain_chrome_toolbar_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

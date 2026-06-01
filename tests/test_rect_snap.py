@@ -557,6 +557,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("all", tokenize_instruction("Open all"))
         self.assertTrue({"all", "bookmarks"}.issubset(tokenize_instruction("Open all bookmarks")))
 
+    def test_browser_profile_all_hint_does_not_match_bare_all(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        control_tokens = tokenize_control("Abel (All)")
+
+        self.assertIn("abel", control_tokens)
+        self.assertNotIn("all", control_tokens)
+        self.assertIn("all", tokenize_instruction("Open all"))
+
     def test_weather_widget_status_does_not_expand_to_clear_action(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -5881,6 +5890,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_bare_all_rejects_browser_profile_all_hint(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open all.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Abel (All)",
+                    "button",
+                    (120, 160, 34, 34),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_profile_request_rejects_plain_browser_identity_buttons(self) -> None:
         from control_inventory import ControlCandidate

@@ -67,6 +67,7 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
 )
 _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
     (re.compile(r"\ball\s+bookmarks\b"), {"bookmarks"}, {"all"}),
+    (re.compile(r"\(\s*all\s*\)"), set(), {"all"}),
     (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
     (
         re.compile(r"\b(?:widgets?|weather)\b.*\bclear\b"),
