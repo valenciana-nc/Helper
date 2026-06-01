@@ -1476,6 +1476,115 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "favorite_action_target_id_accepts_star_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Star"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Star", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bookmark_action_target_id_accepts_star_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Star"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Bookmark this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Star", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "favorite_symbol_target_id_accepts_star_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "*"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2606", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "favorite_action_text_match_overrides_wrong_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Star"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Star", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "favorite_action_alias_rejects_ambiguous_favorite_and_star_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Star"},
+                {"rect": [180, 80, 140, 32], "label": "Favorite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Star", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Favorite", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

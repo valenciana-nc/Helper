@@ -161,6 +161,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("reload", tokenize_instruction("Refresh the page"))
         self.assertIn("refresh", tokenize_control("Reload"))
 
+    def test_favorite_action_aliases_expand_to_star_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        favorite_tokens = tokenize_instruction("Favorite this item")
+        bookmark_tokens = tokenize_instruction("Bookmark this item")
+        star_tokens = tokenize_control("Star")
+
+        self.assertTrue({"bookmark", "favorite", "star"}.issubset(favorite_tokens))
+        self.assertTrue({"bookmark", "favorite", "star"}.issubset(bookmark_tokens))
+        self.assertTrue({"bookmark", "favorite", "star"}.issubset(star_tokens))
+
     def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
         from help_intents import tokens_from_text
 
@@ -171,6 +182,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
             ("\u00d7", {"close", "dismiss", "x"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
+            ("\u2606", {"bookmark", "favorite", "star"}),
+            ("\u2665", {"favorite", "heart"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5170,6 +5183,82 @@ class HelpTargetHarnessTests(unittest.TestCase):
             [
                 ControlCandidate("c001", "Export", "button", (120, 160, 120, 32)),
                 ControlCandidate("c002", "Download", "button", (280, 160, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_favorite_action_alias_target_id_accepts_star_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Favorite this item.", "Star", (120, 160, 100, 32)),
+            ("Star this item.", "Favorite", (120, 160, 120, 32)),
+            ("Bookmark this item.", "Star", (120, 160, 100, 32)),
+            ("Favorite this item.", "\u2606", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_favorite_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Favorite this item.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Star", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_favorite_alias_rejects_ambiguous_favorite_and_star_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Favorite this item.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Star", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Favorite", "button", (280, 160, 140, 32)),
             ],
         )
 
