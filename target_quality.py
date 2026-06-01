@@ -10,6 +10,7 @@ from screen import Capture
 MIN_VISIBLE_FRACTION = 0.35
 MODEL_EMPTY_VISUAL_FLOOR = 0.035
 MODEL_LOW_CONFIDENCE_FLOOR = 0.20
+MODEL_BOUNDARY_ACTIVITY_FLOOR = 0.10
 MAX_TARGET_AREA_FRACTION = 0.25
 
 
@@ -19,6 +20,7 @@ class TargetQuality:
     reason: str = ""
     visible_fraction: float = 1.0
     visual_activity: float = 0.0
+    boundary_activity: float = 0.0
     target_area_fraction: float = 0.0
 
 
@@ -58,24 +60,32 @@ def evaluate_target_quality(
             target_area_fraction=target_area_fraction,
         )
 
-    visual_activity = _visual_activity(capture.png_bytes, clipped)
-    if (
-        source == "model"
-        and confidence <= MODEL_LOW_CONFIDENCE_FLOOR
-        and visual_activity < MODEL_EMPTY_VISUAL_FLOOR
-    ):
-        return TargetQuality(
-            accepted=False,
-            reason="target appears visually empty",
-            visible_fraction=visible_fraction,
-            visual_activity=visual_activity,
-            target_area_fraction=target_area_fraction,
-        )
+    visual_activity, boundary_activity = _visual_activity(capture.png_bytes, clipped)
+    if source == "model" and confidence <= MODEL_LOW_CONFIDENCE_FLOOR:
+        if visual_activity < MODEL_EMPTY_VISUAL_FLOOR:
+            return TargetQuality(
+                accepted=False,
+                reason="target appears visually empty",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
+        if boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR:
+            return TargetQuality(
+                accepted=False,
+                reason="target lacks visible control boundary",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
 
     return TargetQuality(
         accepted=True,
         visible_fraction=visible_fraction,
         visual_activity=visual_activity,
+        boundary_activity=boundary_activity,
         target_area_fraction=target_area_fraction,
     )
 
@@ -107,13 +117,13 @@ def _clip_rect(
     return (ix1, iy1, ix2 - ix1, iy2 - iy1)
 
 
-def _visual_activity(png_bytes: bytes, rect: tuple[int, int, int, int]) -> float:
+def _visual_activity(png_bytes: bytes, rect: tuple[int, int, int, int]) -> tuple[float, float]:
     try:
         with Image.open(io.BytesIO(png_bytes)) as img:
             x, y, width, height = rect
             crop = img.convert("L").crop((x, y, x + width, y + height))
             if crop.width <= 0 or crop.height <= 0:
-                return 0.0
+                return 0.0, 0.0
             stats = ImageStat.Stat(crop)
             contrast = (stats.stddev[0] if stats.stddev else 0.0) / 255.0
             edges = crop.filter(ImageFilter.FIND_EDGES)
@@ -122,6 +132,25 @@ def _visual_activity(png_bytes: bytes, rect: tuple[int, int, int, int]) -> float
                 edge_mean = ImageStat.Stat(edges).mean[0] / 255.0
             else:
                 edge_mean = 0.0
-            return min(1.0, 0.65 * contrast + 0.35 * edge_mean)
+            boundary_activity = _boundary_activity(crop)
+            return min(1.0, 0.65 * contrast + 0.35 * edge_mean), boundary_activity
     except Exception:
+        return 0.0, 0.0
+
+
+def _boundary_activity(crop: Image.Image) -> float:
+    width, height = crop.size
+    if width <= 0 or height <= 0:
         return 0.0
+    band = max(1, min(3, width // 6, height // 6))
+    pixels = crop.load()
+    values: list[int] = []
+    for y in range(height):
+        for x in range(width):
+            if x < band or y < band or x >= width - band or y >= height - band:
+                values.append(int(pixels[x, y]))
+    if not values:
+        return 0.0
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return min(1.0, (variance ** 0.5) / 255.0)

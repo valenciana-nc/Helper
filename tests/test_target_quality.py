@@ -72,6 +72,25 @@ class TargetQualityTests(unittest.TestCase):
         self.assertTrue(quality.accepted)
         self.assertGreaterEqual(quality.visual_activity, 0.035)
 
+    def test_rejects_text_only_model_rect_without_control_boundary(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 120), "white")
+        draw = ImageDraw.Draw(img)
+        draw.text((44, 38), "Save changes now", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 130, 30),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target lacks visible control boundary")
+        self.assertGreaterEqual(quality.visual_activity, 0.035)
+
     def test_rejects_mostly_outside_capture(self) -> None:
         from target_quality import evaluate_target_quality
 

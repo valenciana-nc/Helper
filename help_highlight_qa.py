@@ -295,6 +295,24 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {"source": "model", "quality_reason": "target appears visually empty", "overlay_emitted": False},
         },
         {
+            "name": "text_only_model_rect_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"kind": "text", "rect": [60, 80, 160, 30], "label": "Save changes now"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target": {"x": 120, "y": 250, "width": 320, "height": 93},
+            },
+            "candidates": [],
+            "expected": {
+                "source": "model",
+                "quality_reason": "target lacks visible control boundary",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "out_of_range_model_rect_does_not_draw_edge_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {
@@ -521,8 +539,12 @@ def _make_capture(scenario: dict[str, Any]) -> Capture:
             Capture(b"", width, height, monitor_left, monitor_top, scale),
             rect,
         )
-        draw.rectangle(box, outline="black", fill=item.get("fill", "#f8fafc"), width=1)
         label = str(item.get("label") or "")
+        if item.get("kind") == "text":
+            if label:
+                draw.text((box[0], box[1]), label, fill=item.get("fill", "black"))
+            continue
+        draw.rectangle(box, outline="black", fill=item.get("fill", "#f8fafc"), width=1)
         if label:
             draw.text((box[0] + 6, box[1] + 8), label, fill="black")
     buf = io.BytesIO()
