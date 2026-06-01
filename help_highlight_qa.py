@@ -5379,6 +5379,113 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "email_target_id_accepts_envelope_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Envelope"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open email.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Envelope", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "mail_target_id_accepts_envelope_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open mail.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2709", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "email_icon_text_match_overrides_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Email"},
+                {"rect": [180, 80, 120, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open email.",
+                "target": {"x": 180, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2709", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Settings", "control_type": "button", "rect": [180, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "paste_action_rejects_envelope_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into the note.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2709", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "type_email_rejects_envelope_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type your email.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2709", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "symbol_plus_target_id_highlights_add_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

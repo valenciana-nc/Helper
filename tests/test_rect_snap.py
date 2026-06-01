@@ -520,6 +520,21 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(tokenize_control("\U0001f588")))
         self.assertNotIn("location", tokenize_control("\U0001f4cc"))
 
+    def test_mail_aliases_expand_to_envelope_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        expected = {"email", "envelope", "mail"}
+
+        self.assertTrue(expected.issubset(tokenize_instruction("Open email")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open mail")))
+        self.assertTrue(expected.issubset(tokenize_control("Envelope")))
+        self.assertTrue(expected.issubset(tokenize_control("Email")))
+        self.assertTrue(expected.issubset(tokenize_control("Mail")))
+        for icon in ("\u2709", "\U0001f4e7", "\U0001f4e8", "\U0001f4e9"):
+            with self.subTest(icon=icon):
+                self.assertTrue(expected.issubset(tokenize_control(icon)))
+        self.assertNotIn("clipboard", tokenize_control("\u2709"))
+
     def test_profile_aliases_expand_to_person_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -600,6 +615,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u23fa", {"record"}),
             ("\u270f", {"edit", "pencil"}),
             ("\u2702", {"cut", "scissors"}),
+            ("\u2709", {"email", "envelope", "mail"}),
             ("\U0001f464", {"account", "avatar", "person", "profile", "user"}),
             ("\U0001f465", {"account", "avatar", "people", "person", "profile", "user"}),
             ("\U0001f517", {"link", "share"}),
@@ -627,6 +643,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f5d7", {"overlap", "restore"}),
             ("\U0001f4cb", {"clipboard", "paste"}),
             ("\U0001f4cc", {"pin", "pinned", "pushpin", "thumbtack"}),
+            ("\U0001f4e7", {"email", "envelope", "mail"}),
+            ("\U0001f4e8", {"email", "envelope", "mail"}),
+            ("\U0001f4e9", {"email", "envelope", "mail"}),
             ("\U0001f4ce", {"attach", "attachment", "file", "paperclip"}),
             ("\U0001f587", {"attach", "attachment", "file", "paperclip"}),
             ("\U0001f588", {"pin", "pinned", "pushpin", "thumbtack"}),
@@ -5785,6 +5804,87 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_mail_target_id_accepts_envelope_labels_and_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open email.", "Envelope", (120, 160, 100, 32)),
+            ("Open mail.", "\u2709", (120, 160, 32, 32)),
+            ("Open email.", "\U0001f4e7", (120, 160, 32, 32)),
+            ("Open mail.", "\U0001f4e8", (120, 160, 32, 32)),
+            ("Open email.", "\U0001f4e9", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_mail_icon_text_match_overrides_settings_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open email.",
+                    "target": {"x": 300, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\u2709", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Settings", "button", (300, 160, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_mail_aliases_do_not_cross_clipboard_or_email_field_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Paste into the note.", "\u2709", "target_id semantic mismatch"),
+            ("Open email.", "\U0001f4cb", "target_id semantic mismatch"),
+            ("Type your email.", "\u2709", "target_id control type mismatch"),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
 
     def test_copy_action_alias_target_id_accepts_duplicate_button(self) -> None:
         from control_inventory import ControlCandidate
