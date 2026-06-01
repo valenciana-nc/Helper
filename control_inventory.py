@@ -57,6 +57,14 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+HISTORY_UNDO_WORDS = frozenset({"undo"})
+HISTORY_REDO_WORDS = frozenset({"redo"})
+CHECKBOX_ON_ACTION_WORDS = frozenset({"check", "enable", "tick"})
+CHECKBOX_OFF_ACTION_WORDS = frozenset({"disable", "uncheck", "untick"})
+NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
+MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
+    {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -153,6 +161,7 @@ BROWSER_APP_IDENTITY_WORDS = frozenset({"brave", "browser", "chrome", "edge", "g
 BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
+BROWSER_PAGE_TARGET_WORDS = frozenset({"page", "webpage"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
 BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
@@ -803,7 +812,11 @@ def resolve_candidate_target(
         return dialog_dismiss
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
-        if control_intents and not _candidate_matches_control_intent(candidate, control_intents):
+        if control_intents and not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
             score = _context_text_match_score(
                 instruction,
                 instruction_tokens,
@@ -815,7 +828,11 @@ def resolve_candidate_target(
             score = _text_match_score(instruction, candidate, candidates, model_rect)
         score += _foreground_rank_bonus(candidate, candidates)
         if score > 0:
-            if not _candidate_matches_control_intent(candidate, control_intents):
+            if not _candidate_matches_control_intent(
+                candidate,
+                control_intents,
+                instruction=instruction,
+            ):
                 contained = _single_contained_control_intent_candidate(
                     candidates=candidates,
                     model_rect=candidate.rect,
@@ -1196,7 +1213,11 @@ def _text_match_score(
 ) -> float:
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
-    if not _candidate_matches_control_intent(candidate, control_intents):
+    if not _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    ):
         return 0.0
     if not instruction_tokens:
         return 0.0
@@ -1213,6 +1234,8 @@ def _text_match_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_profile_page_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
@@ -1261,6 +1284,12 @@ def _text_match_score(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return 0.0
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return 0.0
+    if _history_action_mismatch(instruction, candidate):
+        return 0.0
+    if _checkbox_state_action_mismatch(instruction, candidate):
+        return 0.0
+    if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
@@ -1318,6 +1347,8 @@ def _context_text_match_score(
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_profile_page_action_mismatch(instruction, candidate):
+        return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
@@ -1365,6 +1396,12 @@ def _context_text_match_score(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return 0.0
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return 0.0
+    if _history_action_mismatch(instruction, candidate):
+        return 0.0
+    if _checkbox_state_action_mismatch(instruction, candidate):
+        return 0.0
+    if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
@@ -1499,6 +1536,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _browser_profile_page_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return (
             False,
@@ -1611,6 +1654,24 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _history_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _checkbox_state_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return (
             False,
@@ -1649,7 +1710,11 @@ def _target_id_plausibility(
             max(text_score, geometry_score),
             "target_id ambiguous",
         )
-    if not _candidate_matches_control_intent(candidate, control_intents):
+    if not _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    ):
         return (
             False,
             max(text_score, geometry_score),
@@ -1816,6 +1881,25 @@ def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
     return bool(text_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS)
 
 
+def _looks_like_browser_profile_chrome_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    if _looks_like_unnamed_bookmark(candidate):
+        return False
+    width, height = candidate.rect[2], candidate.rect[3]
+    if width <= 0 or height <= 0:
+        return False
+    if max(width, height) > BROWSER_PROFILE_MAX_EDGE:
+        return False
+    if max(width, height) / max(1, min(width, height)) > BROWSER_PROFILE_MAX_ASPECT:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
+    return bool(raw_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
+
+
 def _browser_profile_identity_action_mismatch(
     instruction_tokens: set[str],
     candidate: ControlCandidate,
@@ -1835,6 +1919,18 @@ def _browser_profile_identity_action_mismatch(
         window_tokens & TASKBAR_WINDOW_WORDS
         and raw_candidate_tokens & BROWSER_APP_IDENTITY_WORDS
     )
+
+
+def _browser_profile_page_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & BROWSER_PROFILE_TOKENS):
+        return False
+    if not (instruction_tokens & BROWSER_PAGE_TARGET_WORDS):
+        return False
+    return _looks_like_browser_profile_chrome_button(candidate)
 
 
 def _browser_address_bar_content_mismatch(
@@ -2488,6 +2584,55 @@ def _audio_output_polarity_action_mismatch(
     return requested_up != control_up
 
 
+def _history_action_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_undo = bool(instruction_tokens & HISTORY_UNDO_WORDS)
+    requested_redo = bool(instruction_tokens & HISTORY_REDO_WORDS)
+    if requested_undo == requested_redo:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    control_undo = bool(control_tokens & HISTORY_UNDO_WORDS)
+    control_redo = bool(control_tokens & HISTORY_REDO_WORDS)
+    if control_undo == control_redo:
+        return False
+    return requested_undo != control_undo
+
+
+def _checkbox_state_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if requested_on == requested_off:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    control_on = bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
+    control_off = bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if control_on == control_off:
+        return False
+    return requested_on != control_on
+
+
+def _navigation_media_transport_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    if instruction_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    if not (control_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
+
+
 def _exclusive_action_family_mismatch(instruction: str, candidate_text: str) -> bool:
     requested_families = _exclusive_action_family_indexes(_tokens_from_text(instruction))
     if not requested_families:
@@ -2644,13 +2789,19 @@ def _target_id_ambiguity(
             continue
         if _same_visual_candidate(candidate, selected):
             continue
-        if not _candidate_matches_control_intent(candidate, control_intents):
+        if not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _browser_profile_page_action_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -2699,6 +2850,12 @@ def _target_id_ambiguity(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _history_action_mismatch(instruction, candidate):
+            continue
+        if _checkbox_state_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -2829,13 +2986,19 @@ def _has_semantic_alternative(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if not _candidate_matches_control_intent(candidate, control_intents):
+        if not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _browser_profile_page_action_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -2884,6 +3047,12 @@ def _has_semantic_alternative(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _history_action_mismatch(instruction, candidate):
+            continue
+        if _checkbox_state_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -2911,13 +3080,19 @@ def _has_visible_semantic_alternative(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if not _candidate_matches_control_intent(candidate, control_intents):
+        if not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _browser_profile_page_action_mismatch(instruction, candidate):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
@@ -2966,6 +3141,12 @@ def _has_visible_semantic_alternative(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _history_action_mismatch(instruction, candidate):
+            continue
+        if _checkbox_state_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -3006,6 +3187,8 @@ def _candidate_snap_score(
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_profile_page_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_address_bar_content_mismatch(
@@ -3054,6 +3237,12 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _audio_output_polarity_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _history_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _checkbox_state_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -3064,7 +3253,11 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
-        and not _candidate_matches_control_intent(candidate, control_intents)
+        and not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        )
     ):
         return 0.0
     if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
@@ -3188,7 +3381,11 @@ def _single_contained_control_intent_candidate(
     for candidate in candidates:
         if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
             continue
-        if not _candidate_matches_control_intent(candidate, control_intents):
+        if not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
@@ -3213,6 +3410,12 @@ def _single_contained_control_intent_candidate(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _history_action_mismatch(instruction, candidate):
+            continue
+        if _checkbox_state_action_mismatch(instruction, candidate):
+            continue
+        if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -3266,8 +3469,16 @@ def _contained_control_intent_has_evidence(
 def _candidate_matches_control_intent(
     candidate: ControlCandidate,
     control_intents: set[str],
+    *,
+    instruction: str = "",
 ) -> bool:
     if _control_type_matches_intent(candidate.control_type, control_intents):
+        return True
+    if _state_action_button_matches_checkbox_intent(
+        instruction,
+        candidate,
+        control_intents,
+    ):
         return True
     if (
         control_intents & BROWSER_MENU_CONTROL_INTENTS
@@ -3283,6 +3494,37 @@ def _candidate_matches_control_intent(
     }:
         return True
     return False
+
+
+def _state_action_button_matches_checkbox_intent(
+    instruction: str,
+    candidate: ControlCandidate,
+    control_intents: set[str],
+) -> bool:
+    if "checkbox" not in control_intents:
+        return False
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if requested_on == requested_off:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    if requested_on and not (control_tokens & CHECKBOX_ON_ACTION_WORDS):
+        return False
+    if requested_off and not (control_tokens & CHECKBOX_OFF_ACTION_WORDS):
+        return False
+
+    instruction_semantic = _tokenize_instruction(instruction) - (
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+    )
+    candidate_semantic = _candidate_semantic_tokens(candidate) - (
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+    )
+    return bool(instruction_semantic & candidate_semantic)
 
 
 def _foreground_snap_conflict(
@@ -3376,6 +3618,8 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return True
+    if _browser_profile_page_action_mismatch(instruction, candidate):
+        return True
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _browser_address_bar_content_mismatch(
@@ -3423,6 +3667,12 @@ def _candidate_snap_semantic_mismatch(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return True
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return True
+    if _history_action_mismatch(instruction, candidate):
+        return True
+    if _checkbox_state_action_mismatch(instruction, candidate):
+        return True
+    if _navigation_media_transport_action_mismatch(instruction, candidate):
         return True
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return True

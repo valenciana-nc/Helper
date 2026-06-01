@@ -1705,6 +1705,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "state_action_model_rect_prefers_matching_button_over_noun_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 190, 32], "label": "Enable notifications"},
+                {"rect": [240, 80, 180, 32], "label": "Notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enable notifications.",
+                "target": {"x": 20, "y": 80, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Enable notifications", "control_type": "button", "rect": [20, 80, 190, 32]},
+                {"id": "c002", "text": "Notifications", "control_type": "checkbox", "rect": [240, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 190, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "state_action_target_id_rejects_opposite_checkbox_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 190, 32], "label": "Disable notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enable notifications.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Disable notifications", "control_type": "checkbox", "rect": [20, 80, 190, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "choice_wording_wrong_target_id_recovers_to_radio",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -9083,6 +9127,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "profile_page_prefers_page_link_over_chrome_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [700, 80, 40, 36], "label": "Profile 1"},
+                {"rect": [100, 250, 120, 28], "label": "Profile page"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile page.",
+                "target": {"x": 700, "y": 80, "width": 40, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Profile 1",
+                    "control_type": "button",
+                    "rect": [700, 80, 40, 36],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {"id": "c002", "text": "Profile page", "control_type": "hyperlink", "rect": [100, 250, 120, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [100, 250, 120, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "profile_page_model_rect_rejects_chrome_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [700, 80, 40, 36], "label": "Profile 1"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile page.",
+                "target": {"x": 700, "y": 80, "width": 40, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Profile 1",
+                    "control_type": "button",
+                    "rect": [700, 80, 40, 36],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "profile_name_inference_rejects_non_browser_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10881,6 +10981,69 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "navigation_forward_target_id_rejects_next_track_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Next track"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go forward.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Next track", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "navigation_back_model_rect_rejects_previous_song_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Previous song"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go back.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Previous song", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "media_next_track_target_id_accepts_next_track_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Next track"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Next track.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Next track", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
                 "overlay_emitted": True,
             },
         },

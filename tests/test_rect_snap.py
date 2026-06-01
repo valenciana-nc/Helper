@@ -2360,6 +2360,127 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (360, 160, 120, 32))
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_history_action_does_not_snap_opposite_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Undo change.", "Redo change"),
+            ("Redo change.", "Undo change"),
+            ("Undo last change.", "Redo last change"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 150, 32)
+                window = _make_window("Editor", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 150, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 150, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_checkbox_state_action_does_not_snap_opposite_control(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Enable notifications.", "Disable notifications"),
+            ("Disable notifications.", "Enable notifications"),
+            ("Check Remember me.", "Uncheck Remember me"),
+            ("Uncheck Remember me.", "Check Remember me"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                checkbox = _make_button(label, 360, 160, 180, 32, control_type="CheckBox")
+                window = _make_window("Settings", 0, 0, 800, 600, [checkbox])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 180, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 180, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_state_action_button_with_matching_label_can_snap(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Enable notifications", 360, 160, 180, 32)
+        checkbox = _make_button(
+            "Notifications",
+            120,
+            160,
+            180,
+            32,
+            control_type="CheckBox",
+        )
+        window = _make_window("Settings", 0, 0, 800, 600, [button, checkbox])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (360, 160, 180, 32),
+            "Enable notifications.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (360, 160, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_navigation_direction_does_not_snap_media_transport_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Go forward.", "Next track"),
+            ("Go forward.", "Next song"),
+            ("Go back.", "Previous track"),
+            ("Go back.", "Previous song"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 140, 32)
+                window = _make_window("Player", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 140, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 140, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_profile_page_does_not_snap_browser_chrome_profile_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Profile 1", 700, 80, 40, 36)
+        window = _make_window("about:blank - Google Chrome", 0, 0, 900, 700, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (700, 80, 40, 36),
+            "Open profile page.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (700, 80, 40, 36))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -4200,6 +4321,45 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.rect, (10, 10, 180, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_state_action_text_match_prefers_matching_action_button_over_noun_checkbox(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Enable notifications.",
+            candidates=[
+                ControlCandidate("c001", "Enable notifications", "button", (10, 10, 190, 32)),
+                ControlCandidate("c002", "Notifications", "checkbox", (240, 10, 180, 32)),
+            ],
+            model_rect=(10, 10, 190, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertEqual(result.rect, (10, 10, 190, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_state_action_target_id_accepts_matching_action_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Enable notifications.",
+            candidates=[
+                ControlCandidate("c001", "Enable notifications", "button", (10, 10, 190, 32)),
+                ControlCandidate("c002", "Notifications", "checkbox", (240, 10, 180, 32)),
+            ],
+            model_rect=(10, 10, 190, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+
     def test_choice_wording_text_match_prefers_radio_over_same_label_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -4904,6 +5064,98 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.source, "candidate_snap")
                 self.assertEqual(result.target_id, "c001")
                 self.assertFalse(result.rejected_reason)
+
+    def test_snap_candidate_target_rejects_opposite_history_action(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Undo change.", "Redo change"),
+            ("Redo change.", "Undo change"),
+            ("Undo last change.", "Redo last change"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (120, 160, 160, 32)),
+                    ],
+                    model_rect=(120, 160, 160, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_snap_candidate_target_rejects_opposite_checkbox_state_action(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Enable notifications.", "Disable notifications"),
+            ("Disable notifications.", "Enable notifications"),
+            ("Check Remember me.", "Uncheck Remember me"),
+            ("Uncheck Remember me.", "Check Remember me"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "checkbox", (120, 160, 180, 32)),
+                    ],
+                    model_rect=(120, 160, 180, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_snap_candidate_target_accepts_matching_state_action_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Enable notifications.",
+            candidates=[
+                ControlCandidate("c001", "Enable notifications", "button", (120, 160, 190, 32)),
+                ControlCandidate("c002", "Notifications", "checkbox", (360, 160, 180, 32)),
+            ],
+            model_rect=(120, 160, 190, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_candidate_target_rejects_navigation_media_transport_collision(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Go forward.", "Next track"),
+            ("Go forward.", "Next song"),
+            ("Go back.", "Previous track"),
+            ("Go back.", "Previous song"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (120, 160, 140, 32)),
+                    ],
+                    model_rect=(120, 160, 140, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_snap_candidate_target_prefers_splitbutton_menu_segment(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -6105,6 +6357,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, (120, 160, 160, 32))
         self.assertFalse(target.rejected_reason)
 
+    def test_state_action_model_rect_prefers_matching_action_button_over_noun_checkbox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Enable notifications.",
+                    "target": {"x": 120, "y": 160, "width": 190, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Enable notifications", "button", (120, 160, 190, 32)),
+                ControlCandidate("c002", "Notifications", "checkbox", (360, 160, 180, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 190, 32))
+        self.assertFalse(target.rejected_reason)
+
     def test_choice_wording_wrong_target_id_recovers_to_radio(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -6827,6 +7103,85 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 34, 34))
+
+    def test_profile_page_prefers_page_link_over_browser_profile_button_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open profile page.",
+                    "target": {"x": 700, "y": 80, "width": 40, "height": 36},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Profile 1",
+                    "button",
+                    (700, 80, 40, 36),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate("c002", "Profile page", "hyperlink", (100, 250, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (100, 250, 120, 28))
+
+    def test_profile_page_rejects_browser_profile_button_target_id_and_snap(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Profile 1",
+                "button",
+                (700, 80, 40, 36),
+                window_title="about:blank - Google Chrome",
+            )
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open profile page.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open profile page.",
+            candidates=candidates,
+        )
+        snap_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open profile page.",
+                    "target": {"x": 700, "y": 80, "width": 40, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "c001")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_profile_name_inference_stays_contextual_to_browser_profile_buttons(self) -> None:
         from control_inventory import ControlCandidate
@@ -10410,6 +10765,64 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.target_id, "c001")
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
+    def test_opposite_history_and_checkbox_actions_reject_shared_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Undo change.", "Redo change", "button", (120, 160, 150, 32)),
+            ("Redo change.", "Undo change", "button", (120, 160, 150, 32)),
+            ("Enable notifications.", "Disable notifications", "checkbox", (120, 160, 190, 32)),
+            ("Disable notifications.", "Enable notifications", "checkbox", (120, 160, 190, 32)),
+            ("Check Remember me.", "Uncheck Remember me", "checkbox", (120, 160, 190, 32)),
+            ("Uncheck Remember me.", "Check Remember me", "checkbox", (120, 160, 190, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, control_type, rect),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
     def test_clear_and_delete_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -11709,6 +12122,83 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_navigation_arrow_aliases_do_not_cross_media_transport_controls(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Go forward.", "Next track"),
+            ("Go forward.", "Next song"),
+            ("Go back.", "Previous track"),
+            ("Go back.", "Previous song"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (120, 160, 140, 32)),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 140, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_media_transport_instruction_still_accepts_next_previous_track(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Next track.", "Next track"),
+            ("Previous song.", "Previous song"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 140, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
 
     def test_disclosure_arrow_target_id_accepts_icon_only_buttons(self) -> None:
         from control_inventory import ControlCandidate

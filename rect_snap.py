@@ -45,6 +45,14 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+HISTORY_UNDO_WORDS = frozenset({"undo"})
+HISTORY_REDO_WORDS = frozenset({"redo"})
+CHECKBOX_ON_ACTION_WORDS = frozenset({"check", "enable", "tick"})
+CHECKBOX_OFF_ACTION_WORDS = frozenset({"disable", "uncheck", "untick"})
+NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
+MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
+    {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
+)
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -86,6 +94,9 @@ BROWSER_APP_IDENTITY_WORDS = frozenset({"brave", "browser", "chrome", "edge", "g
 BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
+BROWSER_PAGE_TARGET_WORDS = frozenset({"page", "webpage"})
+BROWSER_PROFILE_MAX_EDGE = 64
+BROWSER_PROFILE_MAX_ASPECT = 1.75
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
@@ -311,6 +322,13 @@ def snap_to_control(
                 window_title,
             )
         )
+        browser_profile_page_action_mismatch = _browser_profile_page_action_mismatch(
+            instruction,
+            visible_text,
+            ctype,
+            window_title,
+            rect,
+        )
         browser_new_tab_action_mismatch = _browser_new_tab_action_mismatch(
             instruction,
             instruction_tokens,
@@ -355,6 +373,23 @@ def snap_to_control(
                 automation_id,
             )
         )
+        history_action_mismatch = _history_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+        )
+        checkbox_state_action_mismatch = _checkbox_state_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+        )
+        navigation_media_transport_action_mismatch = (
+            _navigation_media_transport_action_mismatch(
+                instruction,
+                visible_text,
+                automation_id,
+            )
+        )
         exclusive_action_family_mismatch = _exclusive_action_family_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -389,6 +424,7 @@ def snap_to_control(
             or taskbar_file_action_mismatch
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
+            or browser_profile_page_action_mismatch
             or browser_new_tab_action_mismatch
             or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
@@ -396,6 +432,9 @@ def snap_to_control(
             or pin_state_action_mismatch
             or password_visibility_state_action_mismatch
             or audio_output_polarity_action_mismatch
+            or history_action_mismatch
+            or checkbox_state_action_mismatch
+            or navigation_media_transport_action_mismatch
             or exclusive_action_family_mismatch
             or clear_close_action_mismatch
             or browser_about_blank_title_info_mismatch
@@ -427,7 +466,13 @@ def snap_to_control(
                     rejected_reason="own process target",
                 )
             continue
-        if control_intents and ctype not in control_intents:
+        if control_intents and not _control_matches_effective_intent(
+            ctype,
+            visible_text,
+            automation_id,
+            instruction,
+            control_intents,
+        ):
             if (
                 instruction_tokens
                 and semantic_text
@@ -1068,6 +1113,34 @@ def _browser_profile_identity_action_mismatch(
     )
 
 
+def _browser_profile_page_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & BROWSER_PROFILE_TOKENS):
+        return False
+    if not (instruction_tokens & BROWSER_PAGE_TARGET_WORDS):
+        return False
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    width, height = rect[2], rect[3]
+    if width <= 0 or height <= 0:
+        return False
+    if max(width, height) > BROWSER_PROFILE_MAX_EDGE:
+        return False
+    if max(width, height) / max(1, min(width, height)) > BROWSER_PROFILE_MAX_ASPECT:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_control_tokens = _tokens_from_text(visible_text or "")
+    return bool(raw_control_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
+
+
 def _browser_new_tab_action_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -1295,6 +1368,95 @@ def _audio_output_polarity_action_mismatch(
     if control_up == control_down:
         return False
     return requested_up != control_up
+
+
+def _history_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_undo = bool(instruction_tokens & HISTORY_UNDO_WORDS)
+    requested_redo = bool(instruction_tokens & HISTORY_REDO_WORDS)
+    if requested_undo == requested_redo:
+        return False
+
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    control_undo = bool(control_tokens & HISTORY_UNDO_WORDS)
+    control_redo = bool(control_tokens & HISTORY_REDO_WORDS)
+    if control_undo == control_redo:
+        return False
+    return requested_undo != control_undo
+
+
+def _checkbox_state_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if requested_on == requested_off:
+        return False
+
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    control_on = bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
+    control_off = bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if control_on == control_off:
+        return False
+    return requested_on != control_on
+
+
+def _navigation_media_transport_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    if instruction_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS:
+        return False
+
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    if not (control_tokens & NAVIGATION_DIRECTION_WORDS):
+        return False
+    return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
+
+
+def _control_matches_effective_intent(
+    ctype: str,
+    visible_text: str,
+    automation_id: str,
+    instruction: str,
+    control_intents: set[str],
+) -> bool:
+    if ctype in control_intents:
+        return True
+    if "checkbox" not in control_intents or ctype not in {"button", "splitbutton"}:
+        return False
+
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if requested_on == requested_off:
+        return False
+
+    control_text = " ".join((visible_text or "", automation_id or ""))
+    control_tokens = _tokens_from_text(control_text)
+    if requested_on and not (control_tokens & CHECKBOX_ON_ACTION_WORDS):
+        return False
+    if requested_off and not (control_tokens & CHECKBOX_OFF_ACTION_WORDS):
+        return False
+
+    instruction_semantic = _tokenize_instruction(instruction) - (
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+    )
+    control_semantic = _tokenize_control(_semantic_text(control_text)) - (
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+    )
+    return bool(instruction_semantic & control_semantic)
 
 
 def _exclusive_action_family_mismatch(instruction: str, candidate_text: str) -> bool:
