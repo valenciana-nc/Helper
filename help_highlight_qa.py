@@ -1075,6 +1075,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_split_button_model_rect_snaps_to_splitbutton",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Export"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this split button.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Export", "control_type": "splitbutton", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_split_button_broad_group_rejects_multiple_splitbuttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Export"},
+                {"rect": [20, 120, 180, 32], "label": "Share"},
+                {"rect": [20, 160, 180, 32], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this split button.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Export", "control_type": "splitbutton", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Share", "control_type": "splitbutton", "rect": [20, 120, 180, 32]},
+                {"id": "c003", "text": "Archive", "control_type": "splitbutton", "rect": [20, 160, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

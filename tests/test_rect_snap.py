@@ -594,6 +594,56 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, rect)
                 self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_generic_split_button_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        split = _make_button(
+            "Export",
+            100,
+            200,
+            160,
+            32,
+            control_type="SplitButton",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [split])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 160, 32),
+            "Click this split button.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 160, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_split_button_intent_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button(
+            "Export",
+            100,
+            200,
+            160,
+            32,
+            control_type="Button",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 160, 32),
+            "Click this split button.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 160, 32))
+        self.assertEqual(result.rejected_reason, "control type mismatch")
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1705,6 +1755,41 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, rect)
 
+    def test_generic_split_button_target_id_accepts_splitbutton_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this split button.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_generic_split_button_target_id_rejects_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this split button.",
+            candidates=[
+                ControlCandidate("c001", "Export", "button", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -2616,6 +2701,39 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.target_id, "c001")
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, rect)
+
+    def test_snap_candidate_target_accepts_generic_split_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this split button.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (10, 10, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_snap_candidate_target_rejects_broad_split_button_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this split button.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Share", "splitbutton", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Archive", "splitbutton", (10, 90, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 112),
+        )
+
+        self.assertIsNone(result)
 
     def test_snap_candidate_target_allows_toggle_sidebar_button_label(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -3577,6 +3695,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_generic_split_button_model_rect_highlights_splitbutton(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this split button.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "splitbutton", (10, 10, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 160, 32))
+
+    def test_generic_split_button_broad_group_rejects_multiple_splitbuttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this split button.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "splitbutton", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Share", "splitbutton", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Archive", "splitbutton", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
         from control_inventory import ControlCandidate

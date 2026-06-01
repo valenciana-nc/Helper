@@ -141,6 +141,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "icon",
         "link",
         "hyperlink",
+        "split",
         "tab",
         "list",
         "tree",
@@ -1477,6 +1478,9 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
+    split_button_requested = "splitbutton" in raw_tokens or (
+        "split" in raw_tokens and "button" in raw_tokens
+    )
     input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
     if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
@@ -1494,7 +1498,14 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         "spin" in raw_tokens and "box" in raw_tokens
     ):
         intents.update(SPINNER_CONTROL_TYPES)
-    if not checkbox_requested and not radio_requested and "button" in raw_tokens:
+    if split_button_requested:
+        intents.add("splitbutton")
+    if (
+        not checkbox_requested
+        and not radio_requested
+        and not split_button_requested
+        and "button" in raw_tokens
+    ):
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
         intents.update(_ICON_INTENT_TYPES)
@@ -1518,8 +1529,6 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_MENU_INTENT_TYPES)
     if "menuitem" in raw_tokens:
         intents.add("menuitem")
-    if "splitbutton" in raw_tokens:
-        intents.add("splitbutton")
     return intents
 
 
