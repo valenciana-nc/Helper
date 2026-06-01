@@ -297,6 +297,24 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.matched_text, "Save")
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_uses_camel_case_automation_id_when_no_visible_text_exists(self) -> None:
+        from rect_snap import snap_to_control
+
+        icon = _make_button("", 100, 200, 32, 32, automation_id="saveButton")
+        window = _make_window("Editor", 0, 0, 800, 600, [icon])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 32, 32),
+            "Click Save.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 32, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_automation_only_match_when_visible_alternative_is_weak(self) -> None:
         from rect_snap import snap_to_control
 
@@ -339,6 +357,31 @@ class SnapToControlTests(unittest.TestCase):
 
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, (100, 200, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_generic_focus_field_intent_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        edit = _make_button(
+            "Search",
+            100,
+            200,
+            200,
+            32,
+            control_type="Edit",
+        )
+        window = _make_window("Search", 0, 0, 800, 600, [edit])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 200, 32),
+            "Focus this field.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 200, 32))
         self.assertFalse(result.rejected_reason)
 
     def test_snap_rejects_checkbox_intent_on_plain_button(self) -> None:

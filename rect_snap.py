@@ -52,7 +52,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 
 _INSTRUCTION_STOPWORDS = frozenset(
     {
-        "click", "tap", "press", "select", "choose",
+        "click", "tap", "press", "select", "choose", "focus", "go",
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "button", "icon", "link", "tab", "menu", "item", "field", "input",
@@ -83,6 +83,8 @@ _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_SEPARATOR_RE = re.compile(r"[_\-.]+")
 _TOKEN_ALIASES = {
     "account": {"profile", "user"},
     "avatar": {"account", "profile", "user"},
@@ -627,13 +629,13 @@ def _is_visible(control) -> bool:
 
 
 def _tokenize_instruction(instruction: str) -> set[str]:
-    tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
+    tokens = _tokens_from_text(instruction)
     filtered = {t for t in tokens if t not in _INSTRUCTION_STOPWORDS and len(t) > 1}
     return _expand_token_aliases(filtered)
 
 
 def _instruction_control_intents(instruction: str) -> set[str]:
-    raw_tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
+    raw_tokens = _tokens_from_text(instruction)
     intents: set[str] = set()
     checkbox_requested = "checkbox" in raw_tokens or (
         "check" in raw_tokens and "box" in raw_tokens
@@ -662,7 +664,13 @@ def _instruction_control_intents(instruction: str) -> set[str]:
 
 
 def _tokenize_control(text: str) -> set[str]:
-    return _expand_token_aliases(set(_TOKEN_RE.findall((text or "").lower())))
+    return _expand_token_aliases(_tokens_from_text(text))
+
+
+def _tokens_from_text(text: str) -> set[str]:
+    spaced = _CAMEL_RE.sub(" ", text or "")
+    spaced = _SEPARATOR_RE.sub(" ", spaced)
+    return set(_TOKEN_RE.findall(spaced.lower()))
 
 
 def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
