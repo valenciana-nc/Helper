@@ -8,9 +8,12 @@ candidate scores high enough.
 """
 from __future__ import annotations
 
+import ctypes
 import logging
+import os
 import re
 import time
+from ctypes import wintypes
 from dataclasses import dataclass
 
 log = logging.getLogger("helper.rect_snap")
@@ -129,8 +132,9 @@ def snap_to_control(
     best_score = 0.0
     best_result: SnapResult | None = None
     best_semantic_text = ""
+    own_process_result: SnapResult | None = None
 
-    for control, rect in _iter_candidates(desktop, search_rect, deadline):
+    for control, rect, is_own_process in _iter_candidates(desktop, search_rect, deadline):
         ctype = _control_type(control)
         if ctype not in CLICKABLE_CONTROL_TYPES:
             continue
@@ -138,6 +142,19 @@ def snap_to_control(
             continue
         text = _control_text(control)
         semantic_text = _control_semantic_text(control)
+        if is_own_process:
+            if (
+                own_process_result is None
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                own_process_result = SnapResult(
+                    rect=rect,
+                    confidence=0.0,
+                    source="uia",
+                    matched_text=text,
+                    rejected_reason="own process target",
+                )
+            continue
         score = _score(
             rect=rect,
             semantic_text=semantic_text,
@@ -170,6 +187,8 @@ def snap_to_control(
                 matched_text=best_result.matched_text,
                 rejected_reason="candidate semantic mismatch",
             )
+        if own_process_result is not None:
+            return own_process_result
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -197,8 +216,8 @@ def _default_desktop():
 
 def _iter_candidates(desktop, search_rect, deadline):
     """BFS visible top-level windows and their descendants, yielding
-    ``(control, rect)`` pairs whose rect intersects ``search_rect``. Pruned by
-    ``deadline`` and ``_MAX_BFS_DEPTH``.
+    ``(control, rect, is_own_process)`` tuples whose rect intersects
+    ``search_rect``. Pruned by ``deadline`` and ``_MAX_BFS_DEPTH``.
     """
     try:
         toplevels = list(desktop.windows(visible_only=True, enabled_only=True))
@@ -213,6 +232,10 @@ def _iter_candidates(desktop, search_rect, deadline):
         if top_rect is None or not _intersects(top_rect, search_rect):
             continue
 
+        top_handle = _window_handle(top)
+        is_own_process = (
+            top_handle is not None and _is_own_process_window(top_handle)
+        )
         queue: list[tuple[object, tuple[int, int, int, int]]] = [(top, top_rect)]
         depth = 0
         while queue and depth < _MAX_BFS_DEPTH:
@@ -220,7 +243,7 @@ def _iter_candidates(desktop, search_rect, deadline):
                 return
             next_queue: list[tuple[object, tuple[int, int, int, int]]] = []
             for control, rect in queue:
-                yield control, rect
+                yield control, rect, is_own_process
                 if time.monotonic() >= deadline:
                     return
                 try:
@@ -254,6 +277,38 @@ def _element_rect(control) -> tuple[int, int, int, int] | None:
     if width <= 0 or height <= 0:
         return None
     return (left, top, width, height)
+
+
+def _window_handle(control) -> int | None:
+    for attr in ("handle", "hwnd"):
+        try:
+            value = getattr(control, attr)
+        except Exception:
+            continue
+        if value:
+            try:
+                return int(value)
+            except Exception:
+                pass
+    try:
+        value = getattr(control.element_info, "handle", None)
+    except Exception:
+        return None
+    if not value:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _is_own_process_window(hwnd: int) -> bool:
+    pid = wintypes.DWORD()
+    try:
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    except Exception:
+        return False
+    return int(pid.value) == os.getpid()
 
 
 def _control_type(control) -> str:

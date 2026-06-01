@@ -277,6 +277,27 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
         self.assertIn("saveButton", result.matched_text)
 
+    def test_snap_rejects_own_process_target_instead_of_raw_fallback(self) -> None:
+        from rect_snap import snap_to_control
+
+        helper_button = _make_button("Save", 100, 200, 60, 30)
+        helper_window = _make_window("Helper", 0, 0, 800, 600, [helper_button], handle=101)
+        desktop = _FakeDesktop([helper_window])
+        model_rect = (100, 200, 60, 30)
+
+        with patch("rect_snap._is_own_process_window", side_effect=lambda hwnd: hwnd == 101):
+            result = snap_to_control(
+                model_rect,
+                "Click Save",
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.matched_text, "Save")
+        self.assertEqual(result.rejected_reason, "own process target")
+
     def test_snap_uses_common_ui_label_synonyms(self) -> None:
         from rect_snap import snap_to_control
 
