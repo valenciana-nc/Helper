@@ -1367,6 +1367,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "paste_action_target_id_accepts_clipboard_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 110, 32], "label": "Clipboard"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into the note.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Clipboard", "control_type": "button", "rect": [20, 80, 110, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "paste_action_target_id_accepts_clipboard_symbol",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "P"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4cb", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cut_action_target_id_accepts_scissors_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Scissors"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Cut selection.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Scissors", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cut_action_target_id_accepts_scissors_symbol",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "C"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Cut selection.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2702", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "paste_text_match_overrides_export_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 110, 32], "label": "Clipboard"},
+                {"rect": [180, 80, 100, 32], "label": "Export"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Clipboard", "control_type": "button", "rect": [20, 80, 110, 32]},
+                {"id": "c002", "text": "Export", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cut_text_match_overrides_copy_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Scissors"},
+                {"rect": [180, 80, 100, 32], "label": "Copy"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Cut selection.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Scissors", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Copy", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "download_action_target_id_accepts_export_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

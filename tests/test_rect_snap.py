@@ -151,6 +151,14 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(clone_tokens))
         self.assertTrue({"clone", "copy", "duplicate"}.issubset(duplicate_tokens))
 
+    def test_clipboard_action_aliases_expand_to_common_icon_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("clipboard", tokenize_instruction("Paste into the note"))
+        self.assertIn("scissors", tokenize_instruction("Cut selection"))
+        self.assertIn("cut", tokenize_instruction("Click scissors"))
+        self.assertIn("cut", tokenize_control("Scissors"))
+
     def test_transfer_and_refresh_aliases_expand_to_matching_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -346,6 +354,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u23f9", {"stop"}),
             ("\u23fa", {"record"}),
             ("\u270f", {"edit", "pencil"}),
+            ("\u2702", {"cut", "scissors"}),
             ("\U0001f517", {"link", "share"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
@@ -362,6 +371,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f3e0", {"home", "house"}),
             ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f5c4", {"archive", "cabinet", "filing"}),
+            ("\U0001f4cb", {"clipboard", "paste"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
@@ -5378,6 +5388,76 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_clipboard_action_target_id_accepts_common_icon_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Paste into the note.", "Clipboard", (120, 160, 110, 32)),
+            ("Paste.", "\U0001f4cb", (120, 160, 32, 32)),
+            ("Cut selection.", "Scissors", (120, 160, 100, 32)),
+            ("Cut selection.", "\u2702", (120, 160, 32, 32)),
+            ("Click scissors.", "Cut", (120, 160, 80, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_clipboard_action_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Paste.",
+                ControlCandidate("c001", "Clipboard", "button", (120, 160, 110, 32)),
+                ControlCandidate("c002", "Export", "button", (300, 160, 100, 32)),
+            ),
+            (
+                "Cut selection.",
+                ControlCandidate("c001", "Scissors", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Copy", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
 
     def test_transfer_and_refresh_alias_target_id_accepts_matching_action(self) -> None:
         from control_inventory import ControlCandidate
