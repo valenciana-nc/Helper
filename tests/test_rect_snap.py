@@ -316,6 +316,49 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 32, 32))
         self.assertEqual(result.rejected_reason, "automation-only target ambiguous")
 
+    def test_snap_accepts_generic_checkbox_label_without_type_text(self) -> None:
+        from rect_snap import snap_to_control
+
+        checkbox = _make_button(
+            "Enable precision mode",
+            100,
+            200,
+            180,
+            32,
+            control_type="CheckBox",
+        )
+        window = _make_window("Settings", 0, 0, 800, 600, [checkbox])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 180, 32),
+            "Click this checkbox.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 180, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_checkbox_intent_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("", 100, 200, 32, 32)
+        window = _make_window("Settings", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 32, 32),
+            "Click this checkbox.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 32, 32))
+        self.assertEqual(result.rejected_reason, "control type mismatch")
+
     def test_snap_rejects_background_duplicate_when_foreground_is_plausible(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1973,6 +2016,36 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "snap")
         self.assertEqual(target.rect, model_rect)
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_control_type_mismatch_does_not_fall_back_to_raw_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        button = _make_button("", 120, 160, 32, 32)
+        window = _make_window("Settings", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this checkbox.",
+                    "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+        self.assertEqual(target.rejected_reason, "control type mismatch")
 
     def test_oversized_model_rect_is_rejected(self) -> None:
         from help_session import resolve_help_target

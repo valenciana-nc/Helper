@@ -56,12 +56,31 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "button", "icon", "link", "tab", "menu", "item", "field", "input",
+        "box", "text", "textbox", "textarea", "check", "checkbox",
+        "radio", "radiobutton", "combo", "combobox", "dropdown",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
         "top", "bottom", "left", "right", "upper", "lower",
         "middle", "center", "corner", "side",
     }
 )
+
+INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
+TIGHT_ACTION_CONTROL_TYPES = frozenset(
+    {
+        "button",
+        "menuitem",
+        "tabitem",
+        "hyperlink",
+        "checkbox",
+        "radiobutton",
+        "splitbutton",
+    }
+)
+_INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
+_BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
+_ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
+_MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _TOKEN_ALIASES = {
@@ -130,6 +149,7 @@ def snap_to_control(
         return SnapResult(rect=model_rect, confidence=0.0, source="model")
 
     instruction_tokens = _tokenize_instruction(instruction)
+    control_intents = _instruction_control_intents(instruction)
     search_rect = _expand_rect(model_rect, margin_px)
     model_center = _center(model_rect)
     diagonal = max(1.0, _diagonal_of(search_rect))
@@ -145,6 +165,7 @@ def snap_to_control(
     ranked: list[tuple[float, SnapResult, str, str, int]] = []
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
+    control_type_mismatch_result: SnapResult | None = None
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
     )
@@ -198,6 +219,19 @@ def snap_to_control(
                     source="uia",
                     matched_text=text,
                     rejected_reason="own process target",
+                )
+            continue
+        if control_intents and ctype not in control_intents:
+            if (
+                control_type_mismatch_result is None
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                control_type_mismatch_result = SnapResult(
+                    rect=rect,
+                    confidence=0.0,
+                    source="uia",
+                    matched_text=text,
+                    rejected_reason="control type mismatch",
                 )
             continue
         score = _score(
@@ -280,6 +314,8 @@ def snap_to_control(
             return own_process_result
         if occluded_result is not None:
             return occluded_result
+        if control_type_mismatch_result is not None:
+            return control_type_mismatch_result
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -594,6 +630,35 @@ def _tokenize_instruction(instruction: str) -> set[str]:
     tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
     filtered = {t for t in tokens if t not in _INSTRUCTION_STOPWORDS and len(t) > 1}
     return _expand_token_aliases(filtered)
+
+
+def _instruction_control_intents(instruction: str) -> set[str]:
+    raw_tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
+    intents: set[str] = set()
+    checkbox_requested = "checkbox" in raw_tokens or (
+        "check" in raw_tokens and "box" in raw_tokens
+    )
+    radio_requested = "radiobutton" in raw_tokens or "radio" in raw_tokens
+    input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
+    if checkbox_requested:
+        intents.add("checkbox")
+    if radio_requested:
+        intents.add("radiobutton")
+    if not checkbox_requested and input_requested:
+        intents.update(INPUT_CONTROL_TYPES)
+    if raw_tokens & {"combo", "combobox", "dropdown"}:
+        intents.add("combobox")
+    if not checkbox_requested and not radio_requested and "button" in raw_tokens:
+        intents.update(_BUTTON_INTENT_TYPES)
+    if "icon" in raw_tokens:
+        intents.update(_ICON_INTENT_TYPES)
+    if "link" in raw_tokens:
+        intents.add("hyperlink")
+    if "tab" in raw_tokens:
+        intents.add("tabitem")
+    if "menu" in raw_tokens:
+        intents.update(_MENU_INTENT_TYPES)
+    return intents
 
 
 def _tokenize_control(text: str) -> set[str]:
