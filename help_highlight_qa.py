@@ -1874,6 +1874,49 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "upload_file_model_rect_highlights_browse_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Browse"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Upload a file.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Browse", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "attach_document_target_id_highlights_choose_file_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Choose file"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach a document.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Choose file", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
