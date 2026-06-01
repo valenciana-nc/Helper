@@ -683,7 +683,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("floppy", tokenize_control("Save"))
 
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
-        from help_intents import tokenize_instruction, tokenize_control
+        from help_intents import instruction_control_intents, tokenize_instruction, tokenize_control
 
         favorite_tokens = tokenize_instruction("Favorite this item")
         bookmark_tokens = tokenize_instruction("Bookmark this item")
@@ -692,6 +692,10 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"bookmark", "favorite", "star"}.issubset(favorite_tokens))
         self.assertTrue({"bookmark", "favorite", "star"}.issubset(bookmark_tokens))
         self.assertTrue({"bookmark", "favorite", "star"}.issubset(star_tokens))
+        bookmark_tab_intents = instruction_control_intents("Bookmark this tab")
+        self.assertIn("button", bookmark_tab_intents)
+        self.assertIn("splitbutton", bookmark_tab_intents)
+        self.assertNotIn("tabitem", bookmark_tab_intents)
 
     def test_notification_action_aliases_expand_to_bell_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -6530,6 +6534,74 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
+
+    def test_add_bookmark_prefers_bookmark_button_over_new_tab(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "New Tab",
+                "button",
+                (120, 160, 32, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+            ControlCandidate(
+                "c002",
+                "Bookmark this tab",
+                "button",
+                (180, 160, 32, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+        ]
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Add bookmark.",
+            candidates=candidates,
+            model_rect=None,
+        )
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "c002")
+        self.assertFalse(text_target.rejected_reason)
+
+        cases = (
+            {
+                "kind": "step",
+                "instruction": "Add bookmark.",
+                "target_id": "c001",
+            },
+            {
+                "kind": "step",
+                "instruction": "Add bookmark.",
+                "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+            },
+            {
+                "kind": "step",
+                "instruction": "Add bookmark.",
+                "target": {"x": 180, "y": 160, "width": 32, "height": 32},
+            },
+            {
+                "kind": "step",
+                "instruction": "Bookmark this tab.",
+                "target_id": "c002",
+            },
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                target = resolve_help_target(
+                    self._decision(payload),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIn(target.source, {"target_id", "text_match"})
+                self.assertEqual(target.target_id, "c002")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (180, 160, 32, 32))
 
     def test_generic_bookmark_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
         from control_inventory import ControlCandidate

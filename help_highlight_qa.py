@@ -5809,6 +5809,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "add_bookmark_recovers_from_new_tab_to_bookmark_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "New"},
+                {"rect": [80, 80, 32, 32], "label": "Star"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Add bookmark.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New Tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Bookmark this tab",
+                    "control_type": "button",
+                    "rect": [80, 80, 32, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [80, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_bookmark_model_rect_rejects_unnamed_bookmark_snap",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
