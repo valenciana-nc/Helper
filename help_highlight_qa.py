@@ -1433,6 +1433,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_all_rejects_all_bookmarks_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "All Bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open all.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "All Bookmarks",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "all_bookmarks_wording_accepts_all_bookmarks_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "All Bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open all bookmarks.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "All Bookmarks",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "live_address_bar_label_accepts_explicit_address_wording",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

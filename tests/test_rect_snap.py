@@ -547,6 +547,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("git", tokens)
         self.assertNotIn("hub", tokens)
 
+    def test_all_bookmarks_control_does_not_match_bare_all(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        control_tokens = tokenize_control("All Bookmarks")
+
+        self.assertIn("bookmarks", control_tokens)
+        self.assertNotIn("all", control_tokens)
+        self.assertIn("all", tokenize_instruction("Open all"))
+        self.assertTrue({"all", "bookmarks"}.issubset(tokenize_instruction("Open all bookmarks")))
+
     def test_weather_widget_status_does_not_expand_to_clear_action(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -12053,6 +12063,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 )
 
                 self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_bare_all_rejects_all_bookmarks_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open all.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "All Bookmarks",
+                    "button",
+                    (120, 160, 160, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_all_bookmarks_wording_still_matches_all_bookmarks_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = ("Open all bookmarks.", "Open bookmarks.")
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "All Bookmarks",
+                            "button",
+                            (120, 160, 160, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
 

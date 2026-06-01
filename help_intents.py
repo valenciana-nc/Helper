@@ -66,6 +66,7 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),
 )
 _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
+    (re.compile(r"\ball\s+bookmarks\b"), {"bookmarks"}, {"all"}),
     (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
     (
         re.compile(r"\b(?:widgets?|weather)\b.*\bclear\b"),
