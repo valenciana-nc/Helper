@@ -279,6 +279,90 @@ def clip_resolution_to_capture(
     return replace(target, rect=clipped)
 
 
+def _guard_revalidated_target(
+    *,
+    decision: "LiveHelpDecision",
+    capture: "Capture",
+    candidates: list[ControlCandidate],
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    snapper: Snapper,
+) -> TargetResolution:
+    """Reject stale snapshot IDs that no longer point at the original target."""
+    if target.rejected_reason:
+        return target
+    if not decision.target_id or target.source != "target_id":
+        return target
+
+    independent = resolve_help_target(
+        replace(decision, target_id=""),
+        capture,
+        candidates,
+        snapper=snapper,
+        clip_to_capture=False,
+    )
+    if (
+        not independent.rejected_reason
+        and _same_revalidated_target(target, independent)
+        and _within_revalidation_drift(previous_target.rect, target.rect)
+    ):
+        return target
+    if _same_revalidation_geometry(previous_target.rect, target.rect):
+        return target
+    return replace(target, rejected_reason="current screen recheck target changed")
+
+
+def _same_revalidated_target(a: TargetResolution, b: TargetResolution) -> bool:
+    if _same_revalidation_geometry(a.rect, b.rect):
+        return True
+    if a.target_id and b.target_id and a.target_id == b.target_id:
+        return True
+    return False
+
+
+def _same_revalidation_geometry(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> bool:
+    if _rect_iou(a, b) >= 0.80:
+        return True
+    ax, ay = _rect_center(a)
+    bx, by = _rect_center(b)
+    max_drift = max(8.0, min(a[2], a[3], b[2], b[3]) * 0.35)
+    distance = ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
+    return distance <= max_drift
+
+
+def _within_revalidation_drift(
+    previous: tuple[int, int, int, int],
+    current: tuple[int, int, int, int],
+) -> bool:
+    px, py = _rect_center(previous)
+    cx, cy = _rect_center(current)
+    max_edge = max(previous[2], previous[3], current[2], current[3], 1)
+    max_drift = max(32.0, max_edge * 0.75)
+    distance = ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+    return distance <= max_drift
+
+
+def _rect_iou(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> float:
+    inter = _intersection_rect(a, b)
+    if inter is None:
+        return 0.0
+    inter_area = inter[2] * inter[3]
+    a_area = max(1, a[2] * a[3])
+    b_area = max(1, b[2] * b[3])
+    return inter_area / max(1, a_area + b_area - inter_area)
+
+
+def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
+    x, y, width, height = rect
+    return (x + width / 2.0, y + height / 2.0)
+
+
 def _clip_rect_to_capture(
     rect: tuple[int, int, int, int],
     capture: "Capture",
@@ -505,7 +589,10 @@ class HelpSession(QObject):
                 continue
 
             try:
-                capture, candidates, target = self._revalidate_target_on_current_screen(decision)
+                capture, candidates, target = self._revalidate_target_on_current_screen(
+                    decision,
+                    previous_target=target,
+                )
             except Exception as exc:
                 reason = "current screen recheck failed"
                 log.exception("Pre-overlay target recheck failed")
@@ -656,6 +743,8 @@ class HelpSession(QObject):
     def _revalidate_target_on_current_screen(
         self,
         decision: "LiveHelpDecision",
+        *,
+        previous_target: TargetResolution,
     ) -> tuple["Capture", list[ControlCandidate], TargetResolution]:
         self._clear_overlays(wait_for_flush=True)
         capture = self._capture_provider()
@@ -666,6 +755,14 @@ class HelpSession(QObject):
             candidates,
             snapper=self._snapper,
             clip_to_capture=False,
+        )
+        target = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=candidates,
+            previous_target=previous_target,
+            target=target,
+            snapper=self._snapper,
         )
         return capture, candidates, target
 
