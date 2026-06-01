@@ -38,6 +38,14 @@ CLEAR_CLOSE_WORDS = frozenset({"cancel", "close", "dismiss"})
 CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
+FILTER_RESET_ACTION_WORDS = frozenset({"clear", "delete", "remove", "reset"})
+FILTER_RESET_CONTEXT_WORDS = frozenset({"filter", "filters", "query", "search"})
+FILTER_RESET_ALLOWED_CONTROL_WORDS = frozenset(
+    {"clear", "delete", "remove", "reset", "x"}
+)
+FILTER_RESET_OBJECT_ONLY_WORDS = frozenset(
+    {"apply", "filter", "filters", "funnel", "query", "result", "results", "search"}
+)
 CLOSE_CONTEXT_TARGET_WORDS = frozenset(
     {
         "banner",
@@ -366,13 +374,34 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
 BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
-    {"app", "application", "in_app", "in_page", "nav", "navigation", "sidebar", "wizard"}
+    {
+        "app",
+        "application",
+        "card",
+        "chart",
+        "dashboard",
+        "form",
+        "grid",
+        "in_app",
+        "in_page",
+        "list",
+        "nav",
+        "navigation",
+        "pane",
+        "panel",
+        "report",
+        "section",
+        "sidebar",
+        "table",
+        "widget",
+        "wizard",
+    }
 )
 BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
     {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
-    {"bookmarks", "downloads", "extensions", "history", "sidepanel"}
+    {"bookmarks", "downloads", "extensions", "history", "home", "sidepanel"}
 )
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
@@ -383,6 +412,8 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "extensions",
         "forward",
         "history",
+        "home",
+        "house",
         "reload",
         "refresh",
     }
@@ -1556,12 +1587,127 @@ def _looks_like_browser_chrome_surface(
     window_title: str,
     rect: tuple[int, int, int, int],
 ) -> bool:
+    if _looks_like_os_chrome_surface(visible_text, automation_id, ctype, window_title, rect):
+        return True
     window_tokens = _tokens_from_text(window_title or "")
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     if _looks_like_browser_toolbar_button(visible_text, automation_id, ctype, window_title, rect):
         return True
+    if _looks_like_browser_profile_chrome_button(visible_text, automation_id, ctype, window_title, rect):
+        return True
+    if _looks_like_browser_site_information_chrome_button(
+        visible_text,
+        automation_id,
+        ctype,
+        window_title,
+        rect,
+    ):
+        return True
     return ctype == "tabitem" and rect[1] <= 72
+
+
+def _looks_like_os_chrome_surface(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    return _looks_like_taskbar_search_button(
+        visible_text,
+        automation_id,
+        ctype,
+        window_title,
+    ) or _looks_like_window_titlebar_button(visible_text, automation_id, ctype, rect)
+
+
+def _looks_like_taskbar_search_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    if not (_tokens_from_text(window_title or "") & TASKBAR_WINDOW_WORDS):
+        return False
+    if (automation_id or "").strip().lower() == "searchgleambutton":
+        return True
+    return "search" in _tokens_from_text(visible_text or "")
+
+
+def _looks_like_window_titlebar_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    if rect[1] > 44:
+        return False
+    raw_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    return bool(raw_tokens & {"close", "maximize", "minimize", "minimise", "restore"})
+
+
+def _looks_like_browser_profile_chrome_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    width, height = rect[2], rect[3]
+    if width <= 0 or height <= 0:
+        return False
+    if max(width, height) > BROWSER_PROFILE_MAX_EDGE:
+        return False
+    if max(width, height) / max(1, min(width, height)) > BROWSER_PROFILE_MAX_ASPECT:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    return bool(raw_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
+
+
+def _looks_like_browser_site_information_chrome_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_text = " ".join((visible_text or "", automation_id or "")).lower()
+    raw_tokens = _tokens_from_text(raw_text)
+    if "site_info_lock" in raw_text or {"site", "info", "lock"} <= raw_tokens:
+        return True
+    if rect[1] > 72:
+        return False
+    control_tokens = _tokenize_control(_semantic_text(visible_text))
+    return {"site", "information"} <= control_tokens or {"site", "info"} <= raw_tokens
+
+
+def _looks_like_site_information_button(
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    control_tokens = _tokenize_control(_semantic_text(visible_text))
+    return "site_info_lock" in control_tokens or {"site", "information"} <= control_tokens
 
 
 def _looks_like_browser_toolbar_button(
@@ -1943,6 +2089,10 @@ def _explicit_action_context_mismatch(
     return (
         _edit_action_context_mismatch(instruction, visible_text, automation_id, ctype)
         or _confirm_action_context_mismatch(instruction, visible_text, automation_id)
+        or _filter_reset_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _file_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -2106,6 +2256,18 @@ def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool
         return False
     control_kind = _file_action_kind(_tokens_from_text(candidate_text), is_instruction=False)
     return bool(control_kind and instruction_kind != control_kind)
+
+
+def _filter_reset_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & FILTER_RESET_ACTION_WORDS):
+        return False
+    if not (instruction_tokens & FILTER_RESET_CONTEXT_WORDS):
+        return False
+    candidate_tokens = _tokenize_control(candidate_text) | _tokens_from_text(candidate_text)
+    if candidate_tokens & FILTER_RESET_ALLOWED_CONTROL_WORDS:
+        return False
+    return bool(candidate_tokens & FILTER_RESET_OBJECT_ONLY_WORDS)
 
 
 def _object_only_action_context_mismatch(instruction: str, candidate_text: str) -> bool:

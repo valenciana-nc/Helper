@@ -706,6 +706,7 @@ _MENU_LAUNCHER_WORDS = frozenset(
 _MENU_LAUNCHER_CONTEXT_WORDS = frozenset(
     {"card", "grid", "list", "panel", "row", "rows", "section", "table"}
 )
+_LAUNCHER_CONTROL_ACTION_WORDS = frozenset({"click", "press", "tap"})
 _CONTEXTUAL_MENU_LAUNCHER_WORDS = frozenset(
     {
         "account",
@@ -930,9 +931,21 @@ _FORMAT_SINGLE_LETTER_CONTEXT_WORDS = frozenset(
 _FORMAT_ACTION_CONTEXT_WORDS = frozenset(
     {"content", "copy", "message", "paragraph", "selection", "text", "word", "words"}
 )
-_CLEAR_ACTION_WORDS = frozenset({"clear"})
+_CLEAR_ACTION_WORDS = frozenset({"clear", "reset"})
 _CLEAR_ACTION_CONTEXT_WORDS = frozenset(
-    {"box", "field", "find", "input", "query", "search", "text", "textbox", "textarea"}
+    {
+        "box",
+        "field",
+        "filter",
+        "filters",
+        "find",
+        "input",
+        "query",
+        "search",
+        "text",
+        "textbox",
+        "textarea",
+    }
 )
 _DIALOG_DISMISS_ACTION_WORDS = frozenset({"cancel", "close", "dismiss"})
 _DIALOG_DISMISS_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
@@ -1024,6 +1037,9 @@ def instruction_control_intents(instruction: str) -> set[str]:
     picker_launcher_requested = _picker_launcher_requested(raw_tokens)
     selector_requested = _selector_requested(raw_tokens)
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
+    launcher_control_requested = "launcher" in raw_tokens and bool(
+        raw_tokens & _LAUNCHER_CONTROL_ACTION_WORDS
+    )
     contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
@@ -1065,6 +1081,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or picker_launcher_requested
         or selector_requested
         or menu_launcher_requested
+        or launcher_control_requested
         or contextual_menu_launcher_requested
         or disclosure_requested
         or password_visibility_requested
@@ -1185,7 +1202,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         menu_launcher_requested or contextual_menu_launcher_requested
     ):
         intents.update(_MENU_INTENT_TYPES)
-    if menu_launcher_requested or contextual_menu_launcher_requested:
+    if menu_launcher_requested or launcher_control_requested or contextual_menu_launcher_requested:
         intents.update(_MENU_LAUNCHER_INTENT_TYPES)
     if "menuitem" in raw_tokens:
         intents.add("menuitem")

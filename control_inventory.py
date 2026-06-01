@@ -50,6 +50,14 @@ CLEAR_CONTEXT_CONTROL_TYPES = frozenset({"combobox", "edit"})
 CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
+FILTER_RESET_ACTION_WORDS = frozenset({"clear", "delete", "remove", "reset"})
+FILTER_RESET_CONTEXT_WORDS = frozenset({"filter", "filters", "query", "search"})
+FILTER_RESET_ALLOWED_CONTROL_WORDS = frozenset(
+    {"clear", "delete", "remove", "reset", "x"}
+)
+FILTER_RESET_OBJECT_ONLY_WORDS = frozenset(
+    {"apply", "filter", "filters", "funnel", "query", "result", "results", "search"}
+)
 CLOSE_CONTEXT_TARGET_WORDS = frozenset(
     {
         "banner",
@@ -153,11 +161,18 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
 )
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
+        "by",
         "click",
+        "for",
+        "from",
         "inside",
+        "in",
+        "of",
+        "on",
         "press",
         "tap",
         "within",
+        "with",
     }
 )
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
@@ -188,11 +203,23 @@ BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
     {
         "app",
         "application",
+        "card",
+        "chart",
+        "dashboard",
+        "form",
+        "grid",
         "in_app",
         "in_page",
+        "list",
         "nav",
         "navigation",
+        "pane",
+        "panel",
+        "report",
+        "section",
         "sidebar",
+        "table",
+        "widget",
         "wizard",
     }
 )
@@ -200,7 +227,7 @@ BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
     {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
-    {"bookmarks", "downloads", "extensions", "history", "sidepanel"}
+    {"bookmarks", "downloads", "extensions", "history", "home", "sidepanel"}
 )
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
@@ -211,6 +238,8 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "extensions",
         "forward",
         "history",
+        "home",
+        "house",
         "reload",
         "refresh",
     }
@@ -386,6 +415,21 @@ ACTION_CONTEXT_OBJECT_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
         "windows",
     }
 )
+ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
+    {
+        "item",
+        "items",
+        "list",
+        "order",
+        "orders",
+        "record",
+        "records",
+        "row",
+        "rows",
+        "table",
+    }
+)
+CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset({"dialog"})
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
@@ -2218,6 +2262,10 @@ def _target_id_plausibility(
         candidate,
         candidates,
         model_rect,
+    ) and not _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
     ):
         return False, max(text_score, geometry_score), "target_id ambiguous"
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
@@ -2246,6 +2294,8 @@ def _target_id_plausibility(
             max(text_score, geometry_score),
             "target_id ambiguous",
         )
+    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
+        return True, max(0.86, text_score, geometry_score), ""
     if not _candidate_matches_control_intent(
         candidate,
         control_intents,
@@ -2557,12 +2607,47 @@ def _instruction_requests_app_local_surface(
 
 
 def _looks_like_browser_chrome_surface(candidate: ControlCandidate) -> bool:
+    if _looks_like_os_chrome_surface(candidate):
+        return True
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     if _looks_like_browser_toolbar_button(candidate) or _looks_like_browser_menu_button(candidate):
         return True
+    if _looks_like_browser_profile_chrome_button(candidate):
+        return True
+    if _looks_like_browser_site_information_chrome_button(candidate):
+        return True
     return candidate.control_type == "tabitem" and candidate.rect[1] <= 72
+
+
+def _looks_like_os_chrome_surface(candidate: ControlCandidate) -> bool:
+    return _looks_like_taskbar_search_button(candidate) or _looks_like_window_titlebar_button(candidate)
+
+
+def _looks_like_window_titlebar_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    if candidate.rect[1] > 44:
+        return False
+    raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
+    return bool(raw_tokens & {"close", "maximize", "minimize", "minimise", "restore"})
+
+
+def _looks_like_browser_site_information_chrome_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_text = " ".join((candidate.text or "", candidate.automation_id or "")).lower()
+    raw_tokens = _tokens_from_text(raw_text)
+    if "site_info_lock" in raw_text or {"site", "info", "lock"} <= raw_tokens:
+        return True
+    if candidate.rect[1] > 72:
+        return False
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    return {"site", "information"} <= visible_tokens or {"site", "info"} <= raw_tokens
 
 
 def _browser_menu_button_action_mismatch(
@@ -3379,6 +3464,7 @@ def _explicit_action_context_mismatch(
     return (
         _edit_action_context_mismatch(instruction, candidate)
         or _confirm_action_context_mismatch(instruction, candidate)
+        or _filter_reset_action_mismatch(instruction, candidate)
         or _file_action_context_mismatch(instruction, candidate.descriptor)
         or _same_action_family_object_mismatch(instruction, candidate.descriptor)
         or _same_action_family_window_context_mismatch(instruction, candidate)
@@ -3402,6 +3488,23 @@ def _edit_action_context_mismatch(instruction: str, candidate: ControlCandidate)
     if not control_tokens:
         return False
     return not bool(control_tokens & EDIT_ACTION_WORDS)
+
+
+def _filter_reset_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & FILTER_RESET_ACTION_WORDS):
+        return False
+    if not (instruction_tokens & FILTER_RESET_CONTEXT_WORDS):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(
+        candidate.descriptor
+    )
+    if candidate_tokens & FILTER_RESET_ALLOWED_CONTROL_WORDS:
+        return False
+    return bool(candidate_tokens & FILTER_RESET_OBJECT_ONLY_WORDS)
 
 
 def _confirm_action_context_mismatch(
@@ -3668,6 +3771,11 @@ def _contained_row_action_context_mismatch(
         row_objects = _contained_row_context_objects(candidate, candidates)
         if not row_objects:
             continue
+        distinctive_objects = instruction_objects - ROW_CONTEXT_GENERIC_WORDS
+        if distinctive_objects:
+            if distinctive_objects & row_objects:
+                return False
+            return True
         if instruction_objects & row_objects:
             return False
         return True
@@ -3688,13 +3796,17 @@ def _contained_row_context_objects(
     ]
     containers.sort(key=lambda item: item.rect[2] * item.rect[3])
     for container in containers:
+        container_tokens = (
+            _candidate_semantic_tokens(container)
+            | _tokens_from_text(container.descriptor)
+        )
         objects = _object_token_variants(
-            _action_object_tokens(
-                _tokenize_control(container.descriptor),
-                frozenset(),
-                ROW_CONTEXT_OBJECT_STOPWORDS,
-            )
-        ) & WINDOW_CONTEXT_OBJECT_WORDS
+            {
+                token
+                for token in container_tokens - ROW_CONTEXT_OBJECT_STOPWORDS
+                if token and token not in {"click", "press", "tap"}
+            }
+        )
         if objects:
             return objects
     return set()
@@ -3724,6 +3836,18 @@ def _unresolved_contextual_duplicate_mismatch(
     return not bool(requested_context & evidence_tokens)
 
 
+def _candidate_satisfies_contextual_duplicate_request(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    if not requested_context:
+        return False
+    evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    return bool(requested_context & evidence_tokens)
+
+
 def _contextual_duplicate_request_tokens(
     instruction: str,
     candidate: ControlCandidate,
@@ -3733,8 +3857,11 @@ def _contextual_duplicate_request_tokens(
         return set()
     instruction_tokens = _tokenize_instruction(instruction)
     candidate_tokens = _candidate_semantic_tokens(candidate)
+    surface_tokens = raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
     return _object_token_variants(
-        instruction_tokens - candidate_tokens - CONTEXTUAL_DUPLICATE_STOPWORDS
+        (instruction_tokens | raw_tokens | surface_tokens)
+        - candidate_tokens
+        - (CONTEXTUAL_DUPLICATE_STOPWORDS - CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     )
 
 
@@ -4960,6 +5087,19 @@ def _contained_row_action_candidate_matches(
         return False
     visible_tokens = _candidate_visible_text_tokens(candidate)
     return bool(visible_tokens and instruction_tokens & visible_tokens)
+
+
+def _row_scoped_action_target_matches_context(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not _instruction_requests_contained_row_action(instruction):
+        return False
+    instruction_tokens = _tokenize_instruction(instruction)
+    if not _contained_row_action_candidate_matches(candidate, instruction_tokens):
+        return False
+    return not _contained_row_action_context_mismatch(instruction, candidate, candidates)
 
 
 def _instruction_requests_contained_row_action(instruction: str) -> bool:

@@ -988,10 +988,12 @@ class HelpIntentLanguageTests(unittest.TestCase):
         account_dropdown_intents = instruction_control_intents("Open the account dropdown")
         menu_item_intents = instruction_control_intents("Open the file menu")
         explicit_item_intents = instruction_control_intents("Open the profile menu item")
+        launcher_intents = instruction_control_intents("Click Settings launcher.")
 
         self.assertTrue({"button", "splitbutton"}.issubset(chevron_intents))
         self.assertEqual(overflow_intents, {"button", "splitbutton"})
         self.assertEqual(profile_menu_intents, {"button", "splitbutton"})
+        self.assertEqual(launcher_intents, {"button", "splitbutton"})
         self.assertTrue({"button", "splitbutton"}.issubset(account_dropdown_intents))
         self.assertTrue(menu_segment_intent(menu_item_intents))
         self.assertTrue(menu_segment_intent(explicit_item_intents))
@@ -8115,6 +8117,112 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Open Home in the sidebar.",
+                ControlCandidate(
+                    "c001",
+                    "Home",
+                    "button",
+                    (96, 8, 34, 34),
+                    automation_id="home",
+                    window_title="Reports - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Home",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="Reports - Google Chrome",
+                ),
+            ),
+            (
+                "Refresh the dashboard widget.",
+                ControlCandidate(
+                    "c001",
+                    "Reload",
+                    "button",
+                    (96, 8, 34, 34),
+                    automation_id="reload",
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Refresh",
+                    "button",
+                    (420, 220, 100, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Refresh the chart.",
+                ControlCandidate(
+                    "c001",
+                    "Reload",
+                    "button",
+                    (96, 8, 34, 34),
+                    automation_id="reload",
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Refresh",
+                    "button",
+                    (420, 220, 100, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Refresh the table.",
+                ControlCandidate(
+                    "c001",
+                    "Reload",
+                    "button",
+                    (96, 8, 34, 34),
+                    automation_id="reload",
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Refresh",
+                    "button",
+                    (420, 220, 100, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Open Profile in the app.",
+                ControlCandidate(
+                    "c001",
+                    "All",
+                    "button",
+                    (936, 8, 32, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Profile",
+                    "button",
+                    (420, 180, 110, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Open site info in the app.",
+                ControlCandidate(
+                    "c001",
+                    "site_info_lock",
+                    "button",
+                    (90, 8, 28, 34),
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Site info",
+                    "button",
+                    (420, 180, 110, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
                 "Go forward in the wizard.",
                 ControlCandidate(
                     "c001",
@@ -8151,6 +8259,72 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ),
                     self._capture(),
                     [chrome_control, app_control],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, app_control.id)
+                self.assertFalse(target.rejected_reason)
+
+    def test_os_chrome_controls_do_not_steal_app_local_targets(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Minimize the panel in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Minimize",
+                    "button",
+                    (910, 0, 30, 30),
+                    automation_id="Minimize",
+                    window_title="Dashboard - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Minimize panel",
+                    "button",
+                    (620, 140, 110, 32),
+                    window_title="Dashboard - Google Chrome",
+                ),
+            ),
+            (
+                "Search in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Search",
+                    "button",
+                    (80, 955, 160, 40),
+                    automation_id="SearchGleamButton",
+                    window_title="Taskbar",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Search",
+                    "edit",
+                    (300, 160, 240, 32),
+                    window_title="Dashboard",
+                ),
+            ),
+        )
+        for instruction, os_control, app_control in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": os_control.id,
+                            "target": {
+                                "x": os_control.rect[0],
+                                "y": os_control.rect[1],
+                                "width": os_control.rect[2],
+                                "height": os_control.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [os_control, app_control],
                 )
 
                 self.assertEqual(target.source, "text_match")
@@ -11876,6 +12050,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_filter_reset_actions_reject_plain_filter_controls(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Clear filter.", "Filter"),
+            ("Clear filter.", "Filter results"),
+            ("Clear filter.", "Apply filter"),
+            ("Reset filter.", "Filter"),
+            ("Reset search.", "Search"),
+            ("Reset query.", "Query"),
+            ("Remove filter.", "Filter results"),
+            ("Delete filter.", "Apply filter"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidate = ControlCandidate("c001", label, "button", (120, 160, 140, 32))
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=candidate.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=candidate.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                            "target": {
+                                "x": candidate.rect[0],
+                                "y": candidate.rect[1],
+                                "width": candidate.rect[2],
+                                "height": candidate.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [candidate],
+                )
+
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNotNone(snap_target)
+                assert snap_target is not None
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
     def test_editor_toolbar_target_id_accepts_format_and_history_labels(self) -> None:
         from control_inventory import ControlCandidate
@@ -15967,6 +16193,66 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
 
+    def test_row_scoped_action_target_id_uses_context_over_wrong_model_rect(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Archive in Order 2 row.",
+                {
+                    "x": 10,
+                    "y": 10,
+                    "width": 800,
+                    "height": 40,
+                },
+                [
+                    ControlCandidate("r1", "Order 1", "listitem", (10, 10, 800, 40)),
+                    ControlCandidate("a1", "Archive", "button", (720, 14, 80, 30)),
+                    ControlCandidate("r2", "Order 2", "listitem", (10, 60, 800, 40)),
+                    ControlCandidate("a2", "Archive", "button", (720, 64, 80, 30)),
+                ],
+                "a2",
+                (720, 64, 80, 30),
+            ),
+            (
+                "Click Archive on Project B list item.",
+                {
+                    "x": 10,
+                    "y": 10,
+                    "width": 300,
+                    "height": 120,
+                },
+                [
+                    ControlCandidate("r1", "Project A", "listitem", (10, 10, 300, 120)),
+                    ControlCandidate("a1", "Archive", "button", (220, 90, 80, 30)),
+                    ControlCandidate("r2", "Project B", "listitem", (350, 10, 300, 120)),
+                    ControlCandidate("a2", "Archive", "button", (560, 90, 80, 30)),
+                ],
+                "a2",
+                (560, 90, 80, 30),
+            ),
+        )
+        for instruction, target_rect, candidates, expected_id, expected_rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": expected_id,
+                            "target": target_rect,
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, expected_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected_rect)
+
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -16004,6 +16290,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "modal")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (400, 240, 80, 32))
+
+    def test_same_label_dialog_button_uses_context_over_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click OK in the dialog.",
+                    "target_id": "dialog",
+                    "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "bg",
+                    "OK",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Settings",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "dialog",
+                    "OK",
+                    "button",
+                    (400, 240, 80, 32),
+                    window_title="Preferences dialog",
+                    window_rank=1,
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "dialog")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (400, 240, 80, 32))
+
+    def test_launcher_wording_rejects_same_label_menuitem_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings launcher.",
+                    "target_id": "launcher",
+                    "target": {"x": 200, "y": 80, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("launcher", "Settings", "button", (20, 20, 100, 32), window_title="Start"),
+                ControlCandidate("item", "Settings", "menuitem", (200, 80, 160, 28), window_title="Settings menu"),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "launcher")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (20, 20, 100, 32))
 
     def test_selector_wrong_target_id_recovers_to_combobox(self) -> None:
         from control_inventory import ControlCandidate

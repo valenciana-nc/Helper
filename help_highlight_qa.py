@@ -585,6 +585,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "clear_filter_rejects_plain_filter_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 140, 32], "label": "Filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear filter.",
+                "target_id": "c001",
+                "target": {"x": 120, "y": 160, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Filter", "control_type": "button", "rect": [120, 160, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "delete_filter_rejects_apply_filter_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 160, 32], "label": "Apply filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete filter.",
+                "target_id": "c001",
+                "target": {"x": 120, "y": 160, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Apply filter", "control_type": "button", "rect": [120, 160, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_checkbox_model_rect_rejects_button_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -8060,6 +8104,263 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_home_rejects_sidebar_home_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [96, 20, 34, 34], "label": "Browser home"},
+                {"rect": [260, 160, 180, 32], "label": "Sidebar home"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Home in the sidebar.",
+                "target_id": "c001",
+                "target": {"x": 96, "y": 20, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Home",
+                    "control_type": "button",
+                    "rect": [96, 20, 34, 34],
+                    "automation_id": "home",
+                    "window_title": "Reports - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Home",
+                    "control_type": "listitem",
+                    "rect": [260, 160, 180, 32],
+                    "window_title": "Reports - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [260, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_reload_rejects_dashboard_widget_refresh_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [96, 20, 34, 34], "label": "Browser reload"},
+                {"rect": [420, 220, 100, 32], "label": "Widget refresh"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the dashboard widget.",
+                "target_id": "c001",
+                "target": {"x": 96, "y": 20, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Reload",
+                    "control_type": "button",
+                    "rect": [96, 20, 34, 34],
+                    "automation_id": "reload",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Refresh",
+                    "control_type": "button",
+                    "rect": [420, 220, 100, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 220, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_reload_rejects_chart_refresh_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [96, 20, 34, 34], "label": "Browser reload"},
+                {"rect": [420, 220, 100, 32], "label": "Chart refresh"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Refresh the chart.",
+                "target_id": "c001",
+                "target": {"x": 96, "y": 20, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Reload",
+                    "control_type": "button",
+                    "rect": [96, 20, 34, 34],
+                    "automation_id": "reload",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Refresh",
+                    "control_type": "button",
+                    "rect": [420, 220, 100, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 220, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_profile_rejects_app_profile_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [936, 20, 32, 32], "label": "Browser profile"},
+                {"rect": [420, 180, 110, 32], "label": "App profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Profile in the app.",
+                "target_id": "c001",
+                "target": {"x": 936, "y": 20, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "All",
+                    "control_type": "button",
+                    "rect": [936, 20, 32, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Profile",
+                    "control_type": "button",
+                    "rect": [420, 180, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 180, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_site_info_rejects_app_site_info_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [90, 20, 28, 34], "label": "Browser site info"},
+                {"rect": [420, 180, 110, 32], "label": "App site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open site info in the app.",
+                "target_id": "c001",
+                "target": {"x": 90, "y": 20, "width": 28, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "site_info_lock",
+                    "control_type": "button",
+                    "rect": [90, 20, 28, 34],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Site info",
+                    "control_type": "button",
+                    "rect": [420, 180, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [420, 180, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "titlebar_minimize_rejects_app_panel_minimize_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [910, 0, 30, 30], "label": "Window minimize"},
+                {"rect": [620, 140, 110, 32], "label": "Panel minimize"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Minimize the panel in the app.",
+                "target_id": "c001",
+                "target": {"x": 910, "y": 0, "width": 30, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Minimize",
+                    "control_type": "button",
+                    "rect": [910, 0, 30, 30],
+                    "automation_id": "Minimize",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Minimize panel",
+                    "control_type": "button",
+                    "rect": [620, 140, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [620, 140, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "taskbar_search_rejects_app_search_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 955, 160, 40], "label": "Taskbar search"},
+                {"rect": [300, 160, 240, 32], "label": "App search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Search in the app.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 955, "width": 160, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search",
+                    "control_type": "button",
+                    "rect": [80, 955, 160, 40],
+                    "automation_id": "SearchGleamButton",
+                    "window_title": "Taskbar",
+                },
+                {
+                    "id": "c002",
+                    "text": "Search",
+                    "control_type": "edit",
+                    "rect": [300, 160, 240, 32],
+                    "window_title": "Dashboard",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [300, 160, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -12969,6 +13270,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_numeric_action_target_id_uses_context_over_wrong_model_rect",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 800, 40], "label": "Order 1"},
+                {"rect": [730, 84, 80, 30], "label": "Archive"},
+                {"rect": [20, 140, 800, 40], "label": "Order 2"},
+                {"rect": [730, 144, 80, 30], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Archive in Order 2 row.",
+                "target_id": "a2",
+                "target": {"x": 20, "y": 80, "width": 800, "height": 40},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Order 1", "control_type": "listitem", "rect": [20, 80, 800, 40]},
+                {"id": "a1", "text": "Archive", "control_type": "button", "rect": [730, 84, 80, 30]},
+                {"id": "r2", "text": "Order 2", "control_type": "listitem", "rect": [20, 140, 800, 40]},
+                {"id": "a2", "text": "Archive", "control_type": "button", "rect": [730, 144, 80, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "a2",
+                "rect": [730, 144, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_letter_action_target_id_uses_context_over_wrong_model_rect",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Project A"},
+                {"rect": [230, 160, 80, 30], "label": "Archive"},
+                {"rect": [360, 80, 300, 120], "label": "Project B"},
+                {"rect": [570, 160, 80, 30], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Archive on Project B list item.",
+                "target_id": "a2",
+                "target": {"x": 20, "y": 80, "width": 300, "height": 120},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Project A", "control_type": "listitem", "rect": [20, 80, 300, 120]},
+                {"id": "a1", "text": "Archive", "control_type": "button", "rect": [230, 160, 80, 30]},
+                {"id": "r2", "text": "Project B", "control_type": "listitem", "rect": [360, 80, 300, 120]},
+                {"id": "a2", "text": "Archive", "control_type": "button", "rect": [570, 160, 80, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "a2",
+                "rect": [570, 160, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "same_label_modal_button_uses_geometry_over_foreground_rank",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -13002,6 +13359,68 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "modal",
                 "rect": [400, 240, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_label_dialog_button_uses_context_over_wrong_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "OK"},
+                {"rect": [400, 240, 80, 32], "label": "OK"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click OK in the dialog.",
+                "target_id": "dialog",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "bg",
+                    "text": "OK",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Settings",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog",
+                    "text": "OK",
+                    "control_type": "button",
+                    "rect": [400, 240, 80, 32],
+                    "window_title": "Preferences dialog",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "dialog",
+                "rect": [400, 240, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "launcher_wording_rejects_same_label_menuitem_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 100, 32], "label": "Settings launcher"},
+                {"rect": [200, 80, 160, 28], "label": "Settings menu item"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings launcher.",
+                "target_id": "launcher",
+                "target": {"x": 200, "y": 80, "width": 160, "height": 28},
+            },
+            "candidates": [
+                {"id": "launcher", "text": "Settings", "control_type": "button", "rect": [20, 20, 100, 32], "window_title": "Start"},
+                {"id": "item", "text": "Settings", "control_type": "menuitem", "rect": [200, 80, 160, 28], "window_title": "Settings menu"},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "launcher",
+                "rect": [20, 20, 100, 32],
                 "overlay_emitted": True,
             },
         },
