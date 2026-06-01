@@ -140,6 +140,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("choose", tokens)
         self.assertIn("attach", tokens)
 
+    def test_copy_action_aliases_expand_to_duplicate_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        copy_tokens = tokenize_instruction("Copy this item")
+        clone_tokens = tokenize_instruction("Clone this item")
+        duplicate_tokens = tokenize_control("Duplicate")
+
+        self.assertTrue({"clone", "copy", "duplicate"}.issubset(copy_tokens))
+        self.assertTrue({"clone", "copy", "duplicate"}.issubset(clone_tokens))
+        self.assertTrue({"clone", "copy", "duplicate"}.issubset(duplicate_tokens))
+
     def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
         from help_intents import tokens_from_text
 
@@ -5002,6 +5013,81 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_copy_action_alias_target_id_accepts_duplicate_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Copy this item.", "Duplicate"),
+            ("Clone this item.", "Duplicate"),
+            ("Duplicate this item.", "Copy"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_copy_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Copy this item.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Duplicate", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_copy_action_alias_rejects_ambiguous_copy_and_duplicate_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Copy this item.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Duplicate", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Copy", "button", (260, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_disclosure_broad_row_highlights_single_button(self) -> None:
         from control_inventory import ControlCandidate

@@ -1279,6 +1279,94 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "copy_action_target_id_accepts_duplicate_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Duplicate"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Copy this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clone_action_target_id_accepts_duplicate_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Duplicate"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clone this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "copy_action_text_match_overrides_wrong_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Duplicate"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Copy this item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "copy_action_alias_rejects_ambiguous_copy_and_duplicate_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Duplicate"},
+                {"rect": [180, 80, 100, 32], "label": "Copy"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Copy this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Copy", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
