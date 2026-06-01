@@ -10606,6 +10606,117 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 240, 32))
 
+    def test_browser_address_bar_rejects_url_content_info_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        address = "about:blank | Address and search bar"
+        cases = (
+            "Open about.",
+            "Show info.",
+            "Open information.",
+            "Open site information.",
+            "Open blank.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            address,
+                            "edit",
+                            (120, 160, 260, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_browser_address_bar_live_label_accepts_explicit_bar_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Click address bar.",
+            "Focus the URL bar.",
+            "Click the search bar.",
+            "Click the omnibox.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "about:blank | Address and search bar",
+                            "edit",
+                            (120, 160, 260, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 260, 32))
+
+    def test_site_info_text_match_recovers_from_address_bar_url_content(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open site information.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "about:blank | Address and search bar",
+                    "edit",
+                    (120, 160, 260, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "View site information",
+                    "button",
+                    (420, 160, 160, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (420, 160, 160, 32))
+
     def test_button_control_suffix_model_rect_highlights_button(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

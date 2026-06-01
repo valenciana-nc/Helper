@@ -77,6 +77,12 @@ BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
+BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
+    {"address", "bar", "location", "omnibox", "search", "url"}
+)
+BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
+    {"address", "find", "location", "omnibox", "search", "url"}
+)
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
     {
@@ -976,6 +982,12 @@ def _text_match_score(
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
@@ -1026,6 +1038,12 @@ def _context_text_match_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -1131,6 +1149,16 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return (
             False,
             text_score,
@@ -1348,6 +1376,38 @@ def _browser_profile_identity_action_mismatch(
     )
 
 
+def _browser_address_bar_content_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_address_bar(candidate):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if not (instruction_tokens & candidate_tokens):
+        return False
+    return not _instruction_requests_browser_address_bar(instruction)
+
+
+def _looks_like_browser_address_bar(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"edit", "combobox"}:
+        return False
+    raw_tokens = _tokens_from_text(candidate.text)
+    if {"address", "bar"} <= raw_tokens:
+        return True
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return bool(raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}))
+
+
+def _instruction_requests_browser_address_bar(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
+        return True
+    return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
+
+
 def _browser_extension_access_action_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -1541,6 +1601,12 @@ def _target_id_ambiguity(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_address_bar_content_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1639,6 +1705,12 @@ def _has_semantic_alternative(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_address_bar_content_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1681,6 +1753,12 @@ def _has_visible_semantic_alternative(
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_address_bar_content_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1719,6 +1797,12 @@ def _candidate_snap_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -1960,6 +2044,12 @@ def _candidate_snap_semantic_mismatch(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
         return True
     if _browser_extension_access_action_mismatch(
         instruction,
