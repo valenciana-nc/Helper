@@ -4033,6 +4033,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_new_target_id_rejects_new_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open new.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_new_model_rect_rejects_new_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Create new.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "external_link_action_rejects_chain_share_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -6789,7 +6843,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "generic_new_text_match_prefers_new_tab_over_unnamed_bookmark",
+            "name": "generic_new_rejects_new_tab_and_unnamed_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [20, 80, 220, 32], "label": "Claude new bookmark"},
@@ -6817,10 +6871,9 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "text_match",
-                "target_id": "c002",
-                "rect": [300, 80, 100, 32],
-                "overlay_emitted": True,
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
             },
         },
         {
@@ -7125,6 +7178,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "extension_status_has_rejects_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Codex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open has.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Codex\nHas access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "extension_status_has_model_rect_rejects_extension_access_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Codex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click has.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Codex\nHas access to this site",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
                 "overlay_emitted": False,
             },
         },
@@ -7558,6 +7665,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_icons_rejects_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open icons.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "bare_hidden_model_rect_rejects_show_hidden_icons",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7566,6 +7700,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Open hidden.",
+                "target": {"x": 20, "y": 80, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bare_icons_model_rect_rejects_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open icons.",
                 "target": {"x": 20, "y": 80, "width": 32, "height": 32},
             },
             "candidates": [

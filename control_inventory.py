@@ -79,7 +79,7 @@ TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
 TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
 TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
-    {"icons", "notification_area", "system_tray", "tray"}
+    {"notification_area", "system_tray", "tray"}
 )
 TASKBAR_SHOW_DESKTOP_REQUEST_WORDS = frozenset({"show_desktop"})
 PROGRAM_MANAGER_WINDOW_WORDS = frozenset({"manager", "program"})
@@ -152,6 +152,7 @@ BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS = frozenset(
     {"menu", "more", "options", "preferences", "settings"}
 )
 BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
+BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
 BROWSER_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
@@ -1179,6 +1180,8 @@ def _text_match_score(
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
@@ -1271,12 +1274,14 @@ def _context_text_match_score(
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
         candidate,
     ):
-        return 0.0
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _site_information_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _unnamed_bookmark_generic_route_mismatch(
@@ -1459,6 +1464,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1817,6 +1828,32 @@ def _browser_new_tab_bookmark_action_mismatch(
     return bool(candidate_tokens & BROWSER_NEW_TAB_WORDS)
 
 
+def _browser_new_tab_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_new_tab_button(candidate):
+        return False
+    if not (instruction_tokens & BROWSER_NEW_TAB_GENERIC_WORDS):
+        return False
+    if instruction_tokens & BROWSER_NEW_TAB_WORDS:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    return "tab" not in raw_tokens and "tabs" not in raw_tokens
+
+
+def _looks_like_browser_new_tab_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    text_tokens = _candidate_visible_text_tokens(candidate)
+    raw_text_tokens = _tokens_from_text(candidate.text)
+    return bool(text_tokens & BROWSER_NEW_TAB_WORDS) or {"new", "tab"} <= raw_text_tokens
+
+
 def _close_tab_action_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -1884,7 +1921,11 @@ def _browser_extension_access_action_mismatch(
 ) -> bool:
     if not _looks_like_browser_extension_access_button(candidate):
         return False
-    if not (instruction_tokens & BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS):
+    raw_tokens = _tokens_from_text(instruction)
+    if not (
+        instruction_tokens & BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS
+        or raw_tokens & BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS
+    ):
         return False
     if _instruction_names_browser_extension_access_target(instruction, candidate):
         return False
@@ -2033,9 +2074,11 @@ def _taskbar_hidden_icons_action_mismatch(
 ) -> bool:
     if not _looks_like_taskbar_hidden_icons_button(candidate):
         return False
-    if "hidden" not in instruction_tokens:
+    if instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS:
         return False
-    return not bool(instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS)
+    if {"hidden", "icons"} <= instruction_tokens:
+        return False
+    return bool(instruction_tokens & {"hidden", "icons"})
 
 
 def _taskbar_show_desktop_action_mismatch(
@@ -2372,6 +2415,8 @@ def _target_id_ambiguity(
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -2545,6 +2590,8 @@ def _has_semantic_alternative(
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -2614,6 +2661,8 @@ def _has_visible_semantic_alternative(
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
             continue
         if _browser_extension_access_action_mismatch(
             instruction,
@@ -2690,12 +2739,14 @@ def _candidate_snap_score(
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
         candidate,
     ):
-        return 0.0
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _site_information_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unnamed_bookmark_generic_route_mismatch(
@@ -3023,6 +3074,8 @@ def _candidate_snap_semantic_mismatch(
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_new_tab_action_mismatch(instruction, instruction_tokens, candidate):
         return True
     if _browser_extension_access_action_mismatch(
         instruction,

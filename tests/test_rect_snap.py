@@ -1138,16 +1138,98 @@ class SnapToControlTests(unittest.TestCase):
         desktop = _FakeDesktop([window])
         model_rect = (100, 560, 90, 40)
 
+        for instruction in ("Open hidden.", "Open icons."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_generic_new_does_not_snap_browser_new_tab_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        new_tab = _make_button("New Tab", 100, 20, 32, 32)
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [new_tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 32, 32)
+
+        for instruction in ("Open new.", "Create new.", "Add new."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_new_tab_phrase_still_snaps_browser_new_tab_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        new_tab = _make_button("New Tab", 100, 20, 32, 32)
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [new_tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 32, 32)
+
         result = snap_to_control(
             model_rect,
-            "Open hidden.",
+            "Open new tab.",
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
 
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, model_rect)
-        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+        self.assertFalse(result.rejected_reason)
+
+    def test_extension_status_words_do_not_snap_access_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        extension = _make_button("Codex\nHas access to this site", 100, 20, 120, 32)
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [extension])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 120, 32)
+
+        for instruction in ("Open has.", "Click has."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_named_extension_still_snaps_access_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        extension = _make_button("Codex\nHas access to this site", 100, 20, 120, 32)
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [extension])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 120, 32)
+
+        result = snap_to_control(
+            model_rect,
+            "Open Codex.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertFalse(result.rejected_reason)
 
     def test_bare_desktop_does_not_snap_taskbar_show_desktop_button(self) -> None:
         from rect_snap import snap_to_control
@@ -7139,7 +7221,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
 
-    def test_generic_new_text_match_prefers_new_tab_over_unnamed_bookmark(self) -> None:
+    def test_generic_new_rejects_new_tab_and_unnamed_bookmark(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
@@ -7170,9 +7252,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "text_match")
-        self.assertEqual(target.target_id, "c002")
-        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_app_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
         from control_inventory import ControlCandidate
@@ -7354,6 +7435,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open this site.", claude_access, "target_id semantic mismatch"),
             ("Open access.", claude_access, "target_id semantic mismatch"),
             ("Open site access.", claude_access, "target_id semantic mismatch"),
+            ("Open has.", codex_access, "target_id semantic mismatch"),
+            ("Click has.", codex_access, "target_id semantic mismatch"),
+            ("Open wants.", claude_access, "target_id semantic mismatch"),
             ("Grant access.", claude_access, "target_id semantic mismatch"),
             ("Grant Claude access.", claude_access, ""),
             ("Allow Claude on this site.", claude_access, ""),
@@ -7386,6 +7470,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
+
+    def test_extension_status_words_ignore_access_button_text_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        for instruction in ("Open has.", "Click has."):
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            "Codex\nHas access to this site",
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="GitHub - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertIsNone(result)
+
+    def test_extension_status_words_reject_access_button_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        for instruction in ("Open has.", "Click has."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Codex\nHas access to this site",
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="GitHub - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_site_information_target_id_requires_info_or_lock_wording(self) -> None:
         from control_inventory import ControlCandidate
@@ -11054,6 +11189,88 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
 
+    def test_generic_new_rejects_browser_new_tab_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "New Tab",
+                "button",
+                (120, 160, 32, 32),
+                window_title="GitHub - Google Chrome",
+            )
+        ]
+        for instruction in ("Open new.", "Create new.", "Add new."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_new_tab_wording_accepts_browser_new_tab_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = ("Open new tab.", "Open in new tab.")
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "New Tab",
+                            "button",
+                            (120, 160, 32, 32),
+                            window_title="GitHub - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
     def test_external_link_aliases_do_not_cross_share_link_icons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -12354,6 +12571,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open system tray.", "System Settings"),
             ("Open hidden.", "Show Hidden Icons"),
             ("Click hidden.", "Show Hidden Icons"),
+            ("Open icons.", "Show Hidden Icons"),
+            ("Click icons.", "Show Hidden Icons"),
             ("Show history.", "Show Hidden Icons"),
             ("Show password.", "Show Hidden Icons"),
         )
@@ -12386,49 +12605,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
     def test_bare_hidden_text_match_ignores_show_hidden_icons(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
-        result = resolve_candidate_target(
-            target_id="",
-            instruction="Open hidden.",
-            candidates=[
-                ControlCandidate(
-                    "c001",
-                    "Show Hidden Icons",
-                    "button",
-                    (120, 160, 32, 32),
-                    window_title="Taskbar",
+        for instruction in ("Open hidden.", "Open icons."):
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            "Show Hidden Icons",
+                            "button",
+                            (120, 160, 32, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
                 )
-            ],
-        )
 
-        self.assertIsNone(result)
+                self.assertIsNone(result)
 
     def test_bare_hidden_model_rect_rejects_show_hidden_icons_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Open hidden.",
-                    "target": {"x": 120, "y": 160, "width": 32, "height": 32},
-                }
-            ),
-            self._capture(),
-            [
-                ControlCandidate(
-                    "c001",
-                    "Show Hidden Icons",
-                    "button",
-                    (120, 160, 32, 32),
-                    window_title="Taskbar",
+        for instruction in ("Open hidden.", "Open icons."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 32, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Show Hidden Icons",
+                            "button",
+                            (120, 160, 32, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
                 )
-            ],
-        )
 
-        self.assertEqual(target.source, "candidate_snap")
-        self.assertEqual(target.target_id, "c001")
-        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_network_target_id_accepts_wifi_language(self) -> None:
         from control_inventory import ControlCandidate

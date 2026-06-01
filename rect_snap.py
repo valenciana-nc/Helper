@@ -43,7 +43,7 @@ SITE_INFORMATION_REQUEST_WORDS = frozenset(
     {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
 )
 TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
-    {"icons", "notification_area", "system_tray", "tray"}
+    {"notification_area", "system_tray", "tray"}
 )
 TASKBAR_SHOW_DESKTOP_REQUEST_WORDS = frozenset({"show_desktop"})
 PROGRAM_MANAGER_WINDOW_WORDS = frozenset({"manager", "program"})
@@ -52,6 +52,33 @@ PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS = frozenset(
 )
 PROGRAM_MANAGER_ABOUT_WORDS = frozenset({"about", "details", "info", "information"})
 PROGRAM_MANAGER_NEW_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
+BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
+BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
+BROWSER_NEW_TAB_GENERIC_WORDS = frozenset({"add", "create", "new", "plus"})
+BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
+BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
+    {"access", "button", "control", "extension", "has", "open", "site", "this", "to", "wants"}
+)
+BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS = frozenset(
+    {
+        "access",
+        "allow",
+        "button",
+        "click",
+        "control",
+        "enable",
+        "extension",
+        "give",
+        "grant",
+        "has",
+        "open",
+        "request",
+        "site",
+        "this",
+        "to",
+        "wants",
+    }
+)
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -200,6 +227,22 @@ def snap_to_control(
             ctype,
             window_title,
         )
+        browser_new_tab_action_mismatch = _browser_new_tab_action_mismatch(
+            instruction,
+            instruction_tokens,
+            visible_text,
+            ctype,
+            window_title,
+        )
+        browser_extension_access_action_mismatch = (
+            _browser_extension_access_action_mismatch(
+                instruction,
+                instruction_tokens,
+                semantic_text,
+                ctype,
+                window_title,
+            )
+        )
         browser_tab_auth_action_mismatch = _browser_tab_auth_action_mismatch(
             instruction_tokens,
             ctype,
@@ -220,6 +263,8 @@ def snap_to_control(
             or hidden_icons_action_mismatch
             or show_desktop_action_mismatch
             or program_manager_action_mismatch
+            or browser_new_tab_action_mismatch
+            or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
             or site_information_action_mismatch
@@ -775,12 +820,14 @@ def _hidden_icons_action_mismatch(
     instruction_tokens: set[str],
     visible_text: str,
 ) -> bool:
-    if "hidden" not in instruction_tokens:
-        return False
     control_tokens = _tokenize_control(visible_text or "")
     if not {"hidden", "icons"} <= control_tokens:
         return False
-    return not bool(instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS)
+    if instruction_tokens & TASKBAR_HIDDEN_ICONS_REQUEST_WORDS:
+        return False
+    if {"hidden", "icons"} <= instruction_tokens:
+        return False
+    return bool(instruction_tokens & {"hidden", "icons"})
 
 
 def _show_desktop_action_mismatch(
@@ -821,6 +868,86 @@ def _program_manager_desktop_item_action_mismatch(
             - {token for token in control_tokens if token.isdigit()}
         )
         if not instruction_tokens & distinctive_tokens:
+            return True
+    return False
+
+
+def _browser_new_tab_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    if _tokenize_control(window_title or "") and not (
+        _tokenize_control(window_title or "") & BROWSER_PROFILE_WINDOW_WORDS
+    ):
+        return False
+    control_tokens = _tokenize_control(visible_text or "")
+    raw_control_tokens = _tokens_from_text(visible_text or "")
+    if not (control_tokens & BROWSER_NEW_TAB_WORDS or {"new", "tab"} <= raw_control_tokens):
+        return False
+    if not (instruction_tokens & BROWSER_NEW_TAB_GENERIC_WORDS):
+        return False
+    if instruction_tokens & BROWSER_NEW_TAB_WORDS:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    return "tab" not in raw_tokens and "tabs" not in raw_tokens
+
+
+def _browser_extension_access_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokenize_control(window_title or "")
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    control_tokens = _tokens_from_text(semantic_text or "")
+    if not (BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS <= control_tokens):
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (
+        instruction_tokens & BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS
+        or raw_tokens & BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS
+    ):
+        return False
+    if _instruction_names_browser_extension_access_target(instruction, semantic_text):
+        return False
+    return True
+
+
+def _instruction_names_browser_extension_access_target(
+    instruction: str,
+    semantic_text: str,
+) -> bool:
+    target_tokens = {
+        token
+        for token in _tokens_from_text(semantic_text or "")
+        - BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS
+        if len(token) > 1 and not token.isdigit()
+    }
+    if not target_tokens:
+        return False
+    raw_words = set(re.findall(r"[a-z0-9]+", (instruction or "").lower()))
+    instruction_specific = {
+        word
+        for word in raw_words - BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS
+        if len(word) > 1 and not word.isdigit()
+    }
+    if not instruction_specific:
+        return False
+    target_compact = re.sub(r"[^a-z0-9]+", "", (semantic_text or "").lower())
+    for word in instruction_specific:
+        if word in target_tokens:
+            return True
+        if len(word) >= 4 and word in target_compact:
             return True
     return False
 
