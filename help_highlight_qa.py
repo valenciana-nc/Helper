@@ -3812,6 +3812,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "remove_formatting_target_id_accepts_clear_formatting_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 170, 32], "label": "Clear formatting"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Remove formatting.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Clear formatting", "control_type": "button", "rect": [20, 80, 170, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 170, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "remove_formatting_model_rect_rejects_trash_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Trash"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Remove formatting.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Trash", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "bold_text_match_overrides_text_field_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4575,6 +4617,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 120, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "send_message_model_rect_rejects_delete_message_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Delete message"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send message.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Delete message", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "save_document_target_id_rejects_delete_document_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 170, 32], "label": "Delete document"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Delete document", "control_type": "button", "rect": [20, 80, 170, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {

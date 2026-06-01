@@ -295,14 +295,24 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         bold_intents = instruction_control_intents("Bold text")
         click_b_intents = instruction_control_intents("Click B")
+        remove_formatting_tokens = tokenize_instruction("Remove formatting")
 
         self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Bold text")))
         self.assertTrue({"b", "bold"}.issubset(tokenize_instruction("Click B")))
         self.assertTrue({"i", "italic"}.issubset(tokenize_instruction("Italic text")))
         self.assertTrue({"u", "underline"}.issubset(tokenize_instruction("Underline text")))
+        self.assertTrue({"clear", "formatting"}.issubset(remove_formatting_tokens))
+        self.assertFalse(
+            remove_formatting_tokens & {"bin", "delete", "remove", "trash", "wastebasket"}
+        )
         self.assertTrue({"b", "bold"}.issubset(tokenize_control("B")))
         self.assertTrue({"i", "italic"}.issubset(tokenize_control("I")))
         self.assertTrue({"u", "underline"}.issubset(tokenize_control("U")))
+        self.assertTrue({"clear", "formatting"}.issubset(tokenize_control("Remove formatting")))
+        self.assertFalse(
+            tokenize_control("Remove formatting")
+            & {"bin", "delete", "remove", "trash", "wastebasket"}
+        )
         self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(bold_intents))
         self.assertTrue({"button", "splitbutton", "menuitem"}.issubset(click_b_intents))
         self.assertNotIn("edit", bold_intents)
@@ -2302,6 +2312,52 @@ class SnapToControlTests(unittest.TestCase):
 
                 self.assertEqual(result.source, "uia")
                 self.assertEqual(result.rect, (360, 160, 140, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_action_family_mismatch_does_not_snap_generic_overlap_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click Send message.", "Delete message"),
+            ("Delete message.", "Send message"),
+            ("Save document.", "Delete document"),
+            ("Download file.", "Upload file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 160, 32)
+                window = _make_window("App", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 160, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 160, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_remove_formatting_does_not_snap_delete_family_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        for label in ("Delete", "Trash", "Remove"):
+            with self.subTest(label=label):
+                button = _make_button(label, 360, 160, 120, 32)
+                window = _make_window("Editor", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 120, 32),
+                    "Remove formatting.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 120, 32))
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
@@ -4799,6 +4855,55 @@ class ControlInventoryTests(unittest.TestCase):
         )
 
         self.assertIsNone(result)
+
+    def test_snap_candidate_target_rejects_action_mismatch_with_generic_overlap(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Click Send message.", "Delete message"),
+            ("Delete message.", "Send message"),
+            ("Save document.", "Delete document"),
+            ("Download file.", "Upload file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (120, 160, 180, 32)),
+                    ],
+                    model_rect=(120, 160, 180, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_snap_candidate_target_accepts_matching_action_with_generic_overlap(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Click Send message.", "Submit message"),
+            ("Save document.", "Floppy disk"),
+            ("Upload file.", "Choose file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (120, 160, 180, 32)),
+                    ],
+                    model_rect=(120, 160, 180, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
 
     def test_snap_candidate_target_prefers_splitbutton_menu_segment(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -10188,6 +10293,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Redo change.", "\u21b7", (120, 160, 32, 32)),
             ("Undo change.", "Ctrl+Z", (120, 160, 90, 32)),
             ("Redo change.", "Ctrl+Shift+Z", (120, 160, 140, 32)),
+            ("Remove formatting.", "Clear formatting", (120, 160, 150, 32)),
+            ("Remove formatting.", "Remove formatting", (120, 160, 170, 32)),
         )
         for instruction, label, rect in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -10257,6 +10364,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_remove_formatting_rejects_delete_family_controls(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        for label in ("Delete", "Trash", "Remove"):
+            with self.subTest(label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (120, 160, 120, 32)),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Remove formatting.",
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction="Remove formatting.",
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Remove formatting.",
+                            "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_clear_and_delete_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
@@ -12276,6 +12428,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (280, 160, 100, 32))
+
+    def test_action_family_mismatch_rejects_generic_overlap_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click Send message.", "Delete message"),
+            ("Delete message.", "Send message"),
+            ("Save document.", "Delete document"),
+            ("Download file.", "Upload file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (120, 160, 180, 32)),
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_meeting_control_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate

@@ -57,6 +57,19 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+EXCLUSIVE_ACTION_FAMILIES = (
+    frozenset({"plane", "send", "submit"}),
+    frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
+    frozenset({"disk", "floppy", "save"}),
+    frozenset({"archive", "cabinet", "filing"}),
+    frozenset({"download", "export"}),
+    frozenset({"attach", "attachment", "browse", "choose", "paperclip", "upload"}),
+    frozenset({"clone", "copy", "duplicate"}),
+    frozenset({"clipboard", "paste"}),
+    frozenset({"edit", "pencil"}),
+    frozenset({"print", "printer"}),
+    frozenset({"share"}),
+)
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
@@ -1249,6 +1262,8 @@ def _text_match_score(
         return 0.0
     if _audio_output_polarity_action_mismatch(instruction, candidate):
         return 0.0
+    if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
+        return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
@@ -1350,6 +1365,8 @@ def _context_text_match_score(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return 0.0
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return 0.0
+    if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1589,6 +1606,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return (
             False,
             text_score,
@@ -2465,6 +2488,22 @@ def _audio_output_polarity_action_mismatch(
     return requested_up != control_up
 
 
+def _exclusive_action_family_mismatch(instruction: str, candidate_text: str) -> bool:
+    requested_families = _exclusive_action_family_indexes(_tokens_from_text(instruction))
+    if not requested_families:
+        return False
+    candidate_families = _exclusive_action_family_indexes(_tokens_from_text(candidate_text))
+    return bool(candidate_families and requested_families.isdisjoint(candidate_families))
+
+
+def _exclusive_action_family_indexes(tokens: set[str]) -> set[int]:
+    return {
+        index
+        for index, family in enumerate(EXCLUSIVE_ACTION_FAMILIES)
+        if tokens & family
+    }
+
+
 def _disclosure_action_tokens_mismatch(
     instruction_tokens: set[str],
     candidate_tokens: set[str],
@@ -2661,6 +2700,8 @@ def _target_id_ambiguity(
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
             continue
+        if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -2844,6 +2885,8 @@ def _has_semantic_alternative(
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
             continue
+        if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         score = _text_evidence_score(
@@ -2923,6 +2966,8 @@ def _has_visible_semantic_alternative(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
@@ -3008,6 +3053,8 @@ def _candidate_snap_score(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -3166,6 +3213,8 @@ def _single_contained_control_intent_candidate(
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
         if _audio_output_polarity_action_mismatch(instruction, candidate):
+            continue
+        if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
@@ -3374,6 +3423,8 @@ def _candidate_snap_semantic_mismatch(
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return True
     if _audio_output_polarity_action_mismatch(instruction, candidate):
+        return True
+    if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return True
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return True

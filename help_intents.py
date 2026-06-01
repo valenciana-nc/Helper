@@ -71,6 +71,11 @@ _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
     (re.compile(r"\(\s*all\s*\)"), set(), {"all"}),
     (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
     (
+        re.compile(r"\b(?:clear|remove)\s+(?:the\s+)?format(?:ting|s)?\b"),
+        {"clear", "formatting"},
+        {"bin", "delete", "remove", "trash", "wastebasket"},
+    ),
+    (
         re.compile(r"\b(?:widgets?|weather)\b.*\bclear\b"),
         {"weather"},
         {"clear"},
@@ -121,6 +126,11 @@ _PHRASE_TOKEN_REWRITES = (
         re.compile(r"\b(?:hide|minimi[sz]e)\s+all\s+windows\b"),
         {"show_desktop"},
         {"all", "hide", "minimise", "minimize", "minus", "windows"},
+    ),
+    (
+        re.compile(r"\b(?:clear|remove)\s+(?:the\s+)?format(?:ting|s)?\b"),
+        {"clear", "formatting"},
+        {"bin", "delete", "remove", "trash", "wastebasket"},
     ),
     (
         re.compile(r"\bwi\s+fi\b"),

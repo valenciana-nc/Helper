@@ -45,6 +45,19 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+EXCLUSIVE_ACTION_FAMILIES = (
+    frozenset({"plane", "send", "submit"}),
+    frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
+    frozenset({"disk", "floppy", "save"}),
+    frozenset({"archive", "cabinet", "filing"}),
+    frozenset({"download", "export"}),
+    frozenset({"attach", "attachment", "browse", "choose", "paperclip", "upload"}),
+    frozenset({"clone", "copy", "duplicate"}),
+    frozenset({"clipboard", "paste"}),
+    frozenset({"edit", "pencil"}),
+    frozenset({"print", "printer"}),
+    frozenset({"share"}),
+)
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
@@ -342,6 +355,10 @@ def snap_to_control(
                 automation_id,
             )
         )
+        exclusive_action_family_mismatch = _exclusive_action_family_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,
             instruction_tokens,
@@ -379,6 +396,7 @@ def snap_to_control(
             or pin_state_action_mismatch
             or password_visibility_state_action_mismatch
             or audio_output_polarity_action_mismatch
+            or exclusive_action_family_mismatch
             or clear_close_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
@@ -1277,6 +1295,22 @@ def _audio_output_polarity_action_mismatch(
     if control_up == control_down:
         return False
     return requested_up != control_up
+
+
+def _exclusive_action_family_mismatch(instruction: str, candidate_text: str) -> bool:
+    requested_families = _exclusive_action_family_indexes(_tokens_from_text(instruction))
+    if not requested_families:
+        return False
+    candidate_families = _exclusive_action_family_indexes(_tokens_from_text(candidate_text))
+    return bool(candidate_families and requested_families.isdisjoint(candidate_families))
+
+
+def _exclusive_action_family_indexes(tokens: set[str]) -> set[int]:
+    return {
+        index
+        for index, family in enumerate(EXCLUSIVE_ACTION_FAMILIES)
+        if tokens & family
+    }
 
 
 def _clear_close_action_mismatch(
