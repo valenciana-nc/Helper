@@ -526,6 +526,14 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("bookmark", network_tokens)
         self.assertNotIn("favorite", network_tokens)
 
+    def test_github_phrase_stays_compact_for_url_destination_matching(self) -> None:
+        from help_intents import tokenize_instruction
+
+        tokens = tokenize_instruction("Open GitHub bookmark")
+        self.assertIn("github", tokens)
+        self.assertNotIn("git", tokens)
+        self.assertNotIn("hub", tokens)
+
     def test_weather_widget_status_does_not_expand_to_clear_action(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -6303,6 +6311,148 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_bookmark_action_rejects_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open bookmark.",
+            "Open favorite.",
+            "Open star.",
+            "Bookmark this.",
+            "Favorite this item.",
+            "Click bookmark.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Unnamed bookmark for https://github.com",
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_specific_bookmark_action_requires_matching_unnamed_bookmark_destination(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        github = "Unnamed bookmark for https://github.com"
+        stripe = (
+            "Unnamed bookmark for "
+            "https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview"
+        )
+        openai = (
+            "Unnamed bookmark for "
+            "https://platform.openai.com/settings/organization/billing/overview"
+        )
+        cases = (
+            ("Open GitHub bookmark.", github, ""),
+            ("Open GitHub.", github, ""),
+            ("Open Stripe bookmark.", stripe, ""),
+            ("Open OpenAI billing bookmark.", openai, ""),
+            ("Open GitHub bookmark.", stripe, "target_id semantic mismatch"),
+            ("Open Stripe bookmark.", github, "target_id semantic mismatch"),
+            ("Open OpenAI billing bookmark.", stripe, "target_id semantic mismatch"),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_bookmark_text_match_prefers_star_over_unnamed_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Bookmark this item.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for https://github.com",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate("c002", "Star", "button", (360, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+
+    def test_generic_bookmark_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Bookmark this item.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for https://github.com",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_route_text_match_ignores_unnamed_url_bookmark(self) -> None:
         from control_inventory import ControlCandidate

@@ -169,6 +169,7 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "user",
     }
 )
+UNNAMED_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
 UNNAMED_BOOKMARK_RE = re.compile(r"^\s*Unnamed bookmark for https?://", re.IGNORECASE)
 UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
     {
@@ -179,10 +180,13 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "application",
         "account",
         "acct",
+        "bookmark",
         "browser",
         "chrome",
         "click",
         "dashboard",
+        "favorite",
+        "favourite",
         "edge",
         "for",
         "go",
@@ -201,6 +205,7 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "profile",
         "setting",
         "settings",
+        "star",
         "show",
         "site",
         "tab",
@@ -1562,6 +1567,11 @@ def _unnamed_bookmark_generic_route_mismatch(
 ) -> bool:
     if not _looks_like_unnamed_bookmark(candidate):
         return False
+    if (
+        instruction_tokens & UNNAMED_BOOKMARK_ACTION_WORDS
+        and not _instruction_names_unnamed_bookmark_destination(instruction, candidate)
+    ):
+        return True
     candidate_tokens = _candidate_visible_text_tokens(candidate)
     overlap = instruction_tokens & candidate_tokens
     if not overlap:

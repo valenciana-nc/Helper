@@ -110,6 +110,11 @@ _PHRASE_TOKEN_REWRITES = (
         {"link", "star"},
     ),
     (
+        re.compile(r"\bgit\s+hub\b"),
+        {"github"},
+        {"git", "hub"},
+    ),
+    (
         re.compile(r"\b(?:lock|padlock)\s+icon\b"),
         {"site_info_lock"},
         {"lock", "padlock"},
