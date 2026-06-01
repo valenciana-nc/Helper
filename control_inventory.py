@@ -95,6 +95,7 @@ MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
 EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
+OPEN_VIEW_REQUEST_WORDS = frozenset({"open", "show", "view"})
 CONFIRM_ACTION_WORDS = frozenset(
     {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
 )
@@ -3529,6 +3530,7 @@ def _explicit_action_context_mismatch(
     instruction_tokens = _tokenize_instruction(instruction)
     return (
         _edit_action_context_mismatch(instruction, candidate)
+        or _candidate_edit_action_context_mismatch(instruction, candidate.descriptor)
         or _confirm_action_context_mismatch(instruction, candidate)
         or _filter_reset_action_mismatch(instruction, candidate)
         or _sort_direction_action_mismatch(instruction, candidate.descriptor)
@@ -3559,6 +3561,32 @@ def _edit_action_context_mismatch(instruction: str, candidate: ControlCandidate)
     if not control_tokens:
         return False
     return not bool(control_tokens & EDIT_ACTION_WORDS)
+
+
+def _candidate_edit_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not (instruction_raw_tokens & OPEN_VIEW_REQUEST_WORDS):
+        return False
+    if instruction_raw_tokens & EDIT_ACTION_WORDS:
+        return False
+    candidate_tokens = _tokenize_control(candidate_text) | _tokens_from_text(candidate_text)
+    if not (candidate_tokens & EDIT_ACTION_WORDS):
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokenize_instruction(instruction) | instruction_raw_tokens,
+            OPEN_VIEW_REQUEST_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    candidate_objects = _object_token_variants(
+        _action_object_tokens(
+            candidate_tokens,
+            EDIT_ACTION_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    return bool(instruction_objects and candidate_objects and instruction_objects & candidate_objects)
 
 
 def _filter_reset_action_mismatch(
