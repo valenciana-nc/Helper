@@ -34,6 +34,11 @@ SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
 FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
+CLEAR_CLOSE_WORDS = frozenset({"cancel", "close", "dismiss"})
+CLEAR_CONTEXT_WORDS = frozenset(
+    {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
+)
+X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
@@ -317,6 +322,14 @@ def snap_to_control(
             visible_text,
             automation_id,
         )
+        clear_close_action_mismatch = _clear_close_action_mismatch(
+            instruction,
+            instruction_tokens,
+            visible_text,
+            automation_id,
+            rect,
+            control_intent_contexts,
+        )
         browser_about_blank_title_info_mismatch = (
             _browser_about_blank_title_info_mismatch(
                 instruction,
@@ -344,6 +357,7 @@ def snap_to_control(
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
             or pin_state_action_mismatch
+            or clear_close_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
@@ -1195,6 +1209,61 @@ def _pin_state_action_mismatch(
     if requested_unpin:
         return "pin" in control_tokens and not (control_tokens & PIN_STATE_NEUTRAL_WORDS)
     return "unpin" in control_tokens
+
+
+def _clear_close_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    visible_text: str,
+    automation_id: str,
+    rect: tuple[int, int, int, int],
+    contexts: list[tuple[tuple[int, int, int, int], str]],
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if "clear" not in instruction_words and "clear" not in instruction_tokens:
+        return False
+    if not _looks_like_close_or_x_control(visible_text, automation_id):
+        return False
+    if "clear" in _literal_words_from_text(" ".join((visible_text or "", automation_id or ""))):
+        return False
+    return not _has_clear_field_context(rect, contexts, instruction_words)
+
+
+def _looks_like_close_or_x_control(visible_text: str, automation_id: str) -> bool:
+    literal_tokens = _literal_words_from_text(" ".join((visible_text or "", automation_id or "")))
+    if literal_tokens & CLEAR_CLOSE_WORDS:
+        return True
+    return _is_x_symbol_text(visible_text) or _is_x_symbol_text(automation_id)
+
+
+def _has_clear_field_context(
+    rect: tuple[int, int, int, int],
+    contexts: list[tuple[tuple[int, int, int, int], str]],
+    instruction_words: set[str],
+) -> bool:
+    requested_context = instruction_words & CLEAR_CONTEXT_WORDS
+    for context_rect, context_text in contexts:
+        context_tokens = _tokenize_control(_semantic_text(context_text)) | _literal_words_from_text(
+            context_text
+        )
+        if not (context_tokens & CLEAR_CONTEXT_WORDS):
+            continue
+        if requested_context and not (context_tokens & requested_context):
+            continue
+        expanded = _expand_rect(context_rect, 10)
+        if _contains_rect(expanded, rect) or _center_inside(rect, expanded):
+            return True
+    return False
+
+
+def _literal_words_from_text(text: str) -> set[str]:
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
+    spaced = re.sub(r"[_\-.]+", " ", spaced)
+    return set(re.findall(r"[a-z0-9]+", spaced.lower()))
+
+
+def _is_x_symbol_text(text: str) -> bool:
+    return (text or "").strip().lower() in X_SYMBOL_TEXTS
 
 
 def _semantic_mismatch_targets_model_rect(

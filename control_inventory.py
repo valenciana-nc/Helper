@@ -45,6 +45,12 @@ FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISMISS_DIALOG_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
 DISMISS_WINDOW_CONTEXT_WORDS = frozenset({"browser", "page", "tab", "window"})
+CLEAR_CLOSE_WORDS = frozenset({"cancel", "close", "dismiss"})
+CLEAR_CONTEXT_CONTROL_TYPES = frozenset({"combobox", "edit"})
+CLEAR_CONTEXT_WORDS = frozenset(
+    {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
+)
+X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
@@ -1205,6 +1211,8 @@ def _text_match_score(
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+        return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -1300,6 +1308,8 @@ def _context_text_match_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -1485,6 +1495,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return (
             False,
             text_score,
@@ -1853,6 +1869,76 @@ def _hidden_bookmarks_overflow_action_mismatch(
     if "bookmarks" in instruction_tokens:
         return False
     return bool(instruction_tokens & BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS)
+
+
+def _clear_close_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if "clear" not in instruction_words and "clear" not in instruction_tokens:
+        return False
+    if not _looks_like_close_or_x_button(candidate):
+        return False
+    if _candidate_has_literal_clear_evidence(candidate):
+        return False
+    return not _has_clear_field_context(candidate, candidates, instruction_words)
+
+
+def _looks_like_close_or_x_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    literal_tokens = _literal_words_from_text(candidate.descriptor)
+    if literal_tokens & CLEAR_CLOSE_WORDS:
+        return True
+    return _is_x_symbol_text(candidate.text) or _is_x_symbol_text(candidate.automation_id)
+
+
+def _candidate_has_literal_clear_evidence(candidate: ControlCandidate) -> bool:
+    return "clear" in _literal_words_from_text(candidate.descriptor)
+
+
+def _has_clear_field_context(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction_words: set[str],
+) -> bool:
+    requested_context = instruction_words & CLEAR_CONTEXT_WORDS
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not (
+            context.control_type in CLEAR_CONTEXT_CONTROL_TYPES
+            or _candidate_context_tokens(context) & CLEAR_CONTEXT_WORDS
+        ):
+            continue
+        context_tokens = _candidate_context_tokens(context)
+        if requested_context and not (context_tokens & requested_context):
+            continue
+        expanded = _expand_rect(context.rect, 10)
+        if _contains_rect(expanded, candidate.rect) or _center_inside(candidate.rect, expanded):
+            return True
+    return False
+
+
+def _candidate_context_tokens(candidate: ControlCandidate) -> set[str]:
+    return (
+        _candidate_semantic_tokens(candidate)
+        | _literal_words_from_text(candidate.descriptor)
+        | _literal_words_from_text(candidate.window_title)
+    )
+
+
+def _literal_words_from_text(text: str) -> set[str]:
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
+    spaced = re.sub(r"[_\-.]+", " ", spaced)
+    return set(re.findall(r"[a-z0-9]+", spaced.lower()))
+
+
+def _is_x_symbol_text(text: str) -> bool:
+    return (text or "").strip().lower() in X_SYMBOL_TEXTS
 
 
 def _browser_new_tab_bookmark_action_mismatch(
@@ -2475,6 +2561,8 @@ def _target_id_ambiguity(
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
+        if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+            continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -2652,6 +2740,8 @@ def _has_semantic_alternative(
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
+        if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+            continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -2725,6 +2815,8 @@ def _has_visible_semantic_alternative(
         ):
             continue
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -2804,6 +2896,8 @@ def _candidate_snap_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2968,6 +3062,8 @@ def _single_contained_control_intent_candidate(
         if not _contains_rect(bounds, candidate.rect):
             continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
+        if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -3158,6 +3254,8 @@ def _candidate_snap_semantic_mismatch(
     ):
         return True
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return True
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True

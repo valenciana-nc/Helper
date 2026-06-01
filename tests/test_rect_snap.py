@@ -2214,6 +2214,43 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, rect)
                 self.assertEqual(result.rejected_reason, "control type mismatch")
 
+    def test_clear_search_snap_accepts_x_inside_search_field(self) -> None:
+        from rect_snap import snap_to_control
+
+        search = _make_button("Search", 120, 160, 500, 40, control_type="Edit")
+        clear = _make_button("\u00d7", 586, 166, 28, 28)
+        window = _make_window("App", 0, 0, 800, 600, [search, clear])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (586, 166, 28, 28),
+            "Clear search.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (586, 166, 28, 28))
+        self.assertFalse(result.rejected_reason)
+
+    def test_clear_search_snap_rejects_window_close_x_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        close = _make_button("\u00d7", 700, 20, 32, 32, automation_id="Close")
+        window = _make_window("Dialog", 0, 0, 800, 600, [close])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (700, 20, 32, 32),
+            "Clear search.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (700, 20, 32, 32))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -10173,14 +10210,40 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from help_session import resolve_help_target
 
         cases = (
-            ("Clear search.", "\u00d7", (120, 160, 32, 32)),
-            ("Clear text.", "X", (120, 160, 32, 32)),
-            ("Close dialog.", "X", (120, 160, 32, 32)),
-            ("Delete item.", "\U0001f5d1", (120, 160, 32, 32)),
-            ("Click wastebasket.", "Delete", (120, 160, 100, 32)),
+            (
+                "Clear search.",
+                [
+                    ControlCandidate("c001", "\u00d7", "button", (586, 166, 28, 28)),
+                    ControlCandidate("c002", "Search", "edit", (120, 160, 500, 40)),
+                ],
+                (586, 166, 28, 28),
+            ),
+            (
+                "Clear text.",
+                [
+                    ControlCandidate("c001", "X", "button", (586, 166, 28, 28)),
+                    ControlCandidate("c002", "Body text", "edit", (120, 160, 500, 40)),
+                ],
+                (586, 166, 28, 28),
+            ),
+            (
+                "Close dialog.",
+                [ControlCandidate("c001", "X", "button", (120, 160, 32, 32))],
+                (120, 160, 32, 32),
+            ),
+            (
+                "Delete item.",
+                [ControlCandidate("c001", "\U0001f5d1", "button", (120, 160, 32, 32))],
+                (120, 160, 32, 32),
+            ),
+            (
+                "Click wastebasket.",
+                [ControlCandidate("c001", "Delete", "button", (120, 160, 100, 32))],
+                (120, 160, 100, 32),
+            ),
         )
-        for instruction, label, rect in cases:
-            with self.subTest(instruction=instruction, label=label):
+        for instruction, candidates, rect in cases:
+            with self.subTest(instruction=instruction):
                 target = resolve_help_target(
                     self._decision(
                         {
@@ -10190,13 +10253,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
                         }
                     ),
                     self._capture(),
-                    [ControlCandidate("c001", label, "button", rect)],
+                    candidates,
                 )
 
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_clear_search_recovers_from_window_close_x_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "\u00d7",
+                "button",
+                (700, 20, 32, 32),
+                automation_id="Close",
+                window_title="Dialog",
+            ),
+            ControlCandidate("c002", "Clear", "button", (586, 166, 28, 28)),
+            ControlCandidate("c003", "Search", "edit", (120, 160, 500, 40)),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Clear search.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Clear search.",
+            candidates=[candidates[0]],
+        )
+        snap_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Clear search.",
+                    "target": {"x": 700, "y": 20, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "text_match")
+        self.assertEqual(snap_target.target_id, "c002")
+        self.assertFalse(snap_target.rejected_reason)
 
     def test_weather_widget_accepts_weather_and_widget_wording(self) -> None:
         from control_inventory import ControlCandidate
@@ -10542,21 +10657,28 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             (
                 "Clear search.",
-                ControlCandidate("c001", "\u00d7", "button", (120, 160, 32, 32)),
-                ControlCandidate("c002", "Search", "edit", (300, 160, 220, 32)),
+                ControlCandidate("c001", "\u00d7", "button", (586, 166, 28, 28)),
+                [
+                    ControlCandidate("c002", "Search", "edit", (120, 160, 500, 40)),
+                ],
+                ControlCandidate("c003", "Cancel", "button", (300, 240, 100, 32)),
             ),
             (
                 "Clear text.",
-                ControlCandidate("c001", "X", "button", (120, 160, 32, 32)),
-                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+                ControlCandidate("c001", "X", "button", (586, 166, 28, 28)),
+                [
+                    ControlCandidate("c002", "Body text", "edit", (120, 160, 500, 40)),
+                ],
+                ControlCandidate("c003", "Cancel", "button", (300, 240, 100, 32)),
             ),
             (
                 "Delete item.",
                 ControlCandidate("c001", "\U0001f5d1", "button", (120, 160, 32, 32)),
+                [],
                 ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
             ),
         )
-        for instruction, expected, decoy in cases:
+        for instruction, expected, context_candidates, decoy in cases:
             with self.subTest(instruction=instruction):
                 target = resolve_help_target(
                     self._decision(
@@ -10572,7 +10694,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                         }
                     ),
                     self._capture(),
-                    [expected, decoy],
+                    [expected, *context_candidates, decoy],
                 )
 
                 self.assertEqual(target.source, "text_match")

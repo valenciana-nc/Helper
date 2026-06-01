@@ -2144,10 +2144,11 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "clear_search_target_id_accepts_x_symbol_button",
+            "name": "clear_search_target_id_accepts_x_symbol_inside_search_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
-                {"rect": [20, 80, 32, 32], "label": "X"},
+                {"rect": [20, 80, 500, 40], "label": "Search"},
+                {"rect": [486, 86, 28, 28], "label": "X"},
             ],
             "decision": {
                 "kind": "step",
@@ -2155,12 +2156,77 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
             },
             "candidates": [
-                {"id": "c001", "text": "\u00d7", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c001", "text": "\u00d7", "control_type": "button", "rect": [486, 86, 28, 28]},
+                {"id": "c002", "text": "Search", "control_type": "edit", "rect": [20, 80, 500, 40]},
             ],
             "expected": {
                 "source": "target_id",
                 "target_id": "c001",
-                "rect": [20, 80, 32, 32],
+                "rect": [486, 86, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clear_search_target_id_rejects_window_close_x_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [700, 20, 32, 32], "label": "X"},
+                {"rect": [20, 80, 500, 40], "label": "Search"},
+                {"rect": [486, 86, 28, 28], "label": "Clear"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "\u00d7",
+                    "automation_id": "Close",
+                    "control_type": "button",
+                    "rect": [700, 20, 32, 32],
+                    "window_title": "Dialog",
+                },
+                {"id": "c002", "text": "Search", "control_type": "edit", "rect": [20, 80, 500, 40]},
+                {"id": "c003", "text": "Clear", "control_type": "button", "rect": [486, 86, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c003",
+                "rect": [486, 86, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clear_search_model_rect_rejects_window_close_x_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [700, 20, 32, 32], "label": "X"},
+                {"rect": [20, 80, 500, 40], "label": "Search"},
+                {"rect": [486, 86, 28, 28], "label": "Clear"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear search.",
+                "target": {"x": 700, "y": 20, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "\u00d7",
+                    "automation_id": "Close",
+                    "control_type": "button",
+                    "rect": [700, 20, 32, 32],
+                    "window_title": "Dialog",
+                },
+                {"id": "c002", "text": "Search", "control_type": "edit", "rect": [20, 80, 500, 40]},
+                {"id": "c003", "text": "Clear", "control_type": "button", "rect": [486, 86, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c003",
+                "rect": [486, 86, 28, 28],
                 "overlay_emitted": True,
             },
         },
@@ -2481,8 +2547,8 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "name": "clear_text_match_overrides_field_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
-                {"rect": [20, 80, 32, 32], "label": "X"},
                 {"rect": [180, 80, 220, 32], "label": "Body text"},
+                {"rect": [372, 86, 28, 20], "label": "X"},
             ],
             "decision": {
                 "kind": "step",
@@ -2490,13 +2556,13 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target": {"x": 180, "y": 80, "width": 220, "height": 32},
             },
             "candidates": [
-                {"id": "c001", "text": "X", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c001", "text": "X", "control_type": "button", "rect": [372, 86, 28, 20]},
                 {"id": "c002", "text": "Body text", "control_type": "edit", "rect": [180, 80, 220, 32]},
             ],
             "expected": {
                 "source": "text_match",
                 "target_id": "c001",
-                "rect": [20, 80, 32, 32],
+                "rect": [372, 86, 28, 20],
                 "overlay_emitted": True,
             },
         },
