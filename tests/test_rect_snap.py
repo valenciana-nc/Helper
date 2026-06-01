@@ -161,6 +161,13 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("reload", tokenize_instruction("Refresh the page"))
         self.assertIn("refresh", tokenize_control("Reload"))
 
+    def test_share_and_archive_aliases_expand_to_common_icon_language(self) -> None:
+        from help_intents import tokenize_control
+
+        self.assertIn("share", tokenize_control("\U0001f517"))
+        self.assertIn("archive", tokenize_control("File cabinet"))
+        self.assertIn("archive", tokenize_control("Filing cabinet"))
+
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -324,6 +331,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u23f8", {"pause"}),
             ("\u23f9", {"stop"}),
             ("\u23fa", {"record"}),
+            ("\U0001f517", {"link", "share"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
             ("\U0001f507", {"mute", "speaker", "sound", "volume"}),
@@ -338,6 +346,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f551", {"clock", "time"}),
             ("\U0001f3e0", {"home", "house"}),
             ("\U0001f5a8", {"print", "printer"}),
+            ("\U0001f5c4", {"archive", "cabinet", "filing"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
@@ -5432,6 +5441,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_share_and_archive_target_id_accepts_common_icon_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Share this item.", "\U0001f517", (120, 160, 32, 32)),
+            ("Archive item.", "\U0001f5c4", (120, 160, 32, 32)),
+            ("Archive item.", "File cabinet", (120, 160, 120, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_share_and_archive_text_match_overrides_export_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Share this item.",
+                ControlCandidate("c001", "\U0001f517", "button", (120, 160, 32, 32)),
+            ),
+            (
+                "Archive item.",
+                ControlCandidate("c001", "\U0001f5c4", "button", (120, 160, 32, 32)),
+            ),
+        )
+        for instruction, expected in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        expected,
+                        ControlCandidate("c002", "Export", "button", (300, 160, 100, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
 
     def test_send_action_alias_target_id_accepts_submit_button(self) -> None:
         from control_inventory import ControlCandidate

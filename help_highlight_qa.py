@@ -1476,6 +1476,115 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "share_action_target_id_accepts_chain_link_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Share this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f517", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "archive_action_target_id_accepts_file_cabinet_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5c4", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "archive_action_target_id_accepts_file_cabinet_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "File cabinet"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "File cabinet", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "share_text_match_overrides_export_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+                {"rect": [180, 80, 100, 32], "label": "Export"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Share this item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f517", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Export", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "archive_text_match_overrides_export_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "A"},
+                {"rect": [180, 80, 100, 32], "label": "Export"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5c4", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Export", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "send_action_target_id_accepts_submit_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
