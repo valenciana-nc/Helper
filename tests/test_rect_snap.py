@@ -1088,6 +1088,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_generic_view_does_not_snap_taskbar_task_view_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        task_view = _make_button("Task View", 100, 560, 90, 40, automation_id="TaskViewButton")
+        window = _make_window("Taskbar", 0, 540, 800, 60, [task_view])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 560, 90, 40)
+
+        result = snap_to_control(
+            model_rect,
+            "Open view.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1106,6 +1125,32 @@ class SnapToControlTests(unittest.TestCase):
         result = snap_to_control(
             model_rect,
             "Open memory.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_generic_login_does_not_snap_browser_tab_title(self) -> None:
+        from rect_snap import snap_to_control
+
+        tab = _make_button(
+            "Log In | Mercury - Memory usage - 372 MB",
+            100,
+            20,
+            220,
+            34,
+            control_type="TabItem",
+        )
+        window = _make_window("GitHub - Google Chrome", 0, 0, 800, 600, [tab])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 20, 220, 34)
+
+        result = snap_to_control(
+            model_rect,
+            "Log in.",
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
@@ -8138,6 +8183,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
 
+    def test_browser_tab_login_title_does_not_match_generic_auth_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        label = "Log In | Mercury - Memory usage - 372 MB"
+        cases = (
+            ("Log in.", "target_id semantic mismatch"),
+            ("Open login.", "target_id semantic mismatch"),
+            ("Open Mercury tab.", ""),
+            ("Click the Mercury tab.", ""),
+        )
+        for instruction, reason in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_browser_tab_login_title_is_not_text_match_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Log in.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Log In | Mercury - Memory usage - 372 MB",
+                    "tabitem",
+                    (120, 160, 220, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
     def test_chrome_tab_owner_account_segment_is_not_title_evidence(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -8246,6 +8347,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "DNS | Records | limitles.dev | "
                     "Abelnavarrocarreon@gmail.com's Account | Cloudflare - "
                     "Memory usage - 580 MB",
+                    "tabitem",
+                    (120, 160, 220, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_browser_tab_login_title_rejects_model_rect_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Log in.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Log In | Mercury - Memory usage - 372 MB",
                     "tabitem",
                     (120, 160, 220, 32),
                     window_title="GitHub Dashboard - Google Chrome",
@@ -12081,9 +12210,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
-        cases = ("Open view.", "Click view.")
-        for instruction in cases:
-            with self.subTest(instruction=instruction):
+        cases = (
+            ("Open view.", "TradingView pinned", "target_id semantic mismatch"),
+            ("Click view.", "TradingView pinned", "target_id semantic mismatch"),
+            ("Open view.", "Task View", "target_id semantic mismatch"),
+            ("Click view.", "Task View", "target_id semantic mismatch"),
+            ("Open Task View.", "Task View", ""),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
                 target = resolve_help_target(
                     self._decision(
                         {
@@ -12096,9 +12231,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     [
                         ControlCandidate(
                             "c001",
-                            "TradingView pinned",
+                            label,
                             "button",
                             (120, 160, 180, 32),
+                            automation_id="TaskViewButton" if label == "Task View" else "",
                             window_title="Taskbar",
                         ),
                     ],
@@ -12106,9 +12242,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
-                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(target.rejected_reason, reason)
 
-    def test_generic_view_recovers_to_task_view_over_tradingview(self) -> None:
+    def test_generic_view_does_not_recover_to_task_view_over_tradingview(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
@@ -12134,14 +12270,44 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "Task View",
                     "button",
                     (340, 160, 120, 32),
+                    automation_id="TaskViewButton",
                     window_title="Taskbar",
                 ),
             ],
         )
 
-        self.assertEqual(target.source, "text_match")
-        self.assertEqual(target.target_id, "c002")
-        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_generic_view_model_rect_rejects_task_view_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open view.",
+                    "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Task View",
+                    "button",
+                    (120, 160, 180, 32),
+                    automation_id="TaskViewButton",
+                    window_title="Taskbar",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_compound_taskbar_app_names_still_match(self) -> None:
         from control_inventory import ControlCandidate

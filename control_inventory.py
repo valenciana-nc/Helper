@@ -78,6 +78,7 @@ TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
 TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
+TASKBAR_TASK_VIEW_ALLOWED_TOKENS = frozenset({"task", "windows"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -112,6 +113,7 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
+BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_MENU_BUTTON_TOKENS = frozenset(
     {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
 )
@@ -1133,6 +1135,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -1176,6 +1180,8 @@ def _text_match_score(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1213,6 +1219,8 @@ def _context_text_match_score(
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -1256,6 +1264,8 @@ def _context_text_match_score(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1346,6 +1356,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return (
             False,
@@ -1441,6 +1457,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1922,6 +1944,28 @@ def _taskbar_start_button_action_mismatch(
     return bool(instruction_tokens - TASKBAR_START_BUTTON_ALLOWED_TOKENS)
 
 
+def _taskbar_task_view_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_taskbar_task_view_button(candidate):
+        return False
+    if "view" not in instruction_tokens:
+        return False
+    return not bool(instruction_tokens & TASKBAR_TASK_VIEW_ALLOWED_TOKENS)
+
+
+def _looks_like_taskbar_task_view_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    automation_tokens = _tokens_from_text(candidate.automation_id)
+    return {"task", "view"} <= (text_tokens | automation_tokens)
+
+
 def _looks_like_taskbar_start_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
@@ -2271,6 +2315,17 @@ def _mail_tab_account_reference_mismatch(
     return bool(overlap) and overlap <= GMAIL_TAB_REQUEST_WORDS
 
 
+def _browser_tab_auth_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type != "tabitem":
+        return False
+    if not instruction_tokens or not (instruction_tokens & BROWSER_TAB_AUTH_ACTION_WORDS):
+        return False
+    return instruction_tokens <= BROWSER_TAB_AUTH_ACTION_WORDS
+
+
 def _has_explicit_gmail_tab_evidence(candidate: ControlCandidate) -> bool:
     if candidate.control_type != "tabitem":
         return False
@@ -2443,6 +2498,8 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2486,6 +2543,8 @@ def _candidate_snap_score(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
@@ -2765,6 +2824,8 @@ def _candidate_snap_semantic_mismatch(
         return False
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return True
+    if _taskbar_task_view_action_mismatch(instruction_tokens, candidate):
+        return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2808,6 +2869,8 @@ def _candidate_snap_semantic_mismatch(
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

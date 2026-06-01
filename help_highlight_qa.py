@@ -9195,6 +9195,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_tab_login_title_rejects_generic_login_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Mercury login tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Log in.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Log In | Mercury - Memory usage - 372 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "browser_tab_login_title_rejects_generic_login_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Mercury login tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open login.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Log In | Mercury - Memory usage - 372 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "browser_tab_login_title_keeps_mercury_tab_wording",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Mercury login tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Mercury tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Log In | Mercury - Memory usage - 372 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "tab_memory_usage_suffix_rejects_generic_memory_target_id",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10182,7 +10263,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "generic_view_recovers_to_task_view_over_tradingview",
+            "name": "generic_view_does_not_recover_to_task_view_over_tradingview",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [20, 80, 180, 32], "label": "TradingView"},
@@ -10206,13 +10287,70 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "text": "Task View",
                     "control_type": "button",
                     "rect": [240, 80, 120, 32],
+                    "automation_id": "TaskViewButton",
                     "window_title": "Taskbar",
                 },
             ],
             "expected": {
-                "source": "text_match",
-                "target_id": "c002",
-                "rect": [240, 80, 120, 32],
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_view_model_rect_rejects_task_view",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Task View"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Task View",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "automation_id": "TaskViewButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_task_view_still_highlights_taskbar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Task View"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Task View.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Task View",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "automation_id": "TaskViewButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
                 "overlay_emitted": True,
             },
         },

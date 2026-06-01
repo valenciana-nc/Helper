@@ -36,6 +36,8 @@ MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
+TASK_VIEW_ALLOWED_TOKENS = frozenset({"task", "windows"})
+BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -125,7 +127,7 @@ def snap_to_control(
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
     control_type_mismatch_result: SnapResult | None = None
-    start_button_action_mismatch_result: SnapResult | None = None
+    semantic_action_mismatch_result: SnapResult | None = None
     compound_target_result: SnapResult | None = None
     contained_control_intent_results: list[tuple[SnapResult, str]] = []
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
@@ -162,6 +164,20 @@ def snap_to_control(
             instruction_tokens,
             visible_text,
             automation_id,
+        )
+        task_view_action_mismatch = _task_view_action_mismatch(
+            instruction_tokens,
+            visible_text,
+            automation_id,
+        )
+        browser_tab_auth_action_mismatch = _browser_tab_auth_action_mismatch(
+            instruction_tokens,
+            ctype,
+        )
+        semantic_action_mismatch = (
+            start_button_action_mismatch
+            or task_view_action_mismatch
+            or browser_tab_auth_action_mismatch
         )
         if not _is_candidate_topmost(top_handle, rect, topmost_provider):
             if (
@@ -216,14 +232,14 @@ def snap_to_control(
             model_center=model_center,
             instruction_tokens=instruction_tokens,
             diagonal=diagonal,
-            start_button_action_mismatch=start_button_action_mismatch,
+            semantic_action_mismatch=semantic_action_mismatch,
         )
         if (
-            start_button_action_mismatch
-            and start_button_action_mismatch_result is None
+            semantic_action_mismatch
+            and semantic_action_mismatch_result is None
             and _semantic_mismatch_targets_model_rect(rect, model_rect)
         ):
-            start_button_action_mismatch_result = SnapResult(
+            semantic_action_mismatch_result = SnapResult(
                 rect=rect,
                 confidence=score,
                 source="uia",
@@ -331,8 +347,8 @@ def snap_to_control(
             return occluded_result
         if control_type_mismatch_result is not None:
             return control_type_mismatch_result
-        if start_button_action_mismatch_result is not None:
-            return start_button_action_mismatch_result
+        if semantic_action_mismatch_result is not None:
+            return semantic_action_mismatch_result
         if compound_target_result is not None:
             return compound_target_result
         log.debug(
@@ -688,6 +704,30 @@ def _start_button_action_mismatch(
     return bool(instruction_tokens - START_BUTTON_ALLOWED_TOKENS)
 
 
+def _task_view_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    if "view" not in instruction_tokens:
+        return False
+    control_tokens = _tokenize_control(" ".join((visible_text or "", automation_id or "")))
+    if not {"task", "view"} <= control_tokens:
+        return False
+    return not bool(instruction_tokens & TASK_VIEW_ALLOWED_TOKENS)
+
+
+def _browser_tab_auth_action_mismatch(
+    instruction_tokens: set[str],
+    ctype: str,
+) -> bool:
+    if ctype != "tabitem":
+        return False
+    if not instruction_tokens or not (instruction_tokens & BROWSER_TAB_AUTH_ACTION_WORDS):
+        return False
+    return instruction_tokens <= BROWSER_TAB_AUTH_ACTION_WORDS
+
+
 def _disclosure_action_tokens_mismatch(
     instruction_tokens: set[str],
     control_tokens: set[str],
@@ -722,7 +762,7 @@ def _score(
     model_center: tuple[int, int],
     instruction_tokens: set[str],
     diagonal: float,
-    start_button_action_mismatch: bool = False,
+    semantic_action_mismatch: bool = False,
 ) -> float:
     iou = _iou(rect, model_rect)
     cx, cy = _center(rect)
@@ -763,7 +803,7 @@ def _score(
         + SCORE_WEIGHT_TYPE * type_score
     )
     if (
-        start_button_action_mismatch
+        semantic_action_mismatch
         or disclosure_mismatch
         or (instruction_tokens and control_tokens and not overlap)
     ):
