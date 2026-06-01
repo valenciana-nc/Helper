@@ -5296,6 +5296,61 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "chrome_profile_name_target_id_accepts_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "automation_id": "view_1018",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 34, 34],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "profile_name_inference_rejects_non_browser_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "window_title": "Contacts",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "user_menu_target_id_accepts_people_icon_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5313,6 +5368,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "chrome_profile_name_text_match_overrides_extensions_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 34, 34], "label": "A"},
+                {"rect": [180, 80, 90, 32], "label": "Extensions"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile menu.",
+                "target": {"x": 180, "y": 80, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [20, 80, 34, 34],
+                    "automation_id": "view_1018",
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Extensions",
+                    "control_type": "button",
+                    "rect": [180, 80, 90, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 34, 34],
                 "overlay_emitted": True,
             },
         },

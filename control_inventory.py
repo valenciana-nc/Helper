@@ -68,6 +68,11 @@ TASKBAR_PIN_ACTION_WORDS = frozenset(
     {"pin", "pinned", "pushpin", "thumbtack", "unpin"}
 )
 TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
+BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
+BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
+BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
+BROWSER_PROFILE_MAX_EDGE = 64
+BROWSER_PROFILE_MAX_ASPECT = 1.75
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -859,7 +864,7 @@ def _text_match_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
+    candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
         return 0.0
     overlap = instruction_tokens & candidate_tokens
@@ -893,7 +898,7 @@ def _context_text_match_score(
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
+    candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
         return 0.0
     overlap = instruction_tokens & candidate_tokens
@@ -1100,10 +1105,35 @@ def _candidate_automation_tokens(candidate: ControlCandidate) -> set[str]:
 
 
 def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
+    inferred_tokens = _candidate_inferred_semantic_tokens(candidate)
     visible_tokens = _candidate_visible_text_tokens(candidate)
     if visible_tokens:
-        return visible_tokens
-    return _candidate_automation_tokens(candidate)
+        return visible_tokens | inferred_tokens
+    automation_tokens = _candidate_automation_tokens(candidate)
+    return automation_tokens | inferred_tokens
+
+
+def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]:
+    if _looks_like_browser_profile_button(candidate):
+        return set(BROWSER_PROFILE_TOKENS)
+    return set()
+
+
+def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    width, height = candidate.rect[2], candidate.rect[3]
+    if width <= 0 or height <= 0:
+        return False
+    if max(width, height) > BROWSER_PROFILE_MAX_EDGE:
+        return False
+    if max(width, height) / max(1, min(width, height)) > BROWSER_PROFILE_MAX_ASPECT:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    return bool(text_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS)
 
 
 def _taskbar_app_state_action_mismatch(

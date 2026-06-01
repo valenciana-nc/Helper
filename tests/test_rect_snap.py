@@ -5548,6 +5548,44 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
 
+    def test_profile_menu_target_id_accepts_compact_chrome_profile_name(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open profile.",
+            "Open profile menu.",
+            "Open account dropdown.",
+            "Open user menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Abel (All)",
+                            "button",
+                            (120, 160, 34, 34),
+                            automation_id="view_1018",
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 34, 34))
+
     def test_profile_menu_person_icon_text_match_overrides_settings_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -5571,6 +5609,81 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_profile_menu_chrome_profile_name_overrides_extensions_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open profile menu.",
+                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Abel (All)",
+                    "button",
+                    (120, 160, 34, 34),
+                    automation_id="view_1018",
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Extensions",
+                    "button",
+                    (300, 160, 90, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 34, 34))
+
+    def test_profile_name_inference_stays_contextual_to_browser_profile_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ControlCandidate(
+                "c001",
+                "Abel (All)",
+                "button",
+                (120, 160, 34, 34),
+                window_title="Contacts",
+            ),
+            ControlCandidate(
+                "c001",
+                "All Bookmarks",
+                "button",
+                (120, 160, 160, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+        )
+        for candidate in cases:
+            with self.subTest(label=candidate.text, window=candidate.window_title):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Open profile menu.",
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [candidate],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_contextual_menu_item_wording_still_highlights_menuitem(self) -> None:
         from control_inventory import ControlCandidate
