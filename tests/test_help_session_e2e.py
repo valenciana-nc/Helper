@@ -509,6 +509,77 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
 
+    def test_current_screen_recheck_rejects_text_match_that_jumps_far(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [
+                ControlCandidate("c002", "Save changes", "button", (220, 50, 120, 32)),
+            ],
+        )
+        previous_target = TargetResolution(
+            rect=(40, 50, 120, 32),
+            confidence=0.9,
+            source="text_match",
+            matched_text="Save changes",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Save changes.",
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_allows_moderate_text_match_drift(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        rect = (82, 64, 120, 32)
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [
+                ControlCandidate("c002", "Save changes", "button", rect),
+            ],
+        )
+        previous_target = TargetResolution(
+            rect=(40, 50, 120, 32),
+            confidence=0.9,
+            source="text_match",
+            matched_text="Save changes",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Save changes.",
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "text_match")
+        self.assertFalse(target.rejected_reason)
+
     def test_help_session_recovers_wrong_target_id_before_emitting_highlight(self) -> None:
         app = _qt_app()
         capture = _button_capture()

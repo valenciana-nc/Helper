@@ -298,11 +298,13 @@ def _guard_revalidated_target(
     target: TargetResolution,
     snapper: Snapper,
 ) -> TargetResolution:
-    """Reject stale snapshot IDs that no longer point at the original target."""
+    """Reject rechecks that no longer point near the originally resolved target."""
     if target.rejected_reason:
         return target
-    if not decision.target_id or target.source != "target_id":
+    if _within_revalidation_drift(previous_target.rect, target.rect):
         return target
+    if not decision.target_id or target.source != "target_id":
+        return replace(target, rejected_reason="current screen recheck target changed")
 
     independent = resolve_help_target(
         replace(decision, target_id=""),
