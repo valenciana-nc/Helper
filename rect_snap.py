@@ -38,6 +38,25 @@ CLEAR_CLOSE_WORDS = frozenset({"cancel", "close", "dismiss"})
 CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
+CLOSE_CONTEXT_TARGET_WORDS = frozenset(
+    {
+        "banner",
+        "bar",
+        "card",
+        "drawer",
+        "menu",
+        "modal",
+        "notification",
+        "panel",
+        "pane",
+        "popover",
+        "popup",
+        "section",
+        "sidebar",
+        "toast",
+        "toolbar",
+    }
+)
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
 PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
@@ -163,6 +182,8 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
     (frozenset({"subscribe", "unsubscribe"}), frozenset({"subscribed", "unsubscribed"})),
     (frozenset({"open", "close"}), frozenset({"closed", "opened"})),
+    (frozenset({"approve", "reject"}), frozenset({"approved", "rejected"})),
+    (frozenset({"mark", "read", "unread"}), frozenset({"read", "unread"})),
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
@@ -221,6 +242,10 @@ START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
     {"pinned", "running", "window", "windows"}
+)
+TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
+TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS = frozenset(
+    {"minimize", "minus", "zoom_out"}
 )
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
@@ -463,6 +488,13 @@ def snap_to_control(
             ctype,
             window_title,
         )
+        taskbar_search_status_action_mismatch = _taskbar_search_status_action_mismatch(
+            instruction_tokens,
+            visible_text,
+            automation_id,
+            ctype,
+            window_title,
+        )
         program_manager_action_mismatch = _program_manager_desktop_item_action_mismatch(
             instruction_tokens,
             visible_text,
@@ -564,6 +596,11 @@ def snap_to_control(
             rect,
             control_intent_contexts,
         )
+        close_context_action_mismatch = _close_context_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+        )
         browser_about_blank_title_info_mismatch = (
             _browser_about_blank_title_info_mismatch(
                 instruction,
@@ -584,6 +621,7 @@ def snap_to_control(
             or hidden_icons_action_mismatch
             or show_desktop_action_mismatch
             or taskbar_file_action_mismatch
+            or taskbar_search_status_action_mismatch
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
             or browser_profile_page_action_mismatch
@@ -600,6 +638,7 @@ def snap_to_control(
             or explicit_action_context_mismatch
             or exclusive_action_family_mismatch
             or clear_close_action_mismatch
+            or close_context_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
@@ -1245,6 +1284,25 @@ def _taskbar_file_action_mismatch(
     if distinctive_tokens and instruction_tokens & distinctive_tokens:
         return False
     return True
+
+
+def _taskbar_search_status_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    if (automation_id or "").strip().lower() != "searchgleambutton":
+        return False
+    if not (_tokens_from_text(window_title or "") & TASKBAR_WINDOW_WORDS):
+        return False
+    if instruction_tokens & TASKBAR_SEARCH_STATUS_IDENTITY_WORDS:
+        return False
+    overlap = instruction_tokens & _tokenize_control(visible_text or "")
+    return bool(overlap & TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS)
 
 
 def _browser_profile_identity_action_mismatch(
@@ -2108,6 +2166,23 @@ def _has_clear_field_context(
         if _contains_rect(expanded, rect) or _center_inside(rect, expanded):
             return True
     return False
+
+
+def _close_context_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if not (instruction_words & CLEAR_CLOSE_WORDS):
+        return False
+    requested_context = instruction_words & CLOSE_CONTEXT_TARGET_WORDS
+    if not requested_context:
+        return False
+    if not _looks_like_close_or_x_control(visible_text, automation_id):
+        return False
+    control_words = _literal_words_from_text(" ".join((visible_text or "", automation_id or "")))
+    return not bool(control_words & requested_context)
 
 
 def _literal_words_from_text(text: str) -> set[str]:

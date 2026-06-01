@@ -50,6 +50,25 @@ CLEAR_CONTEXT_CONTROL_TYPES = frozenset({"combobox", "edit"})
 CLEAR_CONTEXT_WORDS = frozenset(
     {"field", "filter", "find", "input", "query", "search", "text", "textbox"}
 )
+CLOSE_CONTEXT_TARGET_WORDS = frozenset(
+    {
+        "banner",
+        "bar",
+        "card",
+        "drawer",
+        "menu",
+        "modal",
+        "notification",
+        "panel",
+        "pane",
+        "popover",
+        "popup",
+        "section",
+        "sidebar",
+        "toast",
+        "toolbar",
+    }
+)
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
 PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
@@ -190,6 +209,8 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
     (frozenset({"subscribe", "unsubscribe"}), frozenset({"subscribed", "unsubscribed"})),
     (frozenset({"open", "close"}), frozenset({"closed", "opened"})),
+    (frozenset({"approve", "reject"}), frozenset({"approved", "rejected"})),
+    (frozenset({"mark", "read", "unread"}), frozenset({"read", "unread"})),
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
@@ -273,6 +294,9 @@ TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
 TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
+TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS = frozenset(
+    {"minimize", "minus", "zoom_out"}
+)
 TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
 TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
     {"notification_area", "system_tray", "tray"}
@@ -1110,6 +1134,26 @@ def snap_candidate_target(
         return None
     ranked.sort(key=lambda item: item[0], reverse=True)
     best_score, candidate = ranked[0]
+    geometry_conflict = _exact_action_geometry_conflict(
+        ranked=ranked,
+        selected=candidate,
+        selected_score=best_score,
+        confidence_floor=confidence_floor,
+        instruction=instruction,
+        candidates=candidates,
+        control_intents=control_intents,
+        model_rect=model_rect,
+    )
+    if geometry_conflict is not None:
+        conflict_score, conflict_candidate = geometry_conflict
+        return TargetResolution(
+            rect=conflict_candidate.rect,
+            confidence=conflict_score,
+            source="candidate_snap",
+            matched_text=conflict_candidate.descriptor,
+            target_id=conflict_candidate.id,
+            rejected_reason="candidate semantic mismatch",
+        )
     if best_score < confidence_floor:
         contained = _single_contained_control_intent_candidate(
             candidates=candidates,
@@ -1425,6 +1469,8 @@ def _text_match_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
+    if _close_context_action_mismatch(instruction, candidate):
+        return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -1543,6 +1589,8 @@ def _context_text_match_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
+    if _close_context_action_mismatch(instruction, candidate):
+        return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -1620,6 +1668,9 @@ def _single_dialog_dismiss_candidate(
 ) -> TargetResolution | None:
     raw_tokens = _tokens_from_text(instruction)
     if raw_tokens & DISMISS_WINDOW_CONTEXT_WORDS and not raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
+        return None
+    close_context_tokens = raw_tokens & CLOSE_CONTEXT_TARGET_WORDS
+    if close_context_tokens and not (close_context_tokens & DISMISS_DIALOG_CONTEXT_WORDS):
         return None
     instruction_tokens = _tokenize_instruction(instruction)
     if not instruction_tokens or instruction_tokens - {"cancel", "close", "dismiss"}:
@@ -1757,6 +1808,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _close_context_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2064,6 +2121,8 @@ def _looks_like_taskbar_search_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & TASKBAR_WINDOW_WORDS):
         return False
+    if (candidate.automation_id or "").strip().lower() == "searchgleambutton":
+        return True
     text_tokens = _tokens_from_text(candidate.text)
     return "search" in text_tokens
 
@@ -2236,6 +2295,22 @@ def _clear_close_action_mismatch(
     if _candidate_has_literal_clear_evidence(candidate):
         return False
     return not _has_clear_field_context(candidate, candidates, instruction_words)
+
+
+def _close_context_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if not (instruction_words & CLEAR_CLOSE_WORDS):
+        return False
+    requested_context = instruction_words & CLOSE_CONTEXT_TARGET_WORDS
+    if not requested_context:
+        return False
+    if not _looks_like_close_or_x_button(candidate):
+        return False
+    control_words = _literal_words_from_text(candidate.descriptor)
+    return not bool(control_words & requested_context)
 
 
 def _looks_like_close_or_x_button(candidate: ControlCandidate) -> bool:
@@ -2528,6 +2603,22 @@ def _taskbar_app_state_action_mismatch(
     if instruction_tokens & TASKBAR_FILE_ACTION_WORDS and text_tokens & {"file", "files"}:
         return True
     return False
+
+
+def _taskbar_search_status_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    if (candidate.automation_id or "").strip().lower() != "searchgleambutton":
+        return False
+    if not (_tokens_from_text(candidate.window_title) & TASKBAR_WINDOW_WORDS):
+        return False
+    if instruction_tokens & TASKBAR_SEARCH_STATUS_IDENTITY_WORDS:
+        return False
+    overlap = instruction_tokens & _tokenize_control(candidate.text)
+    return bool(overlap & TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS)
 
 
 def _taskbar_start_button_action_mismatch(
@@ -3205,6 +3296,77 @@ def _contextual_duplicate_evidence_tokens(
     return _object_token_variants(tokens)
 
 
+def _exact_action_word_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if not instruction_words:
+        return False
+    candidate_semantic = _candidate_semantic_tokens(candidate)
+    candidate_words = _literal_words_from_text(candidate.descriptor)
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        exact_words = instruction_words & family
+        if not exact_words or not (candidate_semantic & family):
+            continue
+        if candidate_words & exact_words:
+            return False
+        for other in candidates:
+            if other.id == candidate.id or _same_visual_candidate(other, candidate):
+                continue
+            if control_intents is not None and not _candidate_matches_control_intent(
+                other,
+                control_intents,
+                instruction=instruction,
+            ):
+                continue
+            if not (_candidate_semantic_tokens(other) & family):
+                continue
+            if _literal_words_from_text(other.descriptor) & exact_words:
+                return True
+    return False
+
+
+def _exact_action_geometry_conflict(
+    *,
+    ranked: list[tuple[float, ControlCandidate]],
+    selected: ControlCandidate,
+    selected_score: float,
+    confidence_floor: float,
+    instruction: str,
+    candidates: list[ControlCandidate],
+    control_intents: set[str],
+    model_rect: tuple[int, int, int, int],
+) -> tuple[float, ControlCandidate] | None:
+    if selected_score >= confidence_floor + TEXT_MATCH_GAP:
+        return None
+    selected_geometry = _geometry_agreement(selected.rect, model_rect)
+    best_conflict: tuple[float, ControlCandidate] | None = None
+    for score, candidate in ranked:
+        if _same_visual_candidate(candidate, selected):
+            continue
+        if not _exact_action_word_alternative_mismatch(
+            instruction,
+            candidate,
+            candidates,
+            control_intents,
+        ):
+            continue
+        candidate_geometry = _geometry_agreement(candidate.rect, model_rect)
+        if candidate_geometry < TARGET_ID_GEOMETRY_FLOOR:
+            continue
+        if selected_geometry >= candidate_geometry - TEXT_MATCH_GAP:
+            continue
+        if best_conflict is None or candidate_geometry > _geometry_agreement(
+            best_conflict[1].rect,
+            model_rect,
+        ):
+            best_conflict = (score, candidate)
+    return best_conflict
+
+
 def _generic_visibility_polarity_action_mismatch(
     instruction: str,
     candidate_text: str,
@@ -3458,7 +3620,7 @@ def _taskbar_status_identity_tokens(
         return TASKBAR_POWER_STATUS_IDENTITY_WORDS
     if "clock" in text_tokens:
         return TASKBAR_CLOCK_STATUS_IDENTITY_WORDS
-    if "search" in text_tokens and automation_id == "searchgleambutton":
+    if automation_id == "searchgleambutton":
         return TASKBAR_SEARCH_STATUS_IDENTITY_WORDS
     if "onedrive" in text_tokens:
         return TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS
@@ -3521,6 +3683,8 @@ def _target_id_ambiguity(
         if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+            continue
+        if _close_context_action_mismatch(instruction, candidate):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -3742,6 +3906,8 @@ def _has_semantic_alternative(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
+        if _close_context_action_mismatch(instruction, candidate):
+            continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -3842,6 +4008,8 @@ def _has_visible_semantic_alternative(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
+        if _close_context_action_mismatch(instruction, candidate):
+            continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -3919,6 +4087,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _taskbar_search_status_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -3943,6 +4113,8 @@ def _candidate_snap_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
+    if _close_context_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -3982,6 +4154,8 @@ def _candidate_snap_score(
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _exact_action_word_alternative_mismatch(instruction, candidate, candidates, control_intents):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _explicit_action_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -4138,6 +4312,8 @@ def _single_contained_control_intent_candidate(
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
+            continue
+        if _close_context_action_mismatch(instruction, candidate):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -4396,6 +4572,8 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return True
+    if _close_context_action_mismatch(instruction, candidate):
+        return True
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True
     if _browser_new_tab_bookmark_action_mismatch(instruction_tokens, candidate):
@@ -4435,6 +4613,8 @@ def _candidate_snap_semantic_mismatch(
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+        return True
+    if _exact_action_word_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_action_context_mismatch(instruction, candidate):
         return True

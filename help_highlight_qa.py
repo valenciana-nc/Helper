@@ -1812,6 +1812,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "approve_request_target_id_rejects_approved_request_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Approved request"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve request.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Approved request", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "mark_as_read_model_rect_rejects_read_message_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Read message"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mark as read.",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Read message", "control_type": "button", "rect": [20, 80, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "choice_wording_wrong_target_id_recovers_to_radio",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -3559,6 +3601,36 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_toolbar_target_id_recovers_from_window_close_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [940, 10, 46, 40], "label": "Close"},
+                {"rect": [280, 80, 120, 32], "label": "Close toolbar"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close toolbar.",
+                "target_id": "c001",
+                "target": {"x": 940, "y": 10, "width": 46, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [940, 10, 46, 40],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {"id": "c002", "text": "Close toolbar", "control_type": "button", "rect": [280, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [280, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "close_dialog_duplicate_buttons_stay_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4374,6 +4446,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "download_action_ambiguous_alias_survives_stale_cancel_target",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Export"},
+                {"rect": [180, 80, 140, 32], "label": "Download"},
+                {"rect": [360, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Download the report.",
+                "target_id": "c003",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Export", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Download", "control_type": "button", "rect": [180, 80, 140, 32]},
+                {"id": "c003", "text": "Cancel", "control_type": "button", "rect": [360, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rejected_reason": "ambiguous text match",
                 "overlay_emitted": False,
             },
         },
@@ -10788,6 +10886,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {
                     "id": "c001",
                     "text": "Search - World Reef Awareness Day",
+                    "control_type": "button",
+                    "rect": [20, 80, 240, 32],
+                    "automation_id": "SearchGleamButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "localized_search_gleam_separator_rejects_zoom_out_alias",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Search gleam"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Zoom out.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "\u641c\u7d22 - \u4e16\u754c\u73ca\u745a\u7901\u65e5",
                     "control_type": "button",
                     "rect": [20, 80, 240, 32],
                     "automation_id": "SearchGleamButton",

@@ -1100,6 +1100,34 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_localized_taskbar_search_status_does_not_snap_minus_alias(self) -> None:
+        from rect_snap import snap_to_control
+
+        search = _make_button(
+            "搜索 - 世界珊瑚礁日",
+            120,
+            160,
+            220,
+            32,
+            automation_id="SearchGleamButton",
+        )
+        window = _make_window("Taskbar", 0, 0, 800, 600, [search])
+        desktop = _FakeDesktop([window])
+        model_rect = (120, 160, 220, 32)
+
+        for instruction in ("Zoom out.", "Minimize.", "Click minus."):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_generic_view_does_not_snap_taskbar_task_view_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -9178,6 +9206,41 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_localized_taskbar_search_status_separator_does_not_match_minus_alias(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidate = ControlCandidate(
+            "c001",
+            "搜索 - 世界珊瑚礁日",
+            "button",
+            (120, 160, 220, 32),
+            automation_id="SearchGleamButton",
+            window_title="Taskbar",
+        )
+        for instruction in ("Zoom out.", "Minimize.", "Click minus."):
+            with self.subTest(instruction=instruction):
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=candidate.rect,
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
     def test_named_taskbar_tray_status_labels_still_match_stable_identity(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -10728,6 +10791,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Start recording.", "Stopped recording", "button"),
             ("Stop recording.", "Stopped recording", "button"),
             ("Stop recording.", "Started recording", "button"),
+            ("Approve request.", "Approved request", "button"),
+            ("Reject request.", "Rejected request", "button"),
+            ("Mark as read.", "Read message", "button"),
+            ("Mark as unread.", "Unread message", "button"),
         )
         for instruction, label, control_type in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -12250,6 +12317,45 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
 
+    def test_close_toolbar_target_id_rejects_window_close_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Close",
+                "button",
+                (940, 10, 46, 40),
+                window_title="MyApp - Google Chrome",
+            ),
+            ControlCandidate("c002", "Close toolbar", "button", (280, 80, 120, 32)),
+        ]
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close toolbar.",
+                    "target_id": "c001",
+                    "target": {"x": 940, "y": 10, "width": 46, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap = snap_candidate_target(
+            instruction="Close toolbar.",
+            candidates=[candidates[0]],
+            model_rect=(940, 10, 46, 40),
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(snap.source, "candidate_snap")
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+
     def test_close_tab_targets_tab_close_button_not_tabitem(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -12944,6 +13050,40 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_transfer_alias_ambiguity_survives_stale_geometry_snap(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("c001", "Export", "button", (120, 160, 120, 32)),
+            ControlCandidate("c002", "Download", "button", (280, 160, 140, 32)),
+            ControlCandidate("c003", "Cancel", "button", (500, 160, 100, 32)),
+        ]
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Download the report.",
+                    "target_id": "c003",
+                    "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap = snap_candidate_target(
+            instruction="Download the report.",
+            candidates=candidates,
+            model_rect=(120, 160, 120, 32),
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap.source, "candidate_snap")
+        self.assertEqual(snap.target_id, "c001")
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
 
     def test_share_and_archive_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
