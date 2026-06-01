@@ -538,6 +538,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "search_field_clear_action_snaps_to_clear_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 40], "label": "Search"},
+                {"rect": [586, 86, 28, 28], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Clear.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 40},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Search", "control_type": "edit", "rect": [20, 80, 600, 40]},
+                {"id": "c002", "text": "Clear", "control_type": "button", "rect": [586, 86, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [586, 86, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_checkbox_model_rect_rejects_button_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -601,6 +625,55 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c002",
                 "rect": [34, 110, 20, 20],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_column_header_model_rect_snaps_to_header",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 50, 120, 28], "label": "Name"},
+                {"rect": [140, 50, 120, 28], "label": "Status"},
+                {"rect": [260, 50, 120, 28], "label": "Owner"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this column header.",
+                "target": {"x": 140, "y": 50, "width": 120, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Name", "control_type": "headeritem", "rect": [20, 50, 120, 28]},
+                {"id": "c002", "text": "Status", "control_type": "headeritem", "rect": [140, 50, 120, 28]},
+                {"id": "c003", "text": "Owner", "control_type": "headeritem", "rect": [260, 50, 120, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [140, 50, 120, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_column_header_broad_row_rejects_multiple_headers",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 50, 120, 28], "label": "Name"},
+                {"rect": [140, 50, 120, 28], "label": "Status"},
+                {"rect": [260, 50, 120, 28], "label": "Owner"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this column header.",
+                "target": {"x": 20, "y": 50, "width": 360, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Name", "control_type": "headeritem", "rect": [20, 50, 120, 28]},
+                {"id": "c002", "text": "Status", "control_type": "headeritem", "rect": [140, 50, 120, 28]},
+                {"id": "c003", "text": "Owner", "control_type": "headeritem", "rect": [260, 50, 120, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
             },
         },
         {
@@ -743,6 +816,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Open the Export menu.",
+                "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Export", "control_type": "splitbutton", "rect": [100, 100, 180, 32]},
+                {"id": "c002", "text": "Export", "control_type": "button", "rect": [100, 100, 140, 32]},
+                {"id": "c003", "text": "Export menu", "control_type": "menuitem", "rect": [240, 100, 40, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c003",
+                "rect": [240, 100, 40, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Export"},
+                {"rect": [240, 100, 40, 32], "label": "v"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Export drop down.",
                 "target": {"x": 100, "y": 100, "width": 180, "height": 32},
             },
             "candidates": [

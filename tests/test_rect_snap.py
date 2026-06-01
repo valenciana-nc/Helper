@@ -384,6 +384,31 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 200, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_generic_column_header_intent_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        header = _make_button(
+            "Status",
+            100,
+            50,
+            120,
+            28,
+            control_type="HeaderItem",
+        )
+        window = _make_window("Grid", 0, 0, 800, 600, [header])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 50, 120, 28),
+            "Click this column header.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 50, 120, 28))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_checkbox_intent_on_plain_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -470,6 +495,26 @@ class SnapToControlTests(unittest.TestCase):
         result = snap_to_control(
             (100, 100, 180, 32),
             "Open the Export menu.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_prefers_splitbutton_dropdown_segment(self) -> None:
+        from rect_snap import snap_to_control
+
+        split = _make_button("Export", 100, 100, 180, 32, control_type="SplitButton")
+        primary = _make_button("Export", 100, 100, 140, 32, control_type="Button")
+        menu = _make_button("Export menu", 240, 100, 40, 32, control_type="MenuItem")
+        window = _make_window("Toolbar", 0, 0, 800, 600, [split, primary, menu])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 100, 180, 32),
+            "Open the Export drop down.",
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
@@ -1109,6 +1154,27 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (240, 100, 40, 32))
 
+    def test_text_match_prefers_splitbutton_dropdown_segment(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open the Export drop down.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c003")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1162,6 +1228,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_generic_column_header_target_id_accepts_header_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this column header.",
+            candidates=[
+                ControlCandidate("c001", "Status", "headeritem", (100, 50, 120, 28)),
+            ],
+            model_rect=(100, 50, 120, 28),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (100, 50, 120, 28))
 
     def test_generic_checkbox_target_id_rejects_wrong_button_type(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -1666,6 +1750,26 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (240, 100, 40, 32))
 
+    def test_snap_candidate_target_prefers_splitbutton_dropdown_segment(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Open the Export dropdown.",
+            candidates=[
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+            model_rect=(100, 100, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c003")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (240, 100, 40, 32))
+
     def test_snap_candidate_target_rejects_splitbutton_menu_without_precise_segment(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -1734,6 +1838,39 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_snap_candidate_target_accepts_generic_column_header(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this column header.",
+            candidates=[
+                ControlCandidate("c001", "Status", "headeritem", (100, 50, 120, 28)),
+            ],
+            model_rect=(100, 50, 120, 28),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (100, 50, 120, 28))
+
+    def test_snap_candidate_target_rejects_broad_header_row_without_label(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this column header.",
+            candidates=[
+                ControlCandidate("c001", "Name", "headeritem", (20, 50, 120, 28)),
+                ControlCandidate("c002", "Status", "headeritem", (140, 50, 120, 28)),
+                ControlCandidate("c003", "Owner", "headeritem", (260, 50, 120, 28)),
+            ],
+            model_rect=(20, 50, 360, 28),
+        )
+
+        self.assertIsNone(result)
 
     def test_snap_candidate_target_rejects_checkbox_intent_on_unlabeled_button(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -2260,6 +2397,31 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (240, 100, 40, 32))
 
+    def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the Export dropdown.",
+                    "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Export", "splitbutton", (100, 100, 180, 32)),
+                ControlCandidate("c002", "Export", "button", (100, 100, 140, 32)),
+                ControlCandidate("c003", "Export menu", "menuitem", (240, 100, 40, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c003")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (240, 100, 40, 32))
+
     def test_generic_row_model_rect_with_actions_downgrades_no_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -2349,6 +2511,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (24, 34, 20, 20))
+
+    def test_generic_column_header_model_rect_highlights_header(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this column header.",
+                    "target": {"x": 100, "y": 50, "width": 120, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Status", "headeritem", (100, 50, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (100, 50, 120, 28))
+
+    def test_generic_column_header_broad_row_rejects_multiple_headers(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this column header.",
+                    "target": {"x": 20, "y": 50, "width": 360, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Name", "headeritem", (20, 50, 120, 28)),
+                ControlCandidate("c002", "Status", "headeritem", (140, 50, 120, 28)),
+                ControlCandidate("c003", "Owner", "headeritem", (260, 50, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_contextual_checkbox_row_highlights_single_checkbox(self) -> None:
         from control_inventory import ControlCandidate

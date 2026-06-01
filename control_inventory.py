@@ -137,6 +137,8 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "tab",
         "menu",
         "item",
+        "header",
+        "heading",
         "field",
         "input",
         "box",
@@ -150,6 +152,11 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "combo",
         "combobox",
         "dropdown",
+        "drop",
+        "down",
+        "arrow",
+        "caret",
+        "chevron",
         "type",
         "enter",
         "into",
@@ -181,6 +188,7 @@ _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea"
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
+_DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 
 ForegroundHandleProvider = Callable[[], int | None]
 TopmostHandleProvider = Callable[[int, int], int | None]
@@ -1400,6 +1408,9 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         "check" in raw_tokens and "box" in raw_tokens
     )
     radio_requested = "radiobutton" in raw_tokens or "radio" in raw_tokens
+    dropdown_requested = "dropdown" in raw_tokens or (
+        "drop" in raw_tokens and "down" in raw_tokens
+    )
     input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
     if checkbox_requested:
         intents.add("checkbox")
@@ -1407,8 +1418,10 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("radiobutton")
     if not checkbox_requested and input_requested:
         intents.update(INPUT_CONTROL_TYPES)
-    if raw_tokens & {"combo", "combobox", "dropdown"}:
+    if raw_tokens & {"combo", "combobox"}:
         intents.add("combobox")
+    if dropdown_requested:
+        intents.update(_DROPDOWN_INTENT_TYPES)
     if not checkbox_requested and not radio_requested and "button" in raw_tokens:
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
@@ -1417,6 +1430,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")
+    if raw_tokens & {"header", "heading"}:
+        intents.add("headeritem")
     if "menu" in raw_tokens:
         intents.update(_MENU_INTENT_TYPES)
     return intents

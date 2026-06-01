@@ -57,9 +57,11 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "here", "there", "highlighted", "shown", "indicated", "selected",
         "area", "spot", "place", "location",
-        "button", "icon", "link", "tab", "menu", "item", "field", "input",
+        "button", "icon", "link", "tab", "menu", "item", "header", "heading",
+        "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "radio", "radiobutton", "combo", "combobox", "dropdown",
+        "drop", "down", "arrow", "caret", "chevron",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
         "top", "bottom", "left", "right", "upper", "lower",
@@ -83,6 +85,7 @@ _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea"
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
+_DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
@@ -682,6 +685,9 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         "check" in raw_tokens and "box" in raw_tokens
     )
     radio_requested = "radiobutton" in raw_tokens or "radio" in raw_tokens
+    dropdown_requested = "dropdown" in raw_tokens or (
+        "drop" in raw_tokens and "down" in raw_tokens
+    )
     input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
     if checkbox_requested:
         intents.add("checkbox")
@@ -689,8 +695,10 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("radiobutton")
     if not checkbox_requested and input_requested:
         intents.update(INPUT_CONTROL_TYPES)
-    if raw_tokens & {"combo", "combobox", "dropdown"}:
+    if raw_tokens & {"combo", "combobox"}:
         intents.add("combobox")
+    if dropdown_requested:
+        intents.update(_DROPDOWN_INTENT_TYPES)
     if not checkbox_requested and not radio_requested and "button" in raw_tokens:
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
@@ -699,6 +707,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")
+    if raw_tokens & {"header", "heading"}:
+        intents.add("headeritem")
     if "menu" in raw_tokens:
         intents.update(_MENU_INTENT_TYPES)
     return intents
