@@ -2706,6 +2706,39 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_tab_recovers_to_tab_close_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 20, 220, 40], "label": "Docs - Project Plan"},
+                {"rect": [286, 28, 24, 24], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Docs - Project Plan",
+                    "control_type": "tabitem",
+                    "rect": [100, 20, 220, 40],
+                },
+                {
+                    "id": "c002",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [286, 28, 24, 24],
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [286, 28, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "close_dialog_duplicate_buttons_stay_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

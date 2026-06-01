@@ -938,6 +938,9 @@ def instruction_control_intents(instruction: str) -> set[str]:
     external_link_action_requested = _external_link_action_requested(raw_tokens)
     confirm_action_requested = _confirm_action_requested(raw_tokens)
     edit_action_requested = _edit_action_requested(raw_tokens)
+    tab_close_action_requested = bool(
+        raw_tokens & {"close", "dismiss"} and raw_tokens & {"tab", "tabs", "tabitem"}
+    )
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -997,6 +1000,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_CONFIRM_ACTION_INTENT_TYPES)
     if edit_action_requested:
         intents.update(_EDIT_ACTION_INTENT_TYPES)
+    if tab_close_action_requested:
+        intents.update(_BUTTON_INTENT_TYPES)
     if (
         not checkbox_requested
         and not radio_requested
@@ -1017,9 +1022,9 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_DISCLOSURE_INTENT_TYPES)
     if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
-    if raw_tokens & {"tab", "tabs"}:
+    if raw_tokens & {"tab", "tabs"} and not tab_close_action_requested:
         intents.add("tabitem")
-    if "tabitem" in raw_tokens:
+    if "tabitem" in raw_tokens and not tab_close_action_requested:
         intents.add("tabitem")
     if "listitem" in raw_tokens or ("list" in raw_tokens and "item" in raw_tokens):
         intents.update(_LIST_ITEM_INTENT_TYPES)

@@ -627,6 +627,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("tabitem", instruction_control_intents("Open tab search"))
         self.assertNotIn("windows_search", tokenize_control("Search tabs"))
 
+    def test_close_tab_intent_targets_close_button_not_tabitem(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_instruction
+
+        tokens = tokenize_instruction("Close tab.")
+        intents = instruction_control_intents("Close tab.")
+
+        self.assertTrue({"close", "dismiss"}.issubset(tokens))
+        self.assertIn("button", intents)
+        self.assertIn("splitbutton", intents)
+        self.assertNotIn("tabitem", intents)
+
     def test_print_action_aliases_expand_to_printer_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -9040,6 +9051,54 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_close_tab_targets_tab_close_button_not_tabitem(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Docs - Project Plan",
+                "tabitem",
+                (100, 0, 220, 40),
+            ),
+            ControlCandidate("c002", "Close", "button", (286, 8, 24, 24)),
+        ]
+        cases = (
+            {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target_id": "c002",
+            },
+            {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target_id": "c001",
+            },
+            {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target": {"x": 286, "y": 8, "width": 24, "height": 24},
+            },
+            {
+                "kind": "step",
+                "instruction": "Close tab.",
+                "target": {"x": 100, "y": 0, "width": 220, "height": 40},
+            },
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                target = resolve_help_target(
+                    self._decision(payload),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIn(target.source, {"target_id", "text_match"})
+                self.assertEqual(target.target_id, "c002")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (286, 8, 24, 24))
 
     def test_close_window_wrong_target_id_recovers_to_foreground_close(self) -> None:
         from control_inventory import ControlCandidate
