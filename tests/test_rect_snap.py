@@ -6444,6 +6444,12 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "https://www.name.com/account/domain/details/s2client.dev/dns",
             ),
             (
+                "Open page.",
+                "Unnamed bookmark for "
+                "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+            ),
+            (
                 "Open platform.",
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
@@ -6510,6 +6516,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Unnamed bookmark for "
             "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646"
         )
+        facebook_page = (
+            "Unnamed bookmark for "
+            "https://business.facebook.com/latest/?asset_id=1136461419546617"
+            "&nav_ref=manage_page_ap_plus_left_nav_mbs_button"
+        )
         claude_platform = (
             "Unnamed bookmark for https://platform.claude.com/workspaces/default/cost"
         )
@@ -6524,10 +6535,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open Cloudflare overview.", cloudflare, ""),
             ("Open Google Cloud.", google_cloud, ""),
             ("Open Google Cloud credentials.", google_cloud, ""),
+            ("Open Facebook page.", facebook_page, ""),
+            ("Open business Facebook.", facebook_page, ""),
             ("Open Claude platform.", claude_platform, ""),
             ("Open Stripe dashboard.", supabase, "target_id semantic mismatch"),
             ("Open Supabase dashboard.", stripe, "target_id semantic mismatch"),
             ("Open Cloudflare overview.", stripe, "target_id semantic mismatch"),
+            ("Open Google page.", facebook_page, "target_id semantic mismatch"),
             ("Open Claude platform.", openai_platform, "target_id semantic mismatch"),
             ("Open Claude platform.", stripe, "target_id semantic mismatch"),
         )
@@ -6953,6 +6967,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (420, 160, 180, 32))
+
+    def test_generic_page_text_match_ignores_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open page.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                    "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
+    def test_generic_page_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open page.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://business.facebook.com/latest/?asset_id=1136461419546617"
+                    "&nav_ref=manage_page_ap_plus_left_nav_mbs_button",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_extension_access_target_id_requires_named_extension(self) -> None:
         from control_inventory import ControlCandidate

@@ -224,6 +224,7 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "new",
         "owned",
         "overview",
+        "page",
         "person",
         "platform",
         "plus",
