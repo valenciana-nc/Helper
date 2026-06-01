@@ -37,6 +37,11 @@ MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
+TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
+BROWSER_APP_IDENTITY_WORDS = frozenset({"browser", "chrome", "edge", "google"})
+BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
+BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
+BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
@@ -242,6 +247,14 @@ def snap_to_control(
             ctype,
             window_title,
         )
+        browser_profile_identity_action_mismatch = (
+            _browser_profile_identity_action_mismatch(
+                instruction_tokens,
+                visible_text,
+                ctype,
+                window_title,
+            )
+        )
         browser_new_tab_action_mismatch = _browser_new_tab_action_mismatch(
             instruction,
             instruction_tokens,
@@ -278,6 +291,7 @@ def snap_to_control(
             or hidden_icons_action_mismatch
             or show_desktop_action_mismatch
             or program_manager_action_mismatch
+            or browser_profile_identity_action_mismatch
             or browser_new_tab_action_mismatch
             or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
@@ -893,6 +907,35 @@ def _program_manager_desktop_item_action_mismatch(
         if distinctive_tokens and not instruction_tokens & distinctive_tokens:
             return True
     return False
+
+
+def _browser_profile_identity_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if not instruction_tokens & BROWSER_PROFILE_TOKENS:
+        return False
+    if instruction_tokens & BROWSER_PROFILE_ACTION_CONTEXT_WORDS:
+        return False
+    control_tokens = _tokenize_control(visible_text or "")
+    raw_control_tokens = _tokens_from_text(visible_text or "")
+    window_tokens = _tokens_from_text(window_title or "")
+    if control_tokens & BROWSER_PROFILE_TOKENS:
+        return False
+    if (
+        ctype in {"button", "splitbutton"}
+        and raw_control_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS
+        and window_tokens & BROWSER_PROFILE_WINDOW_WORDS
+    ):
+        return False
+    if raw_control_tokens & BROWSER_APP_IDENTITY_WORDS:
+        return True
+    return bool(
+        window_tokens & TASKBAR_WINDOW_WORDS
+        and raw_control_tokens & BROWSER_APP_IDENTITY_WORDS
+    )
 
 
 def _browser_new_tab_action_mismatch(

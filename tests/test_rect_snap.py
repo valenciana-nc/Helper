@@ -1445,6 +1445,89 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_profile_request_does_not_snap_plain_browser_identity_controls(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Open Chrome profile.",
+                "Chrome",
+                "Button",
+                "about:blank - Google Chrome",
+                (120, 160, 48, 32),
+            ),
+            (
+                "Open Chrome account.",
+                "Google Chrome - 5 running windows",
+                "Button",
+                "Taskbar",
+                (120, 160, 180, 32),
+            ),
+        )
+        for instruction, label, control_type, window_title, model_rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                control = _make_button(
+                    label,
+                    model_rect[0],
+                    model_rect[1],
+                    model_rect[2],
+                    model_rect[3],
+                    control_type=control_type,
+                )
+                window = _make_window(window_title, 0, 0, 800, 600, [control])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_plain_browser_and_edit_profile_still_snap(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Open Chrome.",
+                "Chrome",
+                "about:blank - Google Chrome",
+                (120, 160, 48, 32),
+            ),
+            (
+                "Edit profile.",
+                "Pencil",
+                "about:blank - Google Chrome",
+                (120, 160, 90, 32),
+            ),
+        )
+        for instruction, label, window_title, model_rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                control = _make_button(
+                    label,
+                    model_rect[0],
+                    model_rect[1],
+                    model_rect[2],
+                    model_rect[3],
+                )
+                window = _make_window(window_title, 0, 0, 800, 600, [control])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
         from rect_snap import snap_to_control
 
