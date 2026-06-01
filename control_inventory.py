@@ -859,14 +859,17 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
 
-    if geometry_score >= TARGET_ID_GEOMETRY_FLOOR and not _has_semantic_alternative(
-        instruction_tokens=instruction_tokens,
-        selected=candidate,
-        candidates=candidates,
-    ):
-        return True, max(0.78, geometry_score), ""
-
     if geometry_score >= TARGET_ID_GEOMETRY_FLOOR:
+        if _has_semantic_alternative(
+            instruction_tokens=instruction_tokens,
+            selected=candidate,
+            candidates=candidates,
+        ):
+            return (
+                False,
+                geometry_score,
+                "target_id ambiguous",
+            )
         if _has_nearby_unlabeled_competitor(candidate, candidates):
             return (
                 False,
