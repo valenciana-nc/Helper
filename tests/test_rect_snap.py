@@ -1183,6 +1183,48 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (480, 104, 28, 28))
                 self.assertFalse(result.rejected_reason)
 
+    def test_snap_rejects_selector_wording_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            "Open the Country selector.",
+            "Click the Country picker.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button("Country", 100, 200, 120, 32)
+                window = _make_window("Form", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (100, 200, 120, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (100, 200, 120, 32))
+                self.assertEqual(result.rejected_reason, "control type mismatch")
+
+    def test_snap_keeps_explicit_picker_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Picker", 100, 200, 120, 32)
+        window = _make_window("Form", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 120, 32),
+            "Click the picker button.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 120, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1917,6 +1959,67 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.target_id, candidate_id)
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, (468, 36, 28, 28))
+
+    def test_selector_target_id_rejects_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c002",
+            instruction="Open the Country selector.",
+            candidates=[
+                ControlCandidate("c001", "Country", "combobox", (10, 10, 220, 32)),
+                ControlCandidate("c002", "Country", "button", (280, 10, 100, 32)),
+            ],
+            model_rect=(280, 10, 100, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
+    def test_selector_text_match_prefers_combobox_over_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            "Open the Country selector.",
+            "Click the Country picker.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "Country", "combobox", (10, 10, 220, 32)),
+                        ControlCandidate("c002", "Country", "button", (280, 10, 100, 32)),
+                    ],
+                    model_rect=(280, 10, 100, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "text_match")
+                self.assertEqual(result.target_id, "c001")
+                self.assertEqual(result.rect, (10, 10, 220, 32))
+                self.assertFalse(result.rejected_reason)
+
+    def test_selector_wording_keeps_explicit_picker_button_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click the picker button.",
+            candidates=[
+                ControlCandidate("c001", "Picker", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
 
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -3144,6 +3247,55 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.target_id, candidate_id)
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, (468, 36, 28, 28))
+
+    def test_snap_candidate_target_rejects_selector_wording_on_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Open the Country selector.",
+            candidates=[
+                ControlCandidate("c001", "Country", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_selector_combobox_in_broad_rect(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Open the Country selector.",
+            candidates=[
+                ControlCandidate("c001", "Country", "combobox", (10, 10, 220, 32)),
+                ControlCandidate("c002", "Country", "button", (280, 10, 100, 32)),
+            ],
+            model_rect=(10, 10, 370, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 220, 32))
+
+    def test_snap_candidate_target_keeps_explicit_picker_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click the picker button.",
+            candidates=[
+                ControlCandidate("c001", "Picker", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
 
     def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -4540,6 +4692,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, candidate_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (578, 186, 28, 28))
+
+    def test_selector_wrong_target_id_recovers_to_combobox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the Country selector.",
+                    "target_id": "c002",
+                    "target": {"x": 400, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Country", "combobox", (120, 160, 220, 32)),
+                ControlCandidate("c002", "Country", "button", (400, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 220, 32))
+
+    def test_selector_model_rect_highlights_combobox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Country picker.",
+                    "target": {"x": 400, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Country", "combobox", (120, 160, 220, 32)),
+                ControlCandidate("c002", "Country", "button", (400, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 220, 32))
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate

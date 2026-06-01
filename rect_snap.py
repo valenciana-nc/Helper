@@ -66,6 +66,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
         "radio", "radiobutton", "splitbutton", "combo", "combobox", "dropdown",
+        "picker", "selector",
         "slider", "spinner", "spinbox", "stepper",
         "drop", "down",
         "open", "type", "enter", "into",
@@ -186,6 +187,24 @@ _DISCLOSURE_INTENT_WORDS = frozenset(
     {"arrow", "caret", "chevron", "collapse", "disclosure", "expand", "expander"}
 )
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
+_SELECTOR_INTENT_TYPES = frozenset({"combobox"})
+_SELECTOR_INTENT_WORDS = frozenset({"picker", "selector"})
+_SELECTOR_BLOCKING_WORDS = frozenset(
+    {
+        "button",
+        "checkbox",
+        "icon",
+        "key",
+        "link",
+        "menu",
+        "menuitem",
+        "radio",
+        "radiobutton",
+        "shortcut",
+        "split",
+        "splitbutton",
+    }
+)
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
 _LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
@@ -887,6 +906,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
+    selector_requested = _selector_requested(raw_tokens)
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
@@ -914,6 +934,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("combobox")
     if dropdown_requested:
         intents.update(_DROPDOWN_INTENT_TYPES)
+    if selector_requested:
+        intents.update(_SELECTOR_INTENT_TYPES)
     if "slider" in raw_tokens:
         intents.update(SLIDER_CONTROL_TYPES)
     if raw_tokens & {"spinner", "spinbox", "stepper"} or (
@@ -990,6 +1012,12 @@ def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
 
 def _disclosure_requested(raw_tokens: set[str]) -> bool:
     return bool(raw_tokens & _DISCLOSURE_INTENT_WORDS)
+
+
+def _selector_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _SELECTOR_INTENT_WORDS) and not bool(
+        raw_tokens & _SELECTOR_BLOCKING_WORDS
+    )
 
 
 def _menu_segment_intent(control_intents: set[str]) -> bool:

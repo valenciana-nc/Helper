@@ -1787,6 +1787,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "selector_wrong_target_id_recovers_to_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Country"},
+                {"rect": [280, 80, 100, 32], "label": "Country"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country selector.",
+                "target_id": "c002",
+                "target": {"x": 280, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Country", "control_type": "combobox", "rect": [20, 80, 220, 32]},
+                {"id": "c002", "text": "Country", "control_type": "button", "rect": [280, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "selector_plain_button_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [280, 80, 100, 32], "label": "Country"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country selector.",
+                "target": {"x": 280, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Country", "control_type": "button", "rect": [280, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
