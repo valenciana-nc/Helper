@@ -59,7 +59,15 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
 )
+_CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
+    (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
+)
 _PHRASE_TOKEN_REWRITES = (
+    (
+        re.compile(r"\bwi\s+fi\b"),
+        {"internet", "network", "wifi"},
+        {"fi", "wi"},
+    ),
     (
         re.compile(r"\bnotification\s+area\b"),
         {"notification_area", "system_tray", "tray"},
@@ -275,6 +283,7 @@ _TOKEN_ALIASES = {
     "i": {"italic"},
     "info": {"about", "details", "information"},
     "information": {"about", "details", "info"},
+    "internet": {"network", "wifi"},
     "italic": {"i"},
     "italics": {"i", "italic"},
     "launch": {"external", "open_new"},
@@ -363,6 +372,8 @@ _TOKEN_ALIASES = {
     "user": {"account", "person", "profile"},
     "visibility": {"eye", "visible"},
     "visible": {"eye", "visibility"},
+    "wifi": {"internet", "network", "wireless"},
+    "wireless": {"internet", "network", "wifi"},
     "ellipsis": {"more", "options", "menu"},
     "close": {"dismiss"},
     "dot": {"more", "options", "menu"},
@@ -970,7 +981,11 @@ def menu_segment_intent(control_intents: set[str]) -> bool:
 
 
 def tokenize_control(text: str) -> set[str]:
-    return expand_token_aliases(tokens_from_text(text) | control_phrase_tokens(text))
+    tokens = tokens_from_text(text) | control_phrase_tokens(text)
+    additions, removals = control_phrase_token_rewrites(text)
+    tokens -= removals
+    tokens.update(additions)
+    return expand_token_aliases(tokens)
 
 
 def tokens_from_text(text: str) -> set[str]:
@@ -1006,6 +1021,24 @@ def control_phrase_tokens(text: str) -> set[str]:
         if pattern.search(phrase_text):
             tokens.update(aliases)
     return tokens
+
+
+def control_phrase_token_rewrites(text: str) -> tuple[set[str], set[str]]:
+    value = text or ""
+    spaced = _CAMEL_RE.sub(" ", value)
+    spaced = _SEPARATOR_RE.sub(" ", spaced)
+    phrase_text = _WHITESPACE_RE.sub(" ", spaced.lower()).strip()
+    additions: set[str] = set()
+    removals: set[str] = set()
+    for (
+        pattern,
+        pattern_additions,
+        pattern_removals,
+    ) in _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS:
+        if pattern.search(phrase_text):
+            additions.update(pattern_additions)
+            removals.update(pattern_removals)
+    return additions, removals
 
 
 def expand_token_aliases(tokens: set[str]) -> set[str]:

@@ -4877,6 +4877,141 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "wifi_target_id_accepts_taskbar_network_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Network"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Wi-Fi.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Network StarLink\nInternet access",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "wireless_target_id_accepts_taskbar_network_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Network"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open wireless.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Network StarLink\nInternet access",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "favorite_action_rejects_starlink_network_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Network"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Network StarLink\nInternet access",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bookmark_action_rejects_starlink_network_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Network"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Bookmark this.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Network StarLink\nInternet access",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "wifi_action_rejects_airplane_mode",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Airplane"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Wi-Fi.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Airplane mode",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

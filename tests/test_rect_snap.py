@@ -483,6 +483,23 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("calendar", tokenize_control("Date"))
         self.assertIn("home", tokenize_control("House"))
 
+    def test_network_aliases_expand_without_starlink_bookmark_collision(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        expected = {"internet", "network", "wifi", "wireless"}
+
+        self.assertTrue(expected.issubset(tokenize_instruction("Open Wi-Fi")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open wifi")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open wireless")))
+        self.assertTrue(expected.issubset(tokenize_control("Wi-Fi")))
+        self.assertTrue(expected.issubset(tokenize_control("Wifi")))
+        network_tokens = tokenize_control("Network StarLink\nInternet access")
+        self.assertTrue(
+            {"internet", "network", "starlink", "wifi"}.issubset(network_tokens)
+        )
+        self.assertNotIn("bookmark", network_tokens)
+        self.assertNotIn("favorite", network_tokens)
+
     def test_print_action_aliases_expand_to_printer_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -8778,6 +8795,82 @@ class HelpTargetHarnessTests(unittest.TestCase):
                         ControlCandidate(
                             "c001",
                             label,
+                            "button",
+                            (120, 160, 140, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_network_target_id_accepts_wifi_language(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open Wi-Fi.",
+            "Open wifi.",
+            "Open wireless.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Network StarLink\nInternet access",
+                            "button",
+                            (120, 160, 140, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 140, 32))
+
+    def test_network_starlink_does_not_cross_bookmark_or_favorite_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Favorite this item.",
+            "Bookmark this.",
+            "Open Wi-Fi.",
+        )
+        labels = {
+            "Favorite this item.": "Network StarLink\nInternet access",
+            "Bookmark this.": "Network StarLink\nInternet access",
+            "Open Wi-Fi.": "Airplane mode",
+        }
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            labels[instruction],
                             "button",
                             (120, 160, 140, 32),
                             window_title="Taskbar",
