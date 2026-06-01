@@ -782,6 +782,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (300, 10, 60, 30))
 
+    def test_target_id_rejects_matching_row_when_tight_child_action_exists(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Settings.",
+            candidates=[
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Settings", "button", (20, 20, 70, 30)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
     def test_target_id_foreground_duplicate_without_geometry_is_accepted(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1570,6 +1588,31 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 {
                     "kind": "step",
                     "instruction": "Click Settings.",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Settings", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Settings", "button", (20, 20, 70, 30)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rect, (20, 20, 70, 30))
+        self.assertFalse(target.rejected_reason)
+
+    def test_row_target_id_recovers_to_tight_child_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings.",
+                    "target_id": "c001",
                     "target": {"x": 10, "y": 10, "width": 600, "height": 80},
                 }
             ),

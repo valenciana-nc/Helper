@@ -911,6 +911,17 @@ def _target_id_plausibility(
             "target_id ambiguous",
         )
 
+    if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction_tokens=instruction_tokens,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+
     if text_score >= TARGET_ID_TEXT_FLOOR:
         ambiguous, _gap = _target_id_ambiguity(
             instruction_tokens=instruction_tokens,
