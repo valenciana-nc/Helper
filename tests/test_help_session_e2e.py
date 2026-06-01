@@ -301,6 +301,71 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertTrue(assistant_history)
         self.assertFalse(any("target_id=" in text for text in assistant_history))
 
+    def test_help_session_retries_transient_empty_candidate_snapshot(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        candidate = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        agent = _ScriptedAgent()
+        candidate_calls = 0
+
+        def candidate_provider(_capture: Capture) -> list[ControlCandidate]:
+            nonlocal candidate_calls
+            candidate_calls += 1
+            if candidate_calls == 1:
+                return []
+            return [candidate]
+
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=candidate_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        click_sent = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if highlights and not click_sent:
+                    x, y, width, height, _label = highlights[0]
+                    session.notify_user_click(x + width // 2, y + height // 2)
+                    click_sent = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertGreaterEqual(candidate_calls, 2)
+        self.assertEqual(agent.calls[0]["control_candidates"], [candidate])
+        self.assertEqual(highlights, [(40, 50, 120, 32, "Click Save changes.")])
+        self.assertTrue(diagnostics[0]["overlay"]["emitted"])
+
     def test_help_session_revalidates_current_screen_before_emitting_highlight(self) -> None:
         app = _qt_app()
         first_capture = _button_capture((40, 50, 120, 32))

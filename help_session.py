@@ -42,6 +42,8 @@ POST_ACTION_SETTLE_SEC = 0.6
 POST_CLICK_SETTLE_SEC = 0.35
 OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
+CANDIDATE_EMPTY_RETRIES = 2
+CANDIDATE_EMPTY_RETRY_SEC = 0.08
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -503,7 +505,7 @@ class HelpSession(QObject):
                 self.failed.emit(f"Couldn't capture the screen: {exc}")
                 return
 
-            candidates = self._candidate_provider(capture)
+            candidates = self._collect_candidates(capture)
             history.add_user_turn(text=outcome_note, screenshot=capture)
 
             try:
@@ -748,7 +750,7 @@ class HelpSession(QObject):
     ) -> tuple["Capture", list[ControlCandidate], TargetResolution]:
         self._clear_overlays(wait_for_flush=True)
         capture = self._capture_provider()
-        candidates = self._candidate_provider(capture)
+        candidates = self._collect_candidates(capture)
         target = resolve_help_target(
             decision,
             capture,
@@ -765,6 +767,16 @@ class HelpSession(QObject):
             snapper=self._snapper,
         )
         return capture, candidates, target
+
+    def _collect_candidates(self, capture: "Capture") -> list[ControlCandidate]:
+        for attempt in range(CANDIDATE_EMPTY_RETRIES + 1):
+            candidates = self._candidate_provider(capture)
+            if candidates or attempt >= CANDIDATE_EMPTY_RETRIES or self._aborted():
+                return candidates
+            log.debug("Help candidate snapshot was empty; retrying before model prompt")
+            if self._cancelled.wait(CANDIDATE_EMPTY_RETRY_SEC):
+                return []
+        return []
 
     def _wait_for_progress(self, rect: tuple[int, int, int, int] | None) -> str:
         self._click_inside_event.clear()
