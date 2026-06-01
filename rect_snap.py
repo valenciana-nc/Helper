@@ -32,6 +32,8 @@ SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
 FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
+DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
+DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -614,18 +616,41 @@ def _is_visible(control) -> bool:
 
 def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
     control_tokens = _tokenize_control(text)
+    if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
+        return True
     return bool(instruction_tokens and control_tokens and not (instruction_tokens & control_tokens))
 
 
 def _semantic_overlap(text: str, instruction_tokens: set[str]) -> bool:
-    return bool(instruction_tokens and (_tokenize_control(text) & instruction_tokens))
+    control_tokens = _tokenize_control(text)
+    if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
+        return False
+    return bool(instruction_tokens and (control_tokens & instruction_tokens))
 
 
 def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
     control_tokens = _tokenize_control(text)
     if not instruction_tokens or not control_tokens:
         return 0.0
+    if _disclosure_action_tokens_mismatch(instruction_tokens, control_tokens):
+        return 0.0
     return len(instruction_tokens & control_tokens) / max(1, len(instruction_tokens))
+
+
+def _disclosure_action_tokens_mismatch(
+    instruction_tokens: set[str],
+    control_tokens: set[str],
+) -> bool:
+    requested_expand = bool(instruction_tokens & DISCLOSURE_EXPAND_ACTION_WORDS)
+    requested_collapse = bool(instruction_tokens & DISCLOSURE_COLLAPSE_ACTION_WORDS)
+    if requested_expand == requested_collapse:
+        return False
+
+    control_expand = bool(control_tokens & DISCLOSURE_EXPAND_ACTION_WORDS)
+    control_collapse = bool(control_tokens & DISCLOSURE_COLLAPSE_ACTION_WORDS)
+    if control_expand == control_collapse:
+        return False
+    return requested_expand != control_expand
 
 
 def _semantic_mismatch_targets_model_rect(
@@ -655,6 +680,10 @@ def _score(
 
     control_tokens = _tokenize_control(semantic_text)
     overlap = instruction_tokens & control_tokens
+    disclosure_mismatch = _disclosure_action_tokens_mismatch(
+        instruction_tokens,
+        control_tokens,
+    )
     if instruction_tokens and control_tokens:
         text_score = len(overlap) / max(1, len(instruction_tokens))
     else:
@@ -681,7 +710,7 @@ def _score(
         + SCORE_WEIGHT_TEXT * text_score
         + SCORE_WEIGHT_TYPE * type_score
     )
-    if instruction_tokens and control_tokens and not overlap:
+    if disclosure_mismatch or (instruction_tokens and control_tokens and not overlap):
         return min(score, SEMANTIC_MISMATCH_CAP)
     return score
 
@@ -737,6 +766,16 @@ def _same_snap_intent(
 ) -> bool:
     if not instruction_tokens:
         return first_ctype == second_ctype
+    if _disclosure_action_tokens_mismatch(
+        instruction_tokens,
+        _tokenize_control(first_text),
+    ):
+        return False
+    if _disclosure_action_tokens_mismatch(
+        instruction_tokens,
+        _tokenize_control(second_text),
+    ):
+        return False
     first_score = _semantic_score(first_text, instruction_tokens)
     second_score = _semantic_score(second_text, instruction_tokens)
     if first_score <= 0 and second_score <= 0:
@@ -787,6 +826,11 @@ def _single_contained_control_intent_result(
 ) -> SnapResult | None:
     eligible: list[SnapResult] = []
     for result, semantic_text in results:
+        if _disclosure_action_tokens_mismatch(
+            instruction_tokens,
+            _tokenize_control(semantic_text),
+        ):
+            continue
         if instruction_tokens and not _contained_control_intent_result_has_evidence(
             rect=result.rect,
             semantic_text=semantic_text,

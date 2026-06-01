@@ -123,6 +123,8 @@ BROWSER_NEW_TAB_WORDS = frozenset({"new_tab"})
 BROWSER_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
+DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
+DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
     {
@@ -1113,6 +1115,8 @@ def _text_match_score(
         return 0.0
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -1184,6 +1188,8 @@ def _context_text_match_score(
     ):
         return 0.0
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -1345,6 +1351,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1846,6 +1858,32 @@ def _browser_group_state_action_mismatch(
     return bool(overlap and overlap <= BROWSER_GROUP_GENERIC_WORDS)
 
 
+def _disclosure_state_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    return _disclosure_action_tokens_mismatch(
+        instruction_tokens,
+        _candidate_semantic_tokens(candidate),
+    )
+
+
+def _disclosure_action_tokens_mismatch(
+    instruction_tokens: set[str],
+    candidate_tokens: set[str],
+) -> bool:
+    requested_expand = bool(instruction_tokens & DISCLOSURE_EXPAND_ACTION_WORDS)
+    requested_collapse = bool(instruction_tokens & DISCLOSURE_COLLAPSE_ACTION_WORDS)
+    if requested_expand == requested_collapse:
+        return False
+
+    candidate_expand = bool(candidate_tokens & DISCLOSURE_EXPAND_ACTION_WORDS)
+    candidate_collapse = bool(candidate_tokens & DISCLOSURE_COLLAPSE_ACTION_WORDS)
+    if candidate_expand == candidate_collapse:
+        return False
+    return requested_expand != candidate_expand
+
+
 def _looks_like_browser_named_group_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
@@ -2010,6 +2048,8 @@ def _target_id_ambiguity(
             continue
         if _browser_group_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
         if _gmail_tab_selected_over_generic_mail_decoy(
             instruction_tokens=instruction_tokens,
@@ -2128,6 +2168,8 @@ def _has_semantic_alternative(
             continue
         if _browser_group_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
         score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -2190,6 +2232,8 @@ def _has_visible_semantic_alternative(
             continue
         if _browser_group_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
             continue
@@ -2249,6 +2293,8 @@ def _candidate_snap_score(
         return 0.0
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
         control_intents
         and not _candidate_matches_control_intent(candidate, control_intents)
@@ -2333,12 +2379,16 @@ def _contains_tighter_same_intent_action(
         ):
             if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
                 continue
+            if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+                continue
             candidate_tokens = _candidate_visible_text_tokens(candidate)
             if not candidate_tokens:
                 return True
             if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
                 return True
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
@@ -2370,6 +2420,8 @@ def _single_contained_control_intent_candidate(
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
         if instruction_tokens and not _contained_control_intent_has_evidence(
             candidate=candidate,
@@ -2462,6 +2514,10 @@ def _same_snap_intent(
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, second):
         return False
+    if _disclosure_state_action_mismatch(instruction_tokens, first):
+        return False
+    if _disclosure_state_action_mismatch(instruction_tokens, second):
+        return False
     first_score = _text_evidence_score(
         instruction_tokens,
         _candidate_semantic_tokens(first),
@@ -2523,6 +2579,8 @@ def _candidate_snap_semantic_mismatch(
     ):
         return True
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

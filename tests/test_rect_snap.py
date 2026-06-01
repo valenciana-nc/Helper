@@ -1050,6 +1050,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_disclosure_state_mismatch_does_not_snap_opposite_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        collapse = _make_button("Collapse Advanced settings", 100, 200, 220, 30)
+        window = _make_window("Settings", 0, 0, 800, 600, [collapse])
+        desktop = _FakeDesktop([window])
+        model_rect = (100, 200, 220, 30)
+
+        result = snap_to_control(
+            model_rect,
+            "Expand Advanced settings.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
         from rect_snap import snap_to_control
 
@@ -9545,6 +9564,93 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_disclosure_state_target_id_rejects_opposite_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Expand Advanced settings.", "Collapse Advanced settings"),
+            ("Collapse Advanced settings.", "Expand Advanced settings"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 220, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_disclosure_state_text_match_uses_matching_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Expand Advanced settings.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Collapse Advanced settings",
+                    "button",
+                    (120, 160, 220, 32),
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Expand Advanced settings",
+                    "button",
+                    (120, 220, 220, 32),
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 220, 220, 32))
+
+    def test_disclosure_state_candidate_snap_rejects_opposite_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Expand Advanced settings.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Collapse Advanced settings",
+                    "button",
+                    (120, 160, 220, 32),
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_disclosure_arrow_text_match_overrides_broad_row_geometry(self) -> None:
         from control_inventory import ControlCandidate
