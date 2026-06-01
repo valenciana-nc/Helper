@@ -487,6 +487,39 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(alerts_tokens))
         self.assertTrue(expected.issubset(control_tokens))
 
+    def test_info_aliases_expand_to_about_and_details_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        expected = {"about", "details", "info", "information"}
+
+        self.assertTrue(expected.issubset(tokenize_instruction("Show info")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open information")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open about")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Show details")))
+        self.assertTrue(expected.issubset(tokenize_control("Info")))
+        self.assertTrue(expected.issubset(tokenize_control("Information")))
+        self.assertTrue(expected.issubset(tokenize_control("Details")))
+        for icon in ("\u2139", "\u24d8", "\U0001f6c8"):
+            with self.subTest(icon=icon):
+                self.assertTrue(expected.issubset(tokenize_control(icon)))
+        self.assertNotIn("info", tokenize_control("i"))
+
+    def test_pin_aliases_expand_to_pushpin_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        expected = {"pin", "pinned", "pushpin", "thumbtack"}
+
+        self.assertTrue(expected.issubset(tokenize_instruction("Pin this item")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Pin to top")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Click the pushpin")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Click the thumbtack")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Unpin this item")))
+        self.assertTrue(expected.issubset(tokenize_control("Pushpin")))
+        self.assertTrue(expected.issubset(tokenize_control("Thumbtack")))
+        self.assertTrue(expected.issubset(tokenize_control("\U0001f4cc")))
+        self.assertTrue(expected.issubset(tokenize_control("\U0001f588")))
+        self.assertNotIn("location", tokenize_control("\U0001f4cc"))
+
     def test_profile_aliases_expand_to_person_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -545,6 +578,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u2212", {"minimize", "minus", "zoom_out"}),
             ("\u2303", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
             ("\u2304", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
+            ("\u24d8", {"about", "details", "info", "information"}),
             ("\u25a1", {"maximize", "square"}),
             ("\u25a2", {"maximize", "square"}),
             ("\u25b4", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
@@ -555,6 +589,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u25bf", {"arrow", "caret", "chevron", "collapse", "disclosure"}),
             ("\u2b1c", {"maximize", "square"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
+            ("\u2139", {"about", "details", "info", "information"}),
             ("\u27f2", {"refresh", "reload"}),
             ("\u27f3", {"refresh", "reload"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
@@ -586,12 +621,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f5c4", {"archive", "cabinet", "filing"}),
             ("\U0001f5d1", {"bin", "delete", "remove", "trash", "wastebasket"}),
+            ("\U0001f6c8", {"about", "details", "info", "information"}),
             ("\U0001f5d5", {"minimize", "minus"}),
             ("\U0001f5d6", {"maximize", "square"}),
             ("\U0001f5d7", {"overlap", "restore"}),
             ("\U0001f4cb", {"clipboard", "paste"}),
+            ("\U0001f4cc", {"pin", "pinned", "pushpin", "thumbtack"}),
             ("\U0001f4ce", {"attach", "attachment", "file", "paperclip"}),
             ("\U0001f587", {"attach", "attachment", "file", "paperclip"}),
+            ("\U0001f588", {"pin", "pinned", "pushpin", "thumbtack"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
@@ -5588,6 +5626,165 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_info_target_id_accepts_common_labels_and_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Show info.", "Information", (120, 160, 120, 32)),
+            ("Open information.", "\u2139", (120, 160, 32, 32)),
+            ("Show details.", "\U0001f6c8", (120, 160, 32, 32)),
+            ("Open about.", "\u24d8", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_info_icon_text_match_overrides_help_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Show info.",
+                    "target": {"x": 300, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\u2139", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Help", "button", (300, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_info_aliases_do_not_cross_help_controls(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Show info.", "?"),
+            ("Open help.", "\u2139"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_pin_target_id_accepts_pushpin_labels_and_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Pin this item.", "Pushpin", (120, 160, 100, 32)),
+            ("Pin this chat.", "Thumbtack", (120, 160, 120, 32)),
+            ("Pin to top.", "Pinned", (120, 160, 100, 32)),
+            ("Click the pushpin.", "Pin", (120, 160, 80, 32)),
+            ("Click the thumbtack.", "Pin", (120, 160, 80, 32)),
+            ("Unpin this item.", "Pushpin", (120, 160, 100, 32)),
+            ("Pin this item.", "\U0001f4cc", (120, 160, 32, 32)),
+            ("Pin this item.", "\U0001f588", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_pin_icon_text_match_overrides_archive_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Pin this item.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\U0001f4cc", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Archive", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_pin_alias_rejects_ambiguous_pin_and_pushpin_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Pin this item.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Pushpin", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Pin", "button", (280, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_copy_action_alias_target_id_accepts_duplicate_button(self) -> None:
         from control_inventory import ControlCandidate

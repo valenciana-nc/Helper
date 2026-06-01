@@ -5163,6 +5163,222 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "info_icon_target_id_highlights_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show info.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2139", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "about_icon_target_id_highlights_circled_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "About"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open about.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f6c8", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "info_icon_text_match_overrides_help_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Info"},
+                {"rect": [100, 80, 80, 32], "label": "Help"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show info.",
+                "target": {"x": 100, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2139", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Help", "control_type": "button", "rect": [100, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "info_action_rejects_question_mark_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "?"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show info.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "?", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "help_action_rejects_info_icon_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open help.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2139", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "pin_item_target_id_accepts_pushpin_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Pushpin"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pushpin", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "pin_item_target_id_accepts_pushpin_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Pushpin"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4cc", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "unpin_item_target_id_accepts_pinned_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Pinned"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unpin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pinned", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "pin_icon_text_match_overrides_archive_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Pushpin"},
+                {"rect": [180, 80, 100, 32], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4cc", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Archive", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "pin_action_rejects_ambiguous_pin_and_pushpin_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Pushpin"},
+                {"rect": [180, 80, 80, 32], "label": "Pin"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pushpin", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Pin", "control_type": "button", "rect": [180, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "symbol_plus_target_id_highlights_add_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
