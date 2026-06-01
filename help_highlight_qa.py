@@ -7674,6 +7674,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "profile_name_inference_rejects_all_token_in_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 28, 28], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://gemini.google.com/app?utm_source=app_launcher&utm_medium=owned&utm_campaign=base_all",
+                    "control_type": "button",
+                    "rect": [20, 80, 28, 28],
+                    "automation_id": "view_1028",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "bare_all_rejects_browser_profile_all_hint",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

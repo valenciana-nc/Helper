@@ -5895,6 +5895,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (120, 160, 160, 32),
                 window_title="about:blank - Google Chrome",
             ),
+            ControlCandidate(
+                "c001",
+                "Unnamed bookmark for "
+                "https://gemini.google.com/app?utm_source=app_launcher"
+                "&utm_medium=owned&utm_campaign=base_all",
+                "button",
+                (120, 160, 28, 28),
+                window_title="about:blank - Google Chrome",
+            ),
         )
         for candidate in cases:
             with self.subTest(label=candidate.text, window=candidate.window_title):

@@ -1515,6 +1515,8 @@ def _looks_like_taskbar_search_button(candidate: ControlCandidate) -> bool:
 def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
+    if _looks_like_unnamed_bookmark(candidate):
+        return False
     width, height = candidate.rect[2], candidate.rect[3]
     if width <= 0 or height <= 0:
         return False
