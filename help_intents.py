@@ -80,6 +80,16 @@ _PHRASE_TOKEN_REWRITES = (
         {"b"},
     ),
     (
+        re.compile(r"\bphone\s+link\b"),
+        {"phone", "phone_link"},
+        {"link"},
+    ),
+    (
+        re.compile(r"\btrading\s+view\b"),
+        {"trading", "tradingview"},
+        {"view"},
+    ),
+    (
         re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
         {"tab_search"},
         {"find", "search", "tab", "tabs"},

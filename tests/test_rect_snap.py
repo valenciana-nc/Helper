@@ -574,6 +574,25 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("bold", control_tokens)
         self.assertNotIn("bold", instruction_tokens)
 
+    def test_compound_taskbar_app_names_do_not_leak_generic_words(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        trading_tokens = tokenize_control("TradingView pinned")
+        trading_instruction = tokenize_instruction("Open TradingView")
+        phone_tokens = tokenize_control("Phone Link pinned")
+        phone_instruction = tokenize_instruction("Open phone link")
+
+        self.assertTrue({"trading", "tradingview"}.issubset(trading_tokens))
+        self.assertTrue({"trading", "tradingview"}.issubset(trading_instruction))
+        self.assertNotIn("view", trading_tokens)
+        self.assertNotIn("view", trading_instruction)
+
+        self.assertTrue({"phone", "phone_link"}.issubset(phone_tokens))
+        self.assertTrue({"phone", "phone_link"}.issubset(phone_instruction))
+        self.assertNotIn("link", phone_tokens)
+        self.assertNotIn("link", phone_instruction)
+        self.assertNotIn("hyperlink", instruction_control_intents("Open phone link"))
+
     def test_tab_search_and_windows_search_phrases_are_specific(self) -> None:
         from help_intents import (
             instruction_control_intents,
@@ -10975,6 +10994,108 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
+
+    def test_generic_view_rejects_tradingview_taskbar_app(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = ("Open view.", "Click view.")
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "TradingView pinned",
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_generic_view_recovers_to_task_view_over_tradingview(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open view.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "TradingView pinned",
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title="Taskbar",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Task View",
+                    "button",
+                    (340, 160, 120, 32),
+                    window_title="Taskbar",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+
+    def test_compound_taskbar_app_names_still_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open TradingView.", "TradingView pinned"),
+            ("Open trading view.", "TradingView pinned"),
+            ("Open phone link.", "Phone Link pinned"),
+            ("Open phone.", "Phone Link pinned"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="Taskbar",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate

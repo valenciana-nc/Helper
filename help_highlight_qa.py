@@ -9044,6 +9044,122 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_view_rejects_tradingview_taskbar_app",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "TradingView"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "TradingView pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_view_recovers_to_task_view_over_tradingview",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "TradingView"},
+                {"rect": [240, 80, 120, 32], "label": "Task View"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open view.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "TradingView pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+                {
+                    "id": "c002",
+                    "text": "Task View",
+                    "control_type": "button",
+                    "rect": [240, 80, 120, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [240, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_tradingview_still_highlights_taskbar_app",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "TradingView"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open TradingView.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "TradingView pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "phone_link_phrase_accepts_taskbar_app",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Phone Link"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open phone link.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Phone Link pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
