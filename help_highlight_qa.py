@@ -2815,6 +2815,195 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_desktop_rejects_docker_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Docker Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open desktop.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Docker Desktop",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bare_desktop_model_rect_rejects_docker_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Docker Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open desktop.",
+                "target": {"x": 20, "y": 80, "width": 76, "height": 54},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Docker Desktop",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "docker_desktop_wording_accepts_docker_desktop_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Docker Desktop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Docker Desktop.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Docker Desktop",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 76, 54],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bare_about_rejects_spotlight_picture_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Picture"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open about.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Learn about this picture",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "picture_wording_accepts_spotlight_picture_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Picture"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open this picture.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Learn about this picture",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 76, 54],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bare_new_rejects_new_pandora_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Pandora"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open new.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New Pandora (1)",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "pandora_wording_accepts_new_pandora_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 76, 54], "label": "Pandora"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Pandora.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New Pandora (1)",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 76, 54],
+                    "window_title": "Program Manager",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 76, 54],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "maximize_window_target_id_accepts_square_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

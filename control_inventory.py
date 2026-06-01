@@ -82,6 +82,12 @@ TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
     {"icons", "notification_area", "system_tray", "tray"}
 )
 TASKBAR_SHOW_DESKTOP_REQUEST_WORDS = frozenset({"show_desktop"})
+PROGRAM_MANAGER_WINDOW_WORDS = frozenset({"manager", "program"})
+PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS = frozenset(
+    {"background", "image", "learn", "photo", "picture", "spotlight", "wallpaper"}
+)
+PROGRAM_MANAGER_ABOUT_WORDS = frozenset({"about", "details", "info", "information"})
+PROGRAM_MANAGER_NEW_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1147,6 +1153,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -1236,6 +1244,8 @@ def _context_text_match_score(
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1387,6 +1397,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -2053,6 +2069,45 @@ def _looks_like_taskbar_show_desktop_button(candidate: ControlCandidate) -> bool
     return "show_desktop" in text_tokens or {"show", "desktop"} <= text_tokens
 
 
+def _program_manager_desktop_item_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_program_manager_desktop_item(candidate):
+        return False
+    text_tokens = _candidate_visible_text_tokens(candidate)
+    raw_text_tokens = _tokens_from_text(candidate.text)
+    if "desktop" in text_tokens and "desktop" in instruction_tokens:
+        distinctive_tokens = text_tokens - {"desktop"}
+        if not instruction_tokens & distinctive_tokens:
+            return True
+    if _looks_like_program_manager_spotlight_picture_item(candidate):
+        if instruction_tokens & PROGRAM_MANAGER_ABOUT_WORDS:
+            return not bool(instruction_tokens & PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS)
+    if "new" in raw_text_tokens and instruction_tokens & PROGRAM_MANAGER_NEW_ACTION_WORDS:
+        distinctive_tokens = (
+            text_tokens
+            - PROGRAM_MANAGER_NEW_ACTION_WORDS
+            - {token for token in text_tokens if token.isdigit()}
+        )
+        if not instruction_tokens & distinctive_tokens:
+            return True
+    return False
+
+
+def _looks_like_program_manager_desktop_item(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"listitem", "treeitem"}:
+        return False
+    return PROGRAM_MANAGER_WINDOW_WORDS <= _tokens_from_text(candidate.window_title)
+
+
+def _looks_like_program_manager_spotlight_picture_item(
+    candidate: ControlCandidate,
+) -> bool:
+    text_tokens = _tokens_from_text(candidate.text)
+    return {"learn", "about", "picture"} <= text_tokens
+
+
 def _looks_like_taskbar_start_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
@@ -2609,6 +2664,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2940,6 +2997,8 @@ def _candidate_snap_semantic_mismatch(
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
         return True
     if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _program_manager_desktop_item_action_mismatch(instruction_tokens, candidate):
         return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True

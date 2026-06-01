@@ -21,6 +21,7 @@ from help_intents import (
     menu_segment_intent as _menu_segment_intent,
     tokenize_control as _tokenize_control,
     tokenize_instruction as _tokenize_instruction,
+    tokens_from_text as _tokens_from_text,
 )
 
 log = logging.getLogger("helper.rect_snap")
@@ -45,6 +46,12 @@ TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
     {"icons", "notification_area", "system_tray", "tray"}
 )
 TASKBAR_SHOW_DESKTOP_REQUEST_WORDS = frozenset({"show_desktop"})
+PROGRAM_MANAGER_WINDOW_WORDS = frozenset({"manager", "program"})
+PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS = frozenset(
+    {"background", "image", "learn", "photo", "picture", "spotlight", "wallpaper"}
+)
+PROGRAM_MANAGER_ABOUT_WORDS = frozenset({"about", "details", "info", "information"})
+PROGRAM_MANAGER_NEW_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
     re.IGNORECASE,
@@ -152,6 +159,7 @@ def snap_to_control(
         window_rank,
         foreground_known,
         top_handle,
+        window_title,
     ) in _iter_candidates(
         desktop,
         search_rect,
@@ -186,6 +194,12 @@ def snap_to_control(
             instruction_tokens,
             visible_text,
         )
+        program_manager_action_mismatch = _program_manager_desktop_item_action_mismatch(
+            instruction_tokens,
+            visible_text,
+            ctype,
+            window_title,
+        )
         browser_tab_auth_action_mismatch = _browser_tab_auth_action_mismatch(
             instruction_tokens,
             ctype,
@@ -205,6 +219,7 @@ def snap_to_control(
             or task_view_action_mismatch
             or hidden_icons_action_mismatch
             or show_desktop_action_mismatch
+            or program_manager_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
             or site_information_action_mismatch
@@ -444,7 +459,15 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
                 return
             next_queue: list[tuple[object, tuple[int, int, int, int]]] = []
             for control, rect in queue:
-                yield control, rect, is_own_process, window_rank, foreground_known, top_handle
+                yield (
+                    control,
+                    rect,
+                    is_own_process,
+                    window_rank,
+                    foreground_known,
+                    top_handle,
+                    _control_visible_text(top),
+                )
                 if time.monotonic() >= deadline:
                     return
                 try:
@@ -770,6 +793,36 @@ def _show_desktop_action_mismatch(
     if "show_desktop" not in control_tokens and not {"show", "desktop"} <= control_tokens:
         return False
     return not bool(instruction_tokens & TASKBAR_SHOW_DESKTOP_REQUEST_WORDS)
+
+
+def _program_manager_desktop_item_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"listitem", "treeitem"}:
+        return False
+    if PROGRAM_MANAGER_WINDOW_WORDS - _tokenize_control(window_title or ""):
+        return False
+    control_tokens = _tokenize_control(visible_text or "")
+    raw_control_tokens = _tokens_from_text(visible_text or "")
+    if "desktop" in control_tokens and "desktop" in instruction_tokens:
+        distinctive_tokens = control_tokens - {"desktop"}
+        if not instruction_tokens & distinctive_tokens:
+            return True
+    if {"learn", "about", "picture"} <= raw_control_tokens:
+        if instruction_tokens & PROGRAM_MANAGER_ABOUT_WORDS:
+            return not bool(instruction_tokens & PROGRAM_MANAGER_SPOTLIGHT_REQUEST_WORDS)
+    if "new" in raw_control_tokens and instruction_tokens & PROGRAM_MANAGER_NEW_ACTION_WORDS:
+        distinctive_tokens = (
+            control_tokens
+            - PROGRAM_MANAGER_NEW_ACTION_WORDS
+            - {token for token in control_tokens if token.isdigit()}
+        )
+        if not instruction_tokens & distinctive_tokens:
+            return True
+    return False
 
 
 def _instruction_mentions_task_view(instruction: str) -> bool:

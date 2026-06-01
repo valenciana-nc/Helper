@@ -1191,6 +1191,59 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, model_rect)
                 self.assertFalse(result.rejected_reason)
 
+    def test_program_manager_generic_words_do_not_snap_desktop_icons(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Open desktop.", "Docker Desktop"),
+            ("Open about.", "Learn about this picture"),
+            ("Create new.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                item = _make_button(label, 100, 560, 76, 54, control_type="ListItem")
+                window = _make_window("Program Manager", 0, 0, 800, 620, [item])
+                desktop = _FakeDesktop([window])
+                model_rect = (100, 560, 76, 54)
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_program_manager_distinctive_words_still_snap_desktop_icons(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Open Docker Desktop.", "Docker Desktop"),
+            ("Open this picture.", "Learn about this picture"),
+            ("Open Pandora.", "New Pandora (1)"),
+            ("Open New Pandora.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                item = _make_button(label, 100, 560, 76, 54, control_type="ListItem")
+                window = _make_window("Program Manager", 0, 0, 800, 620, [item])
+                desktop = _FakeDesktop([window])
+                model_rect = (100, 560, 76, 54)
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_tab_memory_usage_suffix_does_not_snap_as_tab_title(self) -> None:
         from rect_snap import snap_to_control
 
@@ -10132,6 +10185,148 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_program_manager_generic_words_reject_desktop_icon_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open desktop.", "Docker Desktop"),
+            ("Click desktop.", "Docker Desktop"),
+            ("Open about.", "Learn about this picture"),
+            ("Show about.", "Learn about this picture"),
+            ("Open new.", "New Pandora (1)"),
+            ("Create new.", "New Pandora (1)"),
+            ("Add new.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "listitem",
+                            (120, 160, 76, 54),
+                            window_title="Program Manager",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_program_manager_distinctive_words_accept_desktop_icon_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open Docker Desktop.", "Docker Desktop"),
+            ("Open this picture.", "Learn about this picture"),
+            ("Open learn about this picture.", "Learn about this picture"),
+            ("Open Pandora.", "New Pandora (1)"),
+            ("Open New Pandora.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "listitem",
+                            (120, 160, 76, 54),
+                            window_title="Program Manager",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_program_manager_generic_words_ignore_desktop_icon_text_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Open desktop.", "Docker Desktop"),
+            ("Open about.", "Learn about this picture"),
+            ("Open new.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "listitem",
+                            (120, 160, 76, 54),
+                            window_title="Program Manager",
+                        )
+                    ],
+                )
+
+                self.assertIsNone(result)
+
+    def test_program_manager_generic_words_reject_desktop_icon_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open desktop.", "Docker Desktop"),
+            ("Open about.", "Learn about this picture"),
+            ("Open new.", "New Pandora (1)"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": 120,
+                                "y": 160,
+                                "width": 76,
+                                "height": 54,
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "listitem",
+                            (120, 160, 76, 54),
+                            window_title="Program Manager",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_window_control_text_match_overrides_nearby_toolbar_geometry(self) -> None:
         from control_inventory import ControlCandidate
