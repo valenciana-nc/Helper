@@ -58,6 +58,10 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
+    (
+        re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
+        {"find", "search", "tab_search", "tabs"},
+    ),
     (re.compile(r"\bshow\s+desktop\b"), {"show_desktop"}),
     (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),
 )
@@ -70,6 +74,16 @@ _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
     ),
 )
 _PHRASE_TOKEN_REWRITES = (
+    (
+        re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
+        {"tab_search"},
+        {"find", "search", "tab", "tabs"},
+    ),
+    (
+        re.compile(r"\bwindows?\s+search\b|\bsearch\s+windows?\b"),
+        {"windows_search"},
+        {"find", "search", "window", "windows"},
+    ),
     (
         re.compile(r"\b(?:hide|minimi[sz]e)\s+all\s+windows\b"),
         {"show_desktop"},

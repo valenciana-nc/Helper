@@ -1802,6 +1802,149 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "tab_search_target_id_accepts_search_tabs_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Search tabs"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open tab search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "tab_search_rejects_windows_search_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Windows search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Search tabs.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search - World Reef Awareness Day",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "windows_search_target_id_accepts_taskbar_search",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Windows search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Windows search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search - World Reef Awareness Day",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "windows_search_rejects_chrome_tab_search_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Search tabs"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Search Windows.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_search_rejects_ambiguous_tab_and_windows_search",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Search tabs"},
+                {"rect": [180, 80, 180, 32], "label": "Windows search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Search - World Reef Awareness Day",
+                    "control_type": "button",
+                    "rect": [180, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "clear_text_match_overrides_field_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

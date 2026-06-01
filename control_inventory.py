@@ -69,6 +69,7 @@ TASKBAR_PIN_ACTION_WORDS = frozenset(
     {"pin", "pinned", "pushpin", "thumbtack", "unpin"}
 )
 TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
+TASKBAR_WINDOWS_SEARCH_TOKENS = frozenset({"windows_search"})
 BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
@@ -1122,7 +1123,19 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
 def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]:
     if _looks_like_browser_profile_button(candidate):
         return set(BROWSER_PROFILE_TOKENS)
+    if _looks_like_taskbar_search_button(candidate):
+        return set(TASKBAR_WINDOWS_SEARCH_TOKENS)
     return set()
+
+
+def _looks_like_taskbar_search_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    return "search" in text_tokens
 
 
 def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:

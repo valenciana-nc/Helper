@@ -537,6 +537,25 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("x", weather_tokens)
         self.assertIn("clear", tokenize_control("Clear"))
 
+    def test_tab_search_and_windows_search_phrases_are_specific(self) -> None:
+        from help_intents import (
+            instruction_control_intents,
+            tokenize_control,
+            tokenize_instruction,
+        )
+
+        self.assertEqual(tokenize_instruction("Search tabs"), {"tab_search"})
+        self.assertEqual(tokenize_instruction("Open tab search"), {"tab_search"})
+        self.assertEqual(tokenize_instruction("Open Windows search"), {"windows_search"})
+        self.assertEqual(tokenize_instruction("Search Windows"), {"windows_search"})
+        self.assertTrue(
+            {"find", "search", "tab_search", "tabs"}.issubset(
+                tokenize_control("Search tabs")
+            )
+        )
+        self.assertNotIn("tabitem", instruction_control_intents("Open tab search"))
+        self.assertNotIn("windows_search", tokenize_control("Search tabs"))
+
     def test_print_action_aliases_expand_to_printer_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -7030,6 +7049,125 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_tab_search_and_windows_search_target_ids_do_not_cross(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Search tabs.",
+                "Search tabs",
+                "button",
+                "about:blank - Google Chrome",
+                "",
+            ),
+            (
+                "Open tab search.",
+                "Search tabs",
+                "button",
+                "about:blank - Google Chrome",
+                "",
+            ),
+            (
+                "Search tabs.",
+                "Search - World Reef Awareness Day",
+                "button",
+                "Taskbar",
+                "target_id semantic mismatch",
+            ),
+            (
+                "Open tab search.",
+                "Search - World Reef Awareness Day",
+                "button",
+                "Taskbar",
+                "target_id semantic mismatch",
+            ),
+            (
+                "Open Windows search.",
+                "Search - World Reef Awareness Day",
+                "button",
+                "Taskbar",
+                "",
+            ),
+            (
+                "Search Windows.",
+                "Search - World Reef Awareness Day",
+                "button",
+                "Taskbar",
+                "",
+            ),
+            (
+                "Open Windows search.",
+                "Search tabs",
+                "button",
+                "about:blank - Google Chrome",
+                "target_id semantic mismatch",
+            ),
+        )
+        for instruction, label, control_type, window_title, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            control_type,
+                            (120, 160, 180, 32),
+                            window_title=window_title,
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_search_rejects_ambiguous_tab_and_windows_search_targets(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Search tabs",
+                "button",
+                (120, 160, 100, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+            ControlCandidate(
+                "c002",
+                "Search - World Reef Awareness Day",
+                "button",
+                (120, 740, 180, 32),
+                window_title="Taskbar",
+            ),
+        ]
+        for target_id in ("c001", "c002"):
+            with self.subTest(target_id=target_id):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Open search.",
+                            "target_id": target_id,
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, target_id)
+                self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_clear_and_delete_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
