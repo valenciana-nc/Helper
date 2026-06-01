@@ -287,6 +287,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "background_candidate_snap_exact_duplicate_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [120, 100, 80, 32], "label": "Save"},
+                {"rect": [120, 145, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 240, "y": 453, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [120, 100, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "c002",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [120, 145, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c002",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "semantic_mismatch_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

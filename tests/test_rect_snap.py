@@ -1024,6 +1024,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.target_id, "c002")
 
+    def test_snap_candidate_target_rejects_exact_background_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this button.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (120, 100, 80, 32), window_rank=0),
+                ControlCandidate("c002", "Save", "button", (120, 145, 80, 32), window_rank=2),
+            ],
+            model_rect=(120, 145, 80, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c002")
+        self.assertEqual(result.rejected_reason, "ambiguous candidate snap")
+
     def test_snap_candidate_target_rejects_visible_text_conflict_despite_matching_automation_id(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
