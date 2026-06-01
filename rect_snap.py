@@ -146,6 +146,10 @@ TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
+    (frozenset({"apply"}), frozenset({"applied"})),
+    (frozenset({"confirm"}), frozenset({"confirmed"})),
+    (frozenset({"complete"}), frozenset({"completed"})),
+    (frozenset({"finish"}), frozenset({"finished"})),
     (frozenset({"mute"}), frozenset({"muted"})),
     (frozenset({"unmute"}), frozenset({"unmuted"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
@@ -172,6 +176,10 @@ STATE_LABEL_ACTION_GROUPS = (
         frozenset({"check", "disable", "enable", "tick", "uncheck", "untick"}),
         frozenset({"checked", "disabled", "enabled", "unchecked"}),
     ),
+    (
+        frozenset({"apply", "complete", "confirm", "done", "finish", "ok", "okay"}),
+        frozenset({"applied", "completed", "confirmed", "finished", "status"}),
+    ),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -187,6 +195,8 @@ STATE_LABEL_ACTION_GROUPS = (
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
+SEARCH_ACTION_WORDS = frozenset({"find", "search"})
+SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -1792,6 +1802,10 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _search_results_label_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _new_tab_window_action_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -2105,6 +2119,19 @@ def _state_label_action_mismatch(
         if instruction_tokens & action_words and control_tokens & state_words:
             return True
     return False
+
+
+def _search_results_label_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & SEARCH_ACTION_WORDS):
+        return False
+    if instruction_tokens & SEARCH_RESULTS_LABEL_WORDS:
+        return False
+    control_tokens = _literal_words_from_text(candidate_text)
+    return bool(control_tokens & SEARCH_ACTION_WORDS and control_tokens & SEARCH_RESULTS_LABEL_WORDS)
 
 
 def _state_label_is_target_identity(

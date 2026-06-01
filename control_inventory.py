@@ -173,6 +173,10 @@ TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
+    (frozenset({"apply"}), frozenset({"applied"})),
+    (frozenset({"confirm"}), frozenset({"confirmed"})),
+    (frozenset({"complete"}), frozenset({"completed"})),
+    (frozenset({"finish"}), frozenset({"finished"})),
     (frozenset({"mute"}), frozenset({"muted"})),
     (frozenset({"unmute"}), frozenset({"unmuted"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
@@ -199,6 +203,10 @@ STATE_LABEL_ACTION_GROUPS = (
         frozenset({"check", "disable", "enable", "tick", "uncheck", "untick"}),
         frozenset({"checked", "disabled", "enabled", "unchecked"}),
     ),
+    (
+        frozenset({"apply", "complete", "confirm", "done", "finish", "ok", "okay"}),
+        frozenset({"applied", "completed", "confirmed", "finished", "status"}),
+    ),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -214,6 +222,8 @@ STATE_LABEL_ACTION_GROUPS = (
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
+SEARCH_ACTION_WORDS = frozenset({"find", "search"})
+SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -3044,6 +3054,7 @@ def _explicit_action_context_mismatch(
         or _generic_visibility_polarity_action_mismatch(instruction, candidate.descriptor)
         or _reversible_action_polarity_mismatch(instruction, candidate.descriptor)
         or _state_label_action_mismatch(instruction, candidate.descriptor)
+        or _search_results_label_action_mismatch(instruction, candidate.descriptor)
         or _new_tab_window_action_mismatch(instruction, candidate.descriptor)
         or _browser_tab_bookmark_action_mismatch(instruction, instruction_tokens, candidate)
         or _browser_tab_contextual_item_mismatch(instruction, candidate)
@@ -3536,6 +3547,19 @@ def _state_label_action_mismatch(
         if instruction_tokens & action_words and control_tokens & state_words:
             return True
     return False
+
+
+def _search_results_label_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & SEARCH_ACTION_WORDS):
+        return False
+    if instruction_tokens & SEARCH_RESULTS_LABEL_WORDS:
+        return False
+    control_tokens = _literal_words_from_text(candidate_text)
+    return bool(control_tokens & SEARCH_ACTION_WORDS and control_tokens & SEARCH_RESULTS_LABEL_WORDS)
 
 
 def _state_label_is_target_identity(
@@ -4310,6 +4334,11 @@ def _contains_tighter_same_intent_action(
         and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
     ):
         return False
+    if selected.control_type in ROW_CONTEXT_CONTROL_TYPES and _explicit_row_target_request(
+        instruction,
+        control_intents,
+    ):
+        return False
     selected_area = selected.rect[2] * selected.rect[3]
     for candidate in candidates:
         if candidate.id == selected.id:
@@ -4373,6 +4402,16 @@ def _contains_tighter_same_intent_action(
         if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
     return False
+
+
+def _explicit_row_target_request(
+    instruction: str,
+    control_intents: set[str],
+) -> bool:
+    if "listitem" not in control_intents:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    return bool(raw_tokens & {"row", "rows", "listitem"} or {"list", "item"} <= raw_tokens)
 
 
 def _single_contained_control_intent_candidate(

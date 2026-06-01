@@ -2196,6 +2196,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "apply_changes_target_id_rejects_applied_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Changes applied"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Apply changes.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Changes applied", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "apply_filter_model_rect_rejects_apply_coupon_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2813,6 +2834,80 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_search_rejects_search_results_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Search results"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open search.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Search results", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "search_field_button_prefers_tight_button_over_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Search"},
+                {"rect": [230, 82, 28, 28], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Search field button.",
+                "target": {"x": 230, "y": 82, "width": 28, "height": 28},
+            },
+            "candidates": [
+                {"id": "field", "text": "Search", "control_type": "edit", "rect": [20, 80, 240, 32]},
+                {
+                    "id": "btn",
+                    "text": "",
+                    "control_type": "button",
+                    "rect": [230, 82, 28, 28],
+                    "automation_id": "SearchButton",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "btn",
+                "rect": [230, 82, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_table_row_not_demoted_to_same_label_child_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 320, 56], "label": "Settings"},
+                {"rect": [36, 92, 88, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings table row.",
+                "target_id": "row",
+                "target": {"x": 20, "y": 80, "width": 320, "height": 56},
+            },
+            "candidates": [
+                {"id": "row", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 320, 56]},
+                {"id": "btn", "text": "Settings", "control_type": "button", "rect": [36, 92, 88, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "row",
+                "rect": [20, 80, 320, 56],
+                "overlay_emitted": True,
             },
         },
         {

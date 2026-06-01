@@ -971,6 +971,28 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or search_bar_requested
         or _text_entry_action_requested(raw_tokens)
     )
+    explicit_button_requested = "button" in raw_tokens
+    row_requested = bool(raw_tokens & {"row", "rows"}) and not (
+        checkbox_requested
+        or radio_requested
+        or dropdown_requested
+        or picker_launcher_requested
+        or selector_requested
+        or menu_launcher_requested
+        or contextual_menu_launcher_requested
+        or disclosure_requested
+        or password_visibility_requested
+        or format_action_requested
+        or clear_action_requested
+        or history_action_requested
+        or zoom_action_requested
+        or external_link_action_requested
+        or confirm_action_requested
+        or edit_action_requested
+        or tab_button_action_requested
+        or split_button_requested
+        or bool(raw_tokens & {"button", "header", "heading", "headeritem", "icon"})
+    )
     if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
     if radio_requested:
@@ -980,6 +1002,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     if (
         not checkbox_requested
         and input_requested
+        and not explicit_button_requested
         and not password_visibility_requested
         and not format_action_requested
         and not clear_action_requested
@@ -1030,7 +1053,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not external_link_action_requested
         and not confirm_action_requested
         and not edit_action_requested
-        and "button" in raw_tokens
+        and explicit_button_requested
     ):
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
@@ -1044,6 +1067,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
     if "tabitem" in raw_tokens and not tab_button_action_requested:
         intents.add("tabitem")
     if "listitem" in raw_tokens or ("list" in raw_tokens and "item" in raw_tokens):
+        intents.update(_LIST_ITEM_INTENT_TYPES)
+    if row_requested:
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if "treeitem" in raw_tokens or ("tree" in raw_tokens and "item" in raw_tokens):
         intents.update(_TREE_ITEM_INTENT_TYPES)

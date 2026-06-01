@@ -449,13 +449,24 @@ class HelpIntentLanguageTests(unittest.TestCase):
         edit_row_tokens = tokenize_instruction("Edit this row")
         edit_row_intents = instruction_control_intents("Edit this row")
         literal_edit_intents = instruction_control_intents("Click this edit control")
+        search_field_intents = instruction_control_intents("Click the Search field")
+        search_field_button_intents = instruction_control_intents("Click the Search field button")
 
         self.assertTrue({"edit", "pencil"}.issubset(edit_row_tokens))
         self.assertTrue({"button", "splitbutton", "hyperlink", "menuitem"}.issubset(edit_row_intents))
         self.assertNotIn("edit", edit_row_intents)
         self.assertEqual(literal_edit_intents, {"edit"})
+        self.assertEqual(search_field_intents, {"combobox", "edit", "spinner"})
+        self.assertEqual(search_field_button_intents, {"button", "splitbutton"})
         self.assertIn("edit", tokenize_control("Pencil"))
         self.assertIn("pencil", tokenize_control("Edit"))
+
+    def test_row_wording_sets_listitem_intent_without_stealing_action_rows(self) -> None:
+        from help_intents import instruction_control_intents
+
+        self.assertEqual(instruction_control_intents("Click the Settings table row."), {"listitem"})
+        self.assertEqual(instruction_control_intents("Click this table row."), {"listitem"})
+        self.assertNotIn("listitem", instruction_control_intents("Edit this row."))
 
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -2781,6 +2792,39 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.source, "uia")
                 self.assertEqual(result.rect, rect)
                 self.assertFalse(result.rejected_reason)
+
+    def test_snap_button_wording_prefers_tight_search_button_over_field(self) -> None:
+        from rect_snap import snap_to_control
+
+        edit = _make_button(
+            "Search",
+            10,
+            10,
+            240,
+            32,
+            control_type="Edit",
+        )
+        button = _make_button(
+            "",
+            220,
+            12,
+            28,
+            28,
+            automation_id="SearchButton",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [edit, button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (220, 12, 28, 28),
+            "Click the Search field button.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (220, 12, 28, 28))
+        self.assertFalse(result.rejected_reason)
 
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
@@ -6368,6 +6412,37 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_snap_candidate_target_prefers_tight_search_button_over_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("field", "Search", "edit", (10, 10, 240, 32)),
+            ControlCandidate("btn", "", "button", (220, 12, 28, 28), automation_id="SearchButton"),
+        ]
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click the Search field button.",
+            candidates=candidates,
+            model_rect=(220, 12, 28, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Search field button.",
+            candidates=candidates,
+            model_rect=(220, 12, 28, 28),
+        )
+
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "btn")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNotNone(snap_target)
+        assert snap_target is not None
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "btn")
+        self.assertFalse(snap_target.rejected_reason)
 
 
 class HelpTargetHarnessTests(unittest.TestCase):
@@ -10806,6 +10881,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(contextual_snap.target_id, "c002")
         self.assertFalse(contextual_snap.rejected_reason)
 
+    def test_explicit_row_request_is_not_demoted_to_same_label_child_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row", "Settings", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("btn", "Settings", "button", (20, 20, 80, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="row",
+            instruction="Click the Settings table row.",
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click the Settings table row.",
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Settings table row.",
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings table row.",
+                    "target_id": "row",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for target in (target_id, text_target, snap_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "row")
+            self.assertEqual(target.rect, (10, 10, 600, 80))
+            self.assertFalse(target.rejected_reason)
+
     def test_turn_on_off_checkbox_polarity_rejects_opposite_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
@@ -10849,6 +10970,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
         cases = (
+            ("Apply changes.", "Applied changes", "button"),
+            ("Apply changes.", "Changes applied", "button"),
+            ("Confirm selection.", "Confirmed selection", "button"),
+            ("Complete task.", "Completed task", "button"),
+            ("Complete task.", "Task completed", "button"),
+            ("Finish setup.", "Finished setup", "button"),
+            ("Click OK.", "OK status", "button"),
             ("Enable notifications.", "Enabled notifications", "checkbox"),
             ("Enable notifications.", "Disabled notifications", "checkbox"),
             ("Disable notifications.", "Disabled notifications", "checkbox"),
@@ -10912,6 +11040,37 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     instruction=instruction,
                     candidates=[candidate],
                     model_rect=(120, 160, 240, 32),
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_generic_search_rejects_search_results_labels(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ControlCandidate("c001", "Search results", "button", (120, 160, 180, 32)),
+            ControlCandidate("c001", "Search results", "headeritem", (120, 160, 180, 32)),
+        )
+        for candidate in cases:
+            with self.subTest(control_type=candidate.control_type):
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction="Open search.",
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction="Open search.",
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction="Open search.",
+                    candidates=[candidate],
+                    model_rect=(120, 160, 180, 32),
                 )
 
                 self.assertIsNone(text_target)
