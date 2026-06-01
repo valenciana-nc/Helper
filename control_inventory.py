@@ -504,7 +504,23 @@ ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
     }
 )
 CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
-    {"column", "dialog", "footer", "header", "menu", "toolbar"}
+    {
+        "card",
+        "column",
+        "dialog",
+        "footer",
+        "form",
+        "grid",
+        "group",
+        "header",
+        "menu",
+        "modal",
+        "panel",
+        "pane",
+        "section",
+        "table",
+        "toolbar",
+    }
 )
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
@@ -1869,7 +1885,15 @@ def _text_match_score(
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
-        if _same_label_duplicate_has_stronger_geometry(candidate, candidates, model_rect):
+        if _same_label_duplicate_has_stronger_geometry(
+            candidate,
+            candidates,
+            model_rect,
+        ) and not _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        ):
             score = min(score, TEXT_MATCH_FLOOR - 0.01)
     return min(max(score, 0.0), 1.0)
 
@@ -2005,7 +2029,15 @@ def _context_text_match_score(
         score = max(score, TEXT_MATCH_FLOOR + 0.04)
     if model_rect is not None:
         score += 0.05 * _proximity_score(candidate.rect, model_rect)
-        if _same_label_duplicate_has_stronger_geometry(candidate, candidates, model_rect):
+        if _same_label_duplicate_has_stronger_geometry(
+            candidate,
+            candidates,
+            model_rect,
+        ) and not _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        ):
             score = min(score, TEXT_MATCH_FLOOR - 0.01)
     return min(max(score, 0.0), 1.0)
 
@@ -3867,6 +3899,7 @@ def _instruction_action_object_tokens(
     tokens = set(_tokenize_instruction(instruction))
     raw_tokens = _tokens_from_text(instruction)
     tokens.update(raw_tokens & ACTION_CONTEXT_OBJECT_WORDS)
+    tokens.update(raw_tokens & ACTION_OBJECT_ALIAS_CONTEXT_WORDS)
     objects = _action_object_tokens(tokens, action_tokens, ACTION_OBJECT_STOPWORDS)
     objects.update(_file_identity_object_tokens(raw_tokens))
     if action_tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS):
@@ -4262,6 +4295,8 @@ def _contextual_duplicate_evidence_tokens(
     tokens = set(_candidate_semantic_tokens(candidate))
     tokens.update(_tokenize_control(candidate.window_title))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
+    if any(candidate.window_rank > other.window_rank for other in candidates):
+        tokens.add("modal")
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue

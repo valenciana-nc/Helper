@@ -4437,6 +4437,39 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "share_selected_text_recovers_from_browser_share_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 80, 32], "label": "Share"},
+                {"rect": [760, 8, 42, 34], "label": "Share page"},
+                {"rect": [220, 210, 460, 260], "label": "Body text"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Share selected text.",
+                "target_id": "browser_share",
+                "target": {"x": 760, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {"id": "editor_share", "text": "Share", "control_type": "button", "rect": [120, 160, 80, 32]},
+                {
+                    "id": "browser_share",
+                    "text": "Share this page",
+                    "control_type": "button",
+                    "rect": [760, 8, 42, 34],
+                    "automation_id": "share",
+                    "window_title": "Chrome",
+                },
+                {"id": "body", "text": "Body text", "control_type": "edit", "rect": [220, 210, 460, 260]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "editor_share",
+                "rect": [120, 160, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "cut_action_target_id_accepts_scissors_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -13855,6 +13888,72 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "dialog",
                 "rect": [400, 240, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "modal_context_recovers_from_page_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 70, 30], "label": "Save"},
+                {"rect": [500, 300, 70, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the modal.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 70, 30],
+                    "window_title": "Main page",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "modal_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [500, 300, 70, 30],
+                    "window_title": "Save changes",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "modal_save",
+                "rect": [500, 300, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "card_context_recovers_from_modal_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 100], "label": "Profile card"},
+                {"rect": [230, 140, 60, 30], "label": "Save"},
+                {"rect": [360, 200, 280, 160], "label": "Save changes modal"},
+                {"rect": [480, 310, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the card.",
+                "target_id": "modal_save",
+                "target": {"x": 480, "y": 310, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "card", "text": "Profile card", "control_type": "listitem", "rect": [20, 80, 300, 100]},
+                {"id": "card_save", "text": "Save", "control_type": "button", "rect": [230, 140, 60, 30]},
+                {"id": "modal", "text": "Save changes modal", "control_type": "window", "rect": [360, 200, 280, 160]},
+                {"id": "modal_save", "text": "Save", "control_type": "button", "rect": [480, 310, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card_save",
+                "rect": [230, 140, 60, 30],
                 "overlay_emitted": True,
             },
         },

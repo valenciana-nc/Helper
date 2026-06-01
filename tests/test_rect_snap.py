@@ -15330,6 +15330,80 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 100, 32))
 
+    def test_selected_text_actions_reject_page_action_duplicates(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Share selected text.",
+                ControlCandidate("editor_share", "Share", "button", (120, 160, 80, 32)),
+                ControlCandidate(
+                    "browser_share",
+                    "Share this page",
+                    "button",
+                    (760, 8, 42, 34),
+                    automation_id="share",
+                    window_title="Chrome",
+                ),
+            ),
+            (
+                "Print selected text.",
+                ControlCandidate("editor_print", "Print", "button", (120, 160, 80, 32)),
+                ControlCandidate("page_print", "Print page", "button", (760, 8, 80, 34)),
+            ),
+            (
+                "Save selected text.",
+                ControlCandidate("editor_save", "Save", "button", (120, 160, 80, 32)),
+                ControlCandidate("page_save", "Save page", "button", (760, 8, 80, 34)),
+            ),
+        )
+        for instruction, expected, wrong in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    expected,
+                    wrong,
+                    ControlCandidate("body", "Body text", "edit", (220, 210, 460, 260)),
+                ]
+
+                target_id = resolve_candidate_target(
+                    target_id=wrong.id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong.id,
+                            "target": {
+                                "x": wrong.rect[0],
+                                "y": wrong.rect[1],
+                                "width": wrong.rect[2],
+                                "height": wrong.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target_id.target_id, wrong.id)
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.target_id, wrong.id)
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, expected.id)
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, expected.rect)
+
     def test_file_action_requests_reject_object_only_file_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
@@ -16582,6 +16656,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ControlCandidate("menu_settings", "Settings", "button", (520, 80, 100, 30)),
                 ],
             ),
+            (
+                "Click Save in the card.",
+                "modal_save",
+                "card_save",
+                [
+                    ControlCandidate("card", "Profile card", "listitem", (20, 80, 300, 100)),
+                    ControlCandidate("card_save", "Save", "button", (230, 140, 60, 30)),
+                    ControlCandidate("modal", "Save changes modal", "window", (360, 200, 280, 160)),
+                    ControlCandidate("modal_save", "Save", "button", (480, 310, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the modal.",
+                "page_save",
+                "modal_save",
+                [
+                    ControlCandidate(
+                        "page_save",
+                        "Save",
+                        "button",
+                        (100, 100, 70, 30),
+                        window_title="Main page",
+                        window_rank=0,
+                    ),
+                    ControlCandidate(
+                        "modal_save",
+                        "Save",
+                        "button",
+                        (500, 300, 70, 30),
+                        window_title="Save changes",
+                        window_rank=1,
+                    ),
+                ],
+            ),
+            (
+                "Click Save in the panel.",
+                "section_save",
+                "panel_save",
+                [
+                    ControlCandidate("panel", "Details panel", "pane", (20, 80, 300, 100)),
+                    ControlCandidate("panel_save", "Save", "button", (230, 140, 60, 30)),
+                    ControlCandidate("section", "Details section", "pane", (360, 80, 300, 100)),
+                    ControlCandidate("section_save", "Save", "button", (570, 140, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the section.",
+                "panel_save",
+                "section_save",
+                [
+                    ControlCandidate("panel", "Details panel", "pane", (20, 80, 300, 100)),
+                    ControlCandidate("panel_save", "Save", "button", (230, 140, 60, 30)),
+                    ControlCandidate("section", "Details section", "pane", (360, 80, 300, 100)),
+                    ControlCandidate("section_save", "Save", "button", (570, 140, 60, 30)),
+                ],
+            ),
         )
         for instruction, wrong_id, correct_id, candidates in cases:
             with self.subTest(instruction=instruction):
@@ -16613,8 +16743,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     {"target_id ambiguous", "target_id semantic mismatch"},
                 )
                 if wrong_snap is not None:
-                    self.assertEqual(wrong_snap.target_id, wrong_id)
-                    self.assertEqual(wrong_snap.rejected_reason, "candidate semantic mismatch")
+                    if wrong_snap.target_id == correct_id:
+                        self.assertFalse(wrong_snap.rejected_reason)
+                    else:
+                        self.assertEqual(wrong_snap.rejected_reason, "candidate semantic mismatch")
                 self.assertIsNotNone(correct_target)
                 assert correct_target is not None
                 self.assertEqual(correct_target.source, "target_id")
