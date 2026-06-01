@@ -533,6 +533,29 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(alerts_tokens))
         self.assertTrue(expected.issubset(control_tokens))
 
+    def test_system_tray_aliases_expand_without_notification_bell_collision(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        tray_expected = {"system_tray", "tray"}
+        notification_area_expected = {"notification_area", "system_tray", "tray"}
+
+        self.assertTrue(tray_expected.issubset(tokenize_instruction("Open system tray")))
+        self.assertTrue(
+            notification_area_expected.issubset(
+                tokenize_instruction("Open notification area")
+            )
+        )
+        self.assertTrue(
+            notification_area_expected.issubset(tokenize_control("Show Hidden Icons"))
+        )
+        self.assertTrue(
+            notification_area_expected.issubset(tokenize_control("Hidden Icons"))
+        )
+        self.assertNotIn("show", tokenize_instruction("Show history"))
+        self.assertNotIn("bell", tokenize_instruction("Open notification area"))
+        self.assertNotIn("notifications", tokenize_instruction("Open notification area"))
+        self.assertNotIn("tray", tokenize_instruction("Open notifications"))
+
     def test_info_aliases_expand_to_about_and_details_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -6088,6 +6111,108 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, reason)
 
+    def test_gmail_tab_target_id_wins_over_generic_mail_decoys(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+        from screen import Capture
+
+        gmail_tab = (
+            "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - "
+            "Memory usage - 270 MB"
+        )
+        cloudflare_email_tab = (
+            "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | "
+            "Cloudflare - Memory usage - 580 MB"
+        )
+        private_email_bookmark = (
+            "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/"
+            "mail&folder=default0/INBOX"
+        )
+        candidates = [
+            ControlCandidate(
+                "c006",
+                cloudflare_email_tab,
+                "tabitem",
+                (690, 0, 184, 41),
+                window_title="GitHub Dashboard - Google Chrome",
+            ),
+            ControlCandidate(
+                "c010",
+                gmail_tab,
+                "tabitem",
+                (1357, 0, 184, 41),
+                window_title="GitHub Dashboard - Google Chrome",
+            ),
+            ControlCandidate(
+                "c042",
+                private_email_bookmark,
+                "button",
+                (822, 86, 28, 28),
+                window_title="GitHub Dashboard - Google Chrome",
+            ),
+        ]
+        capture = Capture(
+            png_bytes=b"png",
+            width=1920,
+            height=1080,
+            monitor_left=0,
+            monitor_top=0,
+            scale=1.0,
+        )
+        for instruction in (
+            "Open Gmail.",
+            "Open the Gmail tab.",
+            "Open inbox.",
+            "Open mail.",
+            "Open email.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c010",
+                        }
+                    ),
+                    capture,
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c010")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (1357, 0, 184, 41))
+
+    def test_gmail_tab_preference_does_not_make_private_mail_bookmark_gmail(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Gmail.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/"
+                    "mail&folder=default0/INBOX",
+                    "button",
+                    (120, 160, 32, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
     def test_mail_icon_text_match_overrides_settings_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -8590,6 +8715,79 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_system_tray_target_id_accepts_show_hidden_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open system tray.",
+            "Open notification area.",
+            "Show hidden icons.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Show Hidden Icons",
+                            "button",
+                            (120, 160, 32, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_system_tray_aliases_do_not_cross_notifications_or_generic_show(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open notifications.", "Show Hidden Icons"),
+            ("Open notification area.", "Bell"),
+            ("Open system tray.", "System Settings"),
+            ("Show history.", "Show Hidden Icons"),
+            ("Show password.", "Show Hidden Icons"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 140, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_disclosure_broad_row_highlights_single_button(self) -> None:
         from control_inventory import ControlCandidate

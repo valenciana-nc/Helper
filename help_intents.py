@@ -50,12 +50,26 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
 )
 _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bgmail\b"), {"email", "mail"}),
+    (
+        re.compile(r"\b(?:show\s+)?hidden\s+icons\b"),
+        {"notification_area", "system_tray", "tray"},
+    ),
     (re.compile(r"\binbox\b"), {"email", "mail"}),
     (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
 )
-_AUTH_DIRECTION_TOKEN_REWRITES = (
+_PHRASE_TOKEN_REWRITES = (
+    (
+        re.compile(r"\bnotification\s+area\b"),
+        {"notification_area", "system_tray", "tray"},
+        {"area", "notification", "notifications"},
+    ),
+    (
+        re.compile(r"\bsystem\s+tray\b"),
+        {"system_tray", "tray"},
+        {"system"},
+    ),
     (
         re.compile(r"\b(?:log\s+in|login|sign\s+in|signin)\b"),
         {"in", "login", "signin"},
@@ -382,6 +396,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "move",
         "spin",
         "open",
+        "show",
         "focus",
         "go",
         "the",
@@ -964,7 +979,7 @@ def tokens_from_text(text: str) -> set[str]:
     spaced = _SEPARATOR_RE.sub(" ", spaced)
     tokens = set(_TOKEN_RE.findall(spaced.lower()))
     phrase_text = _WHITESPACE_RE.sub(" ", spaced.lower()).strip()
-    for pattern, additions, removals in _AUTH_DIRECTION_TOKEN_REWRITES:
+    for pattern, additions, removals in _PHRASE_TOKEN_REWRITES:
         if pattern.search(phrase_text):
             tokens -= removals
             tokens.update(additions)

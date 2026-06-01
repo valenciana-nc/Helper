@@ -4748,6 +4748,135 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "system_tray_target_id_accepts_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open system tray.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "notification_area_target_id_accepts_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open notification area.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "notification_area_rejects_bell_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Bell"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open notification area.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Bell", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "notifications_rejects_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open notifications.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "show_history_rejects_show_hidden_icons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Tray"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show history.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show Hidden Icons",
+                    "control_type": "button",
+                    "rect": [20, 80, 32, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5901,6 +6030,111 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "text": "Mail",
                     "control_type": "button",
                     "rect": [20, 80, 100, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "gmail_tab_target_id_wins_over_mail_decoys",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 184, 32], "label": "Cloudflare account"},
+                {"rect": [240, 80, 184, 32], "label": "Gmail tab"},
+                {"rect": [460, 80, 28, 28], "label": "Private mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gmail.",
+                "target_id": "c010",
+            },
+            "candidates": [
+                {
+                    "id": "c006",
+                    "text": "DNS | Records | limitles.dev | Abelnavarrocarreon@gmail.com's Account | Cloudflare - Memory usage - 580 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c010",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [240, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c042",
+                    "text": "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+                    "control_type": "button",
+                    "rect": [460, 80, 28, 28],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c010",
+                "rect": [240, 80, 184, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "mail_target_id_gmail_tab_wins_over_privateemail_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 184, 32], "label": "Gmail tab"},
+                {"rect": [240, 80, 28, 28], "label": "Private mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open mail.",
+                "target_id": "c010",
+            },
+            "candidates": [
+                {
+                    "id": "c010",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 184, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+                {
+                    "id": "c042",
+                    "text": "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+                    "control_type": "button",
+                    "rect": [240, 80, 28, 28],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c010",
+                "rect": [20, 80, 184, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "gmail_instruction_rejects_privateemail_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 28, 28], "label": "Private mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gmail.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+                    "control_type": "button",
+                    "rect": [20, 80, 28, 28],
+                    "window_title": "GitHub Dashboard - Google Chrome",
                 },
             ],
             "expected": {

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import ctypes
 import os
+import re
 import time
 from dataclasses import dataclass
 from ctypes import wintypes
@@ -73,6 +74,11 @@ BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
+GMAIL_TAB_SERVICE_RE = re.compile(
+    r"(?:^|[\s\-\|\u2013\u2014])gmail(?:$|[\s\-\|\u2013\u2014])",
+    re.IGNORECASE,
+)
+GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -1190,6 +1196,7 @@ def _target_id_ambiguity(
     selected_score = selected_text + 0.30 * selected_geometry
     selected_score += _foreground_rank_bonus(selected, candidates)
     closest_gap = 1.0
+    selected_has_gmail_tab_evidence = _has_explicit_gmail_tab_evidence(selected)
     for candidate in candidates:
         if candidate is selected or candidate.id == selected.id:
             continue
@@ -1199,10 +1206,15 @@ def _target_id_ambiguity(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
-        text_score = _text_evidence_score(
-            instruction_tokens,
-            _candidate_semantic_tokens(candidate),
-        )
+        candidate_tokens = _candidate_semantic_tokens(candidate)
+        if _gmail_tab_selected_over_generic_mail_decoy(
+            instruction_tokens=instruction_tokens,
+            selected_has_gmail_tab_evidence=selected_has_gmail_tab_evidence,
+            candidate=candidate,
+            candidate_tokens=candidate_tokens,
+        ):
+            continue
+        text_score = _text_evidence_score(instruction_tokens, candidate_tokens)
         if text_score < TARGET_ID_TEXT_FLOOR:
             continue
         geometry = (
@@ -1222,6 +1234,31 @@ def _target_id_ambiguity(
         if model_rect is not None and gap < TEXT_MATCH_GAP:
             return True, gap
     return False, closest_gap
+
+
+def _gmail_tab_selected_over_generic_mail_decoy(
+    *,
+    instruction_tokens: set[str],
+    selected_has_gmail_tab_evidence: bool,
+    candidate: ControlCandidate,
+    candidate_tokens: set[str],
+) -> bool:
+    if not selected_has_gmail_tab_evidence:
+        return False
+    if not (instruction_tokens & GMAIL_TAB_REQUEST_WORDS):
+        return False
+    if _has_explicit_gmail_tab_evidence(candidate):
+        return False
+    overlap = instruction_tokens & candidate_tokens
+    return bool(overlap) and overlap <= GMAIL_TAB_REQUEST_WORDS
+
+
+def _has_explicit_gmail_tab_evidence(candidate: ControlCandidate) -> bool:
+    if candidate.control_type != "tabitem":
+        return False
+    text = candidate.text or ""
+    tokens = _tokens_from_text(text)
+    return "recibidos" in tokens or bool(GMAIL_TAB_SERVICE_RE.search(text))
 
 
 def _foreground_rank_bonus(
