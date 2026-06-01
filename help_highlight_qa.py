@@ -2220,6 +2220,115 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "print_action_target_id_accepts_printer_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Printer"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Print document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Printer", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "printer_action_target_id_accepts_print_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Print"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open printer.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Print", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "print_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "P"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Print document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5a8", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "print_action_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Printer"},
+                {"rect": [180, 80, 140, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Print document.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Printer", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "print_alias_rejects_ambiguous_print_and_printer_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Printer"},
+                {"rect": [180, 80, 100, 32], "label": "Print"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Print document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Printer", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Print", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

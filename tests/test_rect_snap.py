@@ -218,6 +218,14 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("calendar", tokenize_control("Date"))
         self.assertIn("home", tokenize_control("House"))
 
+    def test_print_action_aliases_expand_to_printer_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("printer", tokenize_instruction("Print document"))
+        self.assertIn("print", tokenize_instruction("Open printer"))
+        self.assertIn("printer", tokenize_control("Print"))
+        self.assertIn("print", tokenize_control("Printer"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -263,6 +271,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f4c5", {"calendar", "date"}),
             ("\U0001f551", {"clock", "time"}),
             ("\U0001f3e0", {"home", "house"}),
+            ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5711,6 +5720,81 @@ class HelpTargetHarnessTests(unittest.TestCase):
             [
                 ControlCandidate("c001", "House", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Home", "button", (280, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_print_action_alias_target_id_accepts_printer_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Print document.", "Printer", (120, 160, 100, 32)),
+            ("Open printer.", "Print", (120, 160, 100, 32)),
+            ("Print document.", "\U0001f5a8", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_print_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Print document.",
+                    "target": {"x": 300, "y": 160, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Printer", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_print_alias_rejects_ambiguous_print_and_printer_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Print document.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Printer", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Print", "button", (280, 160, 100, 32)),
             ],
         )
 

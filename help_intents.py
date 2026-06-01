@@ -58,6 +58,8 @@ _SYMBOL_TOKEN_ALIASES = {
     "\U0001f5d3": {"calendar", "date"},
     "\U0001f551": {"clock", "time"},
     "\U0001f552": {"clock", "time"},
+    "\u2399": {"print", "printer"},
+    "\U0001f5a8": {"print", "printer"},
     "\U0001f50d": {"find", "lens", "magnifier", "magnifying", "search"},
     "\U0001f50e": {"find", "lens", "magnifier", "magnifying", "search"},
 }
@@ -130,6 +132,8 @@ _TOKEN_ALIASES = {
     "preferences": {"options", "settings"},
     "previous": {"back"},
     "plane": {"send"},
+    "print": {"printer"},
+    "printer": {"print"},
     "proceed": {"continue", "next"},
     "profile": {"account", "user"},
     "refresh": {"reload"},
