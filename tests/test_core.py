@@ -534,6 +534,42 @@ class HelpSessionMessageTests(unittest.TestCase):
         self.assertNotIn("panel-sized", note)
 
 
+class HelpOverlayAnchorTests(unittest.TestCase):
+    def test_help_highlight_anchors_overlay_at_click_center(self) -> None:
+        class Ghost:
+            def __init__(self) -> None:
+                self.calls: list[tuple[int, int, str]] = []
+
+            def animate_to(self, x: int, y: int, label: str) -> None:
+                self.calls.append((x, y, label))
+
+        class Overlay:
+            def __init__(self) -> None:
+                self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+            def show_highlight(self, *args: object, **kwargs: object) -> None:
+                self.calls.append((args, kwargs))
+
+        harness = type("Harness", (), {})()
+        harness._ghost_cursor = Ghost()
+        harness._overlay = Overlay()
+
+        main.HelplerDesktopApp._on_help_highlight_show(
+            harness, 1895, 100, 48, 48, "Click Save."
+        )
+
+        self.assertEqual(harness._ghost_cursor.calls, [(1919, 124, "Click Save.")])
+        self.assertEqual(
+            harness._overlay.calls,
+            [
+                (
+                    (1895, 100, 48, 48, "Click Save."),
+                    {"duration_ms": 0, "anchor_x": 1919, "anchor_y": 124},
+                )
+            ],
+        )
+
+
 class DesktopWindowTests(unittest.TestCase):
     def test_helper_logo_icon_is_loadable(self) -> None:
         app = _qt_app()

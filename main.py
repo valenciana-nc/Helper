@@ -1552,8 +1552,19 @@ class HelplerDesktopApp(QObject):
         height: int,
         label: str,
     ) -> None:
-        self._ghost_cursor.animate_to(x + width // 2, y + height // 2, label)
-        self._overlay.show_highlight(x, y, width, height, label, 0)
+        anchor_x = x + width // 2
+        anchor_y = y + height // 2
+        self._ghost_cursor.animate_to(anchor_x, anchor_y, label)
+        self._overlay.show_highlight(
+            x,
+            y,
+            width,
+            height,
+            label,
+            duration_ms=0,
+            anchor_x=anchor_x,
+            anchor_y=anchor_y,
+        )
 
     def _on_help_session_finished(self, _summary: str) -> None:
         self.widget_state_requested.emit(FloatingCircle.IDLE)
