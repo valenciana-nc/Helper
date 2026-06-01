@@ -44,6 +44,9 @@ OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
 CANDIDATE_EMPTY_RETRIES = 2
 CANDIDATE_EMPTY_RETRY_SEC = 0.08
+UIA_BACKED_TARGET_SOURCES = frozenset(
+    {"target_id", "text_match", "candidate_snap", "snap"}
+)
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -761,6 +764,15 @@ class HelpSession(QObject):
         self._clear_overlays(wait_for_flush=True)
         capture = self._capture_provider()
         candidates = self._collect_candidates(capture)
+        if not candidates and previous_target.source in UIA_BACKED_TARGET_SOURCES:
+            return (
+                capture,
+                candidates,
+                replace(
+                    previous_target,
+                    rejected_reason="current screen recheck candidates unavailable",
+                ),
+            )
         target = resolve_help_target(
             decision,
             capture,
