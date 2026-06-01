@@ -83,7 +83,9 @@ MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
 EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
-OPEN_VIEW_REQUEST_WORDS = frozenset({"open", "show", "view"})
+OPEN_VIEW_REQUEST_WORDS = frozenset(
+    {"display", "inspect", "open", "read", "review", "see", "show", "view"}
+)
 GENERIC_OBJECT_REQUEST_WORDS = frozenset(
     {
         "click",
@@ -269,7 +271,10 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
     (frozenset({"subscribe", "unsubscribe"}), frozenset({"subscribed", "unsubscribed"})),
     (frozenset({"open", "close"}), frozenset({"closed", "opened"})),
-    (frozenset({"approve", "reject"}), frozenset({"approved", "rejected"})),
+    (
+        frozenset({"accept", "allow", "approve", "decline", "deny", "reject"}),
+        frozenset({"accepted", "allowed", "approved", "declined", "denied", "rejected"}),
+    ),
     (frozenset({"mark", "read", "unread"}), frozenset({"read", "unread"})),
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
@@ -361,8 +366,8 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"edit", "pencil"}),
     frozenset({"filter", "funnel"}),
     frozenset({"print", "printer"}),
-    frozenset({"approve"}),
-    frozenset({"reject"}),
+    frozenset({"accept", "allow", "approve"}),
+    frozenset({"decline", "deny", "reject"}),
     frozenset({"refresh", "reload"}),
     frozenset({"share"}),
     frozenset({"sort"}),
@@ -370,24 +375,23 @@ EXCLUSIVE_ACTION_FAMILIES = (
 OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     CONFIRM_ACTION_WORDS,
     CANCEL_ACTION_WORDS,
+    ADD_ACTION_WORDS - frozenset({"new", "plus"}),
     REMOVE_ACTION_WORDS,
+    PAY_ACTION_WORDS,
     FILE_SAVE_ACTION_WORDS,
     FILE_EXPORT_ACTION_WORDS,
     FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS,
     CLIPBOARD_COPY_WORDS | DUPLICATE_ACTION_WORDS,
     EDIT_ACTION_WORDS,
     frozenset({"archive", "cabinet", "filing"}),
-    frozenset({"approve"}),
+    frozenset({"accept", "allow", "approve"}),
     frozenset({"clipboard", "paste"}),
     frozenset({"plane", "send", "submit"}),
     frozenset({"print", "printer"}),
-    frozenset({"reject"}),
+    frozenset({"decline", "deny", "reject"}),
     frozenset({"share"}),
 )
-GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES + (
-    ADD_ACTION_WORDS - frozenset({"new"}),
-    PAY_ACTION_WORDS,
-)
+GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})

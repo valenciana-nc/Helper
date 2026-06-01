@@ -1937,6 +1937,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "accept_invite_target_id_rejects_decline_invite_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Decline invite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Accept invite.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Decline invite", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "mark_as_read_model_rect_rejects_read_message_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7597,6 +7618,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Delete account", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "inspect_report_model_rect_rejects_download_report_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Download report"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Inspect report.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Download report", "control_type": "button", "rect": [20, 80, 150, 32]},
             ],
             "expected": {
                 "source": "candidate_snap",
