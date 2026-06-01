@@ -50,6 +50,22 @@ TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
     {"pinned", "running", "window", "windows"}
 )
+TASKBAR_APP_GENERIC_REQUEST_WORDS = frozenset(
+    {
+        "app",
+        "apps",
+        "application",
+        "applications",
+        "button",
+        "icon",
+        "icons",
+        "program",
+        "programs",
+    }
+)
+TASKBAR_APP_STATUS_CONTEXT_WORDS = frozenset(
+    {"and", "backed", "backup", "personal", "sync", "synced", "up"}
+)
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1501,6 +1517,10 @@ def _taskbar_app_state_action_mismatch(
     identity_tokens = _taskbar_app_identity_tokens(candidate)
     if identity_tokens and instruction_tokens & identity_tokens:
         return False
+    if _taskbar_app_generic_state_request(instruction_tokens, text_tokens):
+        return True
+    if _taskbar_app_generic_status_request(instruction_tokens, text_tokens):
+        return True
     if instruction_tokens & TASKBAR_FILE_ACTION_WORDS and text_tokens & {"file", "files"}:
         return True
     return False
@@ -1566,8 +1586,45 @@ def _candidate_is_taskbar_app_button(candidate: ControlCandidate) -> bool:
 def _taskbar_app_identity_tokens(candidate: ControlCandidate) -> set[str]:
     tokens = _tokens_from_text(candidate.text)
     tokens -= TASKBAR_APP_STATE_CONTEXT_WORDS
+    tokens -= TASKBAR_APP_STATUS_CONTEXT_WORDS
     tokens -= TASKBAR_GENERIC_FILE_IDENTITY_WORDS
     return {token for token in tokens if not token.isdigit()}
+
+
+def _taskbar_app_generic_state_request(
+    instruction_tokens: set[str],
+    text_tokens: set[str],
+) -> bool:
+    if not text_tokens & TASKBAR_APP_STATE_CONTEXT_WORDS:
+        return False
+    if not instruction_tokens & TASKBAR_APP_STATE_CONTEXT_WORDS:
+        return False
+    meaningful_tokens = {
+        token for token in instruction_tokens if not token.isdigit()
+    }
+    return bool(
+        meaningful_tokens
+        and meaningful_tokens
+        <= (TASKBAR_APP_STATE_CONTEXT_WORDS | TASKBAR_APP_GENERIC_REQUEST_WORDS)
+    )
+
+
+def _taskbar_app_generic_status_request(
+    instruction_tokens: set[str],
+    text_tokens: set[str],
+) -> bool:
+    if not text_tokens & TASKBAR_APP_STATUS_CONTEXT_WORDS:
+        return False
+    if not instruction_tokens & TASKBAR_APP_STATUS_CONTEXT_WORDS:
+        return False
+    meaningful_tokens = {
+        token for token in instruction_tokens if not token.isdigit()
+    }
+    return bool(
+        meaningful_tokens
+        and meaningful_tokens
+        <= (TASKBAR_APP_STATUS_CONTEXT_WORDS | TASKBAR_APP_GENERIC_REQUEST_WORDS)
+    )
 
 
 def _target_id_ambiguity(

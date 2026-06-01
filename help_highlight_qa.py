@@ -7122,6 +7122,166 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_running_windows_rejects_taskbar_app_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Chrome running"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open running windows.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome - 5 running windows",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_running_taskbar_app_still_highlights_app",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Chrome running"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Google Chrome.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome - 5 running windows",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_onedrive_status_rejects_taskbar_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OneDrive status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open backed up.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "OneDrive - Personal\r\nBacked up and synced",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_taskbar_state_model_rect_rejects_app_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Chrome running"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open running windows.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome - 5 running windows",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_onedrive_status_model_rect_rejects_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OneDrive status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open backed up.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "OneDrive - Personal\r\nBacked up and synced",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_onedrive_status_still_highlights_service",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OneDrive status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open OneDrive.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "OneDrive - Personal\r\nBacked up and synced",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "email_target_id_accepts_envelope_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
