@@ -1288,6 +1288,31 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, model_rect)
                 self.assertFalse(result.rejected_reason)
 
+    def test_pin_state_wording_does_not_snap_opposite_pin_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Unpin this item.", "Pin"),
+            ("Pin this item.", "Unpin"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 100, 20, 100, 32)
+                window = _make_window("Notes", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+                model_rect = (100, 20, 100, 32)
+
+                result = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, model_rect)
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_extension_status_words_do_not_snap_access_button(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1801,6 +1826,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, (100, 200, 180, 32))
         self.assertFalse(result.rejected_reason)
+
+    def test_snap_contained_checkbox_requires_child_identity_evidence(self) -> None:
+        from rect_snap import snap_to_control
+
+        row = _make_button("Billing row", 10, 10, 600, 80, control_type="ListItem")
+        checkbox = _make_button("Done", 24, 34, 20, 20, control_type="CheckBox")
+        window = _make_window("Tasks", 0, 0, 800, 600, [row, checkbox])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (10, 10, 600, 80),
+            "Click the Archive checkbox in Billing row.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (10, 10, 600, 80))
+        self.assertEqual(result.rejected_reason, "control type mismatch")
 
     def test_snap_accepts_generic_toggle_label_without_type_text(self) -> None:
         from rect_snap import snap_to_control
@@ -4951,6 +4995,20 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 200, 32))
+
+    def test_snap_candidate_target_rejects_contained_checkbox_with_only_row_context(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click the Archive checkbox in Billing row.",
+            candidates=[
+                ControlCandidate("c001", "Billing row", "listitem", (10, 10, 600, 80)),
+                ControlCandidate("c002", "Done", "checkbox", (24, 34, 20, 20)),
+            ],
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNone(result)
 
     def test_snap_candidate_target_accepts_generic_toggle_checkbox(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -8113,6 +8171,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_pin_state_wording_rejects_opposite_pin_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Unpin this item.", "Pin"),
+            ("Pin this item.", "Unpin"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [
+                    ControlCandidate("c001", label, "button", (120, 160, 100, 32))
+                ]
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_pin_icon_text_match_overrides_archive_geometry(self) -> None:
         from control_inventory import ControlCandidate

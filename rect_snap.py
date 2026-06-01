@@ -36,6 +36,7 @@ FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
+PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
 START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
 TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
@@ -311,6 +312,11 @@ def snap_to_control(
             instruction_tokens,
             ctype,
         )
+        pin_state_action_mismatch = _pin_state_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+        )
         browser_about_blank_title_info_mismatch = (
             _browser_about_blank_title_info_mismatch(
                 instruction,
@@ -337,6 +343,7 @@ def snap_to_control(
             or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
+            or pin_state_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
@@ -1171,6 +1178,25 @@ def _disclosure_action_tokens_mismatch(
     return requested_expand != control_expand
 
 
+def _pin_state_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_unpin = "unpin" in instruction_tokens
+    requested_pin = "pin" in instruction_tokens and not requested_unpin
+    if requested_unpin == requested_pin:
+        return False
+
+    control_tokens = _tokens_from_text(visible_text or "") | _tokens_from_text(
+        automation_id or ""
+    )
+    if requested_unpin:
+        return "pin" in control_tokens and not (control_tokens & PIN_STATE_NEUTRAL_WORDS)
+    return "unpin" in control_tokens
+
+
 def _semantic_mismatch_targets_model_rect(
     candidate_rect: tuple[int, int, int, int],
     model_rect: tuple[int, int, int, int],
@@ -1380,11 +1406,21 @@ def _contained_control_intent_result_has_evidence(
     contexts: list[tuple[tuple[int, int, int, int], str]],
     instruction_tokens: set[str],
 ) -> bool:
-    evidence_tokens = _tokenize_control(_semantic_text(semantic_text))
+    candidate_tokens = _tokenize_control(_semantic_text(semantic_text))
+    context_tokens: set[str] = set()
     for context_rect, context_text in contexts:
         if _contains_rect(_expand_rect(context_rect, 4), rect):
-            evidence_tokens.update(_tokenize_control(_semantic_text(context_text)))
-    return _text_evidence_score(instruction_tokens, evidence_tokens) >= 0.35
+            context_tokens.update(_tokenize_control(_semantic_text(context_text)))
+    evidence_tokens = candidate_tokens | context_tokens
+    if _text_evidence_score(instruction_tokens, evidence_tokens) < 0.35:
+        return False
+    if (
+        candidate_tokens
+        and not (instruction_tokens & candidate_tokens)
+        and not instruction_tokens <= context_tokens
+    ):
+        return False
+    return True
 
 
 def _text_evidence_score(

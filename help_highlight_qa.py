@@ -605,6 +605,28 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "contained_checkbox_requires_child_identity_evidence",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Billing row"},
+                {"rect": [34, 110, 20, 20], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Archive checkbox in Billing row.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Billing row", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Done", "control_type": "checkbox", "rect": [34, 110, 20, 20]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_toggle_model_rect_snaps_to_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -9311,6 +9333,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 100, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "unpin_action_target_id_rejects_pin_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Pin"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unpin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Pin", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "pin_action_model_rect_rejects_unpin_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Unpin"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Unpin", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {

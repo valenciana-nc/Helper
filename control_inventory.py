@@ -178,6 +178,7 @@ BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
+PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
     {
@@ -1228,6 +1229,8 @@ def _text_match_score(
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _pin_state_action_mismatch(instruction, candidate):
+        return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_tab_auth_action_mismatch(instruction_tokens, candidate):
@@ -1321,6 +1324,8 @@ def _context_text_match_score(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _pin_state_action_mismatch(instruction, candidate):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1536,6 +1541,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _pin_state_action_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2282,6 +2293,24 @@ def _disclosure_state_action_mismatch(
     )
 
 
+def _pin_state_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_unpin = "unpin" in instruction_tokens
+    requested_pin = "pin" in instruction_tokens and not requested_unpin
+    if requested_unpin == requested_pin:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.text) | _tokens_from_text(
+        candidate.automation_id
+    )
+    if requested_unpin:
+        return "pin" in control_tokens and not (control_tokens & PIN_STATE_NEUTRAL_WORDS)
+    return "unpin" in control_tokens
+
+
 def _disclosure_action_tokens_mismatch(
     instruction_tokens: set[str],
     candidate_tokens: set[str],
@@ -2470,6 +2499,8 @@ def _target_id_ambiguity(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _pin_state_action_mismatch(instruction, candidate):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -2645,6 +2676,8 @@ def _has_semantic_alternative(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _pin_state_action_mismatch(instruction, candidate):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         score = _text_evidence_score(
@@ -2716,6 +2749,8 @@ def _has_visible_semantic_alternative(
         if _browser_group_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _pin_state_action_mismatch(instruction, candidate):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
@@ -2793,6 +2828,8 @@ def _candidate_snap_score(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _pin_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -2944,6 +2981,8 @@ def _single_contained_control_intent_candidate(
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _pin_state_action_mismatch(instruction, candidate):
+            continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
             continue
         if instruction_tokens and not _contained_control_intent_has_evidence(
@@ -2968,7 +3007,8 @@ def _contained_control_intent_has_evidence(
     model_rect: tuple[int, int, int, int],
     instruction_tokens: set[str],
 ) -> bool:
-    evidence_tokens = set(_candidate_semantic_tokens(candidate))
+    candidate_tokens = set(_candidate_semantic_tokens(candidate))
+    context_tokens: set[str] = set()
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
@@ -2976,9 +3016,18 @@ def _contained_control_intent_has_evidence(
             continue
         if _geometry_agreement(context.rect, model_rect) < TARGET_ID_GEOMETRY_FLOOR:
             continue
-        evidence_tokens.update(_candidate_semantic_tokens(context))
-        evidence_tokens.update(_expand_token_aliases(_tokens_from_text(context.window_title)))
-    return _text_evidence_score(instruction_tokens, evidence_tokens) >= TARGET_ID_TEXT_FLOOR
+        context_tokens.update(_candidate_semantic_tokens(context))
+        context_tokens.update(_expand_token_aliases(_tokens_from_text(context.window_title)))
+    evidence_tokens = candidate_tokens | context_tokens
+    if _text_evidence_score(instruction_tokens, evidence_tokens) < TARGET_ID_TEXT_FLOOR:
+        return False
+    if (
+        _candidate_visible_text_tokens(candidate)
+        and not (instruction_tokens & candidate_tokens)
+        and not instruction_tokens <= context_tokens
+    ):
+        return False
+    return True
 
 
 def _candidate_matches_control_intent(
@@ -3133,6 +3182,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_group_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _pin_state_action_mismatch(instruction, candidate):
         return True
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
         return True
