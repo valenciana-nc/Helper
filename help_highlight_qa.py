@@ -1317,6 +1317,122 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_browser_menu_recovers_from_hidden_bookmarks_overflow",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 60, 32], "label": "Chrome"},
+                {"rect": [120, 80, 220, 32], "label": "Hidden bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open more options menu.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [20, 80, 60, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Menu containing hidden bookmarks",
+                    "control_type": "button",
+                    "rect": [120, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 60, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_browser_menu_rejects_hidden_bookmarks_overflow",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Hidden bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open options menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Menu containing hidden bookmarks",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "chrome_menu_button_accepts_more_options_wording",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 60, 32], "label": "Chrome"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open more options menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [20, 80, 60, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 60, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "hidden_bookmarks_overflow_accepts_hidden_bookmarks_wording",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Hidden bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open hidden bookmarks.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Menu containing hidden bookmarks",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "live_address_bar_label_accepts_explicit_address_wording",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

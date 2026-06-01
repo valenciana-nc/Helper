@@ -111,6 +111,14 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
+BROWSER_MENU_BUTTON_TOKENS = frozenset(
+    {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
+)
+BROWSER_MENU_CONTROL_INTENTS = frozenset({"button", "menuitem", "splitbutton"})
+BROWSER_HIDDEN_BOOKMARKS_WORDS = frozenset({"bookmarks", "hidden"})
+BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS = frozenset(
+    {"menu", "more", "options", "preferences", "settings"}
+)
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
@@ -1069,6 +1077,8 @@ def _text_match_score(
         candidate,
     ):
         return 0.0
+    if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
@@ -1133,6 +1143,8 @@ def _context_text_match_score(
         instruction_tokens,
         candidate,
     ):
+        return 0.0
+    if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -1260,6 +1272,12 @@ def _target_id_plausibility(
         instruction_tokens,
         candidate,
     ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1430,6 +1448,8 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
 def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]:
     if _looks_like_browser_profile_button(candidate):
         return set(BROWSER_PROFILE_TOKENS)
+    if _looks_like_browser_menu_button(candidate):
+        return set(BROWSER_MENU_BUTTON_TOKENS)
     if _looks_like_taskbar_search_button(candidate):
         return set(TASKBAR_WINDOWS_SEARCH_TOKENS)
     return set()
@@ -1513,6 +1533,40 @@ def _instruction_requests_browser_address_bar(instruction: str) -> bool:
     if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
         return True
     return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
+
+
+def _looks_like_browser_menu_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return _tokens_from_text(candidate.text) == {"chrome"}
+
+
+def _hidden_bookmarks_overflow_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_hidden_bookmarks_overflow_button(candidate):
+        return False
+    if "hidden" in instruction_tokens:
+        return False
+    if "all" in instruction_tokens and "bookmarks" in instruction_tokens:
+        return True
+    if "bookmarks" in instruction_tokens:
+        return False
+    return bool(instruction_tokens & BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS)
+
+
+def _looks_like_hidden_bookmarks_overflow_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    return bool(BROWSER_HIDDEN_BOOKMARKS_WORDS <= text_tokens and "menu" in text_tokens)
 
 
 def _browser_about_blank_title_info_mismatch(
@@ -1854,6 +1908,8 @@ def _target_id_ambiguity(
             candidate,
         ):
             continue
+        if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1966,6 +2022,8 @@ def _has_semantic_alternative(
             candidate,
         ):
             continue
+        if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -2022,6 +2080,8 @@ def _has_visible_semantic_alternative(
             candidate,
         ):
             continue
+        if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -2074,6 +2134,8 @@ def _candidate_snap_score(
         instruction_tokens,
         candidate,
     ):
+        return 0.0
+    if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -2249,7 +2311,17 @@ def _candidate_matches_control_intent(
     candidate: ControlCandidate,
     control_intents: set[str],
 ) -> bool:
-    return _control_type_matches_intent(candidate.control_type, control_intents)
+    if _control_type_matches_intent(candidate.control_type, control_intents):
+        return True
+    if (
+        control_intents & BROWSER_MENU_CONTROL_INTENTS
+        and (
+            _looks_like_browser_menu_button(candidate)
+            or _looks_like_hidden_bookmarks_overflow_button(candidate)
+        )
+    ):
+        return True
+    return False
 
 
 def _foreground_snap_conflict(
@@ -2329,6 +2401,8 @@ def _candidate_snap_semantic_mismatch(
         instruction_tokens,
         candidate,
     ):
+        return True
+    if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_extension_access_action_mismatch(
         instruction,

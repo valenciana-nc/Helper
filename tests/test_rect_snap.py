@@ -11524,6 +11524,154 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
 
+    def test_browser_menu_wording_accepts_chrome_menu_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open more menu.",
+            "Open options menu.",
+            "Open more options menu.",
+            "Open Chrome menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Chrome",
+                            "button",
+                            (120, 160, 60, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_generic_browser_menu_wording_rejects_hidden_bookmarks_overflow(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open more menu.",
+            "Open options menu.",
+            "Open more options menu.",
+            "Open all bookmarks.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Menu containing hidden bookmarks",
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_browser_menu_text_match_recovers_from_hidden_bookmarks_overflow(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open more options menu.",
+            "Open Chrome menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c002",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Chrome",
+                            "button",
+                            (120, 160, 60, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                        ControlCandidate(
+                            "c002",
+                            "Menu containing hidden bookmarks",
+                            "button",
+                            (240, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_hidden_bookmarks_overflow_accepts_hidden_bookmark_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open hidden bookmarks.",
+            "Show hidden bookmarks.",
+            "Open bookmarks menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Menu containing hidden bookmarks",
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
     def test_browser_address_bar_live_label_accepts_explicit_bar_wording(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
