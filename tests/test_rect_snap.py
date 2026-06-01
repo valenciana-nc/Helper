@@ -164,6 +164,23 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_instruction("Complete setup")))
         self.assertTrue({"complete", "done", "finish"}.issubset(tokenize_control("Done")))
 
+    def test_auth_direction_aliases_do_not_cross_sign_in_and_out(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        sign_out_tokens = tokenize_instruction("Sign out")
+        log_out_tokens = tokenize_control("Logout")
+        sign_in_tokens = tokenize_instruction("Sign in")
+        log_in_tokens = tokenize_control("Log in")
+
+        self.assertTrue({"logoff", "logout", "out", "signout"}.issubset(sign_out_tokens))
+        self.assertTrue({"logoff", "logout", "out", "signout"}.issubset(log_out_tokens))
+        self.assertNotIn("login", sign_out_tokens)
+        self.assertNotIn("signin", log_out_tokens)
+        self.assertTrue({"login", "signin"}.issubset(sign_in_tokens))
+        self.assertTrue({"login", "signin"}.issubset(log_in_tokens))
+        self.assertNotIn("logout", sign_in_tokens)
+        self.assertNotIn("signout", log_in_tokens)
+
     def test_clipboard_action_aliases_expand_to_common_icon_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -220,6 +237,28 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("undo", tokenize_control("Ctrl+Z"))
         self.assertIn("redo", tokenize_control("Ctrl+Y"))
         self.assertIn("redo", tokenize_control("Ctrl+Shift+Z"))
+
+    def test_clear_and_delete_aliases_expand_to_action_icon_language(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        clear_text_tokens = tokenize_instruction("Clear text")
+        clear_text_intents = instruction_control_intents("Clear text")
+        delete_tokens = tokenize_instruction("Delete item")
+
+        self.assertTrue({"clear", "x"}.issubset(clear_text_tokens))
+        self.assertNotIn("text", clear_text_tokens)
+        self.assertTrue({"button", "splitbutton"}.issubset(clear_text_intents))
+        self.assertNotIn("edit", clear_text_intents)
+        self.assertIn("clear", tokenize_control("\u00d7"))
+        self.assertIn("clear", tokenize_control("X"))
+        self.assertIn("close", tokenize_control("X"))
+        self.assertTrue({"bin", "delete", "remove", "trash", "wastebasket"}.issubset(delete_tokens))
+        self.assertTrue(
+            {"bin", "delete", "remove", "trash", "wastebasket"}.issubset(
+                tokenize_control("\U0001f5d1")
+            )
+        )
+        self.assertIn("delete", tokenize_control("Wastebasket"))
 
     def test_send_action_aliases_expand_to_submit_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -390,7 +429,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("+", {"add", "create", "new", "plus"}),
             ("...", {"dot", "dots", "ellipsis", "menu", "more", "options"}),
             ("\u22ee", {"dot", "dots", "kebab", "menu", "more", "options"}),
-            ("\u00d7", {"close", "dismiss", "x"}),
+            ("\u00d7", {"clear", "close", "dismiss", "x"}),
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
@@ -416,6 +455,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f3e0", {"home", "house"}),
             ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f5c4", {"archive", "cabinet", "filing"}),
+            ("\U0001f5d1", {"bin", "delete", "remove", "trash", "wastebasket"}),
             ("\U0001f4cb", {"clipboard", "paste"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
@@ -5505,6 +5545,73 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
 
+    def test_sign_out_alias_target_id_accepts_logout_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Sign out.", "Logout"),
+            ("Log out.", "Sign out"),
+            ("Click logout.", "Sign out"),
+            ("Sign in.", "Log in"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_sign_out_text_match_overrides_profile_and_sign_in_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                ControlCandidate("c001", "Logout", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Profile", "button", (300, 160, 100, 32)),
+            ),
+            (
+                ControlCandidate("c001", "Logout", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Sign in", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for expected, decoy in cases:
+            with self.subTest(decoy=decoy.text):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Sign out.",
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
     def test_clipboard_action_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -5727,6 +5834,104 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_clear_and_delete_target_id_accepts_common_icon_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Clear search.", "\u00d7", (120, 160, 32, 32)),
+            ("Clear text.", "X", (120, 160, 32, 32)),
+            ("Close dialog.", "X", (120, 160, 32, 32)),
+            ("Delete item.", "\U0001f5d1", (120, 160, 32, 32)),
+            ("Click wastebasket.", "Delete", (120, 160, 100, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_clear_and_delete_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Clear search.",
+                ControlCandidate("c001", "\u00d7", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Search", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Clear text.",
+                ControlCandidate("c001", "X", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Body text", "edit", (300, 160, 220, 32)),
+            ),
+            (
+                "Delete item.",
+                ControlCandidate("c001", "\U0001f5d1", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_delete_alias_rejects_ambiguous_delete_and_trash_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Delete item.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Trash", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Delete", "button", (280, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_transfer_and_refresh_alias_target_id_accepts_matching_action(self) -> None:
         from control_inventory import ControlCandidate

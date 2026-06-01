@@ -1455,6 +1455,161 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "sign_out_target_id_accepts_logout_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Logout"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sign out.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Logout", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sign_out_text_match_overrides_profile_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Logout"},
+                {"rect": [180, 80, 100, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sign out.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Logout", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Profile", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sign_out_text_match_overrides_sign_in_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Logout"},
+                {"rect": [180, 80, 100, 32], "label": "Sign in"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sign out.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Logout", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Sign in", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clear_search_target_id_accepts_x_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u00d7", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clear_text_match_overrides_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "X"},
+                {"rect": [180, 80, 220, 32], "label": "Body text"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear text.",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "X", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Body text", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "delete_symbol_target_id_accepts_wastebasket_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5d1", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "delete_symbol_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Delete"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete item.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f5d1", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "paste_action_target_id_accepts_clipboard_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

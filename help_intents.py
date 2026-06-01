@@ -33,18 +33,30 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*z\b"), {"undo"}),
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*y\b"), {"redo"}),
 )
+_AUTH_DIRECTION_TOKEN_REWRITES = (
+    (
+        re.compile(r"\b(?:log\s+in|login|sign\s+in|signin)\b"),
+        {"in", "login", "signin"},
+        {"log", "logout", "out", "sign", "signout"},
+    ),
+    (
+        re.compile(r"\b(?:log\s+off|logoff|log\s+out|logout|sign\s+out|signout)\b"),
+        {"logoff", "logout", "out", "signout"},
+        {"in", "log", "login", "sign", "signin"},
+    ),
+)
 
 _SYMBOL_TOKEN_ALIASES = {
     "?": {"help", "mark", "question"},
     "+": {"add", "create", "new", "plus"},
     "...": {"dot", "dots", "ellipsis", "menu", "more", "options"},
-    "\u00d7": {"close", "dismiss", "x"},
+    "\u00d7": {"clear", "close", "dismiss", "x"},
     "\u2026": {"dot", "dots", "ellipsis", "menu", "more", "options"},
     "\u22ee": {"dot", "dots", "kebab", "menu", "more", "options"},
     "\u22ef": {"dot", "dots", "ellipsis", "menu", "more", "options"},
     "\u2699": {"cog", "gear", "options", "preferences", "settings"},
-    "\u2715": {"close", "dismiss", "x"},
-    "\u2716": {"close", "dismiss", "x"},
+    "\u2715": {"clear", "close", "dismiss", "x"},
+    "\u2716": {"clear", "close", "dismiss", "x"},
     "\u2605": {"bookmark", "favorite", "star"},
     "\u2606": {"bookmark", "favorite", "star"},
     "\u2661": {"favorite", "heart"},
@@ -93,6 +105,7 @@ _SYMBOL_TOKEN_ALIASES = {
     "\U0001f552": {"clock", "time"},
     "\U0001f5c3": {"archive", "cabinet", "filing"},
     "\U0001f5c4": {"archive", "cabinet", "filing"},
+    "\U0001f5d1": {"bin", "delete", "remove", "trash", "wastebasket"},
     "\U0001f4cb": {"clipboard", "paste"},
     "\U0001f4c1": {"directory", "folder"},
     "\U0001f4c2": {"directory", "folder"},
@@ -129,6 +142,7 @@ _TOKEN_ALIASES = {
     "caret": {"arrow", "chevron", "collapse", "disclosure", "expand"},
     "chevron": {"arrow", "caret", "collapse", "disclosure", "expand"},
     "choose": {"browse", "file", "select", "upload"},
+    "clear": {"x"},
     "clone": {"copy", "duplicate"},
     "clock": {"time"},
     "cog": {"options", "preferences", "settings"},
@@ -141,6 +155,7 @@ _TOKEN_ALIASES = {
     "create": {"add", "new", "plus"},
     "cut": {"scissors"},
     "date": {"calendar"},
+    "delete": {"bin", "remove", "trash", "wastebasket"},
     "dismiss": {"close"},
     "disclosure": {"arrow", "caret", "chevron", "collapse", "expand"},
     "directories": {"directory", "folder", "folders"},
@@ -175,8 +190,10 @@ _TOKEN_ALIASES = {
     "location": {"address", "url"},
     "lock": {"locked", "padlock", "unlock"},
     "locked": {"lock", "padlock"},
+    "logoff": {"logout", "signout"},
     "log": {"login", "sign", "signin"},
     "login": {"log", "sign", "signin"},
+    "logout": {"logoff", "signout"},
     "magnifier": {"find", "search"},
     "magnifying": {"find", "search"},
     "kebab": {"menu", "more", "options"},
@@ -220,6 +237,7 @@ _TOKEN_ALIASES = {
     "shield": {"secure", "security"},
     "sign": {"log", "login", "signin"},
     "signin": {"log", "login", "sign"},
+    "signout": {"logoff", "logout"},
     "sound": {"speaker", "volume"},
     "speaker": {"sound", "volume"},
     "star": {"bookmark", "favorite"},
@@ -238,7 +256,7 @@ _TOKEN_ALIASES = {
     "close": {"dismiss"},
     "dot": {"more", "options", "menu"},
     "dots": {"more", "options", "menu"},
-    "trash": {"delete", "remove"},
+    "trash": {"bin", "delete", "remove", "wastebasket"},
     "time": {"clock"},
     "bin": {"delete", "remove"},
     "plus": {"add", "new", "create"},
@@ -246,6 +264,8 @@ _TOKEN_ALIASES = {
     "video": {"camera", "webcam"},
     "volume": {"sound", "speaker"},
     "webcam": {"camera", "video"},
+    "wastebasket": {"bin", "delete", "remove", "trash"},
+    "x": {"clear", "close", "dismiss"},
 }
 
 _INSTRUCTION_STOPWORDS = frozenset(
@@ -611,6 +631,10 @@ _FORMAT_SINGLE_LETTER_CONTEXT_WORDS = frozenset(
 _FORMAT_ACTION_CONTEXT_WORDS = frozenset(
     {"content", "copy", "message", "paragraph", "selection", "text", "word", "words"}
 )
+_CLEAR_ACTION_WORDS = frozenset({"clear"})
+_CLEAR_ACTION_CONTEXT_WORDS = frozenset(
+    {"box", "field", "find", "input", "query", "search", "text", "textbox", "textarea"}
+)
 _HISTORY_ACTION_WORDS = frozenset({"redo", "undo"})
 _EDIT_ACTION_CONTEXT_WORDS = frozenset(
     {
@@ -647,6 +671,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
     if _format_action_requested(tokens):
         filtered -= _FORMAT_ACTION_CONTEXT_WORDS
         filtered.update(tokens & _FORMAT_SINGLE_LETTER_WORDS)
+    if _clear_action_requested(tokens):
+        filtered -= _CLEAR_ACTION_CONTEXT_WORDS
     if _edit_action_requested(tokens):
         filtered.update({"edit", "pencil"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
@@ -682,6 +708,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     disclosure_requested = _disclosure_requested(raw_tokens)
     password_visibility_requested = _password_visibility_requested(raw_tokens)
     format_action_requested = _format_action_requested(raw_tokens)
+    clear_action_requested = _clear_action_requested(raw_tokens)
     history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
     edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
@@ -708,6 +735,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and input_requested
         and not password_visibility_requested
         and not format_action_requested
+        and not clear_action_requested
     ):
         intents.update(INPUT_CONTROL_TYPES)
     if raw_tokens & {"combo", "combobox"}:
@@ -730,6 +758,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_BUTTON_INTENT_TYPES)
     if format_action_requested:
         intents.update(_FORMAT_ACTION_INTENT_TYPES)
+    if clear_action_requested:
+        intents.update(_BUTTON_INTENT_TYPES)
     if history_action_requested:
         intents.update(_HISTORY_ACTION_INTENT_TYPES)
     if edit_action_requested:
@@ -740,6 +770,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not split_button_requested
         and not password_visibility_requested
         and not format_action_requested
+        and not clear_action_requested
         and not edit_action_requested
         and "button" in raw_tokens
     ):
@@ -795,6 +826,10 @@ def tokens_from_text(text: str) -> set[str]:
     spaced = _SEPARATOR_RE.sub(" ", spaced)
     tokens = set(_TOKEN_RE.findall(spaced.lower()))
     phrase_text = _WHITESPACE_RE.sub(" ", spaced.lower()).strip()
+    for pattern, additions, removals in _AUTH_DIRECTION_TOKEN_REWRITES:
+        if pattern.search(phrase_text):
+            tokens -= removals
+            tokens.update(additions)
     for pattern, aliases in _PHRASE_TOKEN_ALIAS_PATTERNS:
         if pattern.search(phrase_text):
             tokens.update(aliases)
@@ -860,6 +895,10 @@ def _format_action_requested(raw_tokens: set[str]) -> bool:
     if len(letter_tokens) != 1:
         return False
     return bool(raw_tokens & _FORMAT_SINGLE_LETTER_CONTEXT_WORDS)
+
+
+def _clear_action_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _CLEAR_ACTION_WORDS)
 
 
 def _edit_action_requested(raw_tokens: set[str]) -> bool:
