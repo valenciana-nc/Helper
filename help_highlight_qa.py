@@ -313,6 +313,23 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "blank_candidate_rect_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears visually empty",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "out_of_range_model_rect_does_not_draw_edge_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {

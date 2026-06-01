@@ -11,6 +11,7 @@ MIN_VISIBLE_FRACTION = 0.35
 MODEL_EMPTY_VISUAL_FLOOR = 0.035
 MODEL_LOW_CONFIDENCE_FLOOR = 0.20
 MODEL_BOUNDARY_ACTIVITY_FLOOR = 0.10
+CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 MAX_TARGET_AREA_FRACTION = 0.25
 
 
@@ -61,6 +62,19 @@ def evaluate_target_quality(
         )
 
     visual_activity, boundary_activity = _visual_activity(capture.png_bytes, clipped)
+    if (
+        source != "model"
+        and visual_activity < CANDIDATE_EMPTY_VISUAL_FLOOR
+        and boundary_activity < CANDIDATE_EMPTY_VISUAL_FLOOR
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears visually empty",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
     if source == "model" and confidence <= MODEL_LOW_CONFIDENCE_FLOOR:
         if visual_activity < MODEL_EMPTY_VISUAL_FLOOR:
             return TargetQuality(

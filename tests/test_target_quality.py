@@ -72,6 +72,39 @@ class TargetQualityTests(unittest.TestCase):
         self.assertTrue(quality.accepted)
         self.assertGreaterEqual(quality.visual_activity, 0.035)
 
+    def test_rejects_candidate_rect_on_blank_space(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        capture = _capture_with_image(Image.new("RGB", (220, 120), "white"))
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 130, 30),
+            source="target_id",
+            confidence=1.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears visually empty")
+
+    def test_accepts_empty_bordered_candidate_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 120), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 30, 170, 60), outline="#94a3b8", fill="white")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 30, 130, 30),
+            source="target_id",
+            confidence=1.0,
+        )
+
+        self.assertTrue(quality.accepted)
+        self.assertGreaterEqual(quality.visual_activity, 0.012)
+
     def test_rejects_text_only_model_rect_without_control_boundary(self) -> None:
         from target_quality import evaluate_target_quality
 
