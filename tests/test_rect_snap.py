@@ -16760,6 +16760,72 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ControlCandidate("section_save", "Save", "button", (570, 140, 60, 30)),
                 ],
             ),
+            (
+                "Click Save in the sidebar.",
+                "main_save",
+                "sidebar_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("sidebar", "Settings sidebar", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("sidebar_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the drawer.",
+                "main_save",
+                "drawer_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("drawer", "Settings drawer", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("drawer_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the popover.",
+                "main_save",
+                "popover_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("popover", "Settings popover", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("popover_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the popup.",
+                "main_save",
+                "popup_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("popup", "Settings popup", "window", (420, 80, 300, 120)),
+                    ControlCandidate("popup_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the toast.",
+                "main_save",
+                "toast_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("toast", "Settings toast", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("toast_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the banner.",
+                "main_save",
+                "banner_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("banner", "Settings banner", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("banner_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
         )
         for instruction, wrong_id, correct_id, candidates in cases:
             with self.subTest(instruction=instruction):

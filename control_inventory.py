@@ -164,11 +164,15 @@ ROW_CONTEXT_OBJECT_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset(
 CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
     {
         "area",
+        "banner",
+        "banners",
         "box",
         "card",
         "column",
         "columns",
         "dialog",
+        "drawer",
+        "drawers",
         "footer",
         "form",
         "grid",
@@ -181,10 +185,18 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "modal",
         "panel",
         "pane",
+        "popover",
+        "popovers",
+        "popup",
+        "popups",
         "row",
         "rows",
         "section",
+        "sidebar",
+        "sidebars",
         "table",
+        "toast",
+        "toasts",
         "toolbar",
         "toolbars",
     }
@@ -508,9 +520,11 @@ ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
 )
 CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
     {
+        "banner",
         "card",
         "column",
         "dialog",
+        "drawer",
         "footer",
         "form",
         "grid",
@@ -520,8 +534,12 @@ CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
         "modal",
         "panel",
         "pane",
+        "popover",
+        "popup",
         "section",
+        "sidebar",
         "table",
+        "toast",
         "toolbar",
     }
 )
