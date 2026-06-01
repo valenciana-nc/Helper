@@ -399,6 +399,47 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
 
+    def test_visible_text_conflict_rejects_target_id_despite_matching_automation_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Cancel",
+                    "button",
+                    (10, 10, 60, 30),
+                    automation_id="saveButton",
+                )
+            ],
+            model_rect=(10, 10, 60, 30),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
+
+    def test_visible_text_conflict_does_not_resolve_by_automation_id_text_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Cancel",
+                    "button",
+                    (10, 10, 60, 30),
+                    automation_id="saveButton",
+                )
+            ],
+        )
+
+        self.assertIsNone(result)
+
     def test_target_id_accepts_common_ui_synonym_with_exact_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -853,6 +894,28 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.target_id, "c002")
+
+    def test_snap_candidate_target_rejects_visible_text_conflict_despite_matching_automation_id(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Cancel",
+                    "button",
+                    (100, 100, 50, 24),
+                    automation_id="saveButton",
+                )
+            ],
+            model_rect=(100, 100, 50, 24),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
 
 class HelpTargetHarnessTests(unittest.TestCase):

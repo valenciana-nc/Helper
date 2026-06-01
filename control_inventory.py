@@ -783,7 +783,7 @@ def _text_match_score(
     instruction_tokens = _tokenize_instruction(instruction)
     if not instruction_tokens:
         return 0.0
-    candidate_tokens = _candidate_identity_tokens(candidate)
+    candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
         return 0.0
     overlap = instruction_tokens & candidate_tokens
@@ -811,8 +811,8 @@ def _target_id_plausibility(
     model_rect: tuple[int, int, int, int] | None,
 ) -> tuple[bool, float, str]:
     instruction_tokens = _tokenize_instruction(instruction)
-    identity_tokens = _candidate_identity_tokens(candidate)
-    text_score = _text_evidence_score(instruction_tokens, identity_tokens)
+    semantic_tokens = _candidate_semantic_tokens(candidate)
+    text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
@@ -839,7 +839,7 @@ def _target_id_plausibility(
             return False, max(text_score, geometry_score), "target_id ambiguous"
         return True, max(0.86, text_score, geometry_score), ""
 
-    if identity_tokens:
+    if semantic_tokens:
         return (
             False,
             max(text_score, geometry_score),
@@ -878,6 +878,17 @@ def _candidate_visible_text_tokens(candidate: ControlCandidate) -> set[str]:
     return _expand_token_aliases(_tokens_from_text(candidate.text))
 
 
+def _candidate_automation_tokens(candidate: ControlCandidate) -> set[str]:
+    return _expand_token_aliases(_tokens_from_text(candidate.automation_id))
+
+
+def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    if visible_tokens:
+        return visible_tokens
+    return _candidate_automation_tokens(candidate)
+
+
 def _target_id_ambiguity(
     *,
     instruction_tokens: set[str],
@@ -887,7 +898,7 @@ def _target_id_ambiguity(
 ) -> tuple[bool, float]:
     selected_text = _text_evidence_score(
         instruction_tokens,
-        _candidate_identity_tokens(selected),
+        _candidate_semantic_tokens(selected),
     )
     selected_geometry = (
         _geometry_agreement(selected.rect, model_rect) if model_rect is not None else 0.0
@@ -900,7 +911,7 @@ def _target_id_ambiguity(
             continue
         text_score = _text_evidence_score(
             instruction_tokens,
-            _candidate_identity_tokens(candidate),
+            _candidate_semantic_tokens(candidate),
         )
         if text_score < TARGET_ID_TEXT_FLOOR:
             continue
@@ -941,7 +952,7 @@ def _has_semantic_alternative(
             continue
         score = _text_evidence_score(
             instruction_tokens,
-            _candidate_identity_tokens(candidate),
+            _candidate_semantic_tokens(candidate),
         )
         if score >= TARGET_ID_TEXT_FLOOR:
             return True
@@ -957,11 +968,11 @@ def _candidate_snap_score(
 ) -> float:
     iou = _iou(candidate.rect, model_rect)
     proximity = _proximity_score(candidate.rect, model_rect)
-    identity_tokens = _candidate_identity_tokens(candidate)
-    text_score = _text_evidence_score(instruction_tokens, identity_tokens)
-    if not identity_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
+    semantic_tokens = _candidate_semantic_tokens(candidate)
+    text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if not semantic_tokens and _has_nearby_unlabeled_competitor(candidate, candidates):
         return 0.0
-    if instruction_tokens and identity_tokens and text_score <= 0:
+    if instruction_tokens and semantic_tokens and text_score <= 0:
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     area_score = _area_fit_score(candidate.rect, model_rect)
     type_score = 1.0 if candidate.control_type in {"button", "menuitem", "tabitem", "hyperlink", "splitbutton"} else 0.7
@@ -1008,8 +1019,14 @@ def _same_snap_intent(
 ) -> bool:
     if not instruction_tokens:
         return True
-    first_score = _text_evidence_score(instruction_tokens, _candidate_identity_tokens(first))
-    second_score = _text_evidence_score(instruction_tokens, _candidate_identity_tokens(second))
+    first_score = _text_evidence_score(
+        instruction_tokens,
+        _candidate_semantic_tokens(first),
+    )
+    second_score = _text_evidence_score(
+        instruction_tokens,
+        _candidate_semantic_tokens(second),
+    )
     if first_score <= 0 and second_score <= 0:
         return True
     return second_score >= first_score - TEXT_MATCH_GAP
@@ -1021,10 +1038,10 @@ def _candidate_snap_semantic_mismatch(
     instruction_tokens: set[str],
     model_rect: tuple[int, int, int, int],
 ) -> bool:
-    identity_tokens = _candidate_identity_tokens(candidate)
-    if not instruction_tokens or not identity_tokens:
+    semantic_tokens = _candidate_semantic_tokens(candidate)
+    if not instruction_tokens or not semantic_tokens:
         return False
-    if _text_evidence_score(instruction_tokens, identity_tokens) > 0:
+    if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False
     return _geometry_agreement(candidate.rect, model_rect) >= TARGET_ID_GEOMETRY_FLOOR
 
