@@ -1608,6 +1608,92 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "save_action_target_id_accepts_floppy_disk_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Floppy disk"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Floppy disk", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "floppy_disk_action_target_id_accepts_save_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the floppy disk.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "save_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4be", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "save_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Floppy disk"},
+                {"rect": [180, 80, 140, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Floppy disk", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "microphone_action_target_id_accepts_mic_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -235,6 +235,14 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("directory", tokenize_control("Folder"))
         self.assertIn("folder", tokenize_control("Directory"))
 
+    def test_save_action_aliases_expand_to_floppy_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("floppy", tokenize_instruction("Save document"))
+        self.assertIn("save", tokenize_instruction("Click the floppy disk"))
+        self.assertIn("save", tokenize_control("Floppy disk"))
+        self.assertIn("floppy", tokenize_control("Save"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -282,6 +290,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f3e0", {"home", "house"}),
             ("\U0001f5a8", {"print", "printer"}),
             ("\U0001f4c1", {"directory", "folder"}),
+            ("\U0001f4be", {"disk", "floppy", "save"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -4639,6 +4648,93 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+
+    def test_save_action_target_id_accepts_floppy_disk_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Save document.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Floppy disk", "button", (120, 160, 120, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 120, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_floppy_disk_action_target_id_accepts_save_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the floppy disk.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "Save", "button", (120, 160, 100, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_save_symbol_target_id_accepts_icon(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Save document.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "\U0001f4be", "button", (120, 160, 32, 32))],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_save_text_match_overrides_cancel_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Save document.",
+                    "target": {"x": 300, "y": 160, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Floppy disk", "button", (120, 160, 120, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 120, 32))
         self.assertFalse(target.rejected_reason)
 
     def test_unlabeled_target_id_with_geometry_recovers_to_visible_text_match(self) -> None:
