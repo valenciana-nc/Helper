@@ -58,6 +58,12 @@ def looks_oversized(decision: "LiveHelpDecision") -> bool:
     return (w * h) > OVERSIZED_AREA_THRESHOLD or max(w, h) > OVERSIZED_EDGE_THRESHOLD
 
 
+def click_hit_margin(rect: tuple[int, int, int, int]) -> int:
+    _x, _y, width, height = rect
+    shortest_edge = max(1, min(abs(int(width)), abs(int(height))))
+    return max(4, min(CLICK_HIT_MARGIN_PX, shortest_edge // 3))
+
+
 def build_target_diagnostic(
     *,
     decision: "LiveHelpDecision",
@@ -363,7 +369,7 @@ class HelpSession(QObject):
             self._check_now_event.set()
             return
         rx, ry, rw, rh = rect
-        margin = CLICK_HIT_MARGIN_PX
+        margin = click_hit_margin(rect)
         inside = (
             (rx - margin) <= screen_x < (rx + rw + margin)
             and (ry - margin) <= screen_y < (ry + rh + margin)

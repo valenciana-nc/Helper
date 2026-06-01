@@ -120,6 +120,43 @@ class _DoneAgent:
 
 
 class HelpSessionEndToEndTests(unittest.TestCase):
+    def test_click_hit_margin_scales_with_target_size(self) -> None:
+        from help_session import click_hit_margin
+
+        self.assertEqual(click_hit_margin((100, 100, 32, 32)), 10)
+        self.assertEqual(click_hit_margin((100, 100, 120, 32)), 10)
+        self.assertEqual(click_hit_margin((100, 100, 300, 300)), 24)
+
+    def test_small_target_click_just_outside_adaptive_margin_counts_elsewhere(self) -> None:
+        _qt_app()
+        session = HelpSession(
+            _ScriptedAgent(),
+            _Controller(),
+            capture_provider=lambda: _button_capture(),
+            candidate_provider=lambda _capture: [],
+        )
+
+        session._set_active_rect((100, 100, 32, 32))
+        session.notify_user_click(143, 116)
+
+        self.assertFalse(session._click_inside_event.is_set())
+        self.assertTrue(session._check_now_event.is_set())
+
+    def test_small_target_click_inside_adaptive_margin_counts_inside(self) -> None:
+        _qt_app()
+        session = HelpSession(
+            _ScriptedAgent(),
+            _Controller(),
+            capture_provider=lambda: _button_capture(),
+            candidate_provider=lambda _capture: [],
+        )
+
+        session._set_active_rect((100, 100, 32, 32))
+        session.notify_user_click(141, 116)
+
+        self.assertTrue(session._click_inside_event.is_set())
+        self.assertFalse(session._check_now_event.is_set())
+
     def test_help_session_waits_for_overlay_clear_barrier_before_capture(self) -> None:
         app = _qt_app()
         capture = _button_capture()
