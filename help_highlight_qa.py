@@ -1933,6 +1933,101 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_window_target_id_accepts_x_symbol_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close window.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u00d7", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "close_window_wrong_target_id_recovers_to_foreground_close",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 20, 32, 32], "label": "X"},
+                {"rect": [900, 140, 32, 32], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close window.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [900, 20, 32, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "c002",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [900, 140, 32, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [900, 20, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "close_dialog_duplicate_buttons_stay_ambiguous",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 20, 32, 32], "label": "X"},
+                {"rect": [900, 140, 32, 32], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [900, 20, 32, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "c002",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [900, 140, 32, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c002",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "minimize_window_text_match_overrides_zoom_out_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

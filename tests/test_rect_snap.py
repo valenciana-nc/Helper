@@ -6744,6 +6744,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Maximize window.", "\u2b1c", (120, 160, 32, 32)),
             ("Maximize window.", "\U0001f5d6", (120, 160, 32, 32)),
             ("Restore window.", "\U0001f5d7", (120, 160, 32, 32)),
+            ("Close window.", "\u00d7", (120, 160, 32, 32)),
+            ("Close window.", "\u2715", (120, 160, 32, 32)),
         )
         for instruction, label, rect in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -6784,6 +6786,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "\U0001f5d7", "button", (120, 160, 32, 32)),
                 ControlCandidate("c002", "Maximize", "button", (300, 160, 100, 32)),
             ),
+            (
+                "Close window.",
+                ControlCandidate("c001", "\u00d7", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Clear", "button", (300, 160, 100, 32)),
+            ),
         )
         for instruction, expected, decoy in cases:
             with self.subTest(instruction=instruction):
@@ -6808,6 +6815,81 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_close_window_wrong_target_id_recovers_to_foreground_close(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close window.",
+                    "target_id": "c002",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Close",
+                    "button",
+                    (940, 10, 32, 32),
+                    window_title="Foreground",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Close",
+                    "button",
+                    (940, 110, 32, 32),
+                    window_title="Background",
+                    window_rank=1,
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (940, 10, 32, 32))
+
+    def test_dialog_close_wrong_target_id_stays_ambiguous_with_duplicate_closes(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close the dialog.",
+                    "target_id": "c002",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Close",
+                    "button",
+                    (940, 10, 32, 32),
+                    window_title="Foreground",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Close",
+                    "button",
+                    (940, 110, 32, 32),
+                    window_title="Background",
+                    window_rank=1,
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_window_control_aliases_do_not_cross_zoom_controls(self) -> None:
         from control_inventory import ControlCandidate

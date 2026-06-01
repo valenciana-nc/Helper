@@ -42,6 +42,8 @@ UNLABELED_COMPETITOR_MARGIN_PX = 96
 FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
+DISMISS_DIALOG_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
+DISMISS_WINDOW_CONTEXT_WORDS = frozenset({"browser", "page", "tab", "window"})
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -887,10 +889,12 @@ def _single_dialog_dismiss_candidate(
     candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int] | None,
 ) -> TargetResolution | None:
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & DISMISS_WINDOW_CONTEXT_WORDS and not raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
+        return None
     instruction_tokens = _tokenize_instruction(instruction)
     if not instruction_tokens or instruction_tokens - {"cancel", "close", "dismiss"}:
         return None
-    raw_tokens = _tokens_from_text(instruction)
     dismiss_candidates: list[ControlCandidate] = []
     preferred: list[ControlCandidate] = []
     for candidate in candidates:
