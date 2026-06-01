@@ -234,6 +234,30 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("archive", tokenize_control("File cabinet"))
         self.assertIn("archive", tokenize_control("Filing cabinet"))
 
+    def test_external_link_aliases_expand_to_open_new_language(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_control, tokenize_instruction
+
+        external_tokens = tokenize_instruction("Open external link")
+        new_tab_tokens = tokenize_instruction("Open in new tab")
+        new_window_tokens = tokenize_instruction("Open in new window")
+        bare_new_tab_tokens = tokenize_instruction("New tab")
+        intents = instruction_control_intents("Open in new tab")
+
+        self.assertTrue({"external", "launch", "open_new"}.issubset(external_tokens))
+        self.assertTrue({"external", "new_tab", "open_new"}.issubset(new_tab_tokens))
+        self.assertTrue({"external", "new_window", "open_new"}.issubset(new_window_tokens))
+        self.assertNotIn("plus", new_tab_tokens)
+        self.assertIn("plus", bare_new_tab_tokens)
+        self.assertTrue({"button", "splitbutton", "hyperlink", "menuitem"}.issubset(intents))
+        self.assertTrue({"external", "new_tab", "open_new"}.issubset(tokenize_control("New tab")))
+        for icon in ("\u2197", "\u2b08", "\u29c9"):
+            with self.subTest(icon=icon):
+                self.assertTrue(
+                    {"external", "launch", "open_new"}.issubset(tokenize_control(icon))
+                )
+                self.assertNotIn("share", tokenize_control(icon))
+        self.assertNotIn("external", tokenize_control("\U0001f517"))
+
     def test_filter_and_sort_aliases_expand_to_toolbar_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -7065,6 +7089,68 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_external_link_target_id_accepts_open_new_icons_and_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open external link.", "External link", (120, 160, 120, 32)),
+            ("Open in new tab.", "\u2197", (120, 160, 32, 32)),
+            ("Open in new tab.", "New tab", (120, 160, 100, 32)),
+            ("Open in new window.", "\u29c9", (120, 160, 32, 32)),
+            ("Launch item.", "External link", (120, 160, 120, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_external_link_aliases_do_not_cross_share_link_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        share_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Share link.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "\u2197", "button", (120, 160, 32, 32))],
+        )
+        external_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open external link.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [ControlCandidate("c001", "\U0001f517", "button", (120, 160, 32, 32))],
+        )
+
+        self.assertEqual(share_target.source, "target_id")
+        self.assertEqual(share_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(external_target.source, "target_id")
+        self.assertEqual(external_target.rejected_reason, "target_id semantic mismatch")
 
     def test_share_and_archive_text_match_overrides_export_geometry(self) -> None:
         from control_inventory import ControlCandidate

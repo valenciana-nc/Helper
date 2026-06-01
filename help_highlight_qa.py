@@ -2608,6 +2608,90 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "external_link_target_id_accepts_external_link_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "External"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open external link.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "External link", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "open_new_tab_target_id_accepts_arrow_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "N"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open in new tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\u2197", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "open_new_tab_target_id_accepts_new_tab_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open in new tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "New tab", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "external_link_action_rejects_chain_share_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open external link.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f517", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "archive_action_target_id_accepts_file_cabinet_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

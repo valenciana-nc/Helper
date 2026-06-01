@@ -34,8 +34,22 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\b(?:ctrl|control)\s*\+?\s*y\b"), {"redo"}),
     (re.compile(r"\bleft\s+arrow\b"), {"left_arrow"}),
     (re.compile(r"\bright\s+arrow\b"), {"right_arrow"}),
+    (re.compile(r"\bexternal\s+link\b"), {"external", "open_new"}),
+    (
+        re.compile(r"\bopen\s+(?:in\s+)?(?:a\s+)?new\s+tab\b"),
+        {"external", "new_tab", "open_new"},
+    ),
+    (
+        re.compile(r"\bopen\s+(?:in\s+)?(?:a\s+)?new\s+window\b"),
+        {"external", "new_window", "open_new"},
+    ),
+    (re.compile(r"\bopen\s+in\s+new\b"), {"external", "open_new"}),
     (re.compile(r"\bzoom\s+in\b"), {"zoom_in"}),
     (re.compile(r"\bzoom\s+out\b"), {"zoom_out"}),
+)
+_CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
+    (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
+    (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
 )
 _AUTH_DIRECTION_TOKEN_REWRITES = (
     (
@@ -80,10 +94,13 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u22ef": {"dot", "dots", "ellipsis", "menu", "more", "options"},
     "\u2699": {"cog", "gear", "options", "preferences", "settings"},
     "\u2139": {"about", "details", "info", "information"},
+    "\u2197": {"external", "launch", "new_tab", "open_new"},
     "\u2715": {"clear", "close", "dismiss", "x"},
     "\u2716": {"clear", "close", "dismiss", "x"},
     "\u27f2": {"refresh", "reload"},
     "\u27f3": {"refresh", "reload"},
+    "\u29c9": {"external", "launch", "new_tab", "open_new"},
+    "\u2b08": {"external", "launch", "new_tab", "open_new"},
     "\u2605": {"bookmark", "favorite", "star"},
     "\u2606": {"bookmark", "favorite", "star"},
     "\u2661": {"favorite", "heart"},
@@ -213,6 +230,7 @@ _TOKEN_ALIASES = {
     "edit": {"pencil"},
     "email": {"envelope", "mail"},
     "envelope": {"email", "mail"},
+    "external": {"launch", "new_tab", "new_window", "open_new"},
     "expand": {"arrow", "caret", "chevron", "disclosure"},
     "export": {"download"},
     "eye": {"visibility", "visible"},
@@ -236,6 +254,7 @@ _TOKEN_ALIASES = {
     "information": {"about", "details", "info"},
     "italic": {"i"},
     "italics": {"i", "italic"},
+    "launch": {"external", "open_new"},
     "lens": {"find", "search"},
     "left_arrow": {"back", "previous"},
     "location": {"address", "url"},
@@ -257,6 +276,8 @@ _TOKEN_ALIASES = {
     "minus": {"minimize", "zoom_out"},
     "more": {"menu", "options"},
     "new": {"add", "create", "plus"},
+    "new_tab": {"external", "open_new"},
+    "new_window": {"external", "open_new"},
     "next": {"continue", "forward", "proceed"},
     "notification": {"alerts", "bell", "notifications", "notify"},
     "notifications": {"alerts", "bell", "notification", "notify"},
@@ -264,6 +285,7 @@ _TOKEN_ALIASES = {
     "ok": {"confirm", "okay"},
     "okay": {"confirm", "ok"},
     "omnibox": {"address", "search", "url"},
+    "open_new": {"external", "new_tab", "new_window"},
     "options": {"preferences", "settings"},
     "overflow": {"menu", "more", "options"},
     "padlock": {"lock", "locked", "unlock", "unlocked"},
@@ -541,6 +563,9 @@ _EDIT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "hyperlink", "me
 _FORMAT_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _HISTORY_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
 _ZOOM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
+_EXTERNAL_LINK_ACTION_INTENT_TYPES = frozenset(
+    {"button", "splitbutton", "hyperlink", "menuitem"}
+)
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
@@ -709,6 +734,10 @@ _DIALOG_DISMISS_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
 _HISTORY_ACTION_WORDS = frozenset({"redo", "undo"})
 _ZOOM_ACTION_WORDS = frozenset({"zoom_in", "zoom_out"})
 _ZOOM_ACTION_CONTEXT_WORDS = frozenset({"in", "out", "zoom"})
+_EXTERNAL_LINK_ACTION_WORDS = frozenset(
+    {"external", "launch", "new_tab", "new_window", "open_new"}
+)
+_EXTERNAL_LINK_CONTEXT_WORDS = frozenset({"new", "tab", "window"})
 _EDIT_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -748,6 +777,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
         filtered -= _CLEAR_ACTION_CONTEXT_WORDS
     if _zoom_action_requested(tokens):
         filtered -= _ZOOM_ACTION_CONTEXT_WORDS
+    if _external_link_action_requested(tokens):
+        filtered -= _EXTERNAL_LINK_CONTEXT_WORDS
     dialog_dismiss_tokens = _dialog_dismiss_action_tokens(tokens)
     if dialog_dismiss_tokens:
         filtered.update(dialog_dismiss_tokens)
@@ -791,6 +822,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     clear_action_requested = _clear_action_requested(raw_tokens)
     history_action_requested = bool(raw_tokens & _HISTORY_ACTION_WORDS)
     zoom_action_requested = _zoom_action_requested(raw_tokens)
+    external_link_action_requested = _external_link_action_requested(raw_tokens)
     edit_action_requested = _edit_action_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -845,6 +877,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_HISTORY_ACTION_INTENT_TYPES)
     if zoom_action_requested:
         intents.update(_ZOOM_ACTION_INTENT_TYPES)
+    if external_link_action_requested:
+        intents.update(_EXTERNAL_LINK_ACTION_INTENT_TYPES)
     if edit_action_requested:
         intents.update(_EDIT_ACTION_INTENT_TYPES)
     if (
@@ -855,6 +889,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not format_action_requested
         and not clear_action_requested
         and not zoom_action_requested
+        and not external_link_action_requested
         and not edit_action_requested
         and "button" in raw_tokens
     ):
@@ -901,7 +936,7 @@ def menu_segment_intent(control_intents: set[str]) -> bool:
 
 
 def tokenize_control(text: str) -> set[str]:
-    return expand_token_aliases(tokens_from_text(text))
+    return expand_token_aliases(tokens_from_text(text) | control_phrase_tokens(text))
 
 
 def tokens_from_text(text: str) -> set[str]:
@@ -925,6 +960,18 @@ def tokens_from_text(text: str) -> set[str]:
         if symbol in compact:
             symbol_tokens.update(aliases)
     return symbol_tokens
+
+
+def control_phrase_tokens(text: str) -> set[str]:
+    value = text or ""
+    spaced = _CAMEL_RE.sub(" ", value)
+    spaced = _SEPARATOR_RE.sub(" ", spaced)
+    phrase_text = _WHITESPACE_RE.sub(" ", spaced.lower()).strip()
+    tokens: set[str] = set()
+    for pattern, aliases in _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS:
+        if pattern.search(phrase_text):
+            tokens.update(aliases)
+    return tokens
 
 
 def expand_token_aliases(tokens: set[str]) -> set[str]:
@@ -987,6 +1034,10 @@ def _clear_action_requested(raw_tokens: set[str]) -> bool:
 
 def _zoom_action_requested(raw_tokens: set[str]) -> bool:
     return bool(raw_tokens & _ZOOM_ACTION_WORDS)
+
+
+def _external_link_action_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _EXTERNAL_LINK_ACTION_WORDS)
 
 
 def _dialog_dismiss_action_tokens(raw_tokens: set[str]) -> set[str]:
