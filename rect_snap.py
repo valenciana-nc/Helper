@@ -19,6 +19,7 @@ DEFAULT_TIMEOUT_MS = 400
 SEARCH_MARGIN_PX = 60
 CONFIDENCE_FLOOR = 0.42
 SEMANTIC_MISMATCH_CAP = 0.41
+SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -160,7 +161,7 @@ def snap_to_control(
                 best_semantic_text,
                 instruction_tokens,
             )
-            and _iou(best_result.rect, model_rect) >= 0.65
+            and _semantic_mismatch_targets_model_rect(best_result.rect, model_rect)
         ):
             return SnapResult(
                 rect=best_result.rect,
@@ -351,6 +352,15 @@ def _semantic_mismatch(text: str, instruction_tokens: set[str]) -> bool:
     return bool(instruction_tokens and control_tokens and not (instruction_tokens & control_tokens))
 
 
+def _semantic_mismatch_targets_model_rect(
+    candidate_rect: tuple[int, int, int, int],
+    model_rect: tuple[int, int, int, int],
+) -> bool:
+    if _iou(candidate_rect, model_rect) >= SEMANTIC_MISMATCH_IOU_FLOOR:
+        return True
+    return _center_inside(model_rect, candidate_rect)
+
+
 def _expand_token_aliases(tokens: set[str]) -> set[str]:
     expanded = set(tokens)
     for token in tokens:
@@ -442,6 +452,15 @@ def _intersects(
         and ay1 < by1 + bh
         and ay1 + ah > by1
     )
+
+
+def _center_inside(
+    rect: tuple[int, int, int, int],
+    bounds: tuple[int, int, int, int],
+) -> bool:
+    cx, cy = _center(rect)
+    bx, by, bw, bh = bounds
+    return bx <= cx < bx + bw and by <= cy < by + bh
 
 
 def _center(rect: tuple[int, int, int, int]) -> tuple[int, int]:

@@ -238,6 +238,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
+        from rect_snap import snap_to_control
+
+        cancel = _make_button("Cancel", 100, 200, 60, 30)
+        window = _make_window("App", 0, 0, 800, 600, [cancel])
+        desktop = _FakeDesktop([window])
+        model_rect = (80, 185, 120, 70)
+
+        result = snap_to_control(
+            model_rect,
+            "Click Save",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 60, 30))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_snap_rejects_visible_text_conflict_despite_matching_automation_id(self) -> None:
         from rect_snap import snap_to_control
 
