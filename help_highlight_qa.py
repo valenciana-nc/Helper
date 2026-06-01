@@ -5570,6 +5570,148 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_new_action_rejects_unnamed_new_url_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Claude new bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open new.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://claude.ai/new",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_app_action_rejects_unnamed_app_url_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Gemini app bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open app.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://gemini.google.com/app?utm_source=app_launcher&utm_medium=owned&utm_campaign=base_all",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "specific_gemini_app_accepts_matching_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Gemini app bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gemini app.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://gemini.google.com/app?utm_source=app_launcher&utm_medium=owned&utm_campaign=base_all",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_new_text_match_prefers_new_tab_over_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Claude new bookmark"},
+                {"rect": [300, 80, 100, 32], "label": "New Tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open new.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://claude.ai/new",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "New Tab",
+                    "control_type": "button",
+                    "rect": [300, 80, 100, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [300, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_app_model_rect_rejects_unnamed_app_url_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Gemini app bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open app.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://gemini.google.com/app?utm_source=app_launcher",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_closed_rejects_browser_group_label",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

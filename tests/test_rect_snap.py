@@ -6454,6 +6454,156 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
+    def test_generic_url_path_words_reject_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        claude_new = "Unnamed bookmark for https://claude.ai/new"
+        gemini_app = (
+            "Unnamed bookmark for "
+            "https://gemini.google.com/app?utm_source=app_launcher&utm_medium=owned"
+            "&utm_campaign=base_all"
+        )
+        cases = (
+            ("Open new.", claude_new),
+            ("Create new.", claude_new),
+            ("Add new.", claude_new),
+            ("Open app.", gemini_app),
+            ("Open launcher.", gemini_app),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_url_path_words_accept_only_matching_unnamed_bookmark_destination(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        claude_new = "Unnamed bookmark for https://claude.ai/new"
+        gemini_app = (
+            "Unnamed bookmark for "
+            "https://gemini.google.com/app?utm_source=app_launcher&utm_medium=owned"
+            "&utm_campaign=base_all"
+        )
+        cases = (
+            ("Open Claude new.", claude_new, ""),
+            ("Open Claude.", claude_new, ""),
+            ("Open Gemini app.", gemini_app, ""),
+            ("Open Gemini.", gemini_app, ""),
+            ("Open Chrome app.", gemini_app, "target_id semantic mismatch"),
+            ("Open Gemini app.", claude_new, "target_id semantic mismatch"),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_new_text_match_prefers_new_tab_over_unnamed_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open new.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for https://claude.ai/new",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "New Tab",
+                    "button",
+                    (400, 160, 100, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+
+    def test_generic_app_model_rect_rejects_unnamed_bookmark_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open app.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://gemini.google.com/app?utm_source=app_launcher",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
     def test_generic_route_text_match_ignores_unnamed_url_bookmark(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
