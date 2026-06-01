@@ -1694,6 +1694,114 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "weather_widget_target_id_accepts_open_weather",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Widgets weather"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open weather.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Widgets 64\u00b0F Clear",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "weather_widget_target_id_accepts_open_widgets",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Widgets weather"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open widgets.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Widgets 64\u00b0F Clear",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "clear_search_rejects_weather_widget_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Widgets weather"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Widgets 64\u00b0F Clear",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "clear_text_rejects_weather_clear_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Weather"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear text.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Weather 64\u00b0F Clear",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "clear_text_match_overrides_field_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

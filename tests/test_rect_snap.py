@@ -522,6 +522,21 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("bookmark", network_tokens)
         self.assertNotIn("favorite", network_tokens)
 
+    def test_weather_widget_status_does_not_expand_to_clear_action(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        widget_tokens = tokenize_control("Widgets 64\u00b0F Clear")
+        weather_tokens = tokenize_control("Weather 64\u00b0F Clear")
+
+        self.assertTrue({"weather", "widgets"}.issubset(widget_tokens))
+        self.assertIn("weather", weather_tokens)
+        self.assertIn("weather", tokenize_instruction("Open weather"))
+        self.assertNotIn("clear", widget_tokens)
+        self.assertNotIn("x", widget_tokens)
+        self.assertNotIn("clear", weather_tokens)
+        self.assertNotIn("x", weather_tokens)
+        self.assertIn("clear", tokenize_control("Clear"))
+
     def test_print_action_aliases_expand_to_printer_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -6943,6 +6958,78 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_weather_widget_accepts_weather_and_widget_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open widgets.",
+            "Open weather.",
+            "Show weather.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Widgets 64\u00b0F Clear",
+                            "button",
+                            (120, 160, 160, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 160, 32))
+
+    def test_weather_widget_clear_status_does_not_cross_clear_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Clear search.", "Widgets 64\u00b0F Clear"),
+            ("Clear text.", "Widgets 64\u00b0F Clear"),
+            ("Clear the field.", "Weather 64\u00b0F Clear"),
+            ("Open weather.", "Clear"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 160, 32),
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_clear_and_delete_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
