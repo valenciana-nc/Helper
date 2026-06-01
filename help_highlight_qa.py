@@ -153,6 +153,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "background_duplicate_target_id_with_geometry_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+                {"rect": [280, 210, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 160, "y": 250, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 80, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+                {
+                    "id": "c002",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [280, 210, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ambiguous_candidate_snap_rejects_overlay",
             "capture": {"width": 420, "height": 220},
             "draw": [

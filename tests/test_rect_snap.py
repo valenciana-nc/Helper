@@ -642,6 +642,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_target_id_background_duplicate_with_geometry_is_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30), window_rank=0),
+            ],
+            model_rect=(10, 10, 60, 30),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id ambiguous")
+
     def test_text_match_prefers_foreground_duplicate_across_windows(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -1089,6 +1107,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
+
+    def test_background_target_id_with_geometry_does_not_resnap_same_rejected_target(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "c001",
+                    "target": {"x": 10, "y": 10, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Save", "button", (10, 10, 60, 30), window_rank=2),
+                ControlCandidate("c002", "Save", "button", (300, 10, 60, 30), window_rank=0),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_wrong_target_id_recovers_by_geometry_when_text_is_ambiguous(self) -> None:
         from control_inventory import ControlCandidate

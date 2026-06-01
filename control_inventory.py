@@ -22,6 +22,7 @@ TEXT_MATCH_FLOOR = 0.55
 TEXT_MATCH_GAP = 0.08
 TARGET_ID_TEXT_FLOOR = 0.35
 TARGET_ID_GEOMETRY_FLOOR = 0.72
+TARGET_ID_FOREGROUND_CONFLICT_GAP = 0.35
 CANDIDATE_SNAP_FLOOR = 0.50
 CANDIDATE_SNAP_MARGIN_PX = 60
 MIN_VISIBLE_FRACTION = 0.20
@@ -934,6 +935,11 @@ def _target_id_ambiguity(
         score += _foreground_rank_bonus(candidate, candidates)
         gap = selected_score - score
         closest_gap = min(closest_gap, gap)
+        if (
+            candidate.window_rank < selected.window_rank
+            and gap < TARGET_ID_FOREGROUND_CONFLICT_GAP
+        ):
+            return True, gap
         if model_rect is None and gap < TEXT_MATCH_GAP:
             return True, gap
         if model_rect is not None and gap < TEXT_MATCH_GAP:

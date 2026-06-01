@@ -200,6 +200,13 @@ def resolve_help_target(
                 model_rect=model_rect,
             )
             if candidate_snap is not None and not candidate_snap.rejected_reason:
+                if (
+                    target is not None
+                    and target.rejected_reason == "target_id ambiguous"
+                    and target.target_id
+                    and candidate_snap.target_id == target.target_id
+                ):
+                    return target
                 return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
             if candidate_snap is not None:
                 return candidate_snap
