@@ -715,6 +715,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_slider_model_rect_snaps_to_slider",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Adjust this slider.",
+                "target": {"x": 20, "y": 80, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Volume", "control_type": "slider", "rect": [20, 80, 240, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_slider_broad_group_rejects_multiple_sliders",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 240, 32], "label": "Volume"},
+                {"rect": [20, 120, 240, 32], "label": "Brightness"},
+                {"rect": [20, 160, 240, 32], "label": "Contrast"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Adjust this slider.",
+                "target": {"x": 20, "y": 80, "width": 240, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Volume", "control_type": "slider", "rect": [20, 80, 240, 32]},
+                {"id": "c002", "text": "Brightness", "control_type": "slider", "rect": [20, 120, 240, 32]},
+                {"id": "c003", "text": "Contrast", "control_type": "slider", "rect": [20, 160, 240, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

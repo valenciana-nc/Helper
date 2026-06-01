@@ -434,6 +434,31 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 140, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_generic_slider_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        slider = _make_button(
+            "Volume",
+            100,
+            200,
+            220,
+            32,
+            control_type="Slider",
+        )
+        window = _make_window("Settings", 0, 0, 800, 600, [slider])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 220, 32),
+            "Adjust this slider.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 220, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1409,6 +1434,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 140, 32))
 
+    def test_generic_slider_target_id_accepts_slider_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Adjust this slider.",
+            candidates=[
+                ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
+            ],
+            model_rect=(10, 10, 220, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 220, 32))
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -2124,6 +2167,39 @@ class ControlInventoryTests(unittest.TestCase):
                 ControlCandidate("c003", "Monthly", "radiobutton", (10, 74, 140, 32)),
             ],
             model_rect=(10, 10, 140, 96),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_generic_slider(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Adjust this slider.",
+            candidates=[
+                ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
+            ],
+            model_rect=(10, 10, 220, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 220, 32))
+
+    def test_snap_candidate_target_rejects_broad_slider_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Adjust this slider.",
+            candidates=[
+                ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
+                ControlCandidate("c002", "Brightness", "slider", (10, 50, 220, 32)),
+                ControlCandidate("c003", "Contrast", "slider", (10, 90, 220, 32)),
+            ],
+            model_rect=(10, 10, 220, 112),
         )
 
         self.assertIsNone(result)
@@ -2930,6 +3006,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "Daily", "radiobutton", (10, 10, 140, 32)),
                 ControlCandidate("c002", "Weekly", "radiobutton", (10, 42, 140, 32)),
                 ControlCandidate("c003", "Monthly", "radiobutton", (10, 74, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_slider_model_rect_highlights_slider(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Adjust this slider.",
+                    "target": {"x": 10, "y": 10, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 220, 32))
+
+    def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Adjust this slider.",
+                    "target": {"x": 10, "y": 10, "width": 220, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Volume", "slider", (10, 10, 220, 32)),
+                ControlCandidate("c002", "Brightness", "slider", (10, 50, 220, 32)),
+                ControlCandidate("c003", "Contrast", "slider", (10, 90, 220, 32)),
             ],
         )
 
