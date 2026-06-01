@@ -34,6 +34,7 @@ FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
+START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -115,6 +116,7 @@ def snap_to_control(
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
     control_type_mismatch_result: SnapResult | None = None
+    start_button_action_mismatch_result: SnapResult | None = None
     compound_target_result: SnapResult | None = None
     contained_control_intent_results: list[tuple[SnapResult, str]] = []
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
@@ -147,6 +149,11 @@ def snap_to_control(
         visible_text = _control_visible_text(control)
         automation_id = _control_automation_id(control)
         semantic_text = visible_text or automation_id
+        start_button_action_mismatch = _start_button_action_mismatch(
+            instruction_tokens,
+            visible_text,
+            automation_id,
+        )
         if not _is_candidate_topmost(top_handle, rect, topmost_provider):
             if (
                 occluded_result is None
@@ -200,7 +207,20 @@ def snap_to_control(
             model_center=model_center,
             instruction_tokens=instruction_tokens,
             diagonal=diagonal,
+            start_button_action_mismatch=start_button_action_mismatch,
         )
+        if (
+            start_button_action_mismatch
+            and start_button_action_mismatch_result is None
+            and _semantic_mismatch_targets_model_rect(rect, model_rect)
+        ):
+            start_button_action_mismatch_result = SnapResult(
+                rect=rect,
+                confidence=score,
+                source="uia",
+                matched_text=text,
+                rejected_reason="candidate semantic mismatch",
+            )
         if foreground_known and window_rank == 0:
             score = min(1.0, score + FOREGROUND_RANK_BONUS)
         if ctype == "splitbutton" and _menu_segment_intent(control_intents):
@@ -302,6 +322,8 @@ def snap_to_control(
             return occluded_result
         if control_type_mismatch_result is not None:
             return control_type_mismatch_result
+        if start_button_action_mismatch_result is not None:
+            return start_button_action_mismatch_result
         if compound_target_result is not None:
             return compound_target_result
         log.debug(
@@ -637,6 +659,21 @@ def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
     return len(instruction_tokens & control_tokens) / max(1, len(instruction_tokens))
 
 
+def _start_button_action_mismatch(
+    instruction_tokens: set[str],
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    if "start" not in instruction_tokens:
+        return False
+    control_tokens = _tokenize_control(" ".join((visible_text or "", automation_id or "")))
+    if "startbutton" not in control_tokens and not (
+        "start" in control_tokens and "button" in control_tokens
+    ):
+        return False
+    return bool(instruction_tokens - START_BUTTON_ALLOWED_TOKENS)
+
+
 def _disclosure_action_tokens_mismatch(
     instruction_tokens: set[str],
     control_tokens: set[str],
@@ -671,6 +708,7 @@ def _score(
     model_center: tuple[int, int],
     instruction_tokens: set[str],
     diagonal: float,
+    start_button_action_mismatch: bool = False,
 ) -> float:
     iou = _iou(rect, model_rect)
     cx, cy = _center(rect)
@@ -710,7 +748,11 @@ def _score(
         + SCORE_WEIGHT_TEXT * text_score
         + SCORE_WEIGHT_TYPE * type_score
     )
-    if disclosure_mismatch or (instruction_tokens and control_tokens and not overlap):
+    if (
+        start_button_action_mismatch
+        or disclosure_mismatch
+        or (instruction_tokens and control_tokens and not overlap)
+    ):
         return min(score, SEMANTIC_MISMATCH_CAP)
     return score
 

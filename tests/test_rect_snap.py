@@ -1069,6 +1069,25 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, model_rect)
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_start_video_does_not_snap_taskbar_start_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        start = _make_button("Start", 0, 560, 55, 40, automation_id="StartButton")
+        window = _make_window("Taskbar", 0, 540, 800, 60, [start])
+        desktop = _FakeDesktop([window])
+        model_rect = (0, 560, 55, 40)
+
+        result = snap_to_control(
+            model_rect,
+            "Start video.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, model_rect)
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_semantic_mismatch_rejects_loose_model_rect_centered_on_wrong_control(self) -> None:
         from rect_snap import snap_to_control
 
@@ -10199,6 +10218,73 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_start_video_rejects_taskbar_start_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Start video.", "target_id semantic mismatch"),
+            ("Start camera.", "target_id semantic mismatch"),
+            ("Click Start.", ""),
+            ("Open Start button.", ""),
+            ("Open Start menu.", ""),
+        )
+        for instruction, reason in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "Start",
+                            "button",
+                            (120, 160, 55, 40),
+                            automation_id="StartButton",
+                            window_title="Taskbar",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_start_video_model_rect_rejects_taskbar_start_button_snap(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Start video.",
+                    "target": {"x": 120, "y": 160, "width": 55, "height": 40},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Start",
+                    "button",
+                    (120, 160, 55, 40),
+                    automation_id="StartButton",
+                    window_title="Taskbar",
+                )
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_meeting_control_alias_text_match_overrides_settings_geometry(self) -> None:
         from control_inventory import ControlCandidate

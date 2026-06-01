@@ -66,6 +66,7 @@ TASKBAR_APP_GENERIC_REQUEST_WORDS = frozenset(
 TASKBAR_APP_STATUS_CONTEXT_WORDS = frozenset(
     {"and", "backed", "backup", "personal", "sync", "synced", "up"}
 )
+TASKBAR_START_BUTTON_ALLOWED_TOKENS = frozenset({"start", "windows"})
 TASKBAR_WIDGET_STATUS_IDENTITY_WORDS = frozenset({"weather", "widgets"})
 TASKBAR_NETWORK_STATUS_IDENTITY_WORDS = frozenset(
     {"internet", "network", "starlink", "wifi", "wireless"}
@@ -1078,6 +1079,8 @@ def _text_match_score(
         return 0.0
     if not instruction_tokens:
         return 0.0
+    if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -1153,6 +1156,8 @@ def _context_text_match_score(
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     if not instruction_tokens:
+        return 0.0
+    if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -1279,6 +1284,12 @@ def _target_id_plausibility(
     control_intents = _instruction_control_intents(instruction)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return (
             False,
@@ -1804,6 +1815,30 @@ def _taskbar_app_state_action_mismatch(
     return False
 
 
+def _taskbar_start_button_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_taskbar_start_button(candidate):
+        return False
+    if "start" not in instruction_tokens:
+        return False
+    return bool(instruction_tokens - TASKBAR_START_BUTTON_ALLOWED_TOKENS)
+
+
+def _looks_like_taskbar_start_button(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if not (window_tokens & TASKBAR_WINDOW_WORDS):
+        return False
+    automation_tokens = _tokens_from_text(candidate.automation_id)
+    text_tokens = _tokens_from_text(candidate.text)
+    return "startbutton" in automation_tokens or (
+        "start" in text_tokens and "button" in automation_tokens
+    )
+
+
 def _unnamed_bookmark_generic_route_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -2023,6 +2058,8 @@ def _target_id_ambiguity(
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2163,6 +2200,8 @@ def _has_semantic_alternative(
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2229,6 +2268,8 @@ def _has_visible_semantic_alternative(
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2292,6 +2333,8 @@ def _candidate_snap_score(
     proximity = _proximity_score(candidate.rect, model_rect)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
@@ -2416,6 +2459,8 @@ def _contains_tighter_same_intent_action(
             and candidate.control_type in control_intents
             and not _candidate_matches_control_intent(selected, control_intents)
         ):
+            if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+                continue
             if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
                 continue
             if _disclosure_state_action_mismatch(instruction_tokens, candidate):
@@ -2427,6 +2472,8 @@ def _contains_tighter_same_intent_action(
                 return True
             if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
                 return True
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
@@ -2461,6 +2508,8 @@ def _single_contained_control_intent_candidate(
         if not _contains_rect(bounds, candidate.rect):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
+            continue
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -2517,6 +2566,11 @@ def _candidate_matches_control_intent(
         )
     ):
         return True
+    if _looks_like_taskbar_start_button(candidate) and control_intents & {
+        "menuitem",
+        "splitbutton",
+    }:
+        return True
     return False
 
 
@@ -2555,6 +2609,10 @@ def _same_snap_intent(
 ) -> bool:
     if not instruction_tokens:
         return True
+    if _taskbar_start_button_action_mismatch(instruction_tokens, first):
+        return False
+    if _taskbar_start_button_action_mismatch(instruction_tokens, second):
+        return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, first):
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, second):
@@ -2591,6 +2649,8 @@ def _candidate_snap_semantic_mismatch(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     if not instruction_tokens or not semantic_tokens:
         return False
+    if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):

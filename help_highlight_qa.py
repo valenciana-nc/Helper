@@ -4232,6 +4232,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "start_video_rejects_taskbar_start_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 55, 40], "label": "Start"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Start video.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Start",
+                    "control_type": "button",
+                    "rect": [20, 80, 55, 40],
+                    "automation_id": "StartButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "start_menu_accepts_taskbar_start_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 55, 40], "label": "Start"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Start menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Start",
+                    "control_type": "button",
+                    "rect": [20, 80, 55, 40],
+                    "automation_id": "StartButton",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 55, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "play_video_target_id_accepts_symbol_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
