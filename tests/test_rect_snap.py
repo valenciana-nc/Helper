@@ -11777,47 +11777,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ControlCandidate("bob_email", "Email", "edit", (120, 168, 300, 32)),
             ControlCandidate("bob_clear", "Clear", "button", (390, 170, 28, 28)),
         ]
-        instruction = "Clear the Email field in Bob row."
-
-        wrong_target = resolve_candidate_target(
-            target_id="alice_clear",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(390, 94, 28, 28),
-        )
-        wrong_snap = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(390, 94, 28, 28),
-        )
-        right_target = resolve_candidate_target(
-            target_id="bob_clear",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(390, 170, 28, 28),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "alice_clear",
-                    "target": {"x": 390, "y": 94, "width": 28, "height": 28},
-                }
-            ),
-            self._capture(),
-            candidates,
+        instructions = (
+            "Clear the Email field in Bob row.",
+            "Clear the Email field in row Bob.",
         )
 
-        self.assertEqual(wrong_target.target_id, "alice_clear")
-        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
-        self.assertEqual(wrong_snap.target_id, "bob_clear")
-        self.assertFalse(wrong_snap.rejected_reason)
-        self.assertEqual(right_target.target_id, "bob_clear")
-        self.assertFalse(right_target.rejected_reason)
-        self.assertEqual(help_target.source, "candidate_snap")
-        self.assertEqual(help_target.target_id, "bob_clear")
-        self.assertEqual(help_target.rect, (390, 170, 28, 28))
+        for instruction in instructions:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="alice_clear",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(390, 94, 28, 28),
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(390, 94, 28, 28),
+                )
+                right_target = resolve_candidate_target(
+                    target_id="bob_clear",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(390, 170, 28, 28),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "alice_clear",
+                            "target": {"x": 390, "y": 94, "width": 28, "height": 28},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "alice_clear")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(wrong_snap.target_id, "bob_clear")
+                self.assertFalse(wrong_snap.rejected_reason)
+                self.assertEqual(right_target.target_id, "bob_clear")
+                self.assertFalse(right_target.rejected_reason)
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.target_id, "bob_clear")
+                self.assertEqual(help_target.rect, (390, 170, 28, 28))
 
     def test_turn_on_off_checkbox_polarity_rejects_opposite_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

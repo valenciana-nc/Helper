@@ -13696,6 +13696,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_clear_email_accepts_row_name_after_container",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 760, 56], "label": "Alice"},
+                {"rect": [120, 92, 300, 32], "label": "Email"},
+                {"rect": [390, 94, 28, 28], "label": "Clear"},
+                {"rect": [20, 156, 760, 56], "label": "Bob"},
+                {"rect": [120, 168, 300, 32], "label": "Email"},
+                {"rect": [390, 170, 28, 28], "label": "Clear"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Clear the Email field in row Bob.",
+                "target_id": "alice_clear",
+                "target": {"x": 390, "y": 94, "width": 28, "height": 28},
+            },
+            "candidates": [
+                {"id": "alice_row", "text": "Alice", "control_type": "listitem", "rect": [20, 80, 760, 56]},
+                {"id": "alice_email", "text": "Email", "control_type": "edit", "rect": [120, 92, 300, 32]},
+                {"id": "alice_clear", "text": "Clear", "control_type": "button", "rect": [390, 94, 28, 28]},
+                {"id": "bob_row", "text": "Bob", "control_type": "listitem", "rect": [20, 156, 760, 56]},
+                {"id": "bob_email", "text": "Email", "control_type": "edit", "rect": [120, 168, 300, 32]},
+                {"id": "bob_clear", "text": "Clear", "control_type": "button", "rect": [390, 170, 28, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "bob_clear",
+                "rect": [390, 170, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_numeric_action_target_id_uses_context_over_wrong_model_rect",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

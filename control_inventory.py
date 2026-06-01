@@ -4137,12 +4137,12 @@ def _instruction_contained_row_context_objects(
         cursor = index + 1
         if cursor < len(words) and words[cursor] in boundary_words:
             cursor += 1
-            while cursor < len(words):
-                token = words[cursor]
-                if token in boundary_words or token in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
-                    break
-                after.append(token)
-                cursor += 1
+        while cursor < len(words):
+            token = words[cursor]
+            if token in boundary_words or token in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+                break
+            after.append(token)
+            cursor += 1
 
         span_words = before or after
         if not span_words:
