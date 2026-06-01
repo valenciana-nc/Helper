@@ -4989,6 +4989,92 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "profile_menu_model_rect_highlights_person_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Person"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the profile menu.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Person", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "profile_target_id_accepts_person_icon_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Person"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f464", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "user_menu_target_id_accepts_people_icon_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "People"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open user menu.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f465", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "profile_person_icon_text_match_overrides_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Person"},
+                {"rect": [180, 80, 120, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile.",
+                "target": {"x": 180, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f464", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Settings", "control_type": "button", "rect": [180, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "contextual_profile_menu_item_still_highlights_menuitem",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5464,6 +5550,113 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 140, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "attach_file_target_id_highlights_paperclip_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Paperclip"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4ce", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "add_attachment_target_id_highlights_linked_paperclips_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Attachment"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Add attachment.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f587", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "attach_file_text_match_overrides_upload_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Paperclip"},
+                {"rect": [180, 80, 100, 32], "label": "Upload"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4ce", "control_type": "button", "rect": [20, 80, 32, 32]},
+                {"id": "c002", "text": "Upload", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "paste_action_rejects_paperclip_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Paperclip"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Paste into the note.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4ce", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "attach_file_rejects_clipboard_alias_collision",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "Clipboard"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4cb", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {

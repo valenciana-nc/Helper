@@ -132,13 +132,22 @@ def _make_window(
 
 class HelpIntentLanguageTests(unittest.TestCase):
     def test_file_action_aliases_expand_to_browse_language(self) -> None:
-        from help_intents import tokenize_instruction
+        from help_intents import tokenize_control, tokenize_instruction
 
         tokens = tokenize_instruction("Upload a file")
 
         self.assertIn("browse", tokens)
         self.assertIn("choose", tokens)
         self.assertIn("attach", tokens)
+        self.assertIn("paperclip", tokenize_instruction("Attach a file"))
+        self.assertTrue(
+            {"attach", "attachment", "paperclip"}.issubset(tokenize_control("Paperclip"))
+        )
+        for icon in ("\U0001f4ce", "\U0001f587"):
+            with self.subTest(icon=icon):
+                icon_tokens = tokenize_control(icon)
+                self.assertTrue({"attach", "attachment", "paperclip"}.issubset(icon_tokens))
+                self.assertNotIn("paste", icon_tokens)
 
     def test_copy_action_aliases_expand_to_duplicate_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -478,6 +487,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(alerts_tokens))
         self.assertTrue(expected.issubset(control_tokens))
 
+    def test_profile_aliases_expand_to_person_language(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        expected = {"account", "person", "profile", "user"}
+
+        self.assertTrue(expected.issubset(tokenize_instruction("Open profile")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open account")))
+        self.assertTrue(expected.issubset(tokenize_instruction("Open user menu")))
+        self.assertTrue(expected.issubset(tokenize_control("Person")))
+        self.assertTrue(expected.issubset(tokenize_control("People")))
+        self.assertTrue(expected.issubset(tokenize_control("\U0001f464")))
+        self.assertTrue(expected.issubset(tokenize_control("\U0001f465")))
+
     def test_navigation_arrow_aliases_expand_to_directional_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
 
@@ -543,6 +565,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u23fa", {"record"}),
             ("\u270f", {"edit", "pencil"}),
             ("\u2702", {"cut", "scissors"}),
+            ("\U0001f464", {"account", "avatar", "person", "profile", "user"}),
+            ("\U0001f465", {"account", "avatar", "people", "person", "profile", "user"}),
             ("\U0001f517", {"link", "share"}),
             ("\U0001f503", {"refresh", "reload"}),
             ("\U0001f504", {"refresh", "reload"}),
@@ -566,6 +590,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f5d6", {"maximize", "square"}),
             ("\U0001f5d7", {"overlap", "restore"}),
             ("\U0001f4cb", {"clipboard", "paste"}),
+            ("\U0001f4ce", {"attach", "attachment", "file", "paperclip"}),
+            ("\U0001f587", {"attach", "attachment", "file", "paperclip"}),
             ("\U0001f4c1", {"directory", "folder"}),
             ("\U0001f4be", {"disk", "floppy", "save"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
@@ -5359,8 +5385,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         cases = (
             ("Open the profile menu.", "Profile"),
+            ("Open the profile menu.", "Person"),
             ("Open the account menu.", "Account"),
+            ("Open the account menu.", "Person"),
             ("Open the user menu.", "User"),
+            ("Open the user menu.", "Person"),
             ("Open the settings menu.", "Settings"),
             ("Open the account dropdown.", "Account"),
             ("Open the profile drop down.", "Profile"),
@@ -5385,6 +5414,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_profile_menu_target_id_accepts_person_labels_and_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open profile.", "Person", (120, 160, 100, 32)),
+            ("Open account.", "\U0001f464", (120, 160, 32, 32)),
+            ("Open user menu.", "\U0001f465", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_profile_menu_person_icon_text_match_overrides_settings_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open profile.",
+                    "target": {"x": 300, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\U0001f464", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Settings", "button", (300, 160, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
 
     def test_contextual_menu_item_wording_still_highlights_menuitem(self) -> None:
         from control_inventory import ControlCandidate
@@ -7868,6 +7949,85 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_file_attachment_target_id_accepts_paperclip_icons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Attach file.", "\U0001f4ce"),
+            ("Add attachment.", "\U0001f587"),
+            ("Upload file.", "\U0001f4ce"),
+            ("Click the paperclip.", "Attach"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_file_attachment_icon_text_match_overrides_upload_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Attach file.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "\U0001f4ce", "button", (120, 160, 32, 32)),
+                ControlCandidate("c002", "Upload", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 32, 32))
+
+    def test_file_attachment_aliases_do_not_cross_clipboard_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Paste into the note.", "\U0001f4ce"),
+            ("Attach file.", "\U0001f4cb"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 32, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate
