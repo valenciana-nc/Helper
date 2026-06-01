@@ -76,7 +76,7 @@ TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
 TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
-TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"drive", "one"})
+TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS = frozenset({"onedrive"})
 TASKBAR_FILE_ACTION_WORDS = frozenset(
     {
         "attach",
@@ -1860,7 +1860,7 @@ def _taskbar_status_identity_tokens(
         return TASKBAR_CLOCK_STATUS_IDENTITY_WORDS
     if "search" in text_tokens and automation_id == "searchgleambutton":
         return TASKBAR_SEARCH_STATUS_IDENTITY_WORDS
-    if {"drive", "one"} <= text_tokens:
+    if "onedrive" in text_tokens:
         return TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS
     return frozenset()
 

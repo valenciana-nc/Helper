@@ -7965,6 +7965,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_onedrive_fragment_rejects_taskbar_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OneDrive status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open one.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "OneDrive - Personal\r\nBacked up and synced",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_taskbar_state_model_rect_rejects_app_label",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -526,6 +526,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("bookmark", network_tokens)
         self.assertNotIn("favorite", network_tokens)
 
+    def test_onedrive_phrase_tokens_are_specific(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        control_tokens = tokenize_control("OneDrive - Personal\r\nBacked up and synced")
+        instruction_tokens = tokenize_instruction("Open OneDrive")
+
+        self.assertIn("onedrive", control_tokens)
+        self.assertIn("onedrive", instruction_tokens)
+        self.assertNotIn("one", control_tokens)
+        self.assertNotIn("one", instruction_tokens)
+        self.assertNotIn("drive", control_tokens)
+        self.assertNotIn("drive", instruction_tokens)
+
     def test_github_phrase_stays_compact_for_url_destination_matching(self) -> None:
         from help_intents import tokenize_instruction
 
@@ -7063,6 +7076,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from help_session import resolve_help_target
 
         cases = (
+            "Open one.",
+            "Open drive.",
             "Open personal.",
             "Open synced.",
             "Open backed up.",

@@ -90,6 +90,11 @@ _PHRASE_TOKEN_REWRITES = (
         {"view"},
     ),
     (
+        re.compile(r"\bone\s+drive\b|\bonedrive\b"),
+        {"onedrive"},
+        {"drive", "one"},
+    ),
+    (
         re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
         {"tab_search"},
         {"find", "search", "tab", "tabs"},
