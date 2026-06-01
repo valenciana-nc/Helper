@@ -576,10 +576,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(tokenize_control("Envelope")))
         self.assertTrue(expected.issubset(tokenize_control("Email")))
         self.assertTrue(expected.issubset(tokenize_control("Mail")))
+        self.assertTrue({"email", "mail"}.issubset(tokenize_control("Gmail")))
+        self.assertTrue({"email", "mail"}.issubset(tokenize_control("Inbox")))
+        self.assertTrue(
+            {"email", "inbox", "mail"}.issubset(tokenize_control("Recibidos"))
+        )
         for icon in ("\u2709", "\U0001f4e7", "\U0001f4e8", "\U0001f4e9"):
             with self.subTest(icon=icon):
                 self.assertTrue(expected.issubset(tokenize_control(icon)))
         self.assertNotIn("clipboard", tokenize_control("\u2709"))
+        gmail_instruction_tokens = tokenize_instruction("Open Gmail")
+        self.assertIn("gmail", gmail_instruction_tokens)
+        self.assertNotIn("email", gmail_instruction_tokens)
+        self.assertNotIn("mail", gmail_instruction_tokens)
 
     def test_profile_aliases_expand_to_person_language(self) -> None:
         from help_intents import tokenize_control, tokenize_instruction
@@ -6010,6 +6019,21 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open email.", "\U0001f4e7", (120, 160, 32, 32)),
             ("Open mail.", "\U0001f4e8", (120, 160, 32, 32)),
             ("Open email.", "\U0001f4e9", (120, 160, 32, 32)),
+            (
+                "Open mail.",
+                "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                (120, 160, 260, 32),
+            ),
+            (
+                "Open email.",
+                "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                (120, 160, 260, 32),
+            ),
+            (
+                "Open inbox.",
+                "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                (120, 160, 260, 32),
+            ),
         )
         for instruction, label, rect in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -6029,6 +6053,40 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
+
+    def test_gmail_control_aliases_do_not_cross_generic_mail_or_email_fields(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        gmail_tab = (
+            "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - "
+            "Memory usage - 270 MB"
+        )
+        cases = (
+            ("Open Gmail.", "Mail", "button", "target_id semantic mismatch"),
+            ("Type your email.", gmail_tab, "tabitem", "target_id control type mismatch"),
+        )
+        for instruction, label, control_type, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001", label, control_type, (120, 160, 260, 32)
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
 
     def test_mail_icon_text_match_overrides_settings_geometry(self) -> None:
         from control_inventory import ControlCandidate

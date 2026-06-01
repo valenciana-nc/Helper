@@ -5831,6 +5831,113 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "mail_target_id_accepts_gmail_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 260, 32], "label": "Gmail tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open mail.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 260, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 260, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "email_target_id_accepts_recibidos_gmail_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 260, 32], "label": "Recibidos Gmail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open email.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 260, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 260, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "gmail_instruction_rejects_generic_mail_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Mail"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Gmail.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Mail",
+                    "control_type": "button",
+                    "rect": [20, 80, 100, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "type_email_rejects_gmail_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 260, 32], "label": "Gmail tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type your email.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Recibidos (3.921) - abelvalencianacarreon@gmail.com - Gmail - Memory usage - 270 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 260, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "email_icon_text_match_overrides_settings_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

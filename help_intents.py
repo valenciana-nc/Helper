@@ -49,8 +49,11 @@ _PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bzoom\s+out\b"), {"zoom_out"}),
 )
 _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
+    (re.compile(r"\bgmail\b"), {"email", "mail"}),
+    (re.compile(r"\binbox\b"), {"email", "mail"}),
     (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
+    (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
 )
 _AUTH_DIRECTION_TOKEN_REWRITES = (
     (
