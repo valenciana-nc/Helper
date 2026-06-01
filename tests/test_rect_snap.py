@@ -171,6 +171,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("submit", tokenize_control("Send"))
         self.assertIn("send", tokenize_control("Paper plane"))
 
+    def test_meeting_control_aliases_expand_to_common_labels(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("mic", tokenize_instruction("Mute microphone"))
+        self.assertIn("microphone", tokenize_instruction("Mute mic"))
+        self.assertIn("video", tokenize_instruction("Start camera"))
+        self.assertIn("camera", tokenize_instruction("Start video"))
+        self.assertIn("webcam", tokenize_control("Camera"))
+        self.assertIn("camera", tokenize_control("Webcam"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -209,6 +219,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
+            ("\U0001f3a4", {"mic", "microphone"}),
+            ("\U0001f4f7", {"camera", "video", "webcam"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5321,6 +5333,112 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (280, 160, 100, 32))
+
+    def test_meeting_control_alias_target_id_accepts_common_labels(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Mute microphone.", "Mic", (120, 160, 80, 32)),
+            ("Mute mic.", "Microphone", (120, 160, 120, 32)),
+            ("Start video.", "Camera", (120, 160, 100, 32)),
+            ("Start camera.", "Video", (120, 160, 90, 32)),
+            ("Start webcam.", "Camera", (120, 160, 100, 32)),
+            ("Mute microphone.", "\U0001f3a4", (120, 160, 32, 32)),
+            ("Start video.", "\U0001f4f7", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_meeting_control_alias_text_match_overrides_settings_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Mute microphone.",
+                ControlCandidate("c001", "Mic", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Audio settings", "button", (300, 160, 140, 32)),
+            ),
+            (
+                "Start video.",
+                ControlCandidate("c001", "Camera", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "AV settings", "button", (300, 160, 150, 32)),
+            ),
+        )
+        for instruction, expected, decoy in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": decoy.rect[0],
+                                "y": decoy.rect[1],
+                                "width": decoy.rect[2],
+                                "height": decoy.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [expected, decoy],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, expected.id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, expected.rect)
+
+    def test_meeting_control_alias_rejects_ambiguous_exact_and_alias_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Mute microphone.",
+                ControlCandidate("c001", "Mic", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Microphone", "button", (240, 160, 120, 32)),
+            ),
+            (
+                "Start video.",
+                ControlCandidate("c001", "Camera", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Video", "button", (240, 160, 90, 32)),
+            ),
+        )
+        for instruction, target_candidate, competing_candidate in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [target_candidate, competing_candidate],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
     def test_favorite_action_alias_target_id_accepts_star_button(self) -> None:
         from control_inventory import ControlCandidate

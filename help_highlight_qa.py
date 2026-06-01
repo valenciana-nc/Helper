@@ -1608,6 +1608,180 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "microphone_action_target_id_accepts_mic_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Mic"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute microphone.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Mic", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "mic_action_target_id_accepts_microphone_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Microphone"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute mic.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Microphone", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "microphone_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "M"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute microphone.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f3a4", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "video_action_target_id_accepts_camera_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Camera"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Start video.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Camera", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "camera_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "C"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Start video.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4f7", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "microphone_text_match_overrides_audio_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Mic"},
+                {"rect": [180, 80, 140, 32], "label": "Audio settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute microphone.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Mic", "control_type": "button", "rect": [20, 80, 80, 32]},
+                {"id": "c002", "text": "Audio settings", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "video_text_match_overrides_av_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Camera"},
+                {"rect": [180, 80, 150, 32], "label": "AV settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Start video.",
+                "target": {"x": 180, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Camera", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "AV settings", "control_type": "button", "rect": [180, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "meeting_alias_rejects_ambiguous_mic_and_microphone_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "Mic"},
+                {"rect": [180, 80, 140, 32], "label": "Microphone"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute microphone.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Mic", "control_type": "button", "rect": [20, 80, 80, 32]},
+                {"id": "c002", "text": "Microphone", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

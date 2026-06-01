@@ -42,6 +42,11 @@ _SYMBOL_TOKEN_ALIASES = {
     "\u2661": {"favorite", "heart"},
     "\u2665": {"favorite", "heart"},
     "\U0001f514": {"alerts", "bell", "notification", "notifications", "notify"},
+    "\U0001f399": {"mic", "microphone"},
+    "\U0001f3a4": {"mic", "microphone"},
+    "\U0001f3a5": {"camera", "video", "webcam"},
+    "\U0001f4f7": {"camera", "video", "webcam"},
+    "\U0001f4f9": {"camera", "video", "webcam"},
     "\U0001f50d": {"find", "lens", "magnifier", "magnifying", "search"},
     "\U0001f50e": {"find", "lens", "magnifier", "magnifying", "search"},
 }
@@ -63,6 +68,7 @@ _TOKEN_ALIASES = {
     "choose": {"browse", "file", "select", "upload"},
     "clone": {"copy", "duplicate"},
     "cog": {"options", "preferences", "settings"},
+    "camera": {"video", "webcam"},
     "collapse": {"arrow", "caret", "chevron", "disclosure"},
     "confirm": {"ok", "okay"},
     "continue": {"next", "proceed"},
@@ -89,6 +95,8 @@ _TOKEN_ALIASES = {
     "kebab": {"menu", "more", "options"},
     "menu": {"more", "options"},
     "meatballs": {"menu", "more", "options"},
+    "mic": {"microphone"},
+    "microphone": {"mic"},
     "more": {"menu", "options"},
     "next": {"continue", "proceed"},
     "notification": {"alerts", "bell", "notifications", "notify"},
@@ -126,6 +134,8 @@ _TOKEN_ALIASES = {
     "bin": {"delete", "remove"},
     "plus": {"add", "new", "create"},
     "url": {"address", "location"},
+    "video": {"camera", "webcam"},
+    "webcam": {"camera", "video"},
 }
 
 _INSTRUCTION_STOPWORDS = frozenset(
