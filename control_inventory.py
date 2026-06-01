@@ -44,6 +44,30 @@ FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISMISS_DIALOG_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
 DISMISS_WINDOW_CONTEXT_WORDS = frozenset({"browser", "page", "tab", "window"})
+TASKBAR_WINDOW_WORDS = frozenset({"taskbar"})
+TASKBAR_APP_STATE_WORDS = frozenset({"pinned", "running"})
+TASKBAR_APP_STATE_CONTEXT_WORDS = frozenset(
+    {"pinned", "running", "window", "windows"}
+)
+TASKBAR_FILE_ACTION_WORDS = frozenset(
+    {
+        "attach",
+        "attachment",
+        "browse",
+        "choose",
+        "document",
+        "documents",
+        "file",
+        "files",
+        "paperclip",
+        "select",
+        "upload",
+    }
+)
+TASKBAR_PIN_ACTION_WORDS = frozenset(
+    {"pin", "pinned", "pushpin", "thumbtack", "unpin"}
+)
+TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
 
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
@@ -832,6 +856,8 @@ def _text_match_score(
         return 0.0
     if not instruction_tokens:
         return 0.0
+    if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
     if not candidate_tokens:
@@ -863,6 +889,8 @@ def _context_text_match_score(
     model_rect: tuple[int, int, int, int] | None,
 ) -> float:
     if not instruction_tokens:
+        return 0.0
+    if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
@@ -947,6 +975,12 @@ def _target_id_plausibility(
     control_intents = _instruction_control_intents(instruction)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
@@ -1072,6 +1106,42 @@ def _candidate_semantic_tokens(candidate: ControlCandidate) -> set[str]:
     return _candidate_automation_tokens(candidate)
 
 
+def _taskbar_app_state_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not instruction_tokens or not _candidate_is_taskbar_app_button(candidate):
+        return False
+    text_tokens = _tokens_from_text(candidate.text)
+    if (
+        instruction_tokens & TASKBAR_PIN_ACTION_WORDS
+        and text_tokens & TASKBAR_APP_STATE_WORDS
+    ):
+        return True
+    identity_tokens = _taskbar_app_identity_tokens(candidate)
+    if identity_tokens and instruction_tokens & identity_tokens:
+        return False
+    if instruction_tokens & TASKBAR_FILE_ACTION_WORDS and text_tokens & {"file", "files"}:
+        return True
+    return False
+
+
+def _candidate_is_taskbar_app_button(candidate: ControlCandidate) -> bool:
+    window_tokens = _tokens_from_text(candidate.window_title)
+    return (
+        candidate.control_type in {"button", "splitbutton"}
+        and bool(candidate.text.strip())
+        and bool(window_tokens & TASKBAR_WINDOW_WORDS)
+    )
+
+
+def _taskbar_app_identity_tokens(candidate: ControlCandidate) -> set[str]:
+    tokens = _tokens_from_text(candidate.text)
+    tokens -= TASKBAR_APP_STATE_CONTEXT_WORDS
+    tokens -= TASKBAR_GENERIC_FILE_IDENTITY_WORDS
+    return {token for token in tokens if not token.isdigit()}
+
+
 def _target_id_ambiguity(
     *,
     instruction_tokens: set[str],
@@ -1096,6 +1166,8 @@ def _target_id_ambiguity(
         if _same_visual_candidate(candidate, selected):
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
+            continue
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         text_score = _text_evidence_score(
             instruction_tokens,
@@ -1146,6 +1218,8 @@ def _has_semantic_alternative(
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
         score = _text_evidence_score(
             instruction_tokens,
             _candidate_semantic_tokens(candidate),
@@ -1169,6 +1243,8 @@ def _has_visible_semantic_alternative(
             continue
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
         visible_tokens = _candidate_visible_text_tokens(candidate)
         if not visible_tokens:
             continue
@@ -1189,6 +1265,8 @@ def _candidate_snap_score(
     proximity = _proximity_score(candidate.rect, model_rect)
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
+    if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if (
         control_intents
         and not _candidate_matches_control_intent(candidate, control_intents)
@@ -1270,11 +1348,15 @@ def _contains_tighter_same_intent_action(
             and candidate.control_type in control_intents
             and not _candidate_matches_control_intent(selected, control_intents)
         ):
+            if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+                continue
             candidate_tokens = _candidate_visible_text_tokens(candidate)
             if not candidate_tokens:
                 return True
             if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
                 return True
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not candidate_tokens:
             continue
@@ -1300,6 +1382,8 @@ def _single_contained_control_intent_candidate(
         if not _candidate_matches_control_intent(candidate, control_intents):
             continue
         if not _contains_rect(bounds, candidate.rect):
+            continue
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if instruction_tokens and not _contained_control_intent_has_evidence(
             candidate=candidate,
@@ -1378,6 +1462,10 @@ def _same_snap_intent(
 ) -> bool:
     if not instruction_tokens:
         return True
+    if _taskbar_app_state_action_mismatch(instruction_tokens, first):
+        return False
+    if _taskbar_app_state_action_mismatch(instruction_tokens, second):
+        return False
     first_score = _text_evidence_score(
         instruction_tokens,
         _candidate_semantic_tokens(first),
@@ -1400,6 +1488,8 @@ def _candidate_snap_semantic_mismatch(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     if not instruction_tokens or not semantic_tokens:
         return False
+    if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False
     return _geometry_agreement(candidate.rect, model_rect) >= TARGET_ID_GEOMETRY_FLOOR

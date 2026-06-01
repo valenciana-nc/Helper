@@ -5644,6 +5644,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "pin_action_rejects_taskbar_pinned_app_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Chrome pinned"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "pin_named_app_rejects_taskbar_pinned_app_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Chrome pinned"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin Google Chrome.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "email_target_id_accepts_envelope_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -6245,6 +6299,113 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "attach_file_rejects_taskbar_file_explorer_pinned",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "File Explorer"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "File Explorer pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "attach_file_rejects_taskbar_file_explorer_app",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "File Explorer"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "File Explorer",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "attach_file_model_rect_rejects_taskbar_file_explorer_pinned",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "File Explorer"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Attach file.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "File Explorer pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_taskbar_app_still_highlights_file_explorer",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "File Explorer"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click File Explorer.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "File Explorer pinned",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
             },
         },
         {
