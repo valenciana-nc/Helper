@@ -81,6 +81,19 @@ GMAIL_TAB_SERVICE_RE = re.compile(
 )
 GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
 SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
+UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
+    {
+        "account",
+        "acct",
+        "dashboard",
+        "home",
+        "house",
+        "overview",
+        "person",
+        "profile",
+        "user",
+    }
+)
 UNNAMED_BOOKMARK_RE = re.compile(r"^\s*Unnamed bookmark for https?://", re.IGNORECASE)
 UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
     {
@@ -89,20 +102,28 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "and",
         "app",
         "application",
+        "account",
+        "acct",
         "browser",
         "chrome",
         "click",
+        "dashboard",
         "edge",
         "for",
         "go",
+        "home",
+        "house",
         "in",
         "launch",
         "open",
         "option",
         "options",
+        "overview",
         "page",
+        "person",
         "preference",
         "preferences",
+        "profile",
         "setting",
         "settings",
         "show",
@@ -110,6 +131,7 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "tab",
         "the",
         "to",
+        "user",
         "web",
         "website",
         "window",
@@ -912,7 +934,7 @@ def _text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
-    if _unnamed_bookmark_generic_settings_mismatch(
+    if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -953,7 +975,7 @@ def _context_text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
-    if _unnamed_bookmark_generic_settings_mismatch(
+    if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -1048,7 +1070,7 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _unnamed_bookmark_generic_settings_mismatch(
+    if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -1243,20 +1265,22 @@ def _taskbar_app_state_action_mismatch(
     return False
 
 
-def _unnamed_bookmark_generic_settings_mismatch(
+def _unnamed_bookmark_generic_route_mismatch(
     instruction: str,
     instruction_tokens: set[str],
     candidate: ControlCandidate,
 ) -> bool:
     if not _looks_like_unnamed_bookmark(candidate):
         return False
-    if not (instruction_tokens & SETTINGS_REQUEST_WORDS):
-        return False
     candidate_tokens = _candidate_visible_text_tokens(candidate)
-    specific_overlap = (instruction_tokens & candidate_tokens) - SETTINGS_REQUEST_WORDS
-    if specific_overlap:
+    overlap = instruction_tokens & candidate_tokens
+    if not overlap:
         return False
-    return not _instruction_names_unnamed_bookmark_destination(instruction, candidate)
+    if not overlap <= UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS:
+        return False
+    if _instruction_names_unnamed_bookmark_destination(instruction, candidate):
+        return False
+    return True
 
 
 def _looks_like_unnamed_bookmark(candidate: ControlCandidate) -> bool:
@@ -1334,7 +1358,7 @@ def _target_id_ambiguity(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
-        if _unnamed_bookmark_generic_settings_mismatch(
+        if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
             candidate,
@@ -1422,7 +1446,7 @@ def _has_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
-        if _unnamed_bookmark_generic_settings_mismatch(
+        if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
             candidate,
@@ -1454,7 +1478,7 @@ def _has_visible_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
-        if _unnamed_bookmark_generic_settings_mismatch(
+        if _unnamed_bookmark_generic_route_mismatch(
             instruction,
             instruction_tokens,
             candidate,
@@ -1483,7 +1507,7 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
-    if _unnamed_bookmark_generic_settings_mismatch(
+    if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -1714,7 +1738,7 @@ def _candidate_snap_semantic_mismatch(
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
-    if _unnamed_bookmark_generic_settings_mismatch(
+    if _unnamed_bookmark_generic_route_mismatch(
         instruction,
         instruction_tokens,
         candidate,

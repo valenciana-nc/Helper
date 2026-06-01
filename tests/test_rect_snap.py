@@ -6050,6 +6050,150 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
+    def test_generic_route_target_id_rejects_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open dashboard.",
+                "Unnamed bookmark for "
+                "https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+            ),
+            (
+                "Open overview.",
+                "Unnamed bookmark for "
+                "https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+            ),
+            (
+                "Open home.",
+                "Unnamed bookmark for "
+                "https://dash.cloudflare.com/5ae1354de89966fd627a61a76aa3e6dd/home/overview",
+            ),
+            (
+                "Open account.",
+                "Unnamed bookmark for "
+                "https://www.name.com/account/domain/details/s2client.dev/dns",
+            ),
+            (
+                "Open profile.",
+                "Unnamed bookmark for "
+                "https://www.name.com/account/domain/details/s2client.dev/dns",
+            ),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_specific_route_target_id_requires_matching_unnamed_bookmark_destination(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        stripe = (
+            "Unnamed bookmark for "
+            "https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview"
+        )
+        supabase = (
+            "Unnamed bookmark for "
+            "https://supabase.com/dashboard/org/bowdgieoawwjypixwsbx"
+        )
+        cloudflare = (
+            "Unnamed bookmark for "
+            "https://dash.cloudflare.com/5ae1354de89966fd627a61a76aa3e6dd/home/overview"
+        )
+        cases = (
+            ("Open Stripe dashboard.", stripe, ""),
+            ("Open Supabase dashboard.", supabase, ""),
+            ("Open Cloudflare overview.", cloudflare, ""),
+            ("Open Stripe dashboard.", supabase, "target_id semantic mismatch"),
+            ("Open Supabase dashboard.", stripe, "target_id semantic mismatch"),
+            ("Open Cloudflare overview.", stripe, "target_id semantic mismatch"),
+        )
+        for instruction, label, reason in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, reason)
+
+    def test_generic_route_text_match_ignores_unnamed_url_bookmark(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open dashboard.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Unnamed bookmark for "
+                    "https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "GitHub Dashboard",
+                    "tabitem",
+                    (420, 160, 180, 32),
+                    window_title="GitHub Dashboard - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (420, 160, 180, 32))
+
     def test_info_target_id_accepts_common_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

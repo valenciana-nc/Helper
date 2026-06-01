@@ -5175,6 +5175,149 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_dashboard_target_id_rejects_unnamed_stripe_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open dashboard.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "specific_stripe_dashboard_accepts_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Stripe dashboard.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "specific_supabase_dashboard_rejects_stripe_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Supabase dashboard.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_account_target_id_rejects_unnamed_account_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://www.name.com/account/domain/details/s2client.dev/dns",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_dashboard_text_match_prefers_visible_dashboard_over_unnamed_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+                {"rect": [300, 80, 180, 32], "label": "GitHub Dashboard"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open dashboard.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://dashboard.stripe.com/acct_1TQxqVCdMQikXj6B/balance/overview",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "GitHub Dashboard",
+                    "control_type": "tabitem",
+                    "rect": [300, 80, 180, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [300, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "favorite_symbol_target_id_accepts_star_icon",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
