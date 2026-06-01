@@ -1579,6 +1579,11 @@ def _hidden_bookmarks_overflow_action_mismatch(
 ) -> bool:
     if not _looks_like_hidden_bookmarks_overflow_button(candidate):
         return False
+    if "hidden" in instruction_tokens and not (
+        "bookmarks" in instruction_tokens
+        or instruction_tokens & BROWSER_HIDDEN_BOOKMARKS_GENERIC_MENU_WORDS
+    ):
+        return True
     if "hidden" in instruction_tokens:
         return False
     if "all" in instruction_tokens and "bookmarks" in instruction_tokens:

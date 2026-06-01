@@ -12165,6 +12165,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Open options menu.",
             "Open more options menu.",
             "Open all bookmarks.",
+            "Open hidden.",
         )
         for instruction in cases:
             with self.subTest(instruction=instruction):
@@ -12191,6 +12192,26 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_bare_hidden_text_match_ignores_hidden_bookmarks_overflow(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        target = resolve_candidate_target(
+            target_id="",
+            instruction="Open hidden.",
+            candidates=[
+                ControlCandidate(
+                    "c001",
+                    "Menu containing hidden bookmarks",
+                    "button",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+            model_rect=None,
+        )
+
+        self.assertIsNone(target)
 
     def test_browser_menu_text_match_recovers_from_hidden_bookmarks_overflow(self) -> None:
         from control_inventory import ControlCandidate

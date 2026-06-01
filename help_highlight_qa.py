@@ -1379,6 +1379,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_hidden_rejects_hidden_bookmarks_overflow",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Hidden bookmarks"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open hidden.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Menu containing hidden bookmarks",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "chrome_menu_button_accepts_more_options_wording",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
