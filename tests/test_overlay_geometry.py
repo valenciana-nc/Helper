@@ -28,6 +28,60 @@ class OverlayGeometryTests(unittest.TestCase):
 
         self.assertIsNone(local)
 
+    def test_high_dpi_highlight_subtracts_native_origin_before_scaling(self) -> None:
+        from ui_overlay import local_highlight_rect
+
+        local = local_highlight_rect(
+            QRect(-1720, 240, 120, 40),
+            QRect(-960, 0, 960, 540),
+            device_pixel_ratio=2.0,
+        )
+
+        self.assertIsNotNone(local)
+        assert local is not None
+        self.assertEqual((local.x(), local.y(), local.width(), local.height()), (100, 120, 60, 20))
+
+    def test_high_dpi_highlight_uses_logical_local_rect(self) -> None:
+        from ui_overlay import local_highlight_rect
+
+        local = local_highlight_rect(
+            QRect(2000, 1000, 200, 80),
+            QRect(0, 0, 1920, 1080),
+            device_pixel_ratio=2.0,
+        )
+
+        self.assertIsNotNone(local)
+        assert local is not None
+        self.assertEqual((local.x(), local.y(), local.width(), local.height()), (1000, 500, 100, 40))
+
+    def test_high_dpi_highlight_can_use_explicit_native_screen_geometry(self) -> None:
+        from ui_overlay import local_highlight_rect
+
+        local = local_highlight_rect(
+            QRect(3000, 1000, 200, 80),
+            QRect(1920, 0, 1920, 1080),
+            device_pixel_ratio=2.0,
+            native_screen_geometry=QRect(2560, 0, 3840, 2160),
+        )
+
+        self.assertIsNotNone(local)
+        assert local is not None
+        self.assertEqual((local.x(), local.y(), local.width(), local.height()), (220, 500, 100, 40))
+
+    def test_high_dpi_cursor_point_uses_logical_local_point(self) -> None:
+        from ui_overlay import local_screen_point
+
+        point = local_screen_point(
+            2000,
+            1000,
+            QRect(0, 0, 1920, 1080),
+            device_pixel_ratio=2.0,
+        )
+
+        self.assertIsNotNone(point)
+        assert point is not None
+        self.assertEqual((point.x(), point.y()), (1000.0, 500.0))
+
     def test_label_clamps_inside_top_right_edge(self) -> None:
         from ui_overlay import place_label_rect
 

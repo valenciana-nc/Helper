@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import sys
 import winreg
 from ctypes import wintypes
@@ -16,12 +17,24 @@ def _set_dpi_aware() -> None:
 
 _set_dpi_aware()
 
-from PyQt6.QtCore import QObject, QRect, QTimer, Qt
+from PyQt6.QtCore import QObject, QPointF, QRect, QTimer, Qt
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QWidget
 
 
 user32 = ctypes.windll.user32
+
+CCHDEVICENAME = 32
+
+
+class _MonitorInfoEx(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+        ("szDevice", wintypes.WCHAR * CCHDEVICENAME),
+    ]
 
 
 @dataclass(frozen=True)
@@ -37,10 +50,139 @@ class OverlayHighlight:
         return QRect(self.x, self.y, self.width, self.height)
 
 
-def local_highlight_rect(highlight_rect: QRect, screen_geometry: QRect) -> QRect | None:
-    if not screen_geometry.intersects(highlight_rect):
+def local_highlight_rect(
+    highlight_rect: QRect,
+    screen_geometry: QRect,
+    *,
+    device_pixel_ratio: float = 1.0,
+    native_screen_geometry: QRect | None = None,
+) -> QRect | None:
+    native_screen = native_screen_geometry or _native_screen_geometry(
+        screen_geometry,
+        device_pixel_ratio,
+    )
+    if not native_screen.intersects(highlight_rect):
         return None
-    return highlight_rect.translated(-screen_geometry.x(), -screen_geometry.y())
+
+    dpr = _safe_device_pixel_ratio(device_pixel_ratio)
+    left = math.floor((highlight_rect.x() - native_screen.x()) / dpr)
+    top = math.floor((highlight_rect.y() - native_screen.y()) / dpr)
+    right = math.ceil((highlight_rect.x() + highlight_rect.width() - native_screen.x()) / dpr)
+    bottom = math.ceil((highlight_rect.y() + highlight_rect.height() - native_screen.y()) / dpr)
+    return QRect(left, top, max(1, right - left), max(1, bottom - top))
+
+
+def local_screen_point(
+    x: float,
+    y: float,
+    screen_geometry: QRect,
+    *,
+    device_pixel_ratio: float = 1.0,
+    native_screen_geometry: QRect | None = None,
+) -> QPointF | None:
+    native_screen = native_screen_geometry or _native_screen_geometry(
+        screen_geometry,
+        device_pixel_ratio,
+    )
+    if not native_screen.contains(int(x), int(y)):
+        return None
+
+    dpr = _safe_device_pixel_ratio(device_pixel_ratio)
+    return QPointF(
+        (float(x) - native_screen.x()) / dpr,
+        (float(y) - native_screen.y()) / dpr,
+    )
+
+
+def screen_device_pixel_ratio(screen) -> float:
+    try:
+        return _safe_device_pixel_ratio(float(screen.devicePixelRatio()))
+    except Exception:
+        return 1.0
+
+
+def screen_native_geometry(screen) -> QRect:
+    dpr = screen_device_pixel_ratio(screen)
+    try:
+        geometry = screen.geometry()
+    except Exception:
+        geometry = QRect()
+    inferred = _native_screen_geometry(geometry, dpr)
+    monitors = _native_monitor_geometries()
+    if not monitors:
+        return inferred
+
+    try:
+        screen_name = str(screen.name() or "")
+    except Exception:
+        screen_name = ""
+    normalized_screen_name = _normalized_monitor_name(screen_name)
+    if normalized_screen_name:
+        for monitor_name, rect in monitors:
+            if _normalized_monitor_name(monitor_name) == normalized_screen_name:
+                return rect
+
+    inferred_center = inferred.center()
+    for _monitor_name, rect in monitors:
+        if rect.contains(inferred_center):
+            return rect
+    return inferred
+
+
+def _safe_device_pixel_ratio(device_pixel_ratio: float) -> float:
+    if device_pixel_ratio <= 0:
+        return 1.0
+    return max(0.25, min(8.0, float(device_pixel_ratio)))
+
+
+def _native_screen_geometry(screen_geometry: QRect, device_pixel_ratio: float) -> QRect:
+    dpr = _safe_device_pixel_ratio(device_pixel_ratio)
+    return QRect(
+        int(round(screen_geometry.x() * dpr)),
+        int(round(screen_geometry.y() * dpr)),
+        max(1, int(round(screen_geometry.width() * dpr))),
+        max(1, int(round(screen_geometry.height() * dpr))),
+    )
+
+
+def _native_monitor_geometries() -> list[tuple[str, QRect]]:
+    monitors: list[tuple[str, QRect]] = []
+    callback_type = ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        wintypes.HMONITOR,
+        wintypes.HDC,
+        ctypes.POINTER(wintypes.RECT),
+        wintypes.LPARAM,
+    )
+
+    @callback_type
+    def callback(hmonitor, _hdc, _rect, _lparam):
+        info = _MonitorInfoEx()
+        info.cbSize = ctypes.sizeof(info)
+        if user32.GetMonitorInfoW(hmonitor, ctypes.byref(info)):
+            rect = info.rcMonitor
+            monitors.append(
+                (
+                    info.szDevice,
+                    QRect(
+                        rect.left,
+                        rect.top,
+                        rect.right - rect.left,
+                        rect.bottom - rect.top,
+                    ),
+                )
+            )
+        return True
+
+    try:
+        user32.EnumDisplayMonitors(0, None, callback, 0)
+    except Exception:
+        return []
+    return monitors
+
+
+def _normalized_monitor_name(name: str) -> str:
+    return name.lower().replace("\\\\.\\", "").strip()
 
 
 def place_label_rect(
@@ -90,8 +232,18 @@ class OverlayWindow(QWidget):
     def set_highlights(self, highlights: list[OverlayHighlight]) -> None:
         self._sync_to_screen()
         geometry = self.geometry()
+        dpr = screen_device_pixel_ratio(self._screen)
+        native_geometry = screen_native_geometry(self._screen)
         self._highlights = [
-            item for item in highlights if local_highlight_rect(item.rect, geometry) is not None
+            item
+            for item in highlights
+            if local_highlight_rect(
+                item.rect,
+                geometry,
+                device_pixel_ratio=dpr,
+                native_screen_geometry=native_geometry,
+            )
+            is not None
         ]
         if self._highlights:
             self.show()
@@ -129,7 +281,12 @@ class OverlayWindow(QWidget):
                 )
 
     def _to_local(self, rect: QRect) -> QRect:
-        return local_highlight_rect(rect, self.geometry()) or QRect()
+        return local_highlight_rect(
+            rect,
+            self.geometry(),
+            device_pixel_ratio=screen_device_pixel_ratio(self._screen),
+            native_screen_geometry=screen_native_geometry(self._screen),
+        ) or QRect()
 
     def _draw_label(
         self,
@@ -325,11 +482,17 @@ def _fallback_start_rect(app: QApplication) -> QRect:
         return QRect(8, 8, 56, 56)
 
     geometry = primary.geometry()
+    dpr = screen_device_pixel_ratio(primary)
     width = 56
     height = 48
     x = geometry.left() + 8
     y = geometry.bottom() - height - 8
-    return QRect(x, y, width, height)
+    return QRect(
+        int(round(x * dpr)),
+        int(round(y * dpr)),
+        max(1, int(round(width * dpr))),
+        max(1, int(round(height * dpr))),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

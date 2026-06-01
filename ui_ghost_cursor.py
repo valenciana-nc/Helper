@@ -16,6 +16,8 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QApplication, QWidget
 
+from ui_overlay import local_screen_point, screen_device_pixel_ratio, screen_native_geometry
+
 
 CURSOR_FILL_TOP = QColor(255, 255, 255, 235)
 CURSOR_FILL_BOTTOM = QColor(180, 220, 255, 235)
@@ -63,8 +65,7 @@ class _GhostWindow(QWidget):
             self.hide()
             return
 
-        screen_rect = self.geometry()
-        if not screen_rect.contains(int(state.x), int(state.y)):
+        if self._local_point(state) is None:
             self._state = None
             self.hide()
             return
@@ -84,13 +85,25 @@ class _GhostWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+        local = self._local_point(state)
+        if local is None:
+            return
         geometry = self.geometry()
-        local_x = state.x - geometry.x()
-        local_y = state.y - geometry.y()
+        local_x = local.x()
+        local_y = local.y()
 
         self._draw_cursor(painter, local_x, local_y)
         if state.caption:
             self._draw_bubble(painter, local_x, local_y, state.caption, geometry)
+
+    def _local_point(self, state: GhostState) -> QPointF | None:
+        return local_screen_point(
+            state.x,
+            state.y,
+            self.geometry(),
+            device_pixel_ratio=screen_device_pixel_ratio(self._screen),
+            native_screen_geometry=screen_native_geometry(self._screen),
+        )
 
     def _draw_cursor(self, painter: QPainter, x: float, y: float) -> None:
         painter.save()
@@ -289,11 +302,7 @@ class GhostCursorManager(QObject):
 
     def _broadcast(self, state: GhostState) -> None:
         for window in self._windows:
-            geometry = window.geometry()
-            if geometry.contains(int(state.x), int(state.y)):
-                window.set_state(state)
-            else:
-                window.set_state(None)
+            window.set_state(state)
 
 
 def _demo() -> int:
@@ -301,9 +310,11 @@ def _demo() -> int:
 
     app = QApplication(sys.argv)
     manager = GhostCursorManager(app)
-    screen = app.primaryScreen().geometry()
-    cx = screen.left() + screen.width() // 2
-    cy = screen.top() + screen.height() // 2
+    primary = app.primaryScreen()
+    screen = primary.geometry()
+    dpr = screen_device_pixel_ratio(primary)
+    cx = int((screen.left() + screen.width() // 2) * dpr)
+    cy = int((screen.top() + screen.height() // 2) * dpr)
     manager.show_at(cx - 200, cy - 80, "Step 1: Click the Start button to open the menu.")
     QTimer.singleShot(1500, lambda: manager.animate_to(cx + 220, cy + 40, "Step 2: Type 'cmd' to find Command Prompt."))
     QTimer.singleShot(3500, lambda: manager.animate_to(cx - 120, cy + 200, "Step 3: Press Enter to launch it."))
