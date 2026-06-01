@@ -23,6 +23,8 @@ SEARCH_MARGIN_PX = 60
 CONFIDENCE_FLOOR = 0.42
 SEMANTIC_MISMATCH_CAP = 0.41
 SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
+FOREGROUND_RANK_BONUS = 0.10
+FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 
 SCORE_WEIGHT_IOU = 0.40
 SCORE_WEIGHT_PROXIMITY = 0.20
@@ -108,6 +110,7 @@ def snap_to_control(
     margin_px: int = SEARCH_MARGIN_PX,
     confidence_floor: float = CONFIDENCE_FLOOR,
     desktop_factory=None,
+    foreground_handle_provider=None,
 ) -> SnapResult:
     """Snap a model-emitted rect to the nearest matching UIA control.
 
@@ -132,12 +135,23 @@ def snap_to_control(
     best_score = 0.0
     best_result: SnapResult | None = None
     best_semantic_text = ""
+    best_ctype = ""
+    best_window_rank = 0
     best_is_automation_only = False
     best_visible_score = 0.0
     best_visible_result: SnapResult | None = None
+    ranked: list[tuple[float, SnapResult, str, str, int]] = []
     own_process_result: SnapResult | None = None
+    foreground_handle = _safe_foreground_handle(
+        foreground_handle_provider or _foreground_window_handle
+    )
 
-    for control, rect, is_own_process in _iter_candidates(desktop, search_rect, deadline):
+    for control, rect, is_own_process, window_rank, foreground_known in _iter_candidates(
+        desktop,
+        search_rect,
+        deadline,
+        foreground_handle,
+    ):
         ctype = _control_type(control)
         if ctype not in CLICKABLE_CONTROL_TYPES:
             continue
@@ -169,25 +183,29 @@ def snap_to_control(
             instruction_tokens=instruction_tokens,
             diagonal=diagonal,
         )
+        if foreground_known and window_rank == 0:
+            score = min(1.0, score + FOREGROUND_RANK_BONUS)
+        result = SnapResult(
+            rect=rect,
+            confidence=score,
+            source="uia",
+            matched_text=text,
+        )
+        ranked.append((score, result, semantic_text, ctype, window_rank))
         if (
             visible_text
             and _semantic_overlap(visible_text, instruction_tokens)
             and score > best_visible_score
         ):
             best_visible_score = score
-            best_visible_result = SnapResult(
-                rect=rect,
-                confidence=score,
-                source="uia",
-                matched_text=text,
-            )
+            best_visible_result = result
         if score > best_score:
             best_score = score
             best_semantic_text = semantic_text
+            best_ctype = ctype
+            best_window_rank = window_rank
             best_is_automation_only = bool(not visible_text and automation_id)
-            best_result = SnapResult(
-                rect=rect, confidence=score, source="uia", matched_text=text
-            )
+            best_result = result
 
     if (
         best_result is not None
@@ -203,6 +221,18 @@ def snap_to_control(
             matched_text=best_result.matched_text,
             rejected_reason="automation-only target ambiguous",
         )
+
+    foreground_conflict = _foreground_snap_conflict(
+        ranked=ranked,
+        best_result=best_result,
+        best_semantic_text=best_semantic_text,
+        best_ctype=best_ctype,
+        best_window_rank=best_window_rank,
+        instruction_tokens=instruction_tokens,
+        confidence_floor=confidence_floor,
+    )
+    if foreground_conflict is not None:
+        return foreground_conflict
 
     if best_result is None or best_score < confidence_floor:
         if (
@@ -247,10 +277,11 @@ def _default_desktop():
     return Desktop(backend="uia")
 
 
-def _iter_candidates(desktop, search_rect, deadline):
+def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
     """BFS visible top-level windows and their descendants, yielding
-    ``(control, rect, is_own_process)`` tuples whose rect intersects
-    ``search_rect``. Pruned by ``deadline`` and ``_MAX_BFS_DEPTH``.
+    ``(control, rect, is_own_process, window_rank, foreground_known)`` tuples
+    whose rect intersects ``search_rect``. Pruned by ``deadline`` and
+    ``_MAX_BFS_DEPTH``.
     """
     try:
         toplevels = list(desktop.windows(visible_only=True, enabled_only=True))
@@ -258,7 +289,14 @@ def _iter_candidates(desktop, search_rect, deadline):
         log.debug("UIA windows() failed: %s", exc)
         return
 
-    for top in toplevels:
+    foreground_index = _foreground_window_index(toplevels, foreground_handle)
+    foreground_known = foreground_index is not None
+    indexed_toplevels = list(enumerate(toplevels))
+    indexed_toplevels.sort(
+        key=lambda item: _candidate_window_rank(item[0], foreground_index)
+    )
+
+    for window_index, top in indexed_toplevels:
         if time.monotonic() >= deadline:
             return
         top_rect = _element_rect(top)
@@ -266,6 +304,7 @@ def _iter_candidates(desktop, search_rect, deadline):
             continue
 
         top_handle = _window_handle(top)
+        window_rank = _candidate_window_rank(window_index, foreground_index)
         is_own_process = (
             top_handle is not None and _is_own_process_window(top_handle)
         )
@@ -276,7 +315,7 @@ def _iter_candidates(desktop, search_rect, deadline):
                 return
             next_queue: list[tuple[object, tuple[int, int, int, int]]] = []
             for control, rect in queue:
-                yield control, rect, is_own_process
+                yield control, rect, is_own_process, window_rank, foreground_known
                 if time.monotonic() >= deadline:
                     return
                 try:
@@ -333,6 +372,43 @@ def _window_handle(control) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _safe_foreground_handle(provider) -> int | None:
+    try:
+        handle = provider()
+    except Exception:
+        return None
+    if not handle:
+        return None
+    try:
+        return int(handle)
+    except Exception:
+        return None
+
+
+def _foreground_window_handle() -> int | None:
+    try:
+        return int(ctypes.windll.user32.GetForegroundWindow())
+    except Exception:
+        return None
+
+
+def _foreground_window_index(windows: list[object], foreground_handle: int | None) -> int | None:
+    if foreground_handle is None:
+        return None
+    for index, window in enumerate(windows):
+        if _window_handle(window) == foreground_handle:
+            return index
+    return None
+
+
+def _candidate_window_rank(window_index: int, foreground_index: int | None) -> int:
+    if foreground_index is None:
+        return 0
+    if window_index == foreground_index:
+        return 0
+    return window_index + 1 if window_index < foreground_index else window_index
 
 
 def _is_own_process_window(hwnd: int) -> bool:
@@ -437,6 +513,13 @@ def _semantic_overlap(text: str, instruction_tokens: set[str]) -> bool:
     return bool(instruction_tokens and (_tokenize_control(text) & instruction_tokens))
 
 
+def _semantic_score(text: str, instruction_tokens: set[str]) -> float:
+    control_tokens = _tokenize_control(text)
+    if not instruction_tokens or not control_tokens:
+        return 0.0
+    return len(instruction_tokens & control_tokens) / max(1, len(instruction_tokens))
+
+
 def _semantic_mismatch_targets_model_rect(
     candidate_rect: tuple[int, int, int, int],
     model_rect: tuple[int, int, int, int],
@@ -499,6 +582,64 @@ def _score(
     if instruction_tokens and control_tokens and not overlap:
         return min(score, SEMANTIC_MISMATCH_CAP)
     return score
+
+
+def _foreground_snap_conflict(
+    *,
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    best_result: SnapResult | None,
+    best_semantic_text: str,
+    best_ctype: str,
+    best_window_rank: int,
+    instruction_tokens: set[str],
+    confidence_floor: float,
+) -> SnapResult | None:
+    if best_result is None or best_window_rank == 0:
+        return None
+
+    foreground: tuple[float, SnapResult] | None = None
+    for score, result, semantic_text, ctype, window_rank in ranked:
+        if window_rank != 0:
+            continue
+        if score < confidence_floor:
+            continue
+        if not _same_snap_intent(
+            best_semantic_text,
+            best_ctype,
+            semantic_text,
+            ctype,
+            instruction_tokens,
+        ):
+            continue
+        if foreground is None or score > foreground[0]:
+            foreground = (score, result)
+    if foreground is None:
+        return None
+    if best_result.confidence - foreground[0] >= FOREGROUND_SNAP_CONFLICT_GAP:
+        return None
+    return SnapResult(
+        rect=best_result.rect,
+        confidence=best_result.confidence,
+        source="uia",
+        matched_text=best_result.matched_text,
+        rejected_reason="foreground target ambiguous",
+    )
+
+
+def _same_snap_intent(
+    first_text: str,
+    first_ctype: str,
+    second_text: str,
+    second_ctype: str,
+    instruction_tokens: set[str],
+) -> bool:
+    if not instruction_tokens:
+        return first_ctype == second_ctype
+    first_score = _semantic_score(first_text, instruction_tokens)
+    second_score = _semantic_score(second_text, instruction_tokens)
+    if first_score <= 0 and second_score <= 0:
+        return first_ctype == second_ctype
+    return second_score >= first_score - 0.08
 
 
 def _iou(

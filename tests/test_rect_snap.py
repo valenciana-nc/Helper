@@ -316,6 +316,43 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 32, 32))
         self.assertEqual(result.rejected_reason, "automation-only target ambiguous")
 
+    def test_snap_rejects_background_duplicate_when_foreground_is_plausible(self) -> None:
+        from rect_snap import snap_to_control
+
+        background_save = _make_button("Save", 100, 200, 80, 32)
+        foreground_save = _make_button("Save", 100, 250, 80, 32)
+        background = _make_window(
+            "Background Editor",
+            0,
+            0,
+            400,
+            320,
+            [background_save],
+            handle=101,
+        )
+        foreground = _make_window(
+            "Active Editor",
+            0,
+            40,
+            400,
+            320,
+            [foreground_save],
+            handle=202,
+        )
+        desktop = _FakeDesktop([background, foreground])
+
+        result = snap_to_control(
+            (100, 200, 80, 32),
+            "Click Save.",
+            desktop_factory=lambda: desktop,
+            foreground_handle_provider=lambda: 202,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 80, 32))
+        self.assertEqual(result.rejected_reason, "foreground target ambiguous")
+
     def test_snap_rejects_own_process_target_instead_of_raw_fallback(self) -> None:
         from rect_snap import snap_to_control
 
