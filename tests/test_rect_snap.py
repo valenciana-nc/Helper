@@ -2363,6 +2363,17 @@ class SnapToControlTests(unittest.TestCase):
             ("Hide sidebar.", "Show sidebar", "App"),
             ("Open details.", "Close details", "App"),
             ("Close details.", "Open details", "App"),
+            ("Mute speaker.", "Unmuted speaker", "App"),
+            ("Mute speaker.", "Muted speaker", "App"),
+            ("Show sidebar.", "Visible sidebar", "App"),
+            ("Expand Advanced settings.", "Collapsed Advanced settings", "App"),
+            ("Expand Advanced settings.", "Expanded Advanced settings", "App"),
+            ("Lock account.", "Unlocked account", "App"),
+            ("Lock account.", "Locked account", "App"),
+            ("Archive email.", "Unarchived email", "App"),
+            ("Archive email.", "Archived email", "App"),
+            ("Start recording.", "Stopped recording", "App"),
+            ("Start recording.", "Started recording", "App"),
             ("Mute microphone.", "Unmute microphone", "App"),
             ("Unmute microphone.", "Mute microphone", "App"),
             ("Lock account.", "Unlock account", "App"),
@@ -7225,41 +7236,43 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 window_title="about:blank - Google Chrome",
             )
         ]
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Open profile page.",
-                    "target_id": "c001",
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction="Open profile page.",
-            candidates=candidates,
-        )
-        snap_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Open profile page.",
-                    "target": {"x": 700, "y": 80, "width": 40, "height": 36},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+        for instruction in ("Open profile page.", "Click the profile page button."):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                )
+                snap_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 700, "y": 80, "width": 40, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        self.assertEqual(target.source, "target_id")
-        self.assertEqual(target.target_id, "c001")
-        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
-        self.assertIsNone(text_target)
-        self.assertEqual(snap_target.source, "candidate_snap")
-        self.assertEqual(snap_target.target_id, "c001")
-        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.target_id, "c001")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
     def test_profile_name_inference_stays_contextual_to_browser_profile_buttons(self) -> None:
         from control_inventory import ControlCandidate
@@ -10433,6 +10446,17 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Hide sidebar.", "Show sidebar", "App"),
             ("Open details.", "Close details", "App"),
             ("Close details.", "Open details", "App"),
+            ("Mute speaker.", "Unmuted speaker", "App"),
+            ("Mute speaker.", "Muted speaker", "App"),
+            ("Show sidebar.", "Visible sidebar", "App"),
+            ("Expand Advanced settings.", "Collapsed Advanced settings", "App"),
+            ("Expand Advanced settings.", "Expanded Advanced settings", "App"),
+            ("Lock account.", "Unlocked account", "App"),
+            ("Lock account.", "Locked account", "App"),
+            ("Archive email.", "Unarchived email", "App"),
+            ("Archive email.", "Archived email", "App"),
+            ("Start recording.", "Stopped recording", "App"),
+            ("Start recording.", "Started recording", "App"),
             ("Mute microphone.", "Unmute microphone", "App"),
             ("Unmute microphone.", "Mute microphone", "App"),
             ("Lock account.", "Unlock account", "App"),
@@ -10568,6 +10592,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(wrong_help.target_id)
         self.assertEqual(wrong_help.rejected_reason, "candidate snapshot no match")
 
+    def test_contextual_duplicate_requires_container_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        ambiguous_candidates = [
+            ControlCandidate("c001", "Save", "button", (150, 24, 72, 32)),
+            ControlCandidate("c002", "Save", "button", (150, 124, 72, 32)),
+        ]
+        contextual_candidates = [
+            ControlCandidate("profile", "Profile", "listitem", (100, 0, 220, 80)),
+            ControlCandidate("c001", "Save", "button", (150, 24, 72, 32)),
+            ControlCandidate("billing", "Billing", "listitem", (100, 100, 220, 80)),
+            ControlCandidate("c002", "Save", "button", (150, 124, 72, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click Save in the Billing card.",
+            candidates=ambiguous_candidates,
+            model_rect=(150, 24, 72, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save in the Billing card.",
+            candidates=ambiguous_candidates,
+            model_rect=(150, 24, 72, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Save in the Billing card.",
+            candidates=ambiguous_candidates,
+            model_rect=(150, 24, 72, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save in the Billing card.",
+                    "target": {"x": 150, "y": 24, "width": 72, "height": 32},
+                }
+            ),
+            self._capture(),
+            ambiguous_candidates,
+        )
+        contextual_snap = snap_candidate_target(
+            instruction="Click Save in the Billing card.",
+            candidates=contextual_candidates,
+            model_rect=(150, 124, 72, 32),
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.rejected_reason, "candidate snapshot no match")
+        self.assertEqual(contextual_snap.source, "candidate_snap")
+        self.assertEqual(contextual_snap.target_id, "c002")
+        self.assertFalse(contextual_snap.rejected_reason)
+
     def test_turn_on_off_checkbox_polarity_rejects_opposite_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
@@ -10599,6 +10682,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     instruction=instruction,
                     candidates=[candidate],
                     model_rect=(120, 160, 220, 32),
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_action_requests_reject_state_status_labels(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ("Enable notifications.", "Enabled notifications", "checkbox"),
+            ("Enable notifications.", "Disabled notifications", "checkbox"),
+            ("Disable notifications.", "Disabled notifications", "checkbox"),
+            ("Disable notifications.", "Enabled notifications", "checkbox"),
+            ("Turn on notifications.", "Enabled notifications", "checkbox"),
+            ("Turn on notifications.", "Disabled notifications", "checkbox"),
+            ("Turn off notifications.", "Disabled notifications", "checkbox"),
+            ("Turn off notifications.", "Enabled notifications", "checkbox"),
+            ("Mute speaker.", "Muted speaker", "button"),
+            ("Mute speaker.", "Unmuted speaker", "button"),
+            ("Unmute speaker.", "Unmuted speaker", "button"),
+            ("Unmute speaker.", "Muted speaker", "button"),
+            ("Show sidebar.", "Visible sidebar", "button"),
+            ("Show sidebar.", "Hidden sidebar", "button"),
+            ("Expand Advanced settings.", "Expanded Advanced settings", "button"),
+            ("Expand Advanced settings.", "Collapsed Advanced settings", "button"),
+            ("Collapse Advanced settings.", "Collapsed Advanced settings", "button"),
+            ("Collapse Advanced settings.", "Expanded Advanced settings", "button"),
+            ("Lock account.", "Locked account", "button"),
+            ("Lock account.", "Unlocked account", "button"),
+            ("Unlock account.", "Unlocked account", "button"),
+            ("Unlock account.", "Locked account", "button"),
+            ("Connect account.", "Connected account", "button"),
+            ("Connect account.", "Disconnected account", "button"),
+            ("Disconnect account.", "Disconnected account", "button"),
+            ("Disconnect account.", "Connected account", "button"),
+            ("Archive email.", "Archived email", "button"),
+            ("Archive email.", "Unarchived email", "button"),
+            ("Unarchive email.", "Unarchived email", "button"),
+            ("Unarchive email.", "Archived email", "button"),
+            ("Start recording.", "Started recording", "button"),
+            ("Start recording.", "Stopped recording", "button"),
+            ("Stop recording.", "Stopped recording", "button"),
+            ("Stop recording.", "Started recording", "button"),
+        )
+        for instruction, label, control_type in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidate = ControlCandidate(
+                    "c001",
+                    label,
+                    control_type,
+                    (120, 160, 240, 32),
+                    window_title="App",
+                )
+
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=(120, 160, 240, 32),
                 )
 
                 self.assertIsNone(text_target)

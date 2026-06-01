@@ -110,6 +110,18 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
 ROW_CONTEXT_OBJECT_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset(
     {"by", "for", "from", "in", "of", "on", "with"}
 )
+CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
+    {"area", "box", "card", "dialog", "form", "group", "modal", "panel", "pane", "section"}
+)
+CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
+    {
+        "click",
+        "inside",
+        "press",
+        "tap",
+        "within",
+    }
+)
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
@@ -139,6 +151,48 @@ REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
 )
 TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
+STATE_LABEL_ACTION_FAMILIES = (
+    (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
+    (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
+    (frozenset({"mute"}), frozenset({"muted"})),
+    (frozenset({"unmute"}), frozenset({"unmuted"})),
+    (frozenset({"show"}), frozenset({"shown", "visible"})),
+    (frozenset({"hide"}), frozenset({"hidden"})),
+    (frozenset({"expand"}), frozenset({"expanded"})),
+    (frozenset({"collapse"}), frozenset({"collapsed"})),
+    (frozenset({"lock"}), frozenset({"locked"})),
+    (frozenset({"unlock"}), frozenset({"unlocked"})),
+    (frozenset({"connect"}), frozenset({"connected"})),
+    (frozenset({"disconnect"}), frozenset({"disconnected"})),
+    (frozenset({"archive"}), frozenset({"archived"})),
+    (frozenset({"unarchive"}), frozenset({"unarchived"})),
+    (frozenset({"select"}), frozenset({"selected"})),
+    (frozenset({"deselect"}), frozenset({"deselected", "unselected"})),
+    (frozenset({"start"}), frozenset({"running", "started"})),
+    (frozenset({"stop"}), frozenset({"stopped"})),
+    (frozenset({"subscribe"}), frozenset({"subscribed"})),
+    (frozenset({"unsubscribe"}), frozenset({"unsubscribed"})),
+    (frozenset({"open"}), frozenset({"opened"})),
+    (frozenset({"close"}), frozenset({"closed"})),
+)
+STATE_LABEL_ACTION_GROUPS = (
+    (
+        frozenset({"check", "disable", "enable", "tick", "uncheck", "untick"}),
+        frozenset({"checked", "disabled", "enabled", "unchecked"}),
+    ),
+    (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
+    (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
+    (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
+    (frozenset({"lock", "unlock"}), frozenset({"locked", "unlocked"})),
+    (frozenset({"connect", "disconnect"}), frozenset({"connected", "disconnected"})),
+    (frozenset({"archive", "unarchive"}), frozenset({"archived", "unarchived"})),
+    (frozenset({"select", "deselect"}), frozenset({"deselected", "selected", "unselected"})),
+    (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
+    (frozenset({"subscribe", "unsubscribe"}), frozenset({"subscribed", "unsubscribed"})),
+    (frozenset({"open", "close"}), frozenset({"closed", "opened"})),
+)
+STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
+STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -1407,6 +1461,8 @@ def _text_match_score(
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
+    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
@@ -1522,6 +1578,8 @@ def _context_text_match_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return 0.0
+    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
@@ -1795,6 +1853,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
         )
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return (
@@ -2830,6 +2894,7 @@ def _explicit_action_context_mismatch(
         or _same_action_family_window_context_mismatch(instruction, candidate)
         or _generic_visibility_polarity_action_mismatch(instruction, candidate.descriptor)
         or _reversible_action_polarity_mismatch(instruction, candidate.descriptor)
+        or _state_label_action_mismatch(instruction, candidate.descriptor)
         or _new_tab_window_action_mismatch(instruction, candidate.descriptor)
         or _browser_tab_bookmark_action_mismatch(instruction, instruction_tokens, candidate)
         or _browser_tab_contextual_item_mismatch(instruction, candidate)
@@ -3074,6 +3139,72 @@ def _contained_row_context_objects(
     return set()
 
 
+def _unresolved_contextual_duplicate_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    if not requested_context:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    has_duplicate = any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _contextual_duplicate_key(other) == duplicate_key
+        for other in candidates
+    )
+    if not has_duplicate:
+        return False
+    evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    return not bool(requested_context & evidence_tokens)
+
+
+def _contextual_duplicate_request_tokens(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+        return set()
+    instruction_tokens = _tokenize_instruction(instruction)
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    return _object_token_variants(
+        instruction_tokens - candidate_tokens - CONTEXTUAL_DUPLICATE_STOPWORDS
+    )
+
+
+def _contextual_duplicate_key(candidate: ControlCandidate) -> str:
+    visible = _candidate_text_key(candidate.text)
+    if visible:
+        return f"{candidate.control_type}:text:{visible}"
+    automation = _candidate_text_key(candidate.automation_id)
+    if automation:
+        return f"{candidate.control_type}:automation:{automation}"
+    return ""
+
+
+def _contextual_duplicate_evidence_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens = set(_candidate_semantic_tokens(candidate))
+    tokens.update(_tokenize_control(candidate.window_title))
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not context.descriptor:
+            continue
+        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        tokens.update(_candidate_semantic_tokens(context))
+        tokens.update(_tokenize_control(context.window_title))
+    return _object_token_variants(tokens)
+
+
 def _generic_visibility_polarity_action_mismatch(
     instruction: str,
     candidate_text: str,
@@ -3147,6 +3278,42 @@ def _reversible_action_polarity_kind(tokens: set[str]) -> str:
         side = "positive" if requested_positive else "negative"
         return f"{index}:{side}"
     return ""
+
+
+def _state_label_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    control_tokens = _literal_words_from_text(candidate_text)
+    if not control_tokens:
+        return False
+
+    instruction_tokens = _literal_words_from_text(instruction)
+    if _state_label_is_target_identity(instruction_tokens, control_tokens):
+        return False
+
+    turn_kind = _turn_on_off_action_kind(instruction)
+    if turn_kind and control_tokens & (STATE_LABEL_TURN_ON_WORDS | STATE_LABEL_TURN_OFF_WORDS):
+        return True
+
+    for action_words, state_words in STATE_LABEL_ACTION_GROUPS:
+        if instruction_tokens & action_words and control_tokens & state_words:
+            return True
+    return False
+
+
+def _state_label_is_target_identity(
+    instruction_tokens: set[str],
+    control_tokens: set[str],
+) -> bool:
+    if {"hidden", "icons"} <= control_tokens and {"hidden", "icons"} <= instruction_tokens:
+        return True
+    if {"hidden", "bookmarks"} <= control_tokens and {"hidden", "bookmarks"} <= instruction_tokens:
+        return True
+    if "group" in control_tokens and control_tokens & BROWSER_GROUP_STATE_WORDS:
+        identity_tokens = control_tokens - BROWSER_GROUP_STATE_WORDS - {"group", "tab", "tabs"}
+        return "group" in instruction_tokens or bool(identity_tokens & instruction_tokens)
+    return False
 
 
 def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
@@ -3391,6 +3558,8 @@ def _target_id_ambiguity(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+            continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
@@ -3609,6 +3778,8 @@ def _has_semantic_alternative(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+            continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
         if _explicit_action_context_mismatch(instruction, candidate):
@@ -3706,6 +3877,8 @@ def _has_visible_semantic_alternative(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
@@ -3806,6 +3979,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _explicit_action_context_mismatch(instruction, candidate):
@@ -3958,6 +4133,8 @@ def _single_contained_control_intent_candidate(
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
+        if _browser_profile_page_action_mismatch(instruction, candidate):
+            continue
         if _browser_menu_button_action_mismatch(instruction, candidate):
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
@@ -3991,6 +4168,8 @@ def _single_contained_control_intent_candidate(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
@@ -4252,6 +4431,8 @@ def _candidate_snap_semantic_mismatch(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return True
+    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True

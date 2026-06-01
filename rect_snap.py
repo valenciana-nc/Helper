@@ -124,6 +124,48 @@ REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
 )
 TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
+STATE_LABEL_ACTION_FAMILIES = (
+    (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
+    (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
+    (frozenset({"mute"}), frozenset({"muted"})),
+    (frozenset({"unmute"}), frozenset({"unmuted"})),
+    (frozenset({"show"}), frozenset({"shown", "visible"})),
+    (frozenset({"hide"}), frozenset({"hidden"})),
+    (frozenset({"expand"}), frozenset({"expanded"})),
+    (frozenset({"collapse"}), frozenset({"collapsed"})),
+    (frozenset({"lock"}), frozenset({"locked"})),
+    (frozenset({"unlock"}), frozenset({"unlocked"})),
+    (frozenset({"connect"}), frozenset({"connected"})),
+    (frozenset({"disconnect"}), frozenset({"disconnected"})),
+    (frozenset({"archive"}), frozenset({"archived"})),
+    (frozenset({"unarchive"}), frozenset({"unarchived"})),
+    (frozenset({"select"}), frozenset({"selected"})),
+    (frozenset({"deselect"}), frozenset({"deselected", "unselected"})),
+    (frozenset({"start"}), frozenset({"running", "started"})),
+    (frozenset({"stop"}), frozenset({"stopped"})),
+    (frozenset({"subscribe"}), frozenset({"subscribed"})),
+    (frozenset({"unsubscribe"}), frozenset({"unsubscribed"})),
+    (frozenset({"open"}), frozenset({"opened"})),
+    (frozenset({"close"}), frozenset({"closed"})),
+)
+STATE_LABEL_ACTION_GROUPS = (
+    (
+        frozenset({"check", "disable", "enable", "tick", "uncheck", "untick"}),
+        frozenset({"checked", "disabled", "enabled", "unchecked"}),
+    ),
+    (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
+    (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
+    (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
+    (frozenset({"lock", "unlock"}), frozenset({"locked", "unlocked"})),
+    (frozenset({"connect", "disconnect"}), frozenset({"connected", "disconnected"})),
+    (frozenset({"archive", "unarchive"}), frozenset({"archived", "unarchived"})),
+    (frozenset({"select", "deselect"}), frozenset({"deselected", "selected", "unselected"})),
+    (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
+    (frozenset({"subscribe", "unsubscribe"}), frozenset({"subscribed", "unsubscribed"})),
+    (frozenset({"open", "close"}), frozenset({"closed", "opened"})),
+)
+STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
+STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
 WINDOW_CONTEXT_OBJECT_WORDS = frozenset(
     {
         "account",
@@ -1591,6 +1633,10 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _state_label_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _new_tab_window_action_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -1862,6 +1908,42 @@ def _reversible_action_polarity_kind(tokens: set[str]) -> str:
         side = "positive" if requested_positive else "negative"
         return f"{index}:{side}"
     return ""
+
+
+def _state_label_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    control_tokens = _literal_words_from_text(candidate_text)
+    if not control_tokens:
+        return False
+
+    instruction_tokens = _literal_words_from_text(instruction)
+    if _state_label_is_target_identity(instruction_tokens, control_tokens):
+        return False
+
+    turn_kind = _turn_on_off_action_kind(instruction)
+    if turn_kind and control_tokens & (STATE_LABEL_TURN_ON_WORDS | STATE_LABEL_TURN_OFF_WORDS):
+        return True
+
+    for action_words, state_words in STATE_LABEL_ACTION_GROUPS:
+        if instruction_tokens & action_words and control_tokens & state_words:
+            return True
+    return False
+
+
+def _state_label_is_target_identity(
+    instruction_tokens: set[str],
+    control_tokens: set[str],
+) -> bool:
+    if {"hidden", "icons"} <= control_tokens and {"hidden", "icons"} <= instruction_tokens:
+        return True
+    if {"hidden", "bookmarks"} <= control_tokens and {"hidden", "bookmarks"} <= instruction_tokens:
+        return True
+    if "group" in control_tokens and control_tokens & BROWSER_GROUP_STATE_WORDS:
+        identity_tokens = control_tokens - BROWSER_GROUP_STATE_WORDS - {"group", "tab", "tabs"}
+        return "group" in instruction_tokens or bool(identity_tokens & instruction_tokens)
+    return False
 
 
 def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
