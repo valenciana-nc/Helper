@@ -670,6 +670,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_option_model_rect_snaps_to_radio",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select this option.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Weekly", "control_type": "radiobutton", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_option_broad_group_rejects_multiple_radios",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Daily"},
+                {"rect": [20, 112, 180, 32], "label": "Weekly"},
+                {"rect": [20, 144, 180, 32], "label": "Monthly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select this option.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 96},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Daily", "control_type": "radiobutton", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Weekly", "control_type": "radiobutton", "rect": [20, 112, 180, 32]},
+                {"id": "c003", "text": "Monthly", "control_type": "radiobutton", "rect": [20, 144, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -57,8 +57,8 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
         "here", "there", "highlighted", "shown", "indicated", "selected",
         "area", "spot", "place", "location",
-        "button", "icon", "link", "tab", "menu", "item", "header", "heading",
-        "field", "input",
+        "button", "icon", "link", "tab", "menu", "item", "option",
+        "header", "heading", "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
         "radio", "radiobutton", "combo", "combobox", "dropdown",
@@ -87,6 +87,7 @@ _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
+_OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _SWITCH_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -747,6 +748,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
         intents.add("tabitem")
+    if "option" in raw_tokens:
+        intents.update(_OPTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")
     if "menu" in raw_tokens:
