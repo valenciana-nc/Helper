@@ -52,12 +52,26 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SEPARATOR_RE = re.compile(r"[_\-.]+")
 _TOKEN_ALIASES = {
-    "cog": {"settings"},
-    "gear": {"settings"},
-    "magnifier": {"search"},
-    "magnifying": {"search"},
-    "lens": {"search"},
+    "account": {"profile", "user"},
+    "avatar": {"account", "profile", "user"},
+    "cog": {"options", "preferences", "settings"},
+    "dismiss": {"close"},
+    "find": {"search"},
+    "gear": {"options", "preferences", "settings"},
+    "lens": {"find", "search"},
+    "magnifier": {"find", "search"},
+    "magnifying": {"find", "search"},
+    "menu": {"more", "options"},
+    "more": {"menu", "options"},
+    "options": {"preferences", "settings"},
+    "preferences": {"options", "settings"},
+    "profile": {"account", "user"},
+    "remove": {"delete"},
+    "search": {"find"},
+    "settings": {"options", "preferences"},
+    "user": {"account", "profile"},
     "ellipsis": {"more", "options", "menu"},
+    "close": {"dismiss"},
     "dot": {"more", "options", "menu"},
     "dots": {"more", "options", "menu"},
     "trash": {"delete", "remove"},
@@ -857,11 +871,11 @@ def _target_id_plausibility(
 
 def _candidate_identity_tokens(candidate: ControlCandidate) -> set[str]:
     text = " ".join(part for part in (candidate.text, candidate.automation_id) if part)
-    return _tokens_from_text(text)
+    return _expand_token_aliases(_tokens_from_text(text))
 
 
 def _candidate_visible_text_tokens(candidate: ControlCandidate) -> set[str]:
-    return _tokens_from_text(candidate.text)
+    return _expand_token_aliases(_tokens_from_text(candidate.text))
 
 
 def _target_id_ambiguity(
@@ -1065,8 +1079,12 @@ def _tokenize_instruction(instruction: str) -> set[str]:
     filtered = {
         token for token in tokens if token not in _INSTRUCTION_STOPWORDS and len(token) > 1
     }
-    expanded = set(filtered)
-    for token in filtered:
+    return _expand_token_aliases(filtered)
+
+
+def _expand_token_aliases(tokens: set[str]) -> set[str]:
+    expanded = set(tokens)
+    for token in tokens:
         expanded.update(_TOKEN_ALIASES.get(token, set()))
     return expanded
 

@@ -58,12 +58,26 @@ _INSTRUCTION_STOPWORDS = frozenset(
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _TOKEN_ALIASES = {
-    "cog": {"settings"},
-    "gear": {"settings"},
-    "magnifier": {"search"},
-    "magnifying": {"search"},
-    "lens": {"search"},
+    "account": {"profile", "user"},
+    "avatar": {"account", "profile", "user"},
+    "cog": {"options", "preferences", "settings"},
+    "dismiss": {"close"},
+    "find": {"search"},
+    "gear": {"options", "preferences", "settings"},
+    "lens": {"find", "search"},
+    "magnifier": {"find", "search"},
+    "magnifying": {"find", "search"},
+    "menu": {"more", "options"},
+    "more": {"menu", "options"},
+    "options": {"preferences", "settings"},
+    "preferences": {"options", "settings"},
+    "profile": {"account", "user"},
+    "remove": {"delete"},
+    "search": {"find"},
+    "settings": {"options", "preferences"},
+    "user": {"account", "profile"},
     "ellipsis": {"more", "options", "menu"},
+    "close": {"dismiss"},
     "dot": {"more", "options", "menu"},
     "dots": {"more", "options", "menu"},
     "trash": {"delete", "remove"},
@@ -275,14 +289,18 @@ def _is_visible(control) -> bool:
 def _tokenize_instruction(instruction: str) -> set[str]:
     tokens = set(_TOKEN_RE.findall((instruction or "").lower()))
     filtered = {t for t in tokens if t not in _INSTRUCTION_STOPWORDS and len(t) > 1}
-    expanded = set(filtered)
-    for token in filtered:
-        expanded.update(_TOKEN_ALIASES.get(token, set()))
-    return expanded
+    return _expand_token_aliases(filtered)
 
 
 def _tokenize_control(text: str) -> set[str]:
-    return set(_TOKEN_RE.findall((text or "").lower()))
+    return _expand_token_aliases(set(_TOKEN_RE.findall((text or "").lower())))
+
+
+def _expand_token_aliases(tokens: set[str]) -> set[str]:
+    expanded = set(tokens)
+    for token in tokens:
+        expanded.update(_TOKEN_ALIASES.get(token, set()))
+    return expanded
 
 
 def _score(

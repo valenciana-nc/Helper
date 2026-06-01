@@ -237,6 +237,24 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "model")
         self.assertEqual(result.rect, model_rect)
 
+    def test_snap_uses_common_ui_label_synonyms(self) -> None:
+        from rect_snap import snap_to_control
+
+        options = _make_button("Options", 100, 200, 60, 30)
+        window = _make_window("App", 0, 0, 800, 600, [options])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 60, 30),
+            "Click the settings gear.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 60, 30))
+        self.assertIn("Options", result.matched_text)
+
     def test_factory_failure_falls_back_cleanly(self) -> None:
         from rect_snap import snap_to_control
 
@@ -381,7 +399,7 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
 
-    def test_target_id_label_mismatch_rejects_even_with_exact_geometry(self) -> None:
+    def test_target_id_accepts_common_ui_synonym_with_exact_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
         result = resolve_candidate_target(
@@ -396,7 +414,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.source, "target_id")
-        self.assertEqual(result.rejected_reason, "target_id semantic mismatch")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (100, 10, 32, 32))
+
+    def test_text_match_uses_common_ui_synonyms(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Click the settings gear.",
+            candidates=[
+                ControlCandidate("c001", "Options", "button", (100, 10, 32, 32)),
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
 
     def test_unlabeled_target_id_can_pass_with_exact_geometry_when_unambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
