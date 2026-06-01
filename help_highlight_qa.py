@@ -1166,6 +1166,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "text_entry_action_wrong_target_id_recovers_to_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 260, 32], "label": "Email"},
+                {"rect": [300, 80, 90, 32], "label": "Email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type your email.",
+                "target_id": "c002",
+                "target": {"x": 300, "y": 80, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Email", "control_type": "edit", "rect": [20, 80, 260, 32]},
+                {"id": "c002", "text": "Email", "control_type": "button", "rect": [300, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 260, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "search_bar_plain_button_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [300, 80, 90, 32], "label": "Search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the search bar.",
+                "target": {"x": 300, "y": 80, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Search", "control_type": "button", "rect": [300, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "button_control_suffix_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

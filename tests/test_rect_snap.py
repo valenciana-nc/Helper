@@ -701,6 +701,50 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 240, 32))
         self.assertEqual(result.rejected_reason, "control type mismatch")
 
+    def test_snap_rejects_text_entry_wording_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Type your email.", "Email", (100, 200, 180, 32)),
+            ("Enter the verification code.", "Verification code", (100, 200, 220, 32)),
+            ("Click the search bar.", "Search", (100, 200, 180, 32)),
+            ("Click the filter bar.", "Filter", (100, 200, 180, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button(label, *rect, control_type="Button")
+                window = _make_window("App", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertEqual(result.rejected_reason, "control type mismatch")
+
+    def test_snap_keeps_explicit_enter_button_as_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Enter", 100, 200, 120, 32)
+        window = _make_window("Dialog", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 120, 32),
+            "Click the Enter button.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 120, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_accepts_generic_button_control_suffix(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1980,6 +2024,61 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id control type mismatch")
 
+    def test_text_entry_action_target_id_rejects_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Type your email.",
+            candidates=[
+                ControlCandidate("c001", "Email", "button", (10, 10, 180, 32)),
+            ],
+            model_rect=(10, 10, 180, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
+    def test_text_entry_action_text_match_prefers_edit_over_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Enter the verification code.",
+            candidates=[
+                ControlCandidate("c001", "Verification code", "edit", (10, 10, 260, 32)),
+                ControlCandidate("c002", "Verification code", "button", (300, 10, 140, 32)),
+            ],
+            model_rect=(300, 10, 140, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertEqual(result.rect, (10, 10, 260, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_text_entry_wording_keeps_explicit_enter_button_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click the Enter button.",
+            candidates=[
+                ControlCandidate("c001", "Enter", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 120, 32))
+
     def test_button_control_suffix_target_id_accepts_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -3047,6 +3146,47 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 240, 32))
 
+    def test_snap_candidate_target_rejects_text_entry_wording_on_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Type your email.", "Email", (10, 10, 180, 32)),
+            ("Enter the verification code.", "Verification code", (10, 10, 220, 32)),
+            ("Click the search bar.", "Search", (10, 10, 180, 32)),
+            ("Click the find bar.", "Find", (10, 10, 180, 32)),
+            ("Click the filter bar.", "Filter", (10, 10, 180, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", rect),
+                    ],
+                    model_rect=rect,
+                )
+
+                self.assertIsNone(result)
+
+    def test_snap_candidate_target_prefers_search_bar_edit_over_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click the search bar.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 260, 32)),
+                ControlCandidate("c002", "Search", "button", (300, 10, 90, 32)),
+            ],
+            model_rect=(10, 10, 380, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertEqual(result.rect, (10, 10, 260, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_candidate_target_accepts_button_control_suffix(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -3453,6 +3593,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
+
+    def test_text_entry_action_wrong_target_id_recovers_to_edit(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Type your email.",
+                    "target_id": "c002",
+                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Email", "edit", (120, 160, 160, 32)),
+                ControlCandidate("c002", "Email", "button", (300, 160, 90, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rect, (120, 160, 160, 32))
+        self.assertFalse(target.rejected_reason)
+
+    def test_search_bar_model_rect_rejects_plain_button_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the search bar.",
+                    "target": {"x": 300, "y": 160, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Search", "button", (300, 160, 90, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_unlabeled_target_id_with_geometry_recovers_to_visible_text_match(self) -> None:
         from control_inventory import ControlCandidate

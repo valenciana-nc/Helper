@@ -221,6 +221,51 @@ SLIDER_CONTROL_TYPES = frozenset({"slider"})
 SPINNER_CONTROL_TYPES = frozenset({"spinner"})
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
 _ADDRESS_BAR_INTENT_WORDS = frozenset({"address", "url", "location", "omnibox"})
+_SEARCH_BAR_INTENT_WORDS = frozenset({"filter", "find", "query", "search"})
+_TEXT_ENTRY_ACTION_WORDS = frozenset({"enter", "type"})
+_TEXT_ENTRY_BLOCKING_WORDS = frozenset(
+    {
+        "arrow",
+        "button",
+        "caret",
+        "check",
+        "checkbox",
+        "chevron",
+        "combo",
+        "combobox",
+        "down",
+        "drop",
+        "dropdown",
+        "header",
+        "headeritem",
+        "heading",
+        "hyperlink",
+        "icon",
+        "item",
+        "key",
+        "link",
+        "list",
+        "listitem",
+        "menu",
+        "menuitem",
+        "option",
+        "radio",
+        "radiobutton",
+        "shortcut",
+        "slider",
+        "spinbox",
+        "spinner",
+        "split",
+        "splitbutton",
+        "stepper",
+        "switch",
+        "tab",
+        "tabitem",
+        "toggle",
+        "tree",
+        "treeitem",
+    }
+)
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
@@ -1521,7 +1566,13 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     address_bar_requested = "omnibox" in raw_tokens or (
         "bar" in raw_tokens and bool(raw_tokens & _ADDRESS_BAR_INTENT_WORDS)
     )
-    input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS) or address_bar_requested
+    search_bar_requested = "bar" in raw_tokens and bool(raw_tokens & _SEARCH_BAR_INTENT_WORDS)
+    input_requested = (
+        bool(raw_tokens & _INPUT_INTENT_WORDS)
+        or address_bar_requested
+        or search_bar_requested
+        or _text_entry_action_requested(raw_tokens)
+    )
     if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
     if radio_requested:
@@ -1574,6 +1625,12 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     if "menuitem" in raw_tokens:
         intents.add("menuitem")
     return intents
+
+
+def _text_entry_action_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _TEXT_ENTRY_ACTION_WORDS):
+        return False
+    return not bool(raw_tokens & _TEXT_ENTRY_BLOCKING_WORDS)
 
 
 def _candidate_matches_control_intent(
