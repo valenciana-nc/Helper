@@ -58,6 +58,7 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\bnew\s+tab\b"), {"new_tab", "open_new"}),
     (re.compile(r"\bnew\s+window\b"), {"new_window", "open_new"}),
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
+    (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),
 )
 _CONTROL_PHRASE_TOKEN_REWRITE_PATTERNS = (
     (re.compile(r"\bstar\s+link\b"), {"starlink"}, {"link", "star"}),
@@ -67,6 +68,11 @@ _PHRASE_TOKEN_REWRITES = (
         re.compile(r"\bwi\s+fi\b"),
         {"internet", "network", "wifi"},
         {"fi", "wi"},
+    ),
+    (
+        re.compile(r"\b(?:lock|padlock)\s+icon\b"),
+        {"site_info_lock"},
+        {"lock", "padlock"},
     ),
     (
         re.compile(r"\bnotification\s+area\b"),
@@ -170,10 +176,10 @@ _SYMBOL_TOKEN_ALIASES = {
     "\U0001f6d2": {"bag", "basket", "cart"},
     "\U0001f441": {"eye", "visibility", "visible"},
     "\U0001f440": {"eye", "visibility", "visible"},
-    "\U0001f510": {"key", "lock", "padlock", "secure", "security"},
+    "\U0001f510": {"key", "lock", "padlock", "secure", "security", "site_info_lock"},
     "\U0001f511": {"key", "secure", "security"},
-    "\U0001f512": {"lock", "locked", "padlock"},
-    "\U0001f513": {"lock", "padlock", "unlock", "unlocked"},
+    "\U0001f512": {"lock", "locked", "padlock", "site_info_lock"},
+    "\U0001f513": {"lock", "padlock", "site_info_lock", "unlock", "unlocked"},
     "\u2302": {"home", "house"},
     "\U0001f3e0": {"home", "house"},
     "\U0001f4c5": {"calendar", "date"},

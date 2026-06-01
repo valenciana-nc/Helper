@@ -471,6 +471,21 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("lock", tokenize_control("Padlock"))
         self.assertIn("security", tokenize_control("Shield"))
 
+    def test_site_information_lock_icon_wording_is_specific(self) -> None:
+        from help_intents import tokenize_control, tokenize_instruction
+
+        lock_icon_tokens = tokenize_instruction("Click the lock icon")
+        padlock_icon_tokens = tokenize_instruction("Click the padlock icon")
+        site_info_tokens = tokenize_control("View site information")
+
+        self.assertEqual(lock_icon_tokens, {"site_info_lock"})
+        self.assertEqual(padlock_icon_tokens, {"site_info_lock"})
+        self.assertIn("site_info_lock", site_info_tokens)
+        self.assertIn("site_info_lock", tokenize_control("\U0001f512"))
+        self.assertNotIn("site_info_lock", tokenize_instruction("Lock screen"))
+        self.assertNotIn("site_info_lock", tokenize_instruction("Unlock account"))
+        self.assertNotIn("lock", site_info_tokens)
+
     def test_navigation_and_time_aliases_expand_to_common_labels(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -723,8 +738,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f4f7", {"camera", "video", "webcam"}),
             ("\U0001f6d2", {"bag", "basket", "cart"}),
             ("\U0001f441", {"eye", "visibility", "visible"}),
-            ("\U0001f512", {"lock", "locked", "padlock"}),
-            ("\U0001f513", {"lock", "padlock", "unlock", "unlocked"}),
+            ("\U0001f512", {"lock", "locked", "padlock", "site_info_lock"}),
+            ("\U0001f513", {"lock", "padlock", "site_info_lock", "unlock", "unlocked"}),
             ("\U0001f6e1", {"secure", "security", "shield"}),
             ("\U0001f4c5", {"calendar", "date"}),
             ("\U0001f551", {"clock", "time"}),
@@ -8193,6 +8208,79 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (300, 160, 160, 32))
+
+    def test_site_information_target_id_accepts_lock_icon_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the lock icon.", "View site information", (120, 160, 140, 32)),
+            ("Click the padlock icon.", "View site information", (120, 160, 140, 32)),
+            ("Click the lock icon.", "\U0001f512", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            rect,
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_site_information_aliases_do_not_cross_lock_security_or_settings(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Lock screen.", "View site information"),
+            ("Unlock account.", "View site information"),
+            ("Open security.", "View site information"),
+            ("Open site settings.", "View site information"),
+            ("Open site information.", "Security settings"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 160, 32),
+                            window_title="GitHub Dashboard - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_cart_action_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate

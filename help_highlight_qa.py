@@ -3828,6 +3828,141 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "lock_icon_target_id_accepts_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the lock icon.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "padlock_icon_target_id_accepts_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the padlock icon.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "lock_screen_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Lock screen.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "security_action_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open security.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "site_settings_rejects_site_information_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open site settings.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "video_text_match_overrides_av_settings_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
