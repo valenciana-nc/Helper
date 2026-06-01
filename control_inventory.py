@@ -114,6 +114,16 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "of",
         "this",
         "that",
+        "here",
+        "there",
+        "highlighted",
+        "shown",
+        "indicated",
+        "selected",
+        "area",
+        "spot",
+        "place",
+        "location",
         "your",
         "for",
         "now",
@@ -159,6 +169,8 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "center",
         "corner",
         "side",
+        "row",
+        "column",
     }
 )
 
@@ -541,11 +553,26 @@ def resolve_candidate_target(
             rejected_reason="unknown target_id",
         )
 
+    instruction_tokens = _tokenize_instruction(instruction)
+    control_intents = _instruction_control_intents(instruction)
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
-        score = _text_match_score(instruction, candidate, model_rect)
+        if control_intents and not _candidate_matches_control_intent(candidate, control_intents):
+            score = _context_text_match_score(instruction_tokens, candidate, model_rect)
+        else:
+            score = _text_match_score(instruction, candidate, model_rect)
         score += _foreground_rank_bonus(candidate, candidates)
         if score > 0:
+            if not _candidate_matches_control_intent(candidate, control_intents):
+                contained = _single_contained_control_intent_candidate(
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                    instruction_tokens=instruction_tokens,
+                    control_intents=control_intents,
+                )
+                if contained is None:
+                    continue
+                candidate = contained
             ranked.append((score, candidate))
 
     if not ranked:
@@ -923,6 +950,32 @@ def _text_match_score(
     return min(max(score, 0.0), 1.0)
 
 
+def _context_text_match_score(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    model_rect: tuple[int, int, int, int] | None,
+) -> float:
+    if not instruction_tokens:
+        return 0.0
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    candidate_tokens = visible_tokens or _candidate_automation_tokens(candidate)
+    if not candidate_tokens:
+        return 0.0
+    overlap = instruction_tokens & candidate_tokens
+    if not overlap:
+        return 0.0
+    coverage = len(overlap) / max(1, len(instruction_tokens))
+    density = len(overlap) / max(1, len(candidate_tokens))
+    score = 0.70 * coverage + 0.18 * min(1.0, density * 3.0)
+    if visible_tokens:
+        score += VISIBLE_TEXT_MATCH_BONUS
+    elif candidate.automation_id.strip():
+        score -= AUTOMATION_ONLY_MATCH_PENALTY
+    if model_rect is not None:
+        score += 0.05 * _proximity_score(candidate.rect, model_rect)
+    return min(max(score, 0.0), 1.0)
+
+
 def _target_id_plausibility(
     *,
     instruction: str,
@@ -1250,7 +1303,7 @@ def _single_contained_control_intent_candidate(
     instruction_tokens: set[str],
     control_intents: set[str],
 ) -> ControlCandidate | None:
-    if instruction_tokens or not control_intents:
+    if not control_intents:
         return None
     bounds = _expand_rect(model_rect, 4)
     contained: list[ControlCandidate] = []
@@ -1259,12 +1312,39 @@ def _single_contained_control_intent_candidate(
             continue
         if not _contains_rect(bounds, candidate.rect):
             continue
+        if instruction_tokens and not _contained_control_intent_has_evidence(
+            candidate=candidate,
+            candidates=candidates,
+            model_rect=model_rect,
+            instruction_tokens=instruction_tokens,
+        ):
+            continue
         if any(_same_visual_candidate(candidate, existing) for existing in contained):
             continue
         contained.append(candidate)
         if len(contained) > 1:
             return None
     return contained[0] if contained else None
+
+
+def _contained_control_intent_has_evidence(
+    *,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int],
+    instruction_tokens: set[str],
+) -> bool:
+    evidence_tokens = set(_candidate_semantic_tokens(candidate))
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        if _geometry_agreement(context.rect, model_rect) < TARGET_ID_GEOMETRY_FLOOR:
+            continue
+        evidence_tokens.update(_candidate_semantic_tokens(context))
+        evidence_tokens.update(_expand_token_aliases(_tokens_from_text(context.window_title)))
+    return _text_evidence_score(instruction_tokens, evidence_tokens) >= TARGET_ID_TEXT_FLOOR
 
 
 def _instruction_control_intents(instruction: str) -> set[str]:

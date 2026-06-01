@@ -50,6 +50,23 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {"source": "target_id", "rect": [80, 80, 80, 32], "overlay_emitted": True},
         },
         {
+            "name": "deictic_target_id_accepts_exact_labeled_control",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click here.",
+                "target_id": "c001",
+                "target": {"x": 160, "y": 250, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "expected": {"source": "target_id", "rect": [80, 80, 80, 32], "overlay_emitted": True},
+        },
+        {
             "name": "unknown_id_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -558,6 +575,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             ],
             "expected": {
                 "source": "candidate_snap",
+                "target_id": "c002",
+                "rect": [34, 110, 20, 20],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Task row"},
+                {"rect": [34, 110, 20, 20], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the checkbox in Task row.",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Task row", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "c002", "text": "Done", "control_type": "checkbox", "rect": [34, 110, 20, 20]},
+            ],
+            "expected": {
+                "source": "text_match",
                 "target_id": "c002",
                 "rect": [34, 110, 20, 20],
                 "overlay_emitted": True,

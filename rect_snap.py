@@ -55,13 +55,15 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "click", "tap", "press", "select", "choose", "focus", "go",
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
+        "here", "there", "highlighted", "shown", "indicated", "selected",
+        "area", "spot", "place", "location",
         "button", "icon", "link", "tab", "menu", "item", "field", "input",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "radio", "radiobutton", "combo", "combobox", "dropdown",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
         "top", "bottom", "left", "right", "upper", "lower",
-        "middle", "center", "corner", "side",
+        "middle", "center", "corner", "side", "row", "column",
     }
 )
 
@@ -168,7 +170,8 @@ def snap_to_control(
     own_process_result: SnapResult | None = None
     occluded_result: SnapResult | None = None
     control_type_mismatch_result: SnapResult | None = None
-    contained_control_intent_results: list[SnapResult] = []
+    contained_control_intent_results: list[tuple[SnapResult, str]] = []
+    control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
     )
@@ -226,6 +229,12 @@ def snap_to_control(
             continue
         if control_intents and ctype not in control_intents:
             if (
+                instruction_tokens
+                and semantic_text
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                control_intent_contexts.append((rect, semantic_text))
+            if (
                 control_type_mismatch_result is None
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
             ):
@@ -256,11 +265,10 @@ def snap_to_control(
         )
         if (
             control_intents
-            and not instruction_tokens
             and _contains_rect(_expand_rect(model_rect, 4), rect)
-            and not any(item.rect == result.rect for item in contained_control_intent_results)
+            and not any(item.rect == result.rect for item, _text in contained_control_intent_results)
         ):
-            contained_control_intent_results.append(result)
+            contained_control_intent_results.append((result, semantic_text))
         ranked.append((score, result, semantic_text, ctype, window_rank))
         if (
             visible_text
@@ -308,6 +316,8 @@ def snap_to_control(
         contained_result = _single_contained_control_intent_result(
             contained_control_intent_results,
             confidence_floor=confidence_floor,
+            instruction_tokens=instruction_tokens,
+            contexts=control_intent_contexts,
         )
         if contained_result is not None:
             return contained_result
@@ -860,19 +870,59 @@ def _contains_rect(
 
 
 def _single_contained_control_intent_result(
-    results: list[SnapResult],
+    results: list[tuple[SnapResult, str]],
     *,
     confidence_floor: float,
+    instruction_tokens: set[str],
+    contexts: list[tuple[tuple[int, int, int, int], str]],
 ) -> SnapResult | None:
-    if len(results) != 1:
+    eligible: list[SnapResult] = []
+    for result, semantic_text in results:
+        if instruction_tokens and not _contained_control_intent_result_has_evidence(
+            rect=result.rect,
+            semantic_text=semantic_text,
+            contexts=contexts,
+            instruction_tokens=instruction_tokens,
+        ):
+            continue
+        eligible.append(result)
+    if len(eligible) != 1:
         return None
-    result = results[0]
+    result = eligible[0]
     return SnapResult(
         rect=result.rect,
         confidence=max(confidence_floor, result.confidence),
         source=result.source,
         matched_text=result.matched_text,
     )
+
+
+def _contained_control_intent_result_has_evidence(
+    *,
+    rect: tuple[int, int, int, int],
+    semantic_text: str,
+    contexts: list[tuple[tuple[int, int, int, int], str]],
+    instruction_tokens: set[str],
+) -> bool:
+    evidence_tokens = _tokenize_control(semantic_text)
+    for context_rect, context_text in contexts:
+        if _contains_rect(_expand_rect(context_rect, 4), rect):
+            evidence_tokens.update(_tokenize_control(context_text))
+    return _text_evidence_score(instruction_tokens, evidence_tokens) >= 0.35
+
+
+def _text_evidence_score(
+    instruction_tokens: set[str],
+    candidate_tokens: set[str],
+) -> float:
+    if not instruction_tokens or not candidate_tokens:
+        return 0.0
+    overlap = instruction_tokens & candidate_tokens
+    if not overlap:
+        return 0.0
+    coverage = len(overlap) / max(1, len(instruction_tokens))
+    density = len(overlap) / max(1, len(candidate_tokens))
+    return min(1.0, 0.75 * coverage + 0.25 * min(1.0, density * 3.0))
 
 
 def _intersects(
