@@ -2217,6 +2217,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "save_document_model_rect_rejects_saved_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Document saved"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save document.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Document saved", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "send_message_target_id_rejects_sent_status_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Message sent"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send message.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Message sent", "control_type": "button", "rect": [20, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "apply_filter_model_rect_rejects_apply_coupon_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2907,6 +2949,112 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "row",
                 "rect": [20, 80, 320, 56],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_card_not_demoted_to_same_label_child_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 320, 56], "label": "Settings"},
+                {"rect": [36, 92, 88, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings card.",
+                "target_id": "card",
+                "target": {"x": 20, "y": 80, "width": 320, "height": 56},
+            },
+            "candidates": [
+                {"id": "card", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 320, 56]},
+                {"id": "btn", "text": "Settings", "control_type": "button", "rect": [36, 92, 88, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "card",
+                "rect": [20, 80, 320, 56],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_menu_accepts_menu_launcher_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 500, 48], "label": "Order 123"},
+                {"rect": [560, 108, 32, 32], "label": "..."},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open menu in row.",
+                "target": {"x": 560, "y": 108, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {"id": "row1", "text": "Order 123", "control_type": "listitem", "rect": [100, 100, 500, 48]},
+                {"id": "menu1", "text": "More options", "control_type": "button", "rect": [560, 108, 32, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "menu1",
+                "rect": [560, 108, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "combobox_down_arrow_accepts_adjacent_open_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 220, 32], "label": "Country"},
+                {"rect": [292, 100, 28, 32], "label": "v"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the down arrow.",
+                "target": {"x": 292, "y": 100, "width": 28, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo1", "text": "Country", "control_type": "combobox", "rect": [100, 100, 220, 32]},
+                {"id": "arrow1", "text": "Open", "control_type": "button", "rect": [292, 100, 28, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "arrow1",
+                "rect": [292, 100, 28, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_settings_rejects_browser_tab_title_for_settings_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 20, 220, 40], "label": "Settings - Google Chrome"},
+                {"rect": [500, 120, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open settings.",
+                "target_id": "tab",
+                "target": {"x": 80, "y": 20, "width": 220, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Settings - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [80, 20, 220, 40],
+                    "window_title": "Settings - Google Chrome",
+                },
+                {
+                    "id": "button",
+                    "text": "Settings",
+                    "control_type": "button",
+                    "rect": [500, 120, 100, 32],
+                    "window_title": "Settings - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "button",
+                "rect": [500, 120, 100, 32],
                 "overlay_emitted": True,
             },
         },
@@ -3753,6 +3901,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c002",
                 "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "close_page_recovers_to_browser_tab_close_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 20, 220, 40], "label": "Project plan"},
+                {"rect": [286, 28, 24, 24], "label": "X"},
+                {"rect": [940, 20, 46, 40], "label": "X"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close page.",
+                "target_id": "winclose",
+                "target": {"x": 940, "y": 20, "width": 46, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Project plan",
+                    "control_type": "tabitem",
+                    "rect": [100, 20, 220, 40],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "tabclose",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [286, 28, 24, 24],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "winclose",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [940, 20, 46, 40],
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "tabclose",
+                "rect": [286, 28, 24, 24],
+                "overlay_emitted": True,
             },
         },
         {

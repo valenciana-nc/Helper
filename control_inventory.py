@@ -130,7 +130,24 @@ ROW_CONTEXT_OBJECT_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset(
     {"by", "for", "from", "in", "of", "on", "with"}
 )
 CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
-    {"area", "box", "card", "dialog", "form", "group", "modal", "panel", "pane", "section"}
+    {
+        "area",
+        "box",
+        "card",
+        "dialog",
+        "form",
+        "grid",
+        "group",
+        "list",
+        "listitem",
+        "modal",
+        "panel",
+        "pane",
+        "row",
+        "rows",
+        "section",
+        "table",
+    }
 )
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
@@ -171,16 +188,29 @@ REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
 TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
+    (frozenset({"add"}), frozenset({"added"})),
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
     (frozenset({"apply"}), frozenset({"applied"})),
+    (frozenset({"attach"}), frozenset({"attached"})),
+    (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
     (frozenset({"confirm"}), frozenset({"confirmed"})),
     (frozenset({"complete"}), frozenset({"completed"})),
+    (frozenset({"create"}), frozenset({"created"})),
+    (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
     (frozenset({"finish"}), frozenset({"finished"})),
+    (frozenset({"import", "upload"}), frozenset({"imported", "uploaded"})),
+    (frozenset({"install"}), frozenset({"installed"})),
+    (frozenset({"invite"}), frozenset({"invited"})),
     (frozenset({"mute"}), frozenset({"muted"})),
     (frozenset({"unmute"}), frozenset({"unmuted"})),
+    (frozenset({"save"}), frozenset({"saved"})),
+    (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
+    (frozenset({"share"}), frozenset({"shared"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
     (frozenset({"hide"}), frozenset({"hidden"})),
+    (frozenset({"update"}), frozenset({"updated"})),
     (frozenset({"expand"}), frozenset({"expanded"})),
     (frozenset({"collapse"}), frozenset({"collapsed"})),
     (frozenset({"lock"}), frozenset({"locked"})),
@@ -207,6 +237,16 @@ STATE_LABEL_ACTION_GROUPS = (
         frozenset({"apply", "complete", "confirm", "done", "finish", "ok", "okay"}),
         frozenset({"applied", "completed", "confirmed", "finished", "status"}),
     ),
+    (frozenset({"add", "create"}), frozenset({"added", "created"})),
+    (frozenset({"attach", "import", "upload"}), frozenset({"attached", "imported", "uploaded"})),
+    (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
+    (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
+    (frozenset({"invite"}), frozenset({"invited"})),
+    (frozenset({"save"}), frozenset({"saved"})),
+    (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
+    (frozenset({"share"}), frozenset({"shared"})),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -403,7 +443,9 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
 )
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
-BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
+BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
+    {"download", "downloads", "home", "house", "options", "overview", "preferences", "settings"}
+)
 BROWSER_MENU_BUTTON_TOKENS = frozenset(
     {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
 )
@@ -449,6 +491,10 @@ BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
+COMBOBOX_DROPDOWN_ARROW_REQUEST_WORDS = frozenset({"arrow", "caret", "chevron", "down", "dropdown"})
+COMBOBOX_DROPDOWN_ARROW_CONTROL_WORDS = frozenset(
+    {"down", "dropdown", "expand", "more", "open", "show"}
+)
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
 BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS = frozenset(
@@ -1567,6 +1613,11 @@ def _text_match_score(
         return 0.0
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
+    if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
+        score = TEXT_MATCH_FLOOR
+        if model_rect is not None:
+            score = min(1.0, score + 0.05 * _proximity_score(candidate.rect, model_rect))
+        return score
     visible_tokens = _candidate_visible_text_tokens(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not candidate_tokens:
@@ -2014,6 +2065,8 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
+        return True, max(0.86, text_score, geometry_score), ""
     if _contains_tighter_same_intent_action(
         selected=candidate,
         candidates=candidates,
@@ -2507,7 +2560,13 @@ def _close_tab_action_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & {"close", "dismiss"} and raw_tokens & {"tab", "tabs", "tabitem"}):
+    close_tab_requested = bool(raw_tokens & {"close", "dismiss"} and raw_tokens & {"tab", "tabs", "tabitem"})
+    close_page_requested = bool(
+        raw_tokens & {"close", "dismiss"}
+        and raw_tokens & BROWSER_PAGE_TARGET_WORDS
+        and _tokens_from_text(candidate.window_title) & BROWSER_PROFILE_WINDOW_WORDS
+    )
+    if not (close_tab_requested or close_page_requested):
         return False
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not (candidate_tokens & {"close", "dismiss", "x"}):
@@ -2525,6 +2584,57 @@ def _close_button_has_tab_context(
         if _contains_rect(_expand_rect(other.rect, 8), candidate.rect):
             return True
         if _intersects(_expand_rect(other.rect, 8), candidate.rect):
+            return True
+    return False
+
+
+def _combobox_dropdown_arrow_match(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (
+        raw_tokens & COMBOBOX_DROPDOWN_ARROW_REQUEST_WORDS
+        or {"drop", "down"} <= raw_tokens
+    ):
+        return False
+    if candidate.control_type == "combobox":
+        return not _has_combobox_dropdown_arrow_button(candidate, candidates)
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    if control_tokens and not (control_tokens & COMBOBOX_DROPDOWN_ARROW_CONTROL_WORDS):
+        return False
+    return _has_adjacent_combobox(candidate, candidates)
+
+
+def _has_combobox_dropdown_arrow_button(
+    combobox: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    return any(
+        candidate.id != combobox.id
+        and candidate.control_type in {"button", "splitbutton"}
+        and (
+            not _tokens_from_text(candidate.descriptor)
+            or bool(_tokens_from_text(candidate.descriptor) & COMBOBOX_DROPDOWN_ARROW_CONTROL_WORDS)
+        )
+        and _has_adjacent_combobox(candidate, [combobox])
+        for candidate in candidates
+    )
+
+
+def _has_adjacent_combobox(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    for context in candidates:
+        if context.id == candidate.id or context.control_type != "combobox":
+            continue
+        if _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            return True
+        if _intersects(_expand_rect(context.rect, 6), candidate.rect):
             return True
     return False
 
@@ -4267,6 +4377,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
+        return min(1.0, 0.45 * iou + 0.30 * proximity + 0.20)
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
@@ -4334,9 +4446,10 @@ def _contains_tighter_same_intent_action(
         and selected.control_type not in COMPOSITE_ACTION_CONTROL_TYPES
     ):
         return False
-    if selected.control_type in ROW_CONTEXT_CONTROL_TYPES and _explicit_row_target_request(
+    if selected.control_type in ROW_CONTEXT_CONTROL_TYPES and _explicit_container_target_request(
         instruction,
         control_intents,
+        selected.control_type,
     ):
         return False
     selected_area = selected.rect[2] * selected.rect[3]
@@ -4404,14 +4517,19 @@ def _contains_tighter_same_intent_action(
     return False
 
 
-def _explicit_row_target_request(
+def _explicit_container_target_request(
     instruction: str,
     control_intents: set[str],
+    selected_control_type: str,
 ) -> bool:
-    if "listitem" not in control_intents:
+    if control_intents and selected_control_type not in control_intents:
         return False
     raw_tokens = _tokens_from_text(instruction)
-    return bool(raw_tokens & {"row", "rows", "listitem"} or {"list", "item"} <= raw_tokens)
+    return bool(
+        raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+        or {"list", "item"} <= raw_tokens
+        or {"tree", "item"} <= raw_tokens
+    )
 
 
 def _single_contained_control_intent_candidate(

@@ -468,6 +468,15 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(instruction_control_intents("Click this table row."), {"listitem"})
         self.assertNotIn("listitem", instruction_control_intents("Edit this row."))
 
+    def test_row_scoped_menu_wording_targets_menu_launcher_button(self) -> None:
+        from help_intents import instruction_control_intents
+
+        self.assertEqual(instruction_control_intents("Open menu in row."), {"button", "splitbutton"})
+        self.assertEqual(
+            instruction_control_intents("Open menu item in row."),
+            {"listitem", "menuitem", "splitbutton"},
+        )
+
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -2422,6 +2431,11 @@ class SnapToControlTests(unittest.TestCase):
             ("Copy coupon.", "Copy address", "App"),
             ("Send invite.", "Send email", "App"),
             ("Save document.", "Save profile", "App"),
+            ("Save document.", "Document saved", "App"),
+            ("Send message.", "Message sent", "App"),
+            ("Cancel subscription.", "Subscription cancelled", "App"),
+            ("Upload file.", "File uploaded", "App"),
+            ("Download report.", "Report downloaded", "App"),
             ("Save card.", "Save profile", "App"),
             ("Delete section.", "Delete account", "App"),
             ("Archive card.", "Archive email", "App"),
@@ -6444,6 +6458,71 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(snap_target.target_id, "btn")
         self.assertFalse(snap_target.rejected_reason)
 
+    def test_snap_candidate_target_accepts_row_scoped_menu_launcher_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("row1", "Order 123", "listitem", (100, 100, 500, 48)),
+            ControlCandidate("menu1", "More options", "button", (560, 108, 32, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="menu1",
+            instruction="Open menu in row.",
+            candidates=candidates,
+            model_rect=(560, 108, 32, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Open menu in row.",
+            candidates=candidates,
+            model_rect=(560, 108, 32, 32),
+        )
+
+        self.assertEqual(target_id.target_id, "menu1")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(snap_target.target_id, "menu1")
+        self.assertFalse(snap_target.rejected_reason)
+
+    def test_snap_candidate_target_accepts_combobox_dropdown_arrow_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("combo1", "Country", "combobox", (100, 100, 220, 32)),
+            ControlCandidate("arrow1", "Open", "button", (292, 100, 28, 32)),
+        ]
+
+        arrow_target = resolve_candidate_target(
+            target_id="arrow1",
+            instruction="Click the down arrow.",
+            candidates=candidates,
+            model_rect=(292, 100, 28, 32),
+        )
+        combo_with_arrow = resolve_candidate_target(
+            target_id="combo1",
+            instruction="Click the down arrow.",
+            candidates=candidates,
+            model_rect=(100, 100, 220, 32),
+        )
+        combo_only = resolve_candidate_target(
+            target_id="combo1",
+            instruction="Click the down arrow.",
+            candidates=[candidates[0]],
+            model_rect=(100, 100, 220, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the down arrow.",
+            candidates=candidates,
+            model_rect=(292, 100, 28, 32),
+        )
+
+        self.assertEqual(arrow_target.target_id, "arrow1")
+        self.assertFalse(arrow_target.rejected_reason)
+        self.assertEqual(combo_with_arrow.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(combo_only.target_id, "combo1")
+        self.assertFalse(combo_only.rejected_reason)
+        self.assertEqual(snap_target.target_id, "arrow1")
+        self.assertFalse(snap_target.rejected_reason)
+
 
 class HelpTargetHarnessTests(unittest.TestCase):
     def _capture(self):
@@ -7793,6 +7872,107 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_generic_settings_and_downloads_reject_browser_tab_title(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open settings.",
+                ControlCandidate(
+                    "tab",
+                    "Settings - Google Chrome",
+                    "tabitem",
+                    (80, 0, 220, 40),
+                    window_title="Settings - Google Chrome",
+                ),
+                ControlCandidate(
+                    "button",
+                    "Settings",
+                    "button",
+                    (500, 120, 100, 32),
+                    window_title="Settings - Google Chrome",
+                ),
+            ),
+            (
+                "Open downloads.",
+                ControlCandidate(
+                    "tab",
+                    "Downloads - Google Chrome",
+                    "tabitem",
+                    (80, 0, 220, 40),
+                    window_title="Downloads - Google Chrome",
+                ),
+                ControlCandidate(
+                    "button",
+                    "Downloads",
+                    "button",
+                    (500, 120, 120, 32),
+                    window_title="Downloads - Google Chrome",
+                ),
+            ),
+        )
+        for instruction, tab, button in cases:
+            candidates = [tab, button]
+            with self.subTest(instruction=instruction):
+                target_id = resolve_candidate_target(
+                    target_id="tab",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=tab.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=button.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=tab.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "tab",
+                            "target": {"x": tab.rect[0], "y": tab.rect[1], "width": tab.rect[2], "height": tab.rect[3]},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.target_id, "button")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.target_id, "button")
+                self.assertFalse(help_target.rejected_reason)
+
+    def test_explicit_settings_tab_wording_still_accepts_browser_tab_title(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        target = resolve_candidate_target(
+            target_id="tab",
+            instruction="Open settings tab.",
+            candidates=[
+                ControlCandidate(
+                    "tab",
+                    "Settings - Google Chrome",
+                    "tabitem",
+                    (80, 0, 220, 40),
+                    window_title="Settings - Google Chrome",
+                )
+            ],
+            model_rect=(80, 0, 220, 40),
+        )
+
+        self.assertEqual(target.target_id, "tab")
+        self.assertFalse(target.rejected_reason)
 
     def test_specific_settings_target_id_accepts_unnamed_url_bookmark(self) -> None:
         from control_inventory import ControlCandidate
@@ -10927,6 +11107,79 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(target.rect, (10, 10, 600, 80))
             self.assertFalse(target.rejected_reason)
 
+    def test_explicit_card_request_is_not_demoted_to_same_label_child_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("card", "Settings", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("btn", "Settings", "button", (20, 20, 80, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="card",
+            instruction="Click the Settings card.",
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click the Settings card.",
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings card.",
+                    "target_id": "card",
+                    "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for target in (target_id, snap_target, help_target):
+            self.assertEqual(target.target_id, "card")
+            self.assertEqual(target.rect, (10, 10, 600, 80))
+            self.assertFalse(target.rejected_reason)
+
+    def test_contextual_duplicate_row_name_rejects_wrong_row_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("alice_row", "Alice", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("alice_edit", "Edit", "button", (520, 34, 60, 32)),
+            ControlCandidate("bob_row", "Bob", "listitem", (10, 100, 600, 80)),
+            ControlCandidate("bob_edit", "Edit", "button", (520, 124, 60, 32)),
+        ]
+
+        wrong_target = resolve_candidate_target(
+            target_id="bob_edit",
+            instruction="Edit Alice row.",
+            candidates=candidates,
+            model_rect=(520, 124, 60, 32),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction="Edit Alice row.",
+            candidates=candidates,
+            model_rect=(520, 124, 60, 32),
+        )
+        right_target = resolve_candidate_target(
+            target_id="alice_edit",
+            instruction="Edit Alice row.",
+            candidates=candidates,
+            model_rect=(520, 34, 60, 32),
+        )
+
+        self.assertEqual(wrong_target.target_id, "bob_edit")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(wrong_snap.target_id, "alice_edit")
+        self.assertFalse(wrong_snap.rejected_reason)
+        self.assertEqual(right_target.target_id, "alice_edit")
+        self.assertFalse(right_target.rejected_reason)
+
     def test_turn_on_off_checkbox_polarity_rejects_opposite_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
@@ -10977,6 +11230,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Complete task.", "Task completed", "button"),
             ("Finish setup.", "Finished setup", "button"),
             ("Click OK.", "OK status", "button"),
+            ("Cancel subscription.", "Cancelled subscription", "button"),
+            ("Cancel subscription.", "Subscription canceled", "button"),
+            ("Create account.", "Created account", "button"),
+            ("Delete file.", "Deleted file", "button"),
+            ("Delete file.", "File deleted", "button"),
+            ("Download report.", "Downloaded report", "button"),
+            ("Download report.", "Report downloaded", "button"),
+            ("Install app.", "Installed app", "button"),
+            ("Invite user.", "Invited user", "button"),
+            ("Save document.", "Saved document", "button"),
+            ("Save document.", "Document saved", "button"),
+            ("Send message.", "Sent message", "button"),
+            ("Send message.", "Message delivered", "button"),
+            ("Share link.", "Shared link", "button"),
+            ("Update profile.", "Updated profile", "button"),
+            ("Upload file.", "Uploaded file", "button"),
+            ("Upload file.", "File uploaded", "button"),
             ("Enable notifications.", "Enabled notifications", "checkbox"),
             ("Enable notifications.", "Disabled notifications", "checkbox"),
             ("Disable notifications.", "Disabled notifications", "checkbox"),
@@ -12712,6 +12982,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
         )
         self.assertEqual(snap.source, "candidate_snap")
         self.assertEqual(snap.rejected_reason, "candidate snapshot no match")
+
+    def test_close_page_prefers_browser_tab_close_over_window_close(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "tab",
+                "Project plan",
+                "tabitem",
+                (100, 0, 220, 40),
+                window_title="Project - Google Chrome",
+            ),
+            ControlCandidate(
+                "tabclose",
+                "Close",
+                "button",
+                (286, 8, 24, 24),
+                window_title="Project - Google Chrome",
+            ),
+            ControlCandidate(
+                "winclose",
+                "Close",
+                "button",
+                (940, 0, 46, 40),
+                window_title="Project - Google Chrome",
+            ),
+        ]
+
+        for payload in (
+            {
+                "kind": "step",
+                "instruction": "Close page.",
+                "target_id": "winclose",
+                "target": {"x": 940, "y": 0, "width": 46, "height": 40},
+            },
+            {
+                "kind": "step",
+                "instruction": "Close page.",
+                "target": {"x": 940, "y": 0, "width": 46, "height": 40},
+            },
+        ):
+            with self.subTest(payload=payload):
+                target = resolve_help_target(
+                    self._decision(payload),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.target_id, "tabclose")
+                self.assertEqual(target.rect, (286, 8, 24, 24))
+                self.assertFalse(target.rejected_reason)
 
     def test_close_window_wrong_target_id_recovers_to_foreground_close(self) -> None:
         from control_inventory import ControlCandidate

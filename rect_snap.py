@@ -144,16 +144,29 @@ REVERSIBLE_ACTION_POLARITY_WORDS = frozenset(
 TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
+    (frozenset({"add"}), frozenset({"added"})),
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
     (frozenset({"apply"}), frozenset({"applied"})),
+    (frozenset({"attach"}), frozenset({"attached"})),
+    (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
     (frozenset({"confirm"}), frozenset({"confirmed"})),
     (frozenset({"complete"}), frozenset({"completed"})),
+    (frozenset({"create"}), frozenset({"created"})),
+    (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
     (frozenset({"finish"}), frozenset({"finished"})),
+    (frozenset({"import", "upload"}), frozenset({"imported", "uploaded"})),
+    (frozenset({"install"}), frozenset({"installed"})),
+    (frozenset({"invite"}), frozenset({"invited"})),
     (frozenset({"mute"}), frozenset({"muted"})),
     (frozenset({"unmute"}), frozenset({"unmuted"})),
+    (frozenset({"save"}), frozenset({"saved"})),
+    (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
+    (frozenset({"share"}), frozenset({"shared"})),
     (frozenset({"show"}), frozenset({"shown", "visible"})),
     (frozenset({"hide"}), frozenset({"hidden"})),
+    (frozenset({"update"}), frozenset({"updated"})),
     (frozenset({"expand"}), frozenset({"expanded"})),
     (frozenset({"collapse"}), frozenset({"collapsed"})),
     (frozenset({"lock"}), frozenset({"locked"})),
@@ -180,6 +193,16 @@ STATE_LABEL_ACTION_GROUPS = (
         frozenset({"apply", "complete", "confirm", "done", "finish", "ok", "okay"}),
         frozenset({"applied", "completed", "confirmed", "finished", "status"}),
     ),
+    (frozenset({"add", "create"}), frozenset({"added", "created"})),
+    (frozenset({"attach", "import", "upload"}), frozenset({"attached", "imported", "uploaded"})),
+    (frozenset({"cancel"}), frozenset({"canceled", "cancelled"})),
+    (frozenset({"delete", "remove"}), frozenset({"deleted", "removed"})),
+    (frozenset({"download", "export"}), frozenset({"downloaded", "exported"})),
+    (frozenset({"install", "update"}), frozenset({"installed", "updated"})),
+    (frozenset({"invite"}), frozenset({"invited"})),
+    (frozenset({"save"}), frozenset({"saved"})),
+    (frozenset({"send", "submit"}), frozenset({"delivered", "sent", "submitted"})),
+    (frozenset({"share"}), frozenset({"shared"})),
     (frozenset({"mute", "unmute"}), frozenset({"muted", "unmuted"})),
     (frozenset({"show", "hide"}), frozenset({"hidden", "shown", "visible"})),
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
@@ -321,7 +344,9 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
-BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
+BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
+    {"download", "downloads", "home", "house", "options", "overview", "preferences", "settings"}
+)
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
     {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
 )

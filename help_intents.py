@@ -694,6 +694,9 @@ _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _MENU_LAUNCHER_WORDS = frozenset(
     {"dot", "dots", "ellipsis", "kebab", "meatballs", "more", "overflow"}
 )
+_MENU_LAUNCHER_CONTEXT_WORDS = frozenset(
+    {"card", "grid", "list", "panel", "row", "rows", "section", "table"}
+)
 _CONTEXTUAL_MENU_LAUNCHER_WORDS = frozenset(
     {
         "account",
@@ -1255,6 +1258,8 @@ def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
     if not ("menu" in raw_tokens or "options" in raw_tokens):
         return False
     if raw_tokens & _MENU_LAUNCHER_WORDS:
+        return True
+    if raw_tokens & _MENU_LAUNCHER_CONTEXT_WORDS:
         return True
     return "three" in raw_tokens and bool(raw_tokens & {"dot", "dots"})
 
