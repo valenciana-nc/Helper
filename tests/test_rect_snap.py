@@ -190,6 +190,22 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("cart", tokenize_control("Basket"))
         self.assertIn("basket", tokenize_control("Shopping bag"))
 
+    def test_password_visibility_intent_is_contextual(self) -> None:
+        from help_intents import instruction_control_intents, tokenize_instruction, tokenize_control
+
+        password_tokens = tokenize_instruction("Show password")
+        sidebar_tokens = tokenize_instruction("Show sidebar")
+        password_field_intents = instruction_control_intents("Focus password field")
+        visibility_intents = instruction_control_intents("Show password")
+
+        self.assertTrue({"eye", "visibility", "visible"}.issubset(password_tokens))
+        self.assertNotIn("eye", sidebar_tokens)
+        self.assertTrue({"button", "splitbutton"}.issubset(visibility_intents))
+        self.assertNotIn("edit", visibility_intents)
+        self.assertIn("edit", password_field_intents)
+        self.assertIn("visibility", tokenize_control("Eye"))
+        self.assertIn("eye", tokenize_control("Visibility"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -231,6 +247,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\U0001f3a4", {"mic", "microphone"}),
             ("\U0001f4f7", {"camera", "video", "webcam"}),
             ("\U0001f6d2", {"bag", "basket", "cart"}),
+            ("\U0001f441", {"eye", "visibility", "visible"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5525,6 +5542,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_password_visibility_target_id_accepts_eye_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Show password.", "Eye", (360, 160, 32, 32)),
+            ("Hide password.", "Visibility", (360, 160, 80, 32)),
+            ("Reveal passcode.", "Eye", (360, 160, 32, 32)),
+            ("Show password.", "\U0001f441", (360, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", label, "button", rect),
+                        ControlCandidate("c002", "Password", "edit", (120, 160, 220, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_password_visibility_text_match_overrides_password_field_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Show password.",
+                    "target": {"x": 120, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Eye", "button", (360, 160, 32, 32)),
+                ControlCandidate("c002", "Password", "edit", (120, 160, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (360, 160, 32, 32))
+
+    def test_show_sidebar_does_not_match_eye_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Show sidebar.",
+                    "target": {"x": 120, "y": 160, "width": 150, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Eye", "button", (360, 160, 32, 32)),
+                ControlCandidate("c002", "Show sidebar", "button", (120, 160, 150, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 150, 32))
 
     def test_favorite_action_alias_target_id_accepts_star_button(self) -> None:
         from control_inventory import ControlCandidate

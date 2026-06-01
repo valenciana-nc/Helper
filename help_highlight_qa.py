@@ -1912,6 +1912,121 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "password_visibility_target_id_accepts_eye_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 32, 32], "label": "Eye"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show password.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Eye", "control_type": "button", "rect": [260, 80, 32, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [260, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "password_visibility_target_id_accepts_visibility_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 90, 32], "label": "Visibility"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Hide password.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Visibility", "control_type": "button", "rect": [260, 80, 90, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [260, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "password_eye_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 32, 32], "label": "E"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show password.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f441", "control_type": "button", "rect": [260, 80, 32, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [260, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "password_visibility_text_match_overrides_password_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Password"},
+                {"rect": [260, 80, 32, 32], "label": "Eye"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show password.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Eye", "control_type": "button", "rect": [260, 80, 32, 32]},
+                {"id": "c002", "text": "Password", "control_type": "edit", "rect": [20, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [260, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "show_sidebar_does_not_match_eye_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Show sidebar"},
+                {"rect": [260, 80, 32, 32], "label": "Eye"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show sidebar.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Eye", "control_type": "button", "rect": [260, 80, 32, 32]},
+                {"id": "c002", "text": "Show sidebar", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [20, 80, 150, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

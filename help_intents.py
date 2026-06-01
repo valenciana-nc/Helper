@@ -49,6 +49,8 @@ _SYMBOL_TOKEN_ALIASES = {
     "\U0001f4f9": {"camera", "video", "webcam"},
     "\U0001f6cd": {"bag", "basket", "cart"},
     "\U0001f6d2": {"bag", "basket", "cart"},
+    "\U0001f441": {"eye", "visibility", "visible"},
+    "\U0001f440": {"eye", "visibility", "visible"},
     "\U0001f50d": {"find", "lens", "magnifier", "magnifying", "search"},
     "\U0001f50e": {"find", "lens", "magnifier", "magnifying", "search"},
 }
@@ -86,6 +88,7 @@ _TOKEN_ALIASES = {
     "duplicate": {"clone", "copy"},
     "expand": {"arrow", "caret", "chevron", "disclosure"},
     "export": {"download"},
+    "eye": {"visibility", "visible"},
     "favorite": {"bookmark", "star"},
     "file": {"attach", "attachment", "browse", "choose", "document", "select", "upload"},
     "files": {"attach", "attachment", "browse", "choose", "documents", "file", "select", "upload"},
@@ -131,6 +134,8 @@ _TOKEN_ALIASES = {
     "import": {"upload"},
     "upload": {"attach", "attachment", "browse", "choose", "file", "import", "select"},
     "user": {"account", "profile"},
+    "visibility": {"eye", "visible"},
+    "visible": {"eye", "visibility"},
     "ellipsis": {"more", "options", "menu"},
     "close": {"dismiss"},
     "dot": {"more", "options", "menu"},
@@ -466,6 +471,10 @@ _TOGGLE_ACTION_CONTEXT_WORDS = _SWITCH_ACTION_CONTEXT_WORDS | frozenset(
         "toolbar",
     }
 )
+_PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
+_PASSWORD_VISIBILITY_ACTION_WORDS = frozenset(
+    {"conceal", "eye", "hide", "mask", "reveal", "show", "unmask", "visibility", "visible"}
+)
 
 
 def tokenize_instruction(instruction: str) -> set[str]:
@@ -473,6 +482,8 @@ def tokenize_instruction(instruction: str) -> set[str]:
     filtered = {
         token for token in tokens if token not in _INSTRUCTION_STOPWORDS and len(token) > 1
     }
+    if _password_visibility_requested(tokens):
+        filtered.update({"eye", "visibility", "visible"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
     if context_tokens and (tokens & _DEICTIC_WORDS or filtered - context_tokens):
         filtered -= context_tokens
@@ -504,6 +515,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
     contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
+    password_visibility_requested = _password_visibility_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -523,7 +535,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("radiobutton")
     if raw_tokens & {"edit", "editable"}:
         intents.update(EDIT_CONTROL_TYPES)
-    if not checkbox_requested and input_requested:
+    if not checkbox_requested and input_requested and not password_visibility_requested:
         intents.update(INPUT_CONTROL_TYPES)
     if raw_tokens & {"combo", "combobox"}:
         intents.add("combobox")
@@ -541,10 +553,13 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(SPINNER_CONTROL_TYPES)
     if split_button_requested:
         intents.add("splitbutton")
+    if password_visibility_requested:
+        intents.update(_BUTTON_INTENT_TYPES)
     if (
         not checkbox_requested
         and not radio_requested
         and not split_button_requested
+        and not password_visibility_requested
         and "button" in raw_tokens
     ):
         intents.update(_BUTTON_INTENT_TYPES)
@@ -631,6 +646,12 @@ def _checkbox_action_requested(raw_tokens: set[str]) -> bool:
     if "turn" in raw_tokens and raw_tokens & {"off", "on"}:
         return not bool(raw_tokens & _CHECKBOX_ACTION_BLOCKING_WORDS)
     return False
+
+
+def _password_visibility_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _PASSWORD_VISIBILITY_CONTEXT_WORDS):
+        return False
+    return bool(raw_tokens & _PASSWORD_VISIBILITY_ACTION_WORDS)
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
