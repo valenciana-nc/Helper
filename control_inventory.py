@@ -71,6 +71,8 @@ TASKBAR_PIN_ACTION_WORDS = frozenset(
 TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
 TASKBAR_WINDOWS_SEARCH_TOKENS = frozenset({"windows_search"})
 BROWSER_PROFILE_WINDOW_WORDS = frozenset({"browser", "chrome", "edge"})
+BROWSER_APP_IDENTITY_WORDS = frozenset({"browser", "chrome", "edge", "google"})
+BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
 BROWSER_PROFILE_MAX_EDGE = 64
@@ -972,6 +974,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
@@ -1020,6 +1024,8 @@ def _context_text_match_score(
     if not instruction_tokens:
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -1119,6 +1125,12 @@ def _target_id_plausibility(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return (
             False,
             text_score,
@@ -1315,6 +1327,27 @@ def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
     return bool(text_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS)
 
 
+def _browser_profile_identity_action_mismatch(
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not instruction_tokens & BROWSER_PROFILE_TOKENS:
+        return False
+    if instruction_tokens & BROWSER_PROFILE_ACTION_CONTEXT_WORDS:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if candidate_tokens & BROWSER_PROFILE_TOKENS:
+        return False
+    raw_candidate_tokens = _tokens_from_text(candidate.text)
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if raw_candidate_tokens & BROWSER_APP_IDENTITY_WORDS:
+        return True
+    return bool(
+        window_tokens & TASKBAR_WINDOW_WORDS
+        and raw_candidate_tokens & BROWSER_APP_IDENTITY_WORDS
+    )
+
+
 def _browser_extension_access_action_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -1506,6 +1539,8 @@ def _target_id_ambiguity(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1602,6 +1637,8 @@ def _has_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1642,6 +1679,8 @@ def _has_visible_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1678,6 +1717,8 @@ def _candidate_snap_score(
     semantic_tokens = _candidate_semantic_tokens(candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
@@ -1917,6 +1958,8 @@ def _candidate_snap_semantic_mismatch(
     if not instruction_tokens or not semantic_tokens:
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_extension_access_action_mismatch(
         instruction,

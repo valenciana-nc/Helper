@@ -5790,6 +5790,136 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_profile_request_rejects_plain_browser_identity_buttons(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open Chrome profile.",
+                ControlCandidate(
+                    "c001",
+                    "Chrome",
+                    "button",
+                    (120, 160, 48, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ),
+            (
+                "Open profile.",
+                ControlCandidate(
+                    "c001",
+                    "Chrome",
+                    "button",
+                    (120, 160, 48, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ),
+            (
+                "Open account.",
+                ControlCandidate(
+                    "c001",
+                    "Google Chrome - 5 running windows",
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title="Taskbar",
+                ),
+            ),
+        )
+        for instruction, candidate in cases:
+            with self.subTest(instruction=instruction, label=candidate.text):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [candidate],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_profile_request_recovers_from_plain_chrome_button_to_profile_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Chrome profile.",
+                    "target_id": "c001",
+                    "target": {"x": 260, "y": 160, "width": 48, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "Chrome",
+                    "button",
+                    (260, 160, 48, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Abel (All)",
+                    "button",
+                    (120, 160, 34, 34),
+                    automation_id="view_1018",
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 34, 34))
+
+    def test_plain_chrome_and_edit_profile_targets_still_work(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open Chrome.",
+                ControlCandidate(
+                    "c001",
+                    "Chrome",
+                    "button",
+                    (120, 160, 48, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ),
+            (
+                "Edit profile.",
+                ControlCandidate("c001", "Pencil", "button", (120, 160, 90, 32)),
+            ),
+        )
+        for instruction, candidate in cases:
+            with self.subTest(instruction=instruction, label=candidate.text):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [candidate],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
     def test_contextual_menu_item_wording_still_highlights_menuitem(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

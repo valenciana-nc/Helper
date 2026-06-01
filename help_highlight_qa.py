@@ -6504,6 +6504,97 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "chrome_profile_rejects_plain_chrome_toolbar_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 48, 32], "label": "Chrome"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Chrome profile.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [20, 80, 48, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "profile_request_rejects_taskbar_chrome_app_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Chrome app"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open account.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Google Chrome - 5 running windows",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "chrome_profile_recovers_from_chrome_button_to_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 48, 32], "label": "Chrome"},
+                {"rect": [180, 80, 34, 34], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Chrome profile.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 48, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Chrome",
+                    "control_type": "button",
+                    "rect": [20, 80, 48, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [180, 80, 34, 34],
+                    "automation_id": "view_1018",
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [180, 80, 34, 34],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "user_menu_target_id_accepts_people_icon_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
