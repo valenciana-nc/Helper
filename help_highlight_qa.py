@@ -1700,6 +1700,49 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "menu_launcher_target_id_highlights_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "More options"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the overflow menu.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "More options", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "menu_launcher_model_rect_highlights_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "More options"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the three dots menu.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "More options", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

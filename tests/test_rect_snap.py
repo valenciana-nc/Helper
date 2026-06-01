@@ -1097,6 +1097,32 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rejected_reason, "compound target ambiguous")
 
+    def test_snap_accepts_menu_launcher_button_wording(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            "Open the overflow menu.",
+            "Click the kebab menu.",
+            "Click the three dots menu.",
+            "Open the More options menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button("More options", 100, 200, 120, 32)
+                window = _make_window("App", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (100, 200, 120, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (100, 200, 120, 32))
+                self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1731,6 +1757,52 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c003")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (240, 100, 40, 32))
+
+    def test_menu_launcher_target_id_accepts_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            "Open the overflow menu.",
+            "Click the kebab menu.",
+            "Click the three dots menu.",
+            "Open the More options menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "More options", "button", (10, 10, 120, 32)),
+                    ],
+                    model_rect=(10, 10, 120, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_menu_launcher_text_match_accepts_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="",
+            instruction="Open the overflow menu.",
+            candidates=[
+                ControlCandidate("c001", "More options", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "text_match")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 120, 32))
 
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -2880,6 +2952,32 @@ class ControlInventoryTests(unittest.TestCase):
         )
 
         self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_menu_launcher_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            "Open the overflow menu.",
+            "Click the kebab menu.",
+            "Click the three dots menu.",
+            "Open the More options menu.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "More options", "button", (10, 10, 120, 32)),
+                    ],
+                    model_rect=(10, 10, 120, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (10, 10, 120, 32))
 
     def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -4175,6 +4273,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c003")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (240, 100, 40, 32))
+
+    def test_menu_launcher_target_id_highlights_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the overflow menu.",
+                    "target_id": "c001",
+                    "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "More options", "button", (120, 160, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_menu_launcher_model_rect_highlights_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the three dots menu.",
+                    "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "More options", "button", (120, 160, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 120, 32))
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate

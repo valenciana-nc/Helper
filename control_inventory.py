@@ -79,10 +79,13 @@ _TOKEN_ALIASES = {
     "location": {"address", "url"},
     "magnifier": {"find", "search"},
     "magnifying": {"find", "search"},
+    "kebab": {"menu", "more", "options"},
     "menu": {"more", "options"},
+    "meatballs": {"menu", "more", "options"},
     "more": {"menu", "options"},
     "omnibox": {"address", "search", "url"},
     "options": {"preferences", "settings"},
+    "overflow": {"menu", "more", "options"},
     "preferences": {"options", "settings"},
     "profile": {"account", "user"},
     "remove": {"delete"},
@@ -308,6 +311,10 @@ _CHECKBOX_ACTION_BLOCKING_WORDS = frozenset(
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
+_MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
+_MENU_LAUNCHER_WORDS = frozenset(
+    {"dot", "dots", "ellipsis", "kebab", "meatballs", "more", "overflow"}
+)
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
@@ -1602,6 +1609,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
+    menu_launcher_requested = _menu_launcher_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -1662,8 +1670,10 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("headeritem")
     if "headeritem" in raw_tokens:
         intents.add("headeritem")
-    if "menu" in raw_tokens:
+    if "menu" in raw_tokens and not menu_launcher_requested:
         intents.update(_MENU_INTENT_TYPES)
+    if menu_launcher_requested:
+        intents.update(_MENU_LAUNCHER_INTENT_TYPES)
     if "menuitem" in raw_tokens:
         intents.add("menuitem")
     return intents
@@ -1685,6 +1695,16 @@ def _checkbox_action_requested(raw_tokens: set[str]) -> bool:
     if "turn" in raw_tokens and raw_tokens & {"off", "on"}:
         return not bool(raw_tokens & _CHECKBOX_ACTION_BLOCKING_WORDS)
     return False
+
+
+def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
+    if "menuitem" in raw_tokens or ("menu" in raw_tokens and "item" in raw_tokens):
+        return False
+    if not ("menu" in raw_tokens or "options" in raw_tokens):
+        return False
+    if raw_tokens & _MENU_LAUNCHER_WORDS:
+        return True
+    return "three" in raw_tokens and bool(raw_tokens & {"dot", "dots"})
 
 
 def _candidate_matches_control_intent(
