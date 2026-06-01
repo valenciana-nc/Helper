@@ -60,7 +60,7 @@ _CONTROL_PHRASE_TOKEN_ALIAS_PATTERNS = (
     (re.compile(r"\brecibidos\b"), {"email", "inbox", "mail"}),
     (
         re.compile(r"\b(?:search\s+tabs?|tab\s+search)\b"),
-        {"find", "search", "tab_search"},
+        {"tab_search"},
     ),
     (re.compile(r"\bshow\s+desktop\b"), {"show_desktop"}),
     (re.compile(r"\b(?:view\s+)?site\s+information\b"), {"site_info_lock"}),

@@ -2239,7 +2239,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "generic_search_rejects_ambiguous_tab_and_windows_search",
+            "name": "generic_search_recovers_from_tab_search_to_windows_search",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [20, 80, 120, 32], "label": "Search tabs"},
@@ -2267,9 +2267,36 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [180, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_search_rejects_chrome_tab_search_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Search tabs"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open search.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
                 "source": "target_id",
                 "target_id": "c001",
-                "rejected_reason": "target_id ambiguous",
+                "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
             },
         },

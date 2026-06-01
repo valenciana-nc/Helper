@@ -605,7 +605,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(tokenize_instruction("Open Windows search"), {"windows_search"})
         self.assertEqual(tokenize_instruction("Search Windows"), {"windows_search"})
         search_tabs_tokens = tokenize_control("Search tabs")
-        self.assertTrue({"find", "search", "tab_search"}.issubset(search_tabs_tokens))
+        self.assertEqual(search_tabs_tokens, {"tab_search"})
+        self.assertNotIn("find", search_tabs_tokens)
+        self.assertNotIn("search", search_tabs_tokens)
         self.assertNotIn("tabs", search_tabs_tokens)
         self.assertIn("tabitem", instruction_control_intents("Show tabs"))
         self.assertIn("tabitem", instruction_control_intents("Highlight tabs"))
@@ -8611,8 +8613,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
 
-    def test_generic_search_rejects_ambiguous_tab_and_windows_search_targets(self) -> None:
-        from control_inventory import ControlCandidate
+    def test_generic_search_recovers_from_tab_search_to_windows_search(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
 
         candidates = [
@@ -8631,23 +8633,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 window_title="Taskbar",
             ),
         ]
-        for target_id in ("c001", "c002"):
-            with self.subTest(target_id=target_id):
-                target = resolve_help_target(
-                    self._decision(
-                        {
-                            "kind": "step",
-                            "instruction": "Open search.",
-                            "target_id": target_id,
-                        }
-                    ),
-                    self._capture(),
-                    candidates,
-                )
 
-                self.assertEqual(target.source, "target_id")
-                self.assertEqual(target.target_id, target_id)
-                self.assertEqual(target.rejected_reason, "target_id ambiguous")
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open search.",
+            candidates=candidates,
+            model_rect=None,
+        )
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "c002")
+        self.assertFalse(text_target.rejected_reason)
+
+        tab_search_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open search.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        self.assertEqual(tab_search_target.source, "text_match")
+        self.assertEqual(tab_search_target.target_id, "c002")
+        self.assertFalse(tab_search_target.rejected_reason)
+
+        windows_search_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open search.",
+                    "target_id": "c002",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        self.assertEqual(windows_search_target.source, "target_id")
+        self.assertEqual(windows_search_target.target_id, "c002")
+        self.assertFalse(windows_search_target.rejected_reason)
+
+    def test_generic_search_rejects_chrome_tab_search_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Search tabs",
+                "button",
+                (120, 160, 100, 32),
+                window_title="about:blank - Google Chrome",
+            ),
+        ]
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open search.",
+            candidates=candidates,
+            model_rect=None,
+        )
+        self.assertIsNone(text_target)
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open search.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
     def test_clear_and_delete_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
