@@ -363,6 +363,27 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertIn("Submit", prompt)
         self.assertIn("norm=(100,200,50,50)", prompt)
 
+    def test_candidate_prompt_separates_visible_text_from_automation_id(self) -> None:
+        from control_inventory import ControlCandidate, format_candidates_for_prompt
+
+        prompt = format_candidates_for_prompt(
+            [
+                ControlCandidate(
+                    "c001",
+                    "Cancel",
+                    "button",
+                    (10, 10, 60, 30),
+                    automation_id="saveButton",
+                )
+            ],
+            self._capture(),
+        )
+
+        self.assertIn('visible_text="Cancel"', prompt)
+        self.assertIn('automation_id="saveButton"', prompt)
+        self.assertNotIn('"Cancel saveButton"', prompt)
+        self.assertIn("do not treat automation_id as visible screen text", prompt)
+
     def test_resolve_exact_target_id_wins_when_semantically_compatible(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
