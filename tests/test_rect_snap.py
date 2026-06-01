@@ -753,6 +753,16 @@ class SnapToControlTests(unittest.TestCase):
             ("Click this toolbar icon.", "Settings", "Button", (100, 200, 32, 32)),
             ("Click this form field.", "Name", "Edit", (100, 200, 240, 32)),
             ("Click this dialog button.", "OK", "Button", (100, 200, 80, 32)),
+            ("Click this modal button.", "OK", "Button", (100, 200, 80, 32)),
+            ("Click this panel button.", "Save", "Button", (100, 200, 100, 32)),
+            ("Click Panel button.", "Panel", "Button", (100, 200, 100, 32)),
+            ("Click this table row.", "Order 123", "ListItem", (100, 200, 240, 32)),
+            ("Click this grid row.", "Order 123", "ListItem", (100, 200, 240, 32)),
+            ("Click this page link.", "Docs", "Hyperlink", (100, 200, 120, 28)),
+            ("Click this card checkbox.", "Done", "CheckBox", (100, 200, 160, 32)),
+            ("Click this section toggle.", "Dark mode", "CheckBox", (100, 200, 160, 32)),
+            ("Click this drawer item.", "Settings", "ListItem", (100, 200, 160, 32)),
+            ("Click this pane button.", "Apply", "Button", (100, 200, 100, 32)),
             ("Click this popup menu item.", "Open", "MenuItem", (100, 200, 120, 28)),
             ("Click this navigation tab.", "Settings", "TabItem", (100, 200, 140, 32)),
             ("Click this sidebar item.", "Settings", "ListItem", (100, 200, 160, 32)),
@@ -2015,6 +2025,16 @@ class ControlInventoryTests(unittest.TestCase):
             ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
             ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
             ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this modal button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this panel button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Panel button.", "Panel", "button", (10, 10, 100, 32)),
+            ("Click this table row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this grid row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this page link.", "Docs", "hyperlink", (10, 10, 120, 28)),
+            ("Click this card checkbox.", "Done", "checkbox", (10, 10, 160, 32)),
+            ("Click this section toggle.", "Dark mode", "checkbox", (10, 10, 160, 32)),
+            ("Click this drawer item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this pane button.", "Apply", "button", (10, 10, 100, 32)),
             ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
             ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
             ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
@@ -3087,6 +3107,16 @@ class ControlInventoryTests(unittest.TestCase):
             ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
             ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
             ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this modal button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this panel button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Panel button.", "Panel", "button", (10, 10, 100, 32)),
+            ("Click this table row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this grid row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this page link.", "Docs", "hyperlink", (10, 10, 120, 28)),
+            ("Click this card checkbox.", "Done", "checkbox", (10, 10, 160, 32)),
+            ("Click this section toggle.", "Dark mode", "checkbox", (10, 10, 160, 32)),
+            ("Click this drawer item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this pane button.", "Apply", "button", (10, 10, 100, 32)),
             ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
             ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
             ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
@@ -3120,6 +3150,21 @@ class ControlInventoryTests(unittest.TestCase):
                 ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
             ],
             model_rect=(10, 10, 160, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_rejects_broad_table_row_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this table row.",
+            candidates=[
+                ControlCandidate("c001", "Order 1", "listitem", (10, 10, 240, 32)),
+                ControlCandidate("c002", "Order 2", "listitem", (10, 50, 240, 32)),
+                ControlCandidate("c003", "Order 3", "listitem", (10, 90, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 112),
         )
 
         self.assertIsNone(result)
@@ -4235,6 +4280,16 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
             ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
             ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this modal button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this panel button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Panel button.", "Panel", "button", (10, 10, 100, 32)),
+            ("Click this table row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this grid row.", "Order 123", "listitem", (10, 10, 240, 32)),
+            ("Click this page link.", "Docs", "hyperlink", (10, 10, 120, 28)),
+            ("Click this card checkbox.", "Done", "checkbox", (10, 10, 160, 32)),
+            ("Click this section toggle.", "Dark mode", "checkbox", (10, 10, 160, 32)),
+            ("Click this drawer item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this pane button.", "Apply", "button", (10, 10, 100, 32)),
             ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
             ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
             ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
@@ -4282,6 +4337,29 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "General", "listitem", (10, 10, 160, 32)),
                 ControlCandidate("c002", "Privacy", "listitem", (10, 50, 160, 32)),
                 ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_table_row_broad_group_rejects_multiple_listitems(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this table row.",
+                    "target": {"x": 10, "y": 10, "width": 240, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Order 1", "listitem", (10, 10, 240, 32)),
+                ControlCandidate("c002", "Order 2", "listitem", (10, 50, 240, 32)),
+                ControlCandidate("c003", "Order 3", "listitem", (10, 90, 240, 32)),
             ],
         )
 

@@ -1295,6 +1295,72 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "modal_button_model_rect_snaps_to_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "OK"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this modal button.",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "OK", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "table_row_model_rect_snaps_to_listitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 32], "label": "Order 123"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this table row.",
+                "target": {"x": 20, "y": 80, "width": 300, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Order 123", "control_type": "listitem", "rect": [20, 80, 300, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 300, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "table_row_broad_group_rejects_multiple_listitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 32], "label": "Order 1"},
+                {"rect": [20, 120, 300, 32], "label": "Order 2"},
+                {"rect": [20, 160, 300, 32], "label": "Order 3"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this table row.",
+                "target": {"x": 20, "y": 80, "width": 300, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Order 1", "control_type": "listitem", "rect": [20, 80, 300, 32]},
+                {"id": "c002", "text": "Order 2", "control_type": "listitem", "rect": [20, 120, 300, 32]},
+                {"id": "c003", "text": "Order 3", "control_type": "listitem", "rect": [20, 160, 300, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

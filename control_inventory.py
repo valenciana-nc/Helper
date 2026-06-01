@@ -232,7 +232,26 @@ _NAV_ITEM_INTENT_TYPES = frozenset(
     {"button", "hyperlink", "listitem", "treeitem", "menuitem", "tabitem"}
 )
 _CONTEXT_LOCATION_WORDS = frozenset(
-    {"dialog", "form", "nav", "navigation", "popup", "sidebar", "toolbar"}
+    {
+        "card",
+        "dialog",
+        "drawer",
+        "form",
+        "grid",
+        "modal",
+        "page",
+        "pane",
+        "panel",
+        "section",
+        "table",
+        "nav",
+        "navigation",
+        "popup",
+        "sidebar",
+        "toolbar",
+        "view",
+        "window",
+    }
 )
 _DEICTIC_WORDS = frozenset({"this", "that", "here", "there", "shown", "indicated", "selected"})
 _SWITCH_ACTION_CONTEXT_WORDS = frozenset(
@@ -1542,7 +1561,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if "treeitem" in raw_tokens or ("tree" in raw_tokens and "item" in raw_tokens):
         intents.update(_TREE_ITEM_INTENT_TYPES)
-    if "item" in raw_tokens and raw_tokens & {"nav", "navigation", "sidebar"}:
+    if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
     if "option" in raw_tokens:
         intents.update(_OPTION_INTENT_TYPES)
