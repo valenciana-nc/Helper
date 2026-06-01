@@ -1208,6 +1208,93 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "toolbar_button_model_rect_snaps_to_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this toolbar button.",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "form_field_model_rect_snaps_to_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 32], "label": "Name"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this form field.",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Name", "control_type": "edit", "rect": [20, 80, 360, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 360, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "popup_menu_item_model_rect_snaps_to_menuitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 28], "label": "Open"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this popup menu item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Open", "control_type": "menuitem", "rect": [20, 80, 180, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sidebar_item_broad_group_rejects_multiple_listitems",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "General"},
+                {"rect": [20, 120, 180, 32], "label": "Privacy"},
+                {"rect": [20, 160, 180, 32], "label": "Billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this sidebar item.",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "General", "control_type": "listitem", "rect": [20, 80, 180, 32]},
+                {"id": "c002", "text": "Privacy", "control_type": "listitem", "rect": [20, 120, 180, 32]},
+                {"id": "c003", "text": "Billing", "control_type": "listitem", "rect": [20, 160, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

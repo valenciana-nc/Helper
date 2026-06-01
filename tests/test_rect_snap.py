@@ -744,6 +744,44 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 240, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_contextual_control_container_wording(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click this toolbar button.", "Save", "Button", (100, 200, 100, 32)),
+            ("Click Toolbar button.", "Toolbar", "Button", (100, 200, 100, 32)),
+            ("Click this toolbar icon.", "Settings", "Button", (100, 200, 32, 32)),
+            ("Click this form field.", "Name", "Edit", (100, 200, 240, 32)),
+            ("Click this dialog button.", "OK", "Button", (100, 200, 80, 32)),
+            ("Click this popup menu item.", "Open", "MenuItem", (100, 200, 120, 28)),
+            ("Click this navigation tab.", "Settings", "TabItem", (100, 200, 140, 32)),
+            ("Click this sidebar item.", "Settings", "ListItem", (100, 200, 160, 32)),
+            ("Click this nav item.", "Settings", "ListItem", (100, 200, 160, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction):
+                control = _make_button(
+                    label,
+                    rect[0],
+                    rect[1],
+                    rect[2],
+                    rect[3],
+                    control_type=control_type,
+                )
+                window = _make_window("App", 0, 0, 800, 600, [control])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1968,6 +2006,37 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 240, 32))
 
+    def test_contextual_container_target_id_accepts_exact_control(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Click this toolbar button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Toolbar button.", "Toolbar", "button", (10, 10, 100, 32)),
+            ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
+            ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
+            ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
+            ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
+            ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this nav item.", "Settings", "listitem", (10, 10, 160, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, control_type, rect),
+                    ],
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -3005,6 +3074,52 @@ class ControlInventoryTests(unittest.TestCase):
                 ControlCandidate("c003", "Name", "edit", (10, 90, 240, 32)),
             ],
             model_rect=(10, 10, 240, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_contextual_container_wording(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Click this toolbar button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Toolbar button.", "Toolbar", "button", (10, 10, 100, 32)),
+            ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
+            ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
+            ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
+            ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
+            ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this nav item.", "Settings", "listitem", (10, 10, 160, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, control_type, rect),
+                    ],
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
+
+    def test_snap_candidate_target_rejects_broad_sidebar_item_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this sidebar item.",
+            candidates=[
+                ControlCandidate("c001", "General", "listitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Privacy", "listitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
+            ],
+            model_rect=(10, 10, 160, 112),
         )
 
         self.assertIsNone(result)
@@ -4109,6 +4224,69 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 240, 32))
+
+    def test_contextual_container_model_rect_highlights_exact_control(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click this toolbar button.", "Save", "button", (10, 10, 100, 32)),
+            ("Click Toolbar button.", "Toolbar", "button", (10, 10, 100, 32)),
+            ("Click this toolbar icon.", "Settings", "button", (10, 10, 32, 32)),
+            ("Click this form field.", "Name", "edit", (10, 10, 240, 32)),
+            ("Click this dialog button.", "OK", "button", (10, 10, 80, 32)),
+            ("Click this popup menu item.", "Open", "menuitem", (10, 10, 120, 28)),
+            ("Click this navigation tab.", "Settings", "tabitem", (10, 10, 140, 32)),
+            ("Click this sidebar item.", "Settings", "listitem", (10, 10, 160, 32)),
+            ("Click this nav item.", "Settings", "listitem", (10, 10, 160, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", label, control_type, rect),
+                    ],
+                )
+
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_sidebar_item_broad_group_rejects_multiple_listitems(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this sidebar item.",
+                    "target": {"x": 10, "y": 10, "width": 160, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "General", "listitem", (10, 10, 160, 32)),
+                ControlCandidate("c002", "Privacy", "listitem", (10, 50, 160, 32)),
+                ControlCandidate("c003", "Billing", "listitem", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
         from control_inventory import ControlCandidate

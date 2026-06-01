@@ -228,6 +228,13 @@ _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
 _TREE_ITEM_INTENT_TYPES = frozenset({"treeitem"})
+_NAV_ITEM_INTENT_TYPES = frozenset(
+    {"button", "hyperlink", "listitem", "treeitem", "menuitem", "tabitem"}
+)
+_CONTEXT_LOCATION_WORDS = frozenset(
+    {"dialog", "form", "nav", "navigation", "popup", "sidebar", "toolbar"}
+)
+_DEICTIC_WORDS = frozenset({"this", "that", "here", "there", "shown", "indicated", "selected"})
 _SWITCH_ACTION_CONTEXT_WORDS = frozenset(
     {
         "account",
@@ -1535,6 +1542,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if "treeitem" in raw_tokens or ("tree" in raw_tokens and "item" in raw_tokens):
         intents.update(_TREE_ITEM_INTENT_TYPES)
+    if "item" in raw_tokens and raw_tokens & {"nav", "navigation", "sidebar"}:
+        intents.update(_NAV_ITEM_INTENT_TYPES)
     if "option" in raw_tokens:
         intents.update(_OPTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
@@ -1671,6 +1680,9 @@ def _tokenize_instruction(instruction: str) -> set[str]:
     filtered = {
         token for token in tokens if token not in _INSTRUCTION_STOPWORDS and len(token) > 1
     }
+    context_tokens = filtered & _CONTEXT_LOCATION_WORDS
+    if context_tokens and (tokens & _DEICTIC_WORDS or filtered - context_tokens):
+        filtered -= context_tokens
     return _expand_token_aliases(filtered)
 
 
