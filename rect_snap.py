@@ -134,6 +134,12 @@ FILE_PICKER_ACTION_WORDS = frozenset(
     {"attach", "attachment", "browse", "choose", "paperclip", "picker", "select", "upload"}
 )
 FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
+TRANSFER_ACTION_WORDS = FILE_EXPORT_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS
+CLIPBOARD_COPY_WORDS = frozenset({"copy"})
+DUPLICATE_ACTION_WORDS = frozenset({"clone", "duplicate"})
+CLIPBOARD_COPY_EXACT_CONTEXT_WORDS = frozenset(
+    {"address", "link", "links", "selected", "selection", "text", "url", "urls"}
+)
 ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
     {
         "content",
@@ -2125,6 +2131,14 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _generic_file_transfer_alias_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _clipboard_copy_context_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _file_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -2339,6 +2353,35 @@ def _add_remove_action_mismatch(instruction: str, candidate_text: str) -> bool:
         (requested_add and not requested_remove and candidate_remove and not candidate_add)
         or (requested_remove and not requested_add and candidate_add and not candidate_remove)
     )
+
+
+def _generic_file_transfer_alias_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & FILE_IDENTITY_WORDS):
+        return False
+    requested = instruction_tokens & TRANSFER_ACTION_WORDS
+    if not requested:
+        return False
+    candidate_tokens = _tokens_from_text(candidate_text)
+    candidate_transfer = candidate_tokens & TRANSFER_ACTION_WORDS
+    if not candidate_transfer:
+        return False
+    return not bool(requested & candidate_tokens)
+
+
+def _clipboard_copy_context_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    protected_context = instruction_tokens & CLIPBOARD_COPY_EXACT_CONTEXT_WORDS
+    if not protected_context:
+        return False
+    candidate_tokens = _tokens_from_text(candidate_text)
+    if "copy" in instruction_tokens and candidate_tokens & DUPLICATE_ACTION_WORDS and "copy" not in candidate_tokens:
+        return True
+    if instruction_tokens & DUPLICATE_ACTION_WORDS and "copy" in candidate_tokens and not (
+        candidate_tokens & DUPLICATE_ACTION_WORDS
+    ):
+        return True
+    return False
 
 
 def _object_only_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
