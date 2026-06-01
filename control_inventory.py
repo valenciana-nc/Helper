@@ -68,7 +68,7 @@ TASKBAR_APP_STATUS_CONTEXT_WORDS = frozenset(
 )
 TASKBAR_WIDGET_STATUS_IDENTITY_WORDS = frozenset({"weather", "widgets"})
 TASKBAR_NETWORK_STATUS_IDENTITY_WORDS = frozenset(
-    {"internet", "network", "wifi", "wireless"}
+    {"internet", "network", "starlink", "wifi", "wireless"}
 )
 TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
     {"audio", "realtek", "sound", "speaker", "speakers", "volume"}

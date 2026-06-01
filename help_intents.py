@@ -95,6 +95,11 @@ _PHRASE_TOKEN_REWRITES = (
         {"fi", "wi"},
     ),
     (
+        re.compile(r"\bstar\s+link\b"),
+        {"starlink"},
+        {"link", "star"},
+    ),
+    (
         re.compile(r"\b(?:lock|padlock)\s+icon\b"),
         {"site_info_lock"},
         {"lock", "padlock"},

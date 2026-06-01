@@ -5909,6 +5909,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "starlink_target_id_accepts_taskbar_network_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Network"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open StarLink.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Network StarLink\nInternet access",
+                    "control_type": "button",
+                    "rect": [20, 80, 140, 32],
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "favorite_action_rejects_starlink_network_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

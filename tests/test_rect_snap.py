@@ -513,6 +513,10 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(expected.issubset(tokenize_instruction("Open Wi-Fi")))
         self.assertTrue(expected.issubset(tokenize_instruction("Open wifi")))
         self.assertTrue(expected.issubset(tokenize_instruction("Open wireless")))
+        starlink_tokens = tokenize_instruction("Open StarLink")
+        self.assertIn("starlink", starlink_tokens)
+        self.assertNotIn("bookmark", starlink_tokens)
+        self.assertNotIn("favorite", starlink_tokens)
         self.assertTrue(expected.issubset(tokenize_control("Wi-Fi")))
         self.assertTrue(expected.issubset(tokenize_control("Wifi")))
         network_tokens = tokenize_control("Network StarLink\nInternet access")
@@ -10056,6 +10060,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Open Wi-Fi.",
             "Open wifi.",
             "Open wireless.",
+            "Open StarLink.",
         )
         for instruction in cases:
             with self.subTest(instruction=instruction):
