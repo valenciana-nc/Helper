@@ -10167,6 +10167,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "decimal_tab_memory_usage_suffix_rejects_generic_usage_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OpenAI API tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open usage.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Billing overview - OpenAI API - Memory usage - 99.2 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "decimal_tab_memory_usage_suffix_rejects_generic_mb_snap",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "OpenAI API tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open MB.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Billing overview - OpenAI API - Memory usage - 99.2 MB",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "GitHub Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "tab_memory_usage_suffix_keeps_real_tab_title_words",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

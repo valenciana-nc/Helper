@@ -66,6 +66,7 @@ BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset({"home", "house", "overview"})
 SITE_INFORMATION_REQUEST_WORDS = frozenset(
     {"about", "details", "info", "information", "lock", "padlock", "site_info_lock"}
 )
+BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 TASKBAR_HIDDEN_ICONS_REQUEST_WORDS = frozenset(
     {"notification_area", "system_tray", "tray"}
 )
@@ -119,7 +120,7 @@ BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS = frozenset(
     }
 )
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
-    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
+    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+(?:\.\d+)?\s*mb\b.*$",
     re.IGNORECASE,
 )
 BROWSER_TAB_OWNER_ACCOUNT_RE = re.compile(
@@ -305,6 +306,15 @@ def snap_to_control(
             instruction_tokens,
             ctype,
         )
+        browser_about_blank_title_info_mismatch = (
+            _browser_about_blank_title_info_mismatch(
+                instruction,
+                instruction_tokens,
+                semantic_text,
+                ctype,
+                window_title,
+            )
+        )
         site_information_action_mismatch = _site_information_action_mismatch(
             instruction_tokens,
             semantic_text,
@@ -322,6 +332,7 @@ def snap_to_control(
             or browser_extension_access_action_mismatch
             or browser_tab_auth_action_mismatch
             or browser_tab_generic_section_mismatch
+            or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
         if not _is_candidate_topmost(top_handle, rect, topmost_provider):
@@ -1104,6 +1115,26 @@ def _browser_tab_generic_section_mismatch(
 
 def _instruction_mentions_tab_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
+
+
+def _browser_about_blank_title_info_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype != "tabitem":
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    if not (instruction_tokens & SITE_INFORMATION_REQUEST_WORDS):
+        return False
+    if not ({"about", "blank"} <= _tokens_from_text(semantic_text or "")):
+        return False
+    raw_instruction_tokens = _tokens_from_text(instruction)
+    return not bool(raw_instruction_tokens & BROWSER_ABOUT_BLANK_TARGET_WORDS)
 
 
 def _site_information_action_mismatch(

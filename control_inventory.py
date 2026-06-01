@@ -218,7 +218,7 @@ GMAIL_TAB_SERVICE_RE = re.compile(
 GMAIL_TAB_REQUEST_WORDS = frozenset({"email", "envelope", "gmail", "inbox", "mail"})
 MAIL_TAB_EXPLICIT_WORDS = frozenset({"email", "inbox", "mail", "recibidos"})
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
-    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+\s*mb\b.*$",
+    r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+(?:\.\d+)?\s*mb\b.*$",
     re.IGNORECASE,
 )
 BROWSER_TAB_OWNER_ACCOUNT_RE = re.compile(
