@@ -110,6 +110,7 @@ BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
 BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
     {"address", "find", "location", "omnibox", "search", "url"}
 )
+BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS = frozenset({"access", "site"})
@@ -1022,6 +1023,12 @@ def _text_match_score(
         candidate,
     ):
         return 0.0
+    if _browser_about_blank_title_info_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
     if _browser_extension_access_action_mismatch(
         instruction,
         instruction_tokens,
@@ -1076,6 +1083,12 @@ def _context_text_match_score(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
+    if _browser_about_blank_title_info_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -1193,6 +1206,16 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_about_blank_title_info_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -1450,6 +1473,28 @@ def _instruction_requests_browser_address_bar(instruction: str) -> bool:
     if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
         return True
     return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
+
+
+def _browser_about_blank_title_info_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_about_blank_title(candidate):
+        return False
+    if not (instruction_tokens & SITE_INFORMATION_REQUEST_WORDS):
+        return False
+    raw_instruction_tokens = _tokens_from_text(instruction)
+    return not bool(raw_instruction_tokens & BROWSER_ABOUT_BLANK_TARGET_WORDS)
+
+
+def _looks_like_browser_about_blank_title(candidate: ControlCandidate) -> bool:
+    if candidate.control_type != "tabitem":
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    return {"about", "blank"} <= _tokens_from_text(candidate.text)
 
 
 def _browser_extension_access_action_mismatch(
@@ -1763,6 +1808,12 @@ def _target_id_ambiguity(
             candidate,
         ):
             continue
+        if _browser_about_blank_title_info_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1869,6 +1920,12 @@ def _has_semantic_alternative(
             candidate,
         ):
             continue
+        if _browser_about_blank_title_info_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1919,6 +1976,12 @@ def _has_visible_semantic_alternative(
             candidate,
         ):
             continue
+        if _browser_about_blank_title_info_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            continue
         if _browser_extension_access_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1961,6 +2024,12 @@ def _candidate_snap_score(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return 0.0
+    if _browser_about_blank_title_info_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -2210,6 +2279,12 @@ def _candidate_snap_semantic_mismatch(
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_address_bar_content_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+    ):
+        return True
+    if _browser_about_blank_title_info_mismatch(
         instruction,
         instruction_tokens,
         candidate,

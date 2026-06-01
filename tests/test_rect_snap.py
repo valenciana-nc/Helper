@@ -11266,6 +11266,114 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_browser_about_blank_tab_rejects_site_info_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Show info.",
+            "Open info.",
+            "Open details.",
+            "Open about.",
+            "Show site info.",
+            "View site information.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "about:blank",
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_browser_about_blank_tab_accepts_explicit_tab_wording(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            "Open about blank.",
+            "Open about:blank tab.",
+            "Click about:blank tab.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate(
+                            "c001",
+                            "about:blank",
+                            "tabitem",
+                            (120, 160, 220, 32),
+                            window_title="about:blank - Google Chrome",
+                        ),
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+
+    def test_site_info_text_match_recovers_from_about_blank_tab_title(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Show site info.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate(
+                    "c001",
+                    "about:blank",
+                    "tabitem",
+                    (120, 160, 220, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "View site information",
+                    "button",
+                    (400, 160, 160, 32),
+                    window_title="about:blank - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+
     def test_browser_address_bar_live_label_accepts_explicit_bar_wording(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

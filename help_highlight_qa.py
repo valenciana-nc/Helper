@@ -1228,6 +1228,95 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "info_wording_rejects_about_blank_tab_title",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "about:blank tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show info.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "about:blank",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "site_information_recovers_from_about_blank_tab_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "about:blank tab"},
+                {"rect": [240, 80, 160, 32], "label": "Site info"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show site info.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "about:blank",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+                {
+                    "id": "c002",
+                    "text": "View site information",
+                    "control_type": "button",
+                    "rect": [240, 80, 160, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [240, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "about_blank_tab_title_accepts_explicit_tab_wording",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "about:blank tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open about:blank tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "about:blank",
+                    "control_type": "tabitem",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "live_address_bar_label_accepts_explicit_address_wording",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
