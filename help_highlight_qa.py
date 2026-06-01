@@ -1743,6 +1743,71 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "contextual_profile_menu_model_rect_highlights_launcher_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the profile menu.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Profile", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "contextual_account_dropdown_model_rect_highlights_launcher_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Account"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the account dropdown.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Account", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "contextual_profile_menu_item_still_highlights_menuitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Profile"},
+                {"rect": [20, 130, 200, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the profile menu item.",
+                "target": {"x": 20, "y": 130, "width": 200, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Profile", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Profile", "control_type": "menuitem", "rect": [20, 130, 200, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [20, 130, 200, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "confirm_alias_model_rect_highlights_ok_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

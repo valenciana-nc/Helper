@@ -295,6 +295,19 @@ _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _MENU_LAUNCHER_WORDS = frozenset(
     {"dot", "dots", "ellipsis", "kebab", "meatballs", "more", "overflow"}
 )
+_CONTEXTUAL_MENU_LAUNCHER_WORDS = frozenset(
+    {
+        "account",
+        "avatar",
+        "cog",
+        "gear",
+        "options",
+        "preferences",
+        "profile",
+        "settings",
+        "user",
+    }
+)
 _DISCLOSURE_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _DISCLOSURE_INTENT_WORDS = frozenset(
     {"arrow", "caret", "chevron", "collapse", "disclosure", "expand", "expander"}
@@ -434,6 +447,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     picker_launcher_requested = _picker_launcher_requested(raw_tokens)
     selector_requested = _selector_requested(raw_tokens)
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
+    contextual_menu_launcher_requested = _contextual_menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -501,9 +515,11 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("headeritem")
     if "headeritem" in raw_tokens:
         intents.add("headeritem")
-    if "menu" in raw_tokens and not menu_launcher_requested:
+    if "menu" in raw_tokens and not (
+        menu_launcher_requested or contextual_menu_launcher_requested
+    ):
         intents.update(_MENU_INTENT_TYPES)
-    if menu_launcher_requested:
+    if menu_launcher_requested or contextual_menu_launcher_requested:
         intents.update(_MENU_LAUNCHER_INTENT_TYPES)
     if "menuitem" in raw_tokens:
         intents.add("menuitem")
@@ -561,6 +577,17 @@ def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
     if raw_tokens & _MENU_LAUNCHER_WORDS:
         return True
     return "three" in raw_tokens and bool(raw_tokens & {"dot", "dots"})
+
+
+def _contextual_menu_launcher_requested(raw_tokens: set[str]) -> bool:
+    if "menuitem" in raw_tokens or ("menu" in raw_tokens and "item" in raw_tokens):
+        return False
+    has_dropdown_wording = "dropdown" in raw_tokens or (
+        "drop" in raw_tokens and "down" in raw_tokens
+    )
+    if "menu" not in raw_tokens and not has_dropdown_wording:
+        return False
+    return bool(raw_tokens & _CONTEXTUAL_MENU_LAUNCHER_WORDS)
 
 
 def _disclosure_requested(raw_tokens: set[str]) -> bool:

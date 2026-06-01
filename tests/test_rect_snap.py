@@ -156,11 +156,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
 
         chevron_intents = instruction_control_intents("Click the chevron")
         overflow_intents = instruction_control_intents("Open the overflow menu")
+        profile_menu_intents = instruction_control_intents("Open the profile menu")
+        account_dropdown_intents = instruction_control_intents("Open the account dropdown")
         menu_item_intents = instruction_control_intents("Open the file menu")
+        explicit_item_intents = instruction_control_intents("Open the profile menu item")
 
         self.assertTrue({"button", "splitbutton"}.issubset(chevron_intents))
         self.assertEqual(overflow_intents, {"button", "splitbutton"})
+        self.assertEqual(profile_menu_intents, {"button", "splitbutton"})
+        self.assertTrue({"button", "splitbutton"}.issubset(account_dropdown_intents))
         self.assertTrue(menu_segment_intent(menu_item_intents))
+        self.assertTrue(menu_segment_intent(explicit_item_intents))
 
 
 class SnapToControlTests(unittest.TestCase):
@@ -4825,6 +4831,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_contextual_menu_wording_highlights_launcher_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open the profile menu.", "Profile"),
+            ("Open the account menu.", "Account"),
+            ("Open the user menu.", "User"),
+            ("Open the settings menu.", "Settings"),
+            ("Open the account dropdown.", "Account"),
+            ("Open the profile drop down.", "Profile"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", label, "button", (120, 160, 120, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_contextual_menu_item_wording_still_highlights_menuitem(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the profile menu item.",
+                    "target": {"x": 120, "y": 160, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Profile", "button", (120, 160, 120, 32)),
+                ControlCandidate("c002", "Profile", "menuitem", (120, 210, 240, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 210, 240, 32))
 
     def test_common_alias_model_rect_highlights_button(self) -> None:
         from control_inventory import ControlCandidate
