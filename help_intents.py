@@ -44,6 +44,10 @@ _SYMBOL_TOKEN_ALIASES = {
     "\U0001f514": {"alerts", "bell", "notification", "notifications", "notify"},
     "\U0001f399": {"mic", "microphone"},
     "\U0001f3a4": {"mic", "microphone"},
+    "\U0001f507": {"mute", "speaker", "sound", "volume"},
+    "\U0001f508": {"speaker", "sound", "volume"},
+    "\U0001f509": {"speaker", "sound", "volume"},
+    "\U0001f50a": {"speaker", "sound", "volume"},
     "\U0001f3a5": {"camera", "video", "webcam"},
     "\U0001f4f7": {"camera", "video", "webcam"},
     "\U0001f4f9": {"camera", "video", "webcam"},
@@ -156,6 +160,8 @@ _TOKEN_ALIASES = {
     "settings": {"options", "preferences"},
     "sign": {"log", "login", "signin"},
     "signin": {"log", "login", "sign"},
+    "sound": {"speaker", "volume"},
+    "speaker": {"sound", "volume"},
     "star": {"bookmark", "favorite"},
     "submit": {"send"},
     "import": {"upload"},
@@ -173,6 +179,7 @@ _TOKEN_ALIASES = {
     "plus": {"add", "new", "create"},
     "url": {"address", "location"},
     "video": {"camera", "webcam"},
+    "volume": {"sound", "speaker"},
     "webcam": {"camera", "video"},
 }
 
@@ -503,6 +510,25 @@ _PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
 _PASSWORD_VISIBILITY_ACTION_WORDS = frozenset(
     {"conceal", "eye", "hide", "mask", "reveal", "show", "unmask", "visibility", "visible"}
 )
+_AUDIO_OUTPUT_ACTION_WORDS = frozenset(
+    {
+        "decrease",
+        "down",
+        "increase",
+        "lower",
+        "louder",
+        "mute",
+        "off",
+        "on",
+        "quieter",
+        "raise",
+        "sound",
+        "speaker",
+        "unmute",
+        "up",
+        "volume",
+    }
+)
 
 
 def tokenize_instruction(instruction: str) -> set[str]:
@@ -512,6 +538,9 @@ def tokenize_instruction(instruction: str) -> set[str]:
     }
     if _password_visibility_requested(tokens):
         filtered.update({"eye", "visibility", "visible"})
+    if _audio_output_control_requested(tokens):
+        filtered.discard("audio")
+        filtered.update({"speaker", "sound", "volume"})
     context_tokens = filtered & _CONTEXT_LOCATION_WORDS
     if context_tokens and (tokens & _DEICTIC_WORDS or filtered - context_tokens):
         filtered -= context_tokens
@@ -680,6 +709,10 @@ def _password_visibility_requested(raw_tokens: set[str]) -> bool:
     if not (raw_tokens & _PASSWORD_VISIBILITY_CONTEXT_WORDS):
         return False
     return bool(raw_tokens & _PASSWORD_VISIBILITY_ACTION_WORDS)
+
+
+def _audio_output_control_requested(raw_tokens: set[str]) -> bool:
+    return "audio" in raw_tokens and bool(raw_tokens & _AUDIO_OUTPUT_ACTION_WORDS)
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:

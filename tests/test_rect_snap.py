@@ -181,6 +181,19 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("webcam", tokenize_control("Camera"))
         self.assertIn("camera", tokenize_control("Webcam"))
 
+    def test_audio_output_aliases_expand_to_speaker_language_contextually(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        mute_audio_tokens = tokenize_instruction("Mute audio")
+        audio_settings_tokens = tokenize_instruction("Open audio settings")
+
+        self.assertTrue({"speaker", "sound", "volume"}.issubset(mute_audio_tokens))
+        self.assertNotIn("audio", mute_audio_tokens)
+        self.assertNotIn("speaker", audio_settings_tokens)
+        self.assertIn("sound", tokenize_instruction("Open volume"))
+        self.assertIn("speaker", tokenize_control("Sound"))
+        self.assertIn("volume", tokenize_control("Speaker"))
+
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -282,6 +295,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u2665", {"favorite", "heart"}),
             ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f3a4", {"mic", "microphone"}),
+            ("\U0001f507", {"mute", "speaker", "sound", "volume"}),
+            ("\U0001f50a", {"speaker", "sound", "volume"}),
             ("\U0001f4f7", {"camera", "video", "webcam"}),
             ("\U0001f6d2", {"bag", "basket", "cart"}),
             ("\U0001f441", {"eye", "visibility", "visible"}),
@@ -5498,10 +5513,15 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             ("Mute microphone.", "Mic", (120, 160, 80, 32)),
             ("Mute mic.", "Microphone", (120, 160, 120, 32)),
+            ("Mute audio.", "Speaker", (120, 160, 100, 32)),
+            ("Mute speaker.", "Sound", (120, 160, 90, 32)),
+            ("Open volume.", "Speaker", (120, 160, 100, 32)),
             ("Start video.", "Camera", (120, 160, 100, 32)),
             ("Start camera.", "Video", (120, 160, 90, 32)),
             ("Start webcam.", "Camera", (120, 160, 100, 32)),
             ("Mute microphone.", "\U0001f3a4", (120, 160, 32, 32)),
+            ("Mute audio.", "\U0001f50a", (120, 160, 32, 32)),
+            ("Mute audio.", "\U0001f507", (120, 160, 32, 32)),
             ("Start video.", "\U0001f4f7", (120, 160, 32, 32)),
         )
         for instruction, label, rect in cases:
@@ -5531,6 +5551,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
             (
                 "Mute microphone.",
                 ControlCandidate("c001", "Mic", "button", (120, 160, 80, 32)),
+                ControlCandidate("c002", "Audio settings", "button", (300, 160, 140, 32)),
+            ),
+            (
+                "Mute audio.",
+                ControlCandidate("c001", "Speaker", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Audio settings", "button", (300, 160, 140, 32)),
             ),
             (
@@ -5574,6 +5599,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c002", "Microphone", "button", (240, 160, 120, 32)),
             ),
             (
+                "Mute speaker.",
+                ControlCandidate("c001", "Speaker", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Sound", "button", (240, 160, 90, 32)),
+            ),
+            (
                 "Start video.",
                 ControlCandidate("c001", "Camera", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Video", "button", (240, 160, 90, 32)),
@@ -5596,6 +5626,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "target_id")
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_audio_settings_instruction_targets_settings_not_speaker_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open audio settings.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Audio settings", "button", (300, 160, 140, 32)),
+                ControlCandidate("c002", "Speaker", "button", (120, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (300, 160, 140, 32))
 
     def test_cart_action_alias_target_id_accepts_common_labels(self) -> None:
         from control_inventory import ControlCandidate

@@ -1757,6 +1757,90 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "audio_action_target_id_accepts_speaker_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Speaker"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute audio.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Speaker", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "speaker_action_target_id_accepts_sound_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 90, 32], "label": "Sound"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute speaker.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Sound", "control_type": "button", "rect": [20, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "volume_action_target_id_accepts_speaker_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Speaker"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open volume.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Speaker", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "speaker_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute audio.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f50a", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "video_action_target_id_accepts_camera_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -1818,6 +1902,52 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "audio_text_match_overrides_audio_settings_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Speaker"},
+                {"rect": [180, 80, 140, 32], "label": "Audio settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Mute audio.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Speaker", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Audio settings", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "audio_settings_exact_target_id_stays_settings",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Speaker"},
+                {"rect": [180, 80, 140, 32], "label": "Audio settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open audio settings.",
+                "target_id": "c002",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Speaker", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "c002", "text": "Audio settings", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c002",
+                "rect": [180, 80, 140, 32],
                 "overlay_emitted": True,
             },
         },
