@@ -2329,6 +2329,115 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "folder_action_target_id_accepts_directory_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Directory"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Directory", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "directory_action_target_id_accepts_folder_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Folder"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open directory.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Folder", "control_type": "button", "rect": [20, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "folder_symbol_target_id_accepts_icon",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 32, 32], "label": "F"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "\U0001f4c1", "control_type": "button", "rect": [20, 80, 32, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "folder_action_text_match_overrides_cancel_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Directory"},
+                {"rect": [180, 80, 140, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target": {"x": 180, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Directory", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "folder_alias_rejects_ambiguous_folder_and_directory_buttons",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Directory"},
+                {"rect": [180, 80, 100, 32], "label": "Folder"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Directory", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Folder", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
