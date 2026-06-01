@@ -480,6 +480,13 @@ class AgentTests(unittest.TestCase):
         self.assertIn("c001", prompt_text)
         self.assertIn("valid only for this screenshot", prompt_text)
 
+    def test_live_help_system_prompt_prioritizes_visible_text_over_automation_id(self) -> None:
+        from agent import LIVE_HELP_SYSTEM_PROMPT
+
+        self.assertIn("visible_text is what the user can see", LIVE_HELP_SYSTEM_PROMPT)
+        self.assertIn("metadata only", LIVE_HELP_SYSTEM_PROMPT)
+        self.assertIn("visible_text conflicts", LIVE_HELP_SYSTEM_PROMPT)
+
     def test_live_help_history_text_does_not_persist_target_ids(self) -> None:
         from agent import LiveHelpDecision
 

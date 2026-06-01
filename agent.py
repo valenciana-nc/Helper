@@ -172,7 +172,9 @@ Rules:
   controls list, never IDs remembered from earlier turns.
 - If the correct visible target is in the latest Visible clickable controls list, set target_id to that exact id
   AND include the same tight target rectangle from that latest list.
-- Only choose a target_id when the listed control's label, role, or screen position clearly matches your instruction.
+- Control entries may include visible_text and automation_id. visible_text is what the user can see; automation_id is
+  metadata only. Do not choose a target_id from automation_id if visible_text conflicts with your instruction.
+- Only choose a target_id when the listed control's visible_text, role, or screen position clearly matches your instruction.
 - If no listed control is the correct target but the target is clearly visible in the screenshot, leave target_id empty
   and provide a tight target rectangle.
 - If the needed target is not visible, the listed controls disagree with the screenshot, or you are not confident which
