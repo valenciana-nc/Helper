@@ -6785,6 +6785,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "https://platform.openai.com/settings/organization/billing/overview",
             ),
             (
+                "Open folder.",
+                "Unnamed bookmark for "
+                "https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+            ),
+            (
                 "Open cloud.",
                 "Unnamed bookmark for "
                 "https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0559993646",
@@ -7342,6 +7347,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "https://platform.openai.com/settings/organization/billing/overview",
             ),
             (
+                "Open folder.",
+                "Unnamed bookmark for "
+                "https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+            ),
+            (
                 "Open unnamed.",
                 "Unnamed bookmark for https://github.com",
             ),
@@ -7389,6 +7399,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Open organization.",
                 "Unnamed bookmark for "
                 "https://platform.openai.com/settings/organization/billing/overview",
+            ),
+            (
+                "Open folder.",
+                "Unnamed bookmark for "
+                "https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
             ),
             (
                 "Open unnamed.",

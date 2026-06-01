@@ -231,7 +231,11 @@ UNNAMED_BOOKMARK_GENERIC_ROUTE_WORDS = SETTINGS_REQUEST_WORDS | frozenset(
         "dashboard",
         "default",
         "dev",
+        "directories",
+        "directory",
         "for",
+        "folder",
+        "folders",
         "home",
         "http",
         "https",
@@ -292,10 +296,14 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
         "dashboard",
         "default",
         "dev",
+        "directories",
+        "directory",
         "favorite",
         "favourite",
         "edge",
         "for",
+        "folder",
+        "folders",
         "go",
         "home",
         "http",
@@ -1281,7 +1289,7 @@ def _context_text_match_score(
         instruction_tokens,
         candidate,
     ):
-        return min(0.41, 0.45 * iou + 0.30 * proximity)
+        return 0.0
     if _site_information_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _unnamed_bookmark_generic_route_mismatch(

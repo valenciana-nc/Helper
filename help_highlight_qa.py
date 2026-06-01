@@ -6321,6 +6321,59 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_folder_target_id_rejects_unnamed_privateemail_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "generic_folder_model_rect_rejects_unnamed_privateemail_bookmark",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 220, 32], "label": "Bookmark"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open folder.",
+                "target": {"x": 20, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Unnamed bookmark for https://privateemail.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX",
+                    "control_type": "button",
+                    "rect": [20, 80, 220, 32],
+                    "window_title": "about:blank - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "specific_facebook_page_accepts_unnamed_bookmark",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
