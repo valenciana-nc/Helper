@@ -60,11 +60,11 @@ class HelpPrecisionSelfTestUnitTests(unittest.TestCase):
         self.assertTrue(any("IoU too low" in failure for failure in failures))
 
     def test_find_target_candidate_filters_by_window_title(self) -> None:
-        from help_precision_selftest import _find_target_candidate
+        from help_precision_selftest import TARGET_TEXT, _find_target_candidate
 
         candidates = [
             ControlCandidate("c001", "Save changes", "button", (1, 1, 10, 10), window_title="Other"),
-            ControlCandidate("c002", "Save changes", "button", (2, 2, 10, 10), window_title="Helper Precision Self Test abc"),
+            ControlCandidate("c002", TARGET_TEXT, "button", (2, 2, 10, 10), window_title="Helper Precision Self Test abc"),
         ]
 
         result = _find_target_candidate(
@@ -113,19 +113,19 @@ class HelpPrecisionSelfTestUnitTests(unittest.TestCase):
         self.assertTrue(any("unexpectedly" in failure for failure in failures))
 
     def test_resolution_cases_cover_wrong_target_id_paths(self) -> None:
-        from help_precision_selftest import _run_resolution_cases
+        from help_precision_selftest import TARGET_TEXT, _run_resolution_cases
 
         img = Image.new("RGB", (260, 100), "white")
         draw = ImageDraw.Draw(img)
         draw.rectangle((20, 20, 140, 52), outline="black", fill="#f3f4f6")
-        draw.text((34, 29), "Save changes", fill="black")
+        draw.text((34, 29), TARGET_TEXT, fill="black")
         draw.rectangle((160, 20, 235, 52), outline="black", fill="#f3f4f6")
         draw.text((174, 29), "Cancel", fill="black")
         capture = _capture_with_image(img)
         title = "Helper Precision Self Test unit"
         save = ControlCandidate(
             "c001",
-            "Save changes",
+            TARGET_TEXT,
             "button",
             (20, 20, 120, 32),
             window_title=title,

@@ -35,7 +35,7 @@ from screen import Capture, capture_active_monitor
 from target_quality import evaluate_target_quality
 
 WINDOW_TITLE_PREFIX = "Helper Precision Self Test"
-TARGET_TEXT = "Save changes"
+TARGET_TEXT = "Save helper precision"
 CHILD_READY_SETTLE_SEC = 0.25
 TARGET_WAIT_TIMEOUT_SEC = 5.0
 SELFTEST_CANDIDATE_LIMIT = max(MAX_CANDIDATES, 200)

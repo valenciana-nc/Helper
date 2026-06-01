@@ -350,6 +350,23 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"share"}),
     frozenset({"sort"}),
 )
+OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
+    CONFIRM_ACTION_WORDS,
+    CANCEL_ACTION_WORDS,
+    REMOVE_ACTION_WORDS,
+    FILE_SAVE_ACTION_WORDS,
+    FILE_EXPORT_ACTION_WORDS,
+    FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS,
+    CLIPBOARD_COPY_WORDS | DUPLICATE_ACTION_WORDS,
+    EDIT_ACTION_WORDS,
+    frozenset({"archive", "cabinet", "filing"}),
+    frozenset({"approve"}),
+    frozenset({"clipboard", "paste"}),
+    frozenset({"plane", "send", "submit"}),
+    frozenset({"print", "printer"}),
+    frozenset({"reject"}),
+    frozenset({"share"}),
+)
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
 PIN_STATE_NEUTRAL_WORDS = frozenset({"pinned", "pushpin", "thumbtack"})
@@ -2119,6 +2136,10 @@ def _explicit_action_context_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        or _candidate_action_for_open_view_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
         or _confirm_action_context_mismatch(instruction, visible_text, automation_id)
         or _filter_reset_action_mismatch(
             instruction,
@@ -2233,6 +2254,36 @@ def _candidate_edit_action_context_mismatch(instruction: str, candidate_text: st
         )
     )
     return bool(instruction_objects and candidate_objects and instruction_objects & candidate_objects)
+
+
+def _candidate_action_for_open_view_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not (instruction_raw_tokens & OPEN_VIEW_REQUEST_WORDS):
+        return False
+    instruction_tokens = _tokenize_instruction(instruction) | instruction_raw_tokens
+    candidate_raw_tokens = _tokens_from_text(candidate_text)
+    if not candidate_raw_tokens:
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            instruction_tokens,
+            OPEN_VIEW_REQUEST_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    if not instruction_objects:
+        return False
+    for family in OPEN_VIEW_CANDIDATE_ACTION_FAMILIES:
+        if not (candidate_raw_tokens & family):
+            continue
+        if instruction_raw_tokens & family:
+            return False
+        candidate_objects = _object_token_variants(
+            _action_object_tokens(candidate_raw_tokens, family, ACTION_OBJECT_STOPWORDS)
+        )
+        if instruction_objects & candidate_objects:
+            return True
+    return False
 
 
 def _confirm_action_context_mismatch(

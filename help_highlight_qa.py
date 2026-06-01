@@ -7543,6 +7543,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "open_account_model_rect_rejects_delete_account_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 150, 32], "label": "Delete account"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open account.",
+                "target": {"x": 20, "y": 80, "width": 150, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Delete account", "control_type": "button", "rect": [20, 80, 150, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "calendar_action_target_id_accepts_date_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
