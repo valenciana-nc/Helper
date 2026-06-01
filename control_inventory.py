@@ -65,13 +65,44 @@ NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
 MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
+EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
+CONFIRM_ACTION_WORDS = frozenset(
+    {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
+)
+CANCEL_ACTION_WORDS = frozenset({"cancel"})
+CONFIRM_CANCEL_ACTION_WORDS = CONFIRM_ACTION_WORDS | CANCEL_ACTION_WORDS
+CONFIRM_OBJECT_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "button",
+        "check",
+        "control",
+        "mark",
+        "selected",
+        "selection",
+        "the",
+        "this",
+        "that",
+    }
+)
+FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
+FILE_OPEN_ACTION_WORDS = frozenset({"open"})
+FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
+FILE_EXPORT_ACTION_WORDS = frozenset({"download", "export"})
+FILE_PICKER_ACTION_WORDS = frozenset(
+    {"attach", "attachment", "browse", "choose", "paperclip", "picker", "select", "upload"}
+)
+FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
+BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
+BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
     frozenset({"disk", "floppy", "save"}),
     frozenset({"archive", "cabinet", "filing"}),
     frozenset({"download", "export"}),
-    frozenset({"attach", "attachment", "browse", "choose", "paperclip", "upload"}),
+    frozenset({"attach", "attachment", "browse", "choose", "import", "paperclip", "upload"}),
     frozenset({"clone", "copy", "duplicate"}),
     frozenset({"clipboard", "paste"}),
     frozenset({"edit", "pencil"}),
@@ -208,6 +239,12 @@ BROWSER_NEW_TAB_RELATED_REQUEST_WORDS = (
     | frozenset({"external", "new_window", "open_new"})
 )
 BROWSER_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
+BROWSER_BOOKMARK_TAB_CONTEXT_WORDS = frozenset(
+    {"page", "pages", "tab", "tabs", "webpage", "website"}
+)
+BROWSER_BOOKMARK_ITEM_CONTEXT_WORDS = frozenset(
+    {"article", "card", "item", "items", "listing", "post", "product", "record", "row"}
+)
 BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 BROWSER_GROUP_GENERIC_WORDS = frozenset({"closed", "collapsed", "expanded", "group", "open"})
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
@@ -1291,6 +1328,8 @@ def _text_match_score(
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
+    if _explicit_action_context_mismatch(instruction, candidate):
+        return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
     if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -1402,6 +1441,8 @@ def _context_text_match_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return 0.0
+    if _explicit_action_context_mismatch(instruction, candidate):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return 0.0
@@ -1667,6 +1708,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _explicit_action_context_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2096,6 +2143,35 @@ def _browser_new_tab_bookmark_action_mismatch(
     if candidate_tokens & BROWSER_BOOKMARK_ACTION_WORDS:
         return False
     return bool(candidate_tokens & BROWSER_NEW_TAB_WORDS)
+
+
+def _browser_tab_bookmark_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    if not (instruction_tokens & BROWSER_BOOKMARK_ACTION_WORDS):
+        return False
+    window_tokens = _tokens_from_text(candidate.window_title)
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+
+    raw_candidate_tokens = _tokens_from_text(candidate.descriptor)
+    if not (raw_candidate_tokens & BROWSER_BOOKMARK_ACTION_WORDS):
+        return False
+    if not (raw_candidate_tokens & BROWSER_BOOKMARK_TAB_CONTEXT_WORDS):
+        return False
+
+    raw_instruction_tokens = _tokens_from_text(instruction)
+    if raw_instruction_tokens & BROWSER_BOOKMARK_TAB_CONTEXT_WORDS:
+        return False
+    if "add" in raw_instruction_tokens and "bookmark" in raw_instruction_tokens:
+        return False
+    if raw_instruction_tokens & BROWSER_BOOKMARK_ITEM_CONTEXT_WORDS:
+        return True
+    return bool(raw_instruction_tokens & {"favorite", "star"} and raw_instruction_tokens & {"this", "that"})
 
 
 def _browser_new_tab_action_mismatch(
@@ -2633,6 +2709,129 @@ def _navigation_media_transport_action_mismatch(
     return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
 
 
+def _explicit_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _tokenize_instruction(instruction)
+    return (
+        _edit_action_context_mismatch(instruction, candidate)
+        or _confirm_action_context_mismatch(instruction, candidate)
+        or _file_action_context_mismatch(instruction, candidate.descriptor)
+        or _new_tab_window_action_mismatch(instruction, candidate.descriptor)
+        or _browser_tab_bookmark_action_mismatch(instruction, instruction_tokens, candidate)
+    )
+
+
+def _edit_action_context_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
+    if candidate.control_type in {"combobox", "edit"}:
+        return False
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & EDIT_ACTION_WORDS):
+        return False
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    if not control_tokens:
+        return False
+    return not bool(control_tokens & EDIT_ACTION_WORDS)
+
+
+def _confirm_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_kind = _confirm_cancel_action_kind(_tokens_from_text(instruction))
+    if not instruction_kind:
+        return False
+
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    control_kind = _confirm_cancel_action_kind(control_tokens)
+    if not control_kind:
+        return False
+    if instruction_kind != control_kind:
+        return True
+    return _same_action_object_mismatch(
+        _tokenize_instruction(instruction),
+        _candidate_semantic_tokens(candidate),
+        CONFIRM_CANCEL_ACTION_WORDS,
+        CONFIRM_OBJECT_STOPWORDS,
+    )
+
+
+def _confirm_cancel_action_kind(tokens: set[str]) -> str:
+    requested_confirm = bool(tokens & CONFIRM_ACTION_WORDS)
+    requested_cancel = bool(tokens & CANCEL_ACTION_WORDS)
+    if requested_confirm == requested_cancel:
+        return ""
+    return "confirm" if requested_confirm else "cancel"
+
+
+def _same_action_object_mismatch(
+    instruction_tokens: set[str],
+    control_tokens: set[str],
+    action_tokens: frozenset[str],
+    stopwords: frozenset[str],
+) -> bool:
+    instruction_objects = _action_object_tokens(instruction_tokens, action_tokens, stopwords)
+    control_objects = _action_object_tokens(control_tokens, action_tokens, stopwords)
+    if not instruction_objects or not control_objects:
+        return False
+    return not bool(instruction_objects & control_objects)
+
+
+def _action_object_tokens(
+    tokens: set[str],
+    action_tokens: frozenset[str],
+    stopwords: frozenset[str],
+) -> set[str]:
+    return {
+        token
+        for token in tokens - action_tokens - stopwords
+        if len(token) > 1 and not token.isdigit()
+    }
+
+
+def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_kind = _file_action_kind(_tokens_from_text(instruction), is_instruction=True)
+    if not instruction_kind:
+        return False
+    control_kind = _file_action_kind(_tokens_from_text(candidate_text), is_instruction=False)
+    return bool(control_kind and instruction_kind != control_kind)
+
+
+def _file_action_kind(tokens: set[str], *, is_instruction: bool) -> str:
+    fileish = bool(tokens & FILE_IDENTITY_WORDS)
+    pickerish = bool(tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS))
+    if pickerish and (fileish or not is_instruction):
+        return "picker"
+    if not fileish:
+        return ""
+    if tokens & FILE_SAVE_ACTION_WORDS:
+        return "save"
+    if tokens & FILE_EXPORT_ACTION_WORDS:
+        return "export"
+    if tokens & FILE_OPEN_ACTION_WORDS:
+        return "open"
+    return ""
+
+
+def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_kind = _literal_new_tab_window_kind(_literal_words_from_text(instruction))
+    if not instruction_kind:
+        return False
+    control_kind = _literal_new_tab_window_kind(_literal_words_from_text(candidate_text))
+    return bool(control_kind and instruction_kind != control_kind)
+
+
+def _literal_new_tab_window_kind(words: set[str]) -> str:
+    if "new" not in words:
+        return ""
+    has_tab = bool(words & BROWSER_TAB_WORDS)
+    has_window = bool(words & BROWSER_WINDOW_WORDS)
+    if has_tab == has_window:
+        return ""
+    return "tab" if has_tab else "window"
+
+
 def _exclusive_action_family_mismatch(instruction: str, candidate_text: str) -> bool:
     requested_families = _exclusive_action_family_indexes(_tokens_from_text(instruction))
     if not requested_families:
@@ -2857,6 +3056,8 @@ def _target_id_ambiguity(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _explicit_action_context_mismatch(instruction, candidate):
+            continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -3054,6 +3255,8 @@ def _has_semantic_alternative(
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
             continue
+        if _explicit_action_context_mismatch(instruction, candidate):
+            continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -3147,6 +3350,8 @@ def _has_visible_semantic_alternative(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _explicit_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -3242,6 +3447,8 @@ def _candidate_snap_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _explicit_action_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -3416,6 +3623,8 @@ def _single_contained_control_intent_candidate(
         if _checkbox_state_action_mismatch(instruction, candidate):
             continue
         if _navigation_media_transport_action_mismatch(instruction, candidate):
+            continue
+        if _explicit_action_context_mismatch(instruction, candidate):
             continue
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
@@ -3673,6 +3882,8 @@ def _candidate_snap_semantic_mismatch(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return True
+    if _explicit_action_context_mismatch(instruction, candidate):
         return True
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return True

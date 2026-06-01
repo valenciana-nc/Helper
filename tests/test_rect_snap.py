@@ -2322,6 +2322,9 @@ class SnapToControlTests(unittest.TestCase):
             ("Delete message.", "Send message"),
             ("Save document.", "Delete document"),
             ("Download file.", "Upload file"),
+            ("Open file.", "Save file"),
+            ("Open file.", "Export file"),
+            ("Open file.", "Import file"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -2338,6 +2341,35 @@ class SnapToControlTests(unittest.TestCase):
 
                 self.assertEqual(result.source, "uia")
                 self.assertEqual(result.rect, (360, 160, 160, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_explicit_action_context_mismatch_does_not_snap_shared_alias_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Edit profile.", "View profile", "App"),
+            ("Apply changes.", "Cancel changes", "App"),
+            ("Cancel changes.", "Apply changes", "App"),
+            ("Apply filter.", "Apply coupon", "App"),
+            ("Open new tab.", "New window", "GitHub - Google Chrome"),
+            ("Open new window.", "New tab", "GitHub - Google Chrome"),
+            ("Favorite this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+        )
+        for instruction, label, window_title in cases:
+            with self.subTest(instruction=instruction, label=label):
+                button = _make_button(label, 360, 160, 180, 32)
+                window = _make_window(window_title, 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (360, 160, 180, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (360, 160, 180, 32))
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
     def test_remove_formatting_does_not_snap_delete_family_button(self) -> None:
@@ -10325,6 +10357,90 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, expected.id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, expected.rect)
+
+    def test_explicit_action_context_mismatches_reject_inventory_paths(self) -> None:
+        from control_inventory import (
+            ControlCandidate,
+            resolve_candidate_target,
+            snap_candidate_target,
+        )
+
+        cases = (
+            ("Edit profile.", "View profile", "App"),
+            ("Apply changes.", "Cancel changes", "App"),
+            ("Cancel changes.", "Apply changes", "App"),
+            ("Apply filter.", "Apply coupon", "App"),
+            ("Open new tab.", "New window", "GitHub - Google Chrome"),
+            ("Open new window.", "New tab", "GitHub - Google Chrome"),
+            ("Open file.", "Save file", "App"),
+            ("Open file.", "Export file", "App"),
+            ("Open file.", "Import file", "App"),
+            ("Favorite this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+            ("Star this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+            ("Bookmark this item.", "Bookmark this tab", "GitHub - Google Chrome"),
+        )
+        for instruction, label, window_title in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidate = ControlCandidate(
+                    "c001",
+                    label,
+                    "button",
+                    (120, 160, 180, 32),
+                    window_title=window_title,
+                )
+
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                target_id = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[candidate],
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[candidate],
+                    model_rect=(120, 160, 180, 32),
+                )
+
+                self.assertIsNone(text_target)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_explicit_action_context_exact_targets_still_accept(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Edit profile.", "Edit profile"),
+            ("Apply filter.", "Apply filter"),
+            ("Open new tab.", "New tab"),
+            ("Open new window.", "New window"),
+            ("Open file.", "Open file"),
+            ("Bookmark this tab.", "Bookmark this tab"),
+            ("Add bookmark.", "Bookmark this tab"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(
+                            "c001",
+                            label,
+                            "button",
+                            (120, 160, 180, 32),
+                            window_title="GitHub - Google Chrome",
+                        )
+                    ],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertFalse(target.rejected_reason)
 
     def test_sign_out_alias_target_id_accepts_logout_button(self) -> None:
         from control_inventory import ControlCandidate

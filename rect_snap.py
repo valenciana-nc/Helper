@@ -53,13 +53,44 @@ NAVIGATION_DIRECTION_WORDS = frozenset({"back", "forward", "next", "previous"})
 MEDIA_TRANSPORT_CONTEXT_WORDS = frozenset(
     {"audio", "clip", "media", "movie", "music", "playback", "song", "track", "video"}
 )
+EDIT_ACTION_WORDS = frozenset({"edit", "pencil"})
+CONFIRM_ACTION_WORDS = frozenset(
+    {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
+)
+CANCEL_ACTION_WORDS = frozenset({"cancel"})
+CONFIRM_CANCEL_ACTION_WORDS = CONFIRM_ACTION_WORDS | CANCEL_ACTION_WORDS
+CONFIRM_OBJECT_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "button",
+        "check",
+        "control",
+        "mark",
+        "selected",
+        "selection",
+        "the",
+        "this",
+        "that",
+    }
+)
+FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
+FILE_OPEN_ACTION_WORDS = frozenset({"open"})
+FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
+FILE_EXPORT_ACTION_WORDS = frozenset({"download", "export"})
+FILE_PICKER_ACTION_WORDS = frozenset(
+    {"attach", "attachment", "browse", "choose", "paperclip", "picker", "select", "upload"}
+)
+FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
+BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
+BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
 EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
     frozenset({"disk", "floppy", "save"}),
     frozenset({"archive", "cabinet", "filing"}),
     frozenset({"download", "export"}),
-    frozenset({"attach", "attachment", "browse", "choose", "paperclip", "upload"}),
+    frozenset({"attach", "attachment", "browse", "choose", "import", "paperclip", "upload"}),
     frozenset({"clone", "copy", "duplicate"}),
     frozenset({"clipboard", "paste"}),
     frozenset({"edit", "pencil"}),
@@ -159,6 +190,13 @@ BROWSER_EXTENSION_ACCESS_INSTRUCTION_STOPWORDS = frozenset(
         "to",
         "wants",
     }
+)
+BROWSER_BOOKMARK_ACTION_WORDS = frozenset({"bookmark", "favorite", "star"})
+BROWSER_BOOKMARK_TAB_CONTEXT_WORDS = frozenset(
+    {"page", "pages", "tab", "tabs", "webpage", "website"}
+)
+BROWSER_BOOKMARK_ITEM_CONTEXT_WORDS = frozenset(
+    {"article", "card", "item", "items", "listing", "post", "product", "record", "row"}
 )
 BROWSER_TAB_MEMORY_USAGE_RE = re.compile(
     r"(?:\s*[\-\|\u2013\u2014]\s*)?memory\s+usage\s*[-:]\s*\d+(?:\.\d+)?\s*mb\b.*$",
@@ -390,6 +428,13 @@ def snap_to_control(
                 automation_id,
             )
         )
+        explicit_action_context_mismatch = _explicit_action_context_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+            ctype,
+            window_title,
+        )
         exclusive_action_family_mismatch = _exclusive_action_family_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
@@ -435,6 +480,7 @@ def snap_to_control(
             or history_action_mismatch
             or checkbox_state_action_mismatch
             or navigation_media_transport_action_mismatch
+            or explicit_action_context_mismatch
             or exclusive_action_family_mismatch
             or clear_close_action_mismatch
             or browser_about_blank_title_info_mismatch
@@ -1423,6 +1469,183 @@ def _navigation_media_transport_action_mismatch(
     if not (control_tokens & NAVIGATION_DIRECTION_WORDS):
         return False
     return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
+
+
+def _explicit_action_context_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    return (
+        _edit_action_context_mismatch(instruction, visible_text, automation_id, ctype)
+        or _confirm_action_context_mismatch(instruction, visible_text, automation_id)
+        or _file_action_context_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _new_tab_window_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _browser_tab_bookmark_action_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+            ctype,
+            window_title,
+        )
+    )
+
+
+def _edit_action_context_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+) -> bool:
+    if ctype in {"combobox", "edit"}:
+        return False
+    instruction_tokens = _tokens_from_text(instruction)
+    if not (instruction_tokens & EDIT_ACTION_WORDS):
+        return False
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    if not control_tokens:
+        return False
+    return not bool(control_tokens & EDIT_ACTION_WORDS)
+
+
+def _confirm_action_context_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+) -> bool:
+    instruction_kind = _confirm_cancel_action_kind(_tokens_from_text(instruction))
+    if not instruction_kind:
+        return False
+
+    control_text = " ".join((visible_text or "", automation_id or ""))
+    control_tokens = _tokens_from_text(control_text)
+    control_kind = _confirm_cancel_action_kind(control_tokens)
+    if not control_kind:
+        return False
+    if instruction_kind != control_kind:
+        return True
+    return _same_action_object_mismatch(
+        _tokenize_instruction(instruction),
+        _tokenize_control(_semantic_text(control_text)),
+        CONFIRM_CANCEL_ACTION_WORDS,
+        CONFIRM_OBJECT_STOPWORDS,
+    )
+
+
+def _confirm_cancel_action_kind(tokens: set[str]) -> str:
+    requested_confirm = bool(tokens & CONFIRM_ACTION_WORDS)
+    requested_cancel = bool(tokens & CANCEL_ACTION_WORDS)
+    if requested_confirm == requested_cancel:
+        return ""
+    return "confirm" if requested_confirm else "cancel"
+
+
+def _same_action_object_mismatch(
+    instruction_tokens: set[str],
+    control_tokens: set[str],
+    action_tokens: frozenset[str],
+    stopwords: frozenset[str],
+) -> bool:
+    instruction_objects = _action_object_tokens(instruction_tokens, action_tokens, stopwords)
+    control_objects = _action_object_tokens(control_tokens, action_tokens, stopwords)
+    if not instruction_objects or not control_objects:
+        return False
+    return not bool(instruction_objects & control_objects)
+
+
+def _action_object_tokens(
+    tokens: set[str],
+    action_tokens: frozenset[str],
+    stopwords: frozenset[str],
+) -> set[str]:
+    return {
+        token
+        for token in tokens - action_tokens - stopwords
+        if len(token) > 1 and not token.isdigit()
+    }
+
+
+def _file_action_context_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_kind = _file_action_kind(_tokens_from_text(instruction), is_instruction=True)
+    if not instruction_kind:
+        return False
+    control_kind = _file_action_kind(_tokens_from_text(candidate_text), is_instruction=False)
+    return bool(control_kind and instruction_kind != control_kind)
+
+
+def _file_action_kind(tokens: set[str], *, is_instruction: bool) -> str:
+    fileish = bool(tokens & FILE_IDENTITY_WORDS)
+    pickerish = bool(tokens & (FILE_PICKER_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS))
+    if pickerish and (fileish or not is_instruction):
+        return "picker"
+    if not fileish:
+        return ""
+    if tokens & FILE_SAVE_ACTION_WORDS:
+        return "save"
+    if tokens & FILE_EXPORT_ACTION_WORDS:
+        return "export"
+    if tokens & FILE_OPEN_ACTION_WORDS:
+        return "open"
+    return ""
+
+
+def _new_tab_window_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_kind = _literal_new_tab_window_kind(_literal_words_from_text(instruction))
+    if not instruction_kind:
+        return False
+    control_kind = _literal_new_tab_window_kind(_literal_words_from_text(candidate_text))
+    return bool(control_kind and instruction_kind != control_kind)
+
+
+def _literal_new_tab_window_kind(words: set[str]) -> str:
+    if "new" not in words:
+        return ""
+    has_tab = bool(words & BROWSER_TAB_WORDS)
+    has_window = bool(words & BROWSER_WINDOW_WORDS)
+    if has_tab == has_window:
+        return ""
+    return "tab" if has_tab else "window"
+
+
+def _browser_tab_bookmark_action_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    instruction_tokens = _tokenize_instruction(instruction)
+    if not (instruction_tokens & BROWSER_BOOKMARK_ACTION_WORDS):
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+
+    control_text = " ".join((visible_text or "", automation_id or ""))
+    raw_control_tokens = _tokens_from_text(control_text)
+    if not (raw_control_tokens & BROWSER_BOOKMARK_ACTION_WORDS):
+        return False
+    if not (raw_control_tokens & BROWSER_BOOKMARK_TAB_CONTEXT_WORDS):
+        return False
+
+    raw_instruction_tokens = _tokens_from_text(instruction)
+    if raw_instruction_tokens & BROWSER_BOOKMARK_TAB_CONTEXT_WORDS:
+        return False
+    if "add" in raw_instruction_tokens and "bookmark" in raw_instruction_tokens:
+        return False
+    if raw_instruction_tokens & BROWSER_BOOKMARK_ITEM_CONTEXT_WORDS:
+        return True
+    return bool(raw_instruction_tokens & {"favorite", "star"} and raw_instruction_tokens & {"this", "that"})
 
 
 def _control_matches_effective_intent(

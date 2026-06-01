@@ -1989,6 +1989,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "apply_changes_target_id_rejects_cancel_changes_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Cancel changes"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Apply changes.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Cancel changes", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "apply_filter_model_rect_rejects_apply_coupon_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Apply coupon"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Apply filter.",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Apply coupon", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "checkbox_intent_rejects_checkmark_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -4315,6 +4357,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "new_tab_model_rect_rejects_new_window_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "New window"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open in new tab.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "New window",
+                    "control_type": "button",
+                    "rect": [20, 80, 120, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "new_window_model_rect_rejects_new_tab_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5311,6 +5380,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edit_profile_target_id_rejects_view_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "View profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Edit profile.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "View profile", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
@@ -6481,6 +6571,60 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "favorite_item_target_id_rejects_browser_bookmark_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Bookmark this tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Bookmark this tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bookmark_tab_target_id_accepts_browser_bookmark_tab_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Bookmark this tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Bookmark this tab.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Bookmark this tab",
+                    "control_type": "button",
+                    "rect": [20, 80, 180, 32],
+                    "window_title": "GitHub - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 180, 32],
                 "overlay_emitted": True,
             },
         },
@@ -11428,6 +11572,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 120, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "open_file_model_rect_rejects_save_file_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Save file"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open file.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save file", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {
