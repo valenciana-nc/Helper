@@ -1120,6 +1120,94 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_url_bar_model_rect_snaps_to_address_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 32], "label": "Address"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Focus the URL bar.",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Address", "control_type": "edit", "rect": [20, 80, 360, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 360, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_url_bar_broad_group_prefers_address_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 32], "label": "Address"},
+                {"rect": [20, 120, 360, 32], "label": "Search"},
+                {"rect": [20, 160, 360, 32], "label": "Filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Focus the URL bar.",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 112},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Address", "control_type": "edit", "rect": [20, 80, 360, 32]},
+                {"id": "c002", "text": "Search", "control_type": "edit", "rect": [20, 120, 360, 32]},
+                {"id": "c003", "text": "Filter", "control_type": "edit", "rect": [20, 160, 360, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 360, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "button_control_suffix_model_rect_snaps_to_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Submit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button control.",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Submit", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "literal_edit_model_rect_snaps_to_edit",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 32], "label": "Search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this edit control.",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Search", "control_type": "edit", "rect": [20, 80, 360, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "c001",
+                "rect": [20, 80, 360, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "contextual_checkbox_row_model_rect_snaps_to_single_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -57,10 +57,11 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "slide", "move", "spin", "focus", "go",
         "the", "on", "in", "to", "a", "an", "and", "or", "of",
         "this", "that", "your", "for", "now", "at", "is", "it", "be",
-        "here", "there", "highlighted", "shown", "indicated", "selected",
+        "here", "there", "bar", "highlighted", "shown", "indicated", "selected",
+        "control", "controls",
         "area", "spot", "place", "location",
         "button", "icon", "link", "hyperlink", "split", "tab", "list", "tree", "menu", "item", "option",
-        "header", "heading", "field", "input",
+        "header", "heading", "field", "input", "edit", "editable",
         "box", "text", "textbox", "textarea", "check", "checkbox",
         "toggle", "switch",
         "radio", "radiobutton", "splitbutton", "combo", "combobox", "dropdown",
@@ -75,6 +76,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
 )
 
 INPUT_CONTROL_TYPES = frozenset({"edit", "combobox", "spinner"})
+EDIT_CONTROL_TYPES = frozenset({"edit"})
 SLIDER_CONTROL_TYPES = frozenset({"slider"})
 SPINNER_CONTROL_TYPES = frozenset({"spinner"})
 TIGHT_ACTION_CONTROL_TYPES = frozenset(
@@ -89,6 +91,7 @@ TIGHT_ACTION_CONTROL_TYPES = frozenset(
     }
 )
 _INPUT_INTENT_WORDS = frozenset({"field", "input", "text", "textbox", "textarea", "box"})
+_ADDRESS_BAR_INTENT_WORDS = frozenset({"address", "url", "location", "omnibox"})
 _BUTTON_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
@@ -133,16 +136,19 @@ _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SEPARATOR_RE = re.compile(r"[_\-.]+")
 _TOKEN_ALIASES = {
     "account": {"profile", "user"},
+    "address": {"location", "url"},
     "avatar": {"account", "profile", "user"},
     "cog": {"options", "preferences", "settings"},
     "dismiss": {"close"},
     "find": {"search"},
     "gear": {"options", "preferences", "settings"},
     "lens": {"find", "search"},
+    "location": {"address", "url"},
     "magnifier": {"find", "search"},
     "magnifying": {"find", "search"},
     "menu": {"more", "options"},
     "more": {"menu", "options"},
+    "omnibox": {"address", "search", "url"},
     "options": {"preferences", "settings"},
     "preferences": {"options", "settings"},
     "profile": {"account", "user"},
@@ -157,6 +163,7 @@ _TOKEN_ALIASES = {
     "trash": {"delete", "remove"},
     "bin": {"delete", "remove"},
     "plus": {"add", "new", "create"},
+    "url": {"address", "location"},
 }
 _MAX_BFS_DEPTH = 8
 
@@ -740,11 +747,16 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
-    input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS)
+    address_bar_requested = "omnibox" in raw_tokens or (
+        "bar" in raw_tokens and bool(raw_tokens & _ADDRESS_BAR_INTENT_WORDS)
+    )
+    input_requested = bool(raw_tokens & _INPUT_INTENT_WORDS) or address_bar_requested
     if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
     if radio_requested:
         intents.add("radiobutton")
+    if raw_tokens & {"edit", "editable"}:
+        intents.update(EDIT_CONTROL_TYPES)
     if not checkbox_requested and input_requested:
         intents.update(INPUT_CONTROL_TYPES)
     if raw_tokens & {"combo", "combobox"}:

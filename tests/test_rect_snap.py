@@ -644,6 +644,106 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 160, 32))
         self.assertEqual(result.rejected_reason, "control type mismatch")
 
+    def test_snap_accepts_browser_address_bar_wording(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            "Focus the URL bar.",
+            "Click the location bar.",
+            "Click the omnibox.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                edit = _make_button(
+                    "Address",
+                    100,
+                    200,
+                    240,
+                    32,
+                    control_type="Edit",
+                )
+                window = _make_window("Browser", 0, 0, 800, 600, [edit])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (100, 200, 240, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (100, 200, 240, 32))
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_browser_address_bar_wording_on_plain_button(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button(
+            "Address",
+            100,
+            200,
+            240,
+            32,
+            control_type="Button",
+        )
+        window = _make_window("Browser", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 240, 32),
+            "Focus the URL bar.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 240, 32))
+        self.assertEqual(result.rejected_reason, "control type mismatch")
+
+    def test_snap_accepts_generic_button_control_suffix(self) -> None:
+        from rect_snap import snap_to_control
+
+        button = _make_button("Submit", 100, 200, 120, 32)
+        window = _make_window("App", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 120, 32),
+            "Click this button control.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 120, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_literal_edit_wording(self) -> None:
+        from rect_snap import snap_to_control
+
+        edit = _make_button(
+            "Search",
+            100,
+            200,
+            240,
+            32,
+            control_type="Edit",
+        )
+        window = _make_window("App", 0, 0, 800, 600, [edit])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 240, 32),
+            "Click this edit control.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 240, 32))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_allows_toggle_sidebar_button_label(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1790,6 +1890,84 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id control type mismatch")
 
+    def test_browser_address_bar_target_id_accepts_edit(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            "Focus the URL bar.",
+            "Click the location bar.",
+            "Click the omnibox.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "Address", "edit", (10, 10, 240, 32)),
+                    ],
+                    model_rect=(10, 10, 240, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (10, 10, 240, 32))
+
+    def test_browser_address_bar_target_id_rejects_plain_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Focus the URL bar.",
+            candidates=[
+                ControlCandidate("c001", "Address", "button", (10, 10, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
+    def test_button_control_suffix_target_id_accepts_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this button control.",
+            candidates=[
+                ControlCandidate("c001", "Submit", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_literal_edit_target_id_accepts_edit(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click this edit control.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 240, 32))
+
     def test_switch_account_text_match_still_allows_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -2731,6 +2909,102 @@ class ControlInventoryTests(unittest.TestCase):
                 ControlCandidate("c003", "Archive", "splitbutton", (10, 90, 160, 32)),
             ],
             model_rect=(10, 10, 160, 112),
+        )
+
+        self.assertIsNone(result)
+
+    def test_snap_candidate_target_accepts_browser_address_bar_wording(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            "Focus the URL bar.",
+            "Click the location bar.",
+            "Click the omnibox.",
+        )
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "Address", "edit", (10, 10, 240, 32)),
+                    ],
+                    model_rect=(10, 10, 240, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (10, 10, 240, 32))
+
+    def test_snap_candidate_target_prefers_address_edit_in_broad_bar_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Focus the URL bar.",
+            candidates=[
+                ControlCandidate("c001", "Address", "edit", (10, 10, 240, 32)),
+                ControlCandidate("c002", "Search", "edit", (10, 50, 240, 32)),
+                ControlCandidate("c003", "Filter", "edit", (10, 90, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 112),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 240, 32))
+
+    def test_snap_candidate_target_accepts_button_control_suffix(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this button control.",
+            candidates=[
+                ControlCandidate("c001", "Submit", "button", (10, 10, 120, 32)),
+            ],
+            model_rect=(10, 10, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_snap_candidate_target_accepts_literal_edit(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this edit control.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 240, 32))
+
+    def test_snap_candidate_target_rejects_broad_literal_edit_group(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click this edit.",
+            candidates=[
+                ControlCandidate("c001", "Search", "edit", (10, 10, 240, 32)),
+                ControlCandidate("c002", "Filter", "edit", (10, 50, 240, 32)),
+                ControlCandidate("c003", "Name", "edit", (10, 90, 240, 32)),
+            ],
+            model_rect=(10, 10, 240, 112),
         )
 
         self.assertIsNone(result)
@@ -3741,6 +4015,100 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_browser_url_bar_model_rect_highlights_address_edit(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Focus the URL bar.",
+                    "target": {"x": 10, "y": 10, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Address", "edit", (10, 10, 240, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 240, 32))
+
+    def test_browser_url_bar_broad_group_prefers_address_edit(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Focus the URL bar.",
+                    "target": {"x": 10, "y": 10, "width": 240, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Address", "edit", (10, 10, 240, 32)),
+                ControlCandidate("c002", "Search", "edit", (10, 50, 240, 32)),
+                ControlCandidate("c003", "Filter", "edit", (10, 90, 240, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 240, 32))
+
+    def test_button_control_suffix_model_rect_highlights_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this button control.",
+                    "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Submit", "button", (10, 10, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 120, 32))
+
+    def test_literal_edit_model_rect_highlights_edit(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this edit control.",
+                    "target": {"x": 10, "y": 10, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Search", "edit", (10, 10, 240, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 240, 32))
 
     def test_generic_slider_broad_group_rejects_multiple_sliders(self) -> None:
         from control_inventory import ControlCandidate
