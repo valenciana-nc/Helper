@@ -1743,6 +1743,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "confirm_alias_model_rect_highlights_ok_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 80, 32], "label": "OK"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Confirm.",
+                "target": {"x": 20, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "OK", "control_type": "button", "rect": [20, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "disclosure_broad_row_highlights_chevron_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 500, 80], "label": "Advanced settings"},
+                {"rect": [478, 106, 28, 28], "label": ">"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the chevron.",
+                "target": {"x": 20, "y": 80, "width": 500, "height": 80},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Advanced settings", "control_type": "listitem", "rect": [20, 80, 500, 80]},
+                {"id": "c002", "text": "Expand", "control_type": "button", "rect": [478, 106, 28, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [478, 106, 28, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

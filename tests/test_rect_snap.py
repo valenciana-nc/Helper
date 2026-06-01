@@ -1123,6 +1123,66 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (100, 200, 120, 32))
                 self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_common_button_aliases(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click Confirm.", "OK", (100, 200, 80, 32)),
+            ("Click Previous.", "Back", (100, 200, 80, 32)),
+            ("Click Continue.", "Next", (100, 200, 80, 32)),
+            ("Click Sign in.", "Log in", (100, 200, 100, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button(label, *rect)
+                window = _make_window("Dialog", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_prefers_disclosure_button_inside_broad_row(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click the chevron.", "Expand"),
+            ("Click the down arrow.", "Expand"),
+            ("Expand Advanced settings.", "Expand"),
+            ("Collapse Advanced settings.", "Collapse"),
+        )
+        for instruction, button_text in cases:
+            with self.subTest(instruction=instruction):
+                row = _make_button(
+                    "Advanced settings",
+                    20,
+                    80,
+                    500,
+                    80,
+                    control_type="ListItem",
+                )
+                button = _make_button(button_text, 480, 104, 28, 28)
+                window = _make_window("Settings", 0, 0, 800, 600, [row, button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (20, 80, 500, 80),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (480, 104, 28, 28))
+                self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1803,6 +1863,60 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_common_button_alias_target_ids_are_accepted(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Click Confirm.", "OK", "ok"),
+            ("Click Previous.", "Back", "back"),
+            ("Click Continue.", "Next", "next"),
+            ("Click Sign in.", "Log in", "login"),
+        )
+        for instruction, label, candidate_id in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id=candidate_id,
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(candidate_id, label, "button", (10, 10, 120, 32)),
+                    ],
+                    model_rect=(10, 10, 120, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.target_id, candidate_id)
+                self.assertFalse(result.rejected_reason)
+
+    def test_disclosure_target_id_inside_broad_row_accepts_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Click the chevron.", "Expand", "c002"),
+            ("Click the down arrow.", "Expand", "c002"),
+            ("Expand Advanced settings.", "Expand", "c002"),
+            ("Collapse Advanced settings.", "Collapse", "c003"),
+        )
+        for instruction, label, candidate_id in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id=candidate_id,
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "Advanced settings", "listitem", (10, 10, 500, 80)),
+                        ControlCandidate(candidate_id, label, "button", (468, 36, 28, 28)),
+                    ],
+                    model_rect=(10, 10, 500, 80),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.target_id, candidate_id)
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (468, 36, 28, 28))
 
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -2978,6 +3092,58 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.target_id, "c001")
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, (10, 10, 120, 32))
+
+    def test_snap_candidate_target_accepts_common_button_aliases(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Click Confirm.", "OK", "ok"),
+            ("Click Previous.", "Back", "back"),
+            ("Click Continue.", "Next", "next"),
+            ("Click Sign in.", "Log in", "login"),
+        )
+        for instruction, label, candidate_id in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate(candidate_id, label, "button", (10, 10, 120, 32)),
+                    ],
+                    model_rect=(10, 10, 120, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, candidate_id)
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_candidate_target_prefers_disclosure_button_inside_broad_row(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Click the chevron.", "Expand", "c002"),
+            ("Click the down arrow.", "Expand", "c002"),
+            ("Expand Advanced settings.", "Expand", "c002"),
+            ("Collapse Advanced settings.", "Collapse", "c003"),
+        )
+        for instruction, label, candidate_id in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", "Advanced settings", "listitem", (10, 10, 500, 80)),
+                        ControlCandidate(candidate_id, label, "button", (468, 36, 28, 28)),
+                    ],
+                    model_rect=(10, 10, 500, 80),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, candidate_id)
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, (468, 36, 28, 28))
 
     def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -4320,6 +4486,60 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_common_alias_model_rect_highlights_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Confirm.",
+                    "target": {"x": 120, "y": 160, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "OK", "button", (120, 160, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 80, 32))
+
+    def test_disclosure_broad_row_highlights_single_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the chevron.", "Expand", "c002"),
+            ("Expand Advanced settings.", "Expand", "c002"),
+            ("Collapse Advanced settings.", "Collapse", "c003"),
+        )
+        for instruction, label, candidate_id in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 120, "y": 160, "width": 500, "height": 80},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", "Advanced settings", "listitem", (120, 160, 500, 80)),
+                        ControlCandidate(candidate_id, label, "button", (578, 186, 28, 28)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, candidate_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (578, 186, 28, 28))
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate

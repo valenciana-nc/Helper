@@ -67,7 +67,7 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "toggle", "switch",
         "radio", "radiobutton", "splitbutton", "combo", "combobox", "dropdown",
         "slider", "spinner", "spinbox", "stepper",
-        "drop", "down", "arrow", "caret", "chevron",
+        "drop", "down",
         "open", "type", "enter", "into",
         "near", "beside", "nearby", "under", "above", "below",
         "top", "bottom", "left", "right", "upper", "lower",
@@ -181,6 +181,10 @@ _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _MENU_LAUNCHER_WORDS = frozenset(
     {"dot", "dots", "ellipsis", "kebab", "meatballs", "more", "overflow"}
 )
+_DISCLOSURE_INTENT_TYPES = frozenset({"button", "splitbutton"})
+_DISCLOSURE_INTENT_WORDS = frozenset(
+    {"arrow", "caret", "chevron", "collapse", "disclosure", "expand", "expander"}
+)
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
 _OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
 _OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
@@ -250,27 +254,45 @@ _SEPARATOR_RE = re.compile(r"[_\-.]+")
 _TOKEN_ALIASES = {
     "account": {"profile", "user"},
     "address": {"location", "url"},
+    "arrow": {"caret", "chevron", "collapse", "disclosure", "expand"},
     "avatar": {"account", "profile", "user"},
+    "back": {"previous"},
+    "caret": {"arrow", "chevron", "collapse", "disclosure", "expand"},
+    "chevron": {"arrow", "caret", "collapse", "disclosure", "expand"},
     "cog": {"options", "preferences", "settings"},
+    "collapse": {"arrow", "caret", "chevron", "disclosure"},
+    "confirm": {"ok", "okay"},
+    "continue": {"next", "proceed"},
     "dismiss": {"close"},
+    "disclosure": {"arrow", "caret", "chevron", "collapse", "expand"},
+    "expand": {"arrow", "caret", "chevron", "disclosure"},
     "find": {"search"},
     "gear": {"options", "preferences", "settings"},
     "lens": {"find", "search"},
     "location": {"address", "url"},
+    "log": {"login", "sign", "signin"},
+    "login": {"log", "sign", "signin"},
     "magnifier": {"find", "search"},
     "magnifying": {"find", "search"},
     "kebab": {"menu", "more", "options"},
     "menu": {"more", "options"},
     "meatballs": {"menu", "more", "options"},
     "more": {"menu", "options"},
+    "next": {"continue", "proceed"},
+    "ok": {"confirm", "okay"},
+    "okay": {"confirm", "ok"},
     "omnibox": {"address", "search", "url"},
     "options": {"preferences", "settings"},
     "overflow": {"menu", "more", "options"},
     "preferences": {"options", "settings"},
+    "previous": {"back"},
+    "proceed": {"continue", "next"},
     "profile": {"account", "user"},
     "remove": {"delete"},
     "search": {"find"},
     "settings": {"options", "preferences"},
+    "sign": {"log", "login", "signin"},
+    "signin": {"log", "login", "sign"},
     "user": {"account", "profile"},
     "ellipsis": {"more", "options", "menu"},
     "close": {"dismiss"},
@@ -866,6 +888,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         "drop" in raw_tokens and "down" in raw_tokens
     )
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
+    disclosure_requested = _disclosure_requested(raw_tokens)
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -908,6 +931,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_BUTTON_INTENT_TYPES)
     if "icon" in raw_tokens:
         intents.update(_ICON_INTENT_TYPES)
+    if disclosure_requested:
+        intents.update(_DISCLOSURE_INTENT_TYPES)
     if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
     if "tab" in raw_tokens:
@@ -961,6 +986,10 @@ def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
     if raw_tokens & _MENU_LAUNCHER_WORDS:
         return True
     return "three" in raw_tokens and bool(raw_tokens & {"dot", "dots"})
+
+
+def _disclosure_requested(raw_tokens: set[str]) -> bool:
+    return bool(raw_tokens & _DISCLOSURE_INTENT_WORDS)
 
 
 def _menu_segment_intent(control_intents: set[str]) -> bool:
