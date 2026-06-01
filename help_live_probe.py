@@ -25,8 +25,9 @@ def run_probe(
     max_candidates: int = 80,
     min_candidates: int = 1,
     min_actionable_candidates: int = 1,
-    candidate_retries: int = 2,
-    retry_delay_sec: float = 0.1,
+    candidate_retries: int = 4,
+    retry_delay_sec: float = 0.3,
+    candidate_timeout_ms: int = 1500,
 ) -> dict[str, Any]:
     if clean and artifacts_dir.exists():
         shutil.rmtree(artifacts_dir)
@@ -45,6 +46,7 @@ def run_probe(
             resolved_candidates = collect_control_candidates(
                 capture,
                 limit=max_candidates,
+                timeout_ms=max(0, candidate_timeout_ms),
             )[:max_candidates]
             failures, _actionable_count = _probe_failures(
                 capture,
@@ -228,8 +230,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-candidates", type=int, default=80)
     parser.add_argument("--min-candidates", type=int, default=1)
     parser.add_argument("--min-actionable-candidates", type=int, default=1)
-    parser.add_argument("--candidate-retries", type=int, default=2)
-    parser.add_argument("--retry-delay-sec", type=float, default=0.1)
+    parser.add_argument("--candidate-retries", type=int, default=4)
+    parser.add_argument("--retry-delay-sec", type=float, default=0.3)
+    parser.add_argument("--candidate-timeout-ms", type=int, default=1500)
     args = parser.parse_args(argv)
 
     summary = run_probe(
@@ -240,6 +243,7 @@ def main(argv: list[str] | None = None) -> int:
         min_actionable_candidates=args.min_actionable_candidates,
         candidate_retries=args.candidate_retries,
         retry_delay_sec=args.retry_delay_sec,
+        candidate_timeout_ms=args.candidate_timeout_ms,
     )
     print(
         "Help live probe: "

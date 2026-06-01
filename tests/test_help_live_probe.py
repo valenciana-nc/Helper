@@ -171,6 +171,28 @@ class HelpLiveProbeTests(unittest.TestCase):
         self.assertEqual(payload["collection_attempts"], 2)
         self.assertEqual(payload["candidates"][0]["id"], "c001")
 
+    def test_run_probe_passes_collection_timeout_to_inventory(self) -> None:
+        from help_live_probe import run_probe
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch(
+                "help_live_probe.collect_control_candidates",
+                return_value=[],
+            ) as collect:
+                summary = run_probe(
+                    artifacts_dir=root,
+                    capture_provider=_capture,
+                    candidate_retries=0,
+                    candidate_timeout_ms=2345,
+                    min_candidates=0,
+                    min_actionable_candidates=0,
+                )
+
+        self.assertTrue(summary["passed"])
+        self.assertEqual(collect.call_count, 1)
+        self.assertEqual(collect.call_args.kwargs["timeout_ms"], 2345)
+
 
 if __name__ == "__main__":
     unittest.main()
