@@ -337,6 +337,25 @@ _DISCLOSURE_INTENT_WORDS = frozenset(
     {"arrow", "caret", "chevron", "collapse", "disclosure", "expand", "expander"}
 )
 _DROPDOWN_INTENT_TYPES = frozenset({"combobox", "menuitem", "splitbutton"})
+_PICKER_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton", "edit", "combobox"})
+_PICKER_LAUNCHER_WORDS = frozenset({"chooser", "picker", "selector"})
+_PICKER_LAUNCHER_CONTEXT_WORDS = frozenset(
+    {
+        "avatar",
+        "calendar",
+        "color",
+        "colour",
+        "date",
+        "directory",
+        "file",
+        "folder",
+        "image",
+        "month",
+        "photo",
+        "picture",
+        "time",
+    }
+)
 _SELECTOR_INTENT_TYPES = frozenset({"combobox"})
 _SELECTOR_INTENT_WORDS = frozenset({"picker", "selector"})
 _SELECTOR_BLOCKING_WORDS = frozenset(
@@ -1648,6 +1667,7 @@ def _instruction_control_intents(instruction: str) -> set[str]:
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
+    picker_launcher_requested = _picker_launcher_requested(raw_tokens)
     selector_requested = _selector_requested(raw_tokens)
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
     disclosure_requested = _disclosure_requested(raw_tokens)
@@ -1676,6 +1696,8 @@ def _instruction_control_intents(instruction: str) -> set[str]:
         intents.add("combobox")
     if dropdown_requested:
         intents.update(_DROPDOWN_INTENT_TYPES)
+    if picker_launcher_requested:
+        intents.update(_PICKER_LAUNCHER_INTENT_TYPES)
     if selector_requested:
         intents.update(_SELECTOR_INTENT_TYPES)
     if "slider" in raw_tokens:
@@ -1757,9 +1779,17 @@ def _disclosure_requested(raw_tokens: set[str]) -> bool:
 
 
 def _selector_requested(raw_tokens: set[str]) -> bool:
+    if _picker_launcher_requested(raw_tokens):
+        return False
     return bool(raw_tokens & _SELECTOR_INTENT_WORDS) and not bool(
         raw_tokens & _SELECTOR_BLOCKING_WORDS
     )
+
+
+def _picker_launcher_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _PICKER_LAUNCHER_WORDS):
+        return False
+    return bool(raw_tokens & _PICKER_LAUNCHER_CONTEXT_WORDS)
 
 
 def _candidate_matches_control_intent(

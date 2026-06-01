@@ -1225,6 +1225,32 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 120, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_contextual_picker_launcher_buttons(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Open the Date picker.", "Date", (100, 200, 120, 32)),
+            ("Click the Calendar picker.", "Calendar", (100, 200, 140, 32)),
+            ("Open the Color picker.", "Color", (100, 200, 120, 32)),
+            ("Click the File picker.", "Choose file", (100, 200, 140, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction):
+                button = _make_button(label, *rect)
+                window = _make_window("Form", 0, 0, 800, 600, [button])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+
     def test_snap_rejects_multiple_checkboxes_inside_loose_row(self) -> None:
         from rect_snap import snap_to_control
 
@@ -2020,6 +2046,32 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.source, "target_id")
         self.assertFalse(result.rejected_reason)
+
+    def test_contextual_picker_launcher_target_ids_accept_buttons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        cases = (
+            ("Open the Date picker.", "Date"),
+            ("Click the Calendar picker.", "Calendar"),
+            ("Open the Color picker.", "Color"),
+            ("Click the File picker.", "Choose file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="c001",
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (10, 10, 140, 32)),
+                    ],
+                    model_rect=(10, 10, 140, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
 
     def test_generic_field_target_id_accepts_edit_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -3296,6 +3348,31 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
+
+    def test_snap_candidate_target_accepts_contextual_picker_launcher_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        cases = (
+            ("Open the Date picker.", "Date"),
+            ("Click the Calendar picker.", "Calendar"),
+            ("Open the Color picker.", "Color"),
+            ("Click the File picker.", "Choose file"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[
+                        ControlCandidate("c001", label, "button", (10, 10, 140, 32)),
+                    ],
+                    model_rect=(10, 10, 140, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, "c001")
+                self.assertFalse(result.rejected_reason)
 
     def test_snap_candidate_target_accepts_generic_field_containing_clear_action(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -4741,6 +4818,29 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 220, 32))
+
+    def test_contextual_picker_model_rect_highlights_launcher_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open the Date picker.",
+                    "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Date", "button", (120, 160, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 120, 32))
 
     def test_splitbutton_model_rect_highlights_dropdown_segment(self) -> None:
         from control_inventory import ControlCandidate

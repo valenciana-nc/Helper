@@ -1831,6 +1831,49 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "date_picker_model_rect_highlights_launcher_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Date"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Date picker.",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Date", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "file_picker_target_id_highlights_launcher_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Choose file"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the File picker.",
+                "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Choose file", "control_type": "button", "rect": [20, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "splitbutton_dropdown_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
