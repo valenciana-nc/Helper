@@ -38,6 +38,7 @@ WINDOW_TITLE_PREFIX = "Helper Precision Self Test"
 TARGET_TEXT = "Save changes"
 CHILD_READY_SETTLE_SEC = 0.25
 TARGET_WAIT_TIMEOUT_SEC = 5.0
+SELFTEST_CANDIDATE_LIMIT = max(MAX_CANDIDATES, 200)
 
 
 def run_selftest(
@@ -459,7 +460,12 @@ def _wait_for_target_candidate(
     stable_rect: tuple[int, int, int, int] | None = None
     while True:
         capture = capture_active_monitor()
-        candidates = collect_control_candidates(capture, timeout_ms=1500, limit=MAX_CANDIDATES)
+        candidates = collect_control_candidates(
+            capture,
+            timeout_ms=1500,
+            limit=SELFTEST_CANDIDATE_LIMIT,
+            foreground_handle_provider=_ignore_foreground_window,
+        )
         target = _find_target_candidate(candidates, title=title)
         last = (capture, candidates, target)
         if target is not None:
@@ -469,6 +475,10 @@ def _wait_for_target_candidate(
         if time.monotonic() >= deadline:
             return last
         time.sleep(0.15)
+
+
+def _ignore_foreground_window() -> int | None:
+    return None
 
 
 def _decision_for_candidate(capture: Capture, candidate: ControlCandidate):

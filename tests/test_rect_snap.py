@@ -172,6 +172,20 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue({"bookmark", "favorite", "star"}.issubset(bookmark_tokens))
         self.assertTrue({"bookmark", "favorite", "star"}.issubset(star_tokens))
 
+    def test_notification_action_aliases_expand_to_bell_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        bell_tokens = tokenize_instruction("Click the bell")
+        notifications_tokens = tokenize_instruction("Open notifications")
+        alerts_tokens = tokenize_instruction("Open alerts")
+        control_tokens = tokenize_control("Bell")
+
+        expected = {"alerts", "bell", "notification", "notifications"}
+        self.assertTrue(expected.issubset(bell_tokens))
+        self.assertTrue(expected.issubset(notifications_tokens))
+        self.assertTrue(expected.issubset(alerts_tokens))
+        self.assertTrue(expected.issubset(control_tokens))
+
     def test_symbol_only_control_text_yields_semantic_tokens(self) -> None:
         from help_intents import tokens_from_text
 
@@ -184,6 +198,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
             ("\u2699", {"cog", "gear", "options", "preferences", "settings"}),
             ("\u2606", {"bookmark", "favorite", "star"}),
             ("\u2665", {"favorite", "heart"}),
+            ("\U0001f514", {"alerts", "bell", "notification", "notifications", "notify"}),
             ("\U0001f50d", {"find", "lens", "magnifier", "magnifying", "search"}),
         )
         for text, expected in cases:
@@ -5259,6 +5274,82 @@ class HelpTargetHarnessTests(unittest.TestCase):
             [
                 ControlCandidate("c001", "Star", "button", (120, 160, 100, 32)),
                 ControlCandidate("c002", "Favorite", "button", (280, 160, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "c001")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_notification_action_alias_target_id_accepts_bell_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the bell.", "Notifications", (120, 160, 140, 32)),
+            ("Open notifications.", "Bell", (120, 160, 100, 32)),
+            ("Open alerts.", "Bell", (120, 160, 100, 32)),
+            ("Open notifications.", "\U0001f514", (120, 160, 32, 32)),
+        )
+        for instruction, label, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", rect)],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_notification_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the bell.",
+                    "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Notifications", "button", (120, 160, 140, 32)),
+                ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 140, 32))
+
+    def test_notification_alias_rejects_ambiguous_bell_and_notifications_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open notifications.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Bell", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Notifications", "button", (280, 160, 140, 32)),
             ],
         )
 
