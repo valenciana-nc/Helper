@@ -161,6 +161,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("reload", tokenize_instruction("Refresh the page"))
         self.assertIn("refresh", tokenize_control("Reload"))
 
+    def test_send_action_aliases_expand_to_submit_language(self) -> None:
+        from help_intents import tokenize_instruction, tokenize_control
+
+        self.assertIn("submit", tokenize_instruction("Send the message"))
+        self.assertIn("plane", tokenize_instruction("Send the message"))
+        self.assertIn("send", tokenize_instruction("Submit the form"))
+        self.assertIn("send", tokenize_control("Submit"))
+        self.assertIn("submit", tokenize_control("Send"))
+        self.assertIn("send", tokenize_control("Paper plane"))
+
     def test_favorite_action_aliases_expand_to_star_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -5204,6 +5214,113 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_send_action_alias_target_id_accepts_submit_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Send the message.", "Submit"),
+            ("Submit the form.", "Send"),
+            ("Send the message.", "Paper plane"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "c001",
+                        }
+                    ),
+                    self._capture(),
+                    [ControlCandidate("c001", label, "button", (120, 160, 100, 32))],
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_send_action_alias_text_match_overrides_wrong_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Send the message.", "Submit"),
+            ("Submit the form.", "Send"),
+            ("Send message.", "Paper plane"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 300, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("c001", label, "button", (120, 160, 100, 32)),
+                        ControlCandidate("c002", "Cancel", "button", (300, 160, 100, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "c001")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_send_action_alias_text_match_overrides_message_field_geometry(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Send message.",
+                    "target": {"x": 300, "y": 160, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Paper plane", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Message", "edit", (300, 160, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c001")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (120, 160, 100, 32))
+
+    def test_send_alias_prefers_exact_send_over_submit_alias(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Send the message.",
+                    "target_id": "c001",
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c001", "Submit", "button", (120, 160, 100, 32)),
+                ControlCandidate("c002", "Send", "button", (280, 160, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (280, 160, 100, 32))
 
     def test_favorite_action_alias_target_id_accepts_star_button(self) -> None:
         from control_inventory import ControlCandidate

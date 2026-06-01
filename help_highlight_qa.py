@@ -1476,6 +1476,138 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "send_action_target_id_accepts_submit_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Submit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send the message.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Submit", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "submit_action_target_id_accepts_send_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Send"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Submit the form.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Send", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "send_action_text_match_overrides_wrong_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Submit"},
+                {"rect": [180, 80, 100, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send the message.",
+                "target": {"x": 180, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Submit", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "send_action_alias_prefers_exact_send_over_submit_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Submit"},
+                {"rect": [180, 80, 100, 32], "label": "Send"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send the message.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Submit", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Send", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rect": [180, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "send_action_target_id_accepts_paper_plane_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Paper plane"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send message.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Paper plane", "control_type": "button", "rect": [20, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "send_message_text_match_overrides_message_field_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Paper plane"},
+                {"rect": [180, 80, 220, 32], "label": "Message"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Send message.",
+                "target": {"x": 180, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Paper plane", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "c002", "text": "Message", "control_type": "edit", "rect": [180, 80, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "favorite_action_target_id_accepts_star_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
