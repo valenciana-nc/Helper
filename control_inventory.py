@@ -2881,9 +2881,13 @@ def _candidate_context_tokens(candidate: ControlCandidate) -> set[str]:
 
 
 def _literal_words_from_text(text: str) -> set[str]:
+    return set(_literal_word_sequence(text))
+
+
+def _literal_word_sequence(text: str) -> list[str]:
     spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
     spaced = re.sub(r"[_\-.]+", " ", spaced)
-    return set(re.findall(r"[a-z0-9]+", spaced.lower()))
+    return re.findall(r"[a-z0-9]+", spaced.lower())
 
 
 def _is_x_symbol_text(text: str) -> bool:
@@ -4056,7 +4060,100 @@ def _contained_row_action_context_mismatch(
         if instruction_objects & row_objects:
             return False
         return True
+    if (
+        _instruction_requests_contained_row_action(instruction)
+        and _contained_row_action_candidate_matches(
+            candidate,
+            _tokenize_instruction(instruction),
+        )
+    ):
+        row_objects = _contained_row_context_objects(candidate, candidates)
+        if not row_objects:
+            return False
+        instruction_objects = _instruction_contained_row_context_objects(instruction, candidate)
+        if not instruction_objects:
+            return False
+        if instruction_objects & row_objects:
+            return False
+        return True
     return False
+
+
+def _instruction_contained_row_context_objects(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    if not words:
+        return set()
+    candidate_words = (
+        _literal_words_from_text(candidate.descriptor)
+        | _candidate_visible_text_tokens(candidate)
+    )
+    ignored_words = (
+        candidate_words
+        | CONTEXTUAL_DUPLICATE_STOPWORDS
+        | ROW_CONTEXT_GENERIC_WORDS
+        | CLEAR_CONTEXT_WORDS
+    )
+    context_words: set[str] = set()
+    boundary_words = frozenset(
+        {
+            "a",
+            "an",
+            "by",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "of",
+            "on",
+            "the",
+            "this",
+            "that",
+            "to",
+            "with",
+            "within",
+        }
+    )
+    position_only_words = CONTEXTUAL_DUPLICATE_POSITION_WORDS - frozenset(
+        {"1", "2", "3", "4", "5"}
+    )
+    for index, word in enumerate(words):
+        if word not in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+            continue
+        before: list[str] = []
+        cursor = index - 1
+        while cursor >= 0:
+            token = words[cursor]
+            if token in boundary_words:
+                break
+            if token not in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+                before.append(token)
+            cursor -= 1
+        before.reverse()
+
+        after: list[str] = []
+        cursor = index + 1
+        if cursor < len(words) and words[cursor] in boundary_words:
+            cursor += 1
+            while cursor < len(words):
+                token = words[cursor]
+                if token in boundary_words or token in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+                    break
+                after.append(token)
+                cursor += 1
+
+        span_words = before or after
+        if not span_words:
+            continue
+        filtered = {token for token in span_words if token not in ignored_words}
+        if not filtered:
+            continue
+        if filtered <= position_only_words:
+            continue
+        context_words.update(filtered)
+    return _object_token_variants(context_words)
 
 
 def _contained_row_context_objects(
@@ -5277,6 +5374,8 @@ def _candidate_snap_score(
         model_rect=model_rect,
         suppress_for_stronger_geometry=False,
     )
+    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
             selected=candidate,
