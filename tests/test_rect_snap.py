@@ -7589,6 +7589,31 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
 
+    def test_open_wrong_target_id_recovers_from_publish_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open project.",
+                    "target_id": "publish",
+                    "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("publish", "Publish project", "button", (20, 20, 120, 32)),
+                ControlCandidate("open", "Open project", "button", (180, 20, 120, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "open")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (180, 20, 120, 32))
+
     def test_button_wording_recovers_to_plain_button_from_splitbutton(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -19212,6 +19237,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "Project settings",
             "Project options",
             "Project dashboard",
+            "Project billing",
+            "Project logs",
             "Project page",
             "Project profile",
             "Project properties",
@@ -19273,6 +19300,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
             assert target is not None
             self.assertEqual(target.target_id, "settings")
             self.assertFalse(target.rejected_reason)
+
+    def test_open_destination_rejects_different_destination_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        labels = (
+            "Project dashboard",
+            "Project billing",
+            "Project logs",
+        )
+        for label in labels:
+            with self.subTest(label=label):
+                candidates = [
+                    ControlCandidate("destination", label, "button", (100, 100, 160, 32)),
+                ]
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction="Open project settings.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction="Open project settings.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Open project settings.",
+                            "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNone(text_target)
+                self.assertIsNotNone(snap_target)
+                assert snap_target is not None
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "candidate semantic mismatch")
 
     def test_selected_file_actions_prefer_exact_action_over_alias_neighbor(self) -> None:
         from control_inventory import ControlCandidate

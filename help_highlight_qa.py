@@ -107,6 +107,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "open_wrong_target_id_recovers_from_publish_action",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Publish project"},
+                {"rect": [180, 20, 120, 32], "label": "Open project"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open project.",
+                "target_id": "publish",
+                "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "publish", "text": "Publish project", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "open", "text": "Open project", "control_type": "button", "rect": [180, 20, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "open",
+                "rect": [180, 20, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "wrong_target_id_recovers_by_geometry_when_text_ambiguous",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -503,6 +527,46 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "candidate_snap",
                 "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "destructive_action_rejects_object_destination_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 140, 32], "label": "Project billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete project.",
+                "target": {"x": 100, "y": 100, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "billing", "text": "Project billing", "control_type": "button", "rect": [100, 100, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "open_destination_rejects_different_destination_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 160, 32], "label": "Project dashboard"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open project settings.",
+                "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "dashboard", "text": "Project dashboard", "control_type": "button", "rect": [100, 100, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate semantic mismatch",
                 "overlay_emitted": False,
             },
         },

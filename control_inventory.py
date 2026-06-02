@@ -805,6 +805,7 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"print", "printer"}),
     frozenset({"accept", "allow", "approve"}),
     frozenset({"decline", "deny", "reject"}),
+    frozenset({"publish", "release"}),
     frozenset({"refresh", "reload"}),
     frozenset({"share"}),
     frozenset({"sort"}),
@@ -829,6 +830,7 @@ OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"print", "printer"}),
     frozenset({"decline", "deny", "reject"}),
+    frozenset({"publish", "release"}),
     frozenset({"share"}),
 )
 GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES
@@ -5480,6 +5482,22 @@ def _browser_extension_access_action_mismatch(
     return True
 
 
+def _browser_extension_access_action_match(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_browser_extension_access_button(candidate):
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (
+        instruction_tokens & BROWSER_EXTENSION_ACCESS_CONTEXT_WORDS
+        or raw_tokens & BROWSER_EXTENSION_ACCESS_LABEL_STOPWORDS
+    ):
+        return False
+    return _instruction_names_browser_extension_access_target(instruction, candidate)
+
+
 def _looks_like_browser_extension_access_button(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"button", "splitbutton"}:
         return False
@@ -6132,7 +6150,8 @@ def _explicit_action_context_mismatch(
 ) -> bool:
     instruction_tokens = _tokenize_instruction(instruction)
     return (
-        _edit_action_context_mismatch(instruction, candidate)
+        _open_destination_context_mismatch(instruction, candidate)
+        or _edit_action_context_mismatch(instruction, candidate)
         or _candidate_edit_action_context_mismatch(instruction, candidate.descriptor)
         or _candidate_action_for_open_view_mismatch(instruction, candidate.descriptor)
         or _candidate_action_for_generic_object_request_mismatch(
@@ -6274,6 +6293,48 @@ def _candidate_action_for_generic_object_request_mismatch(
         if instruction_objects & candidate_objects:
             return True
     return False
+
+
+def _open_destination_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_raw_tokens = _tokens_from_text(instruction)
+    if not (instruction_raw_tokens & OPEN_VIEW_REQUEST_WORDS):
+        return False
+    requested_destinations = instruction_raw_tokens & (
+        NEUTRAL_ACTION_DESTINATION_WORDS
+        - frozenset({"menu", "menus", "page", "pages", "panel", "panels"})
+    )
+    if not requested_destinations:
+        return False
+    requested_destination_variants = _object_token_variants(
+        _expand_token_aliases(set(requested_destinations))
+    )
+    candidate_tokens = (
+        _candidate_semantic_tokens(candidate)
+        | _tokens_from_text(candidate.descriptor)
+        | _expand_token_aliases(_tokens_from_text(candidate.descriptor))
+    )
+    if _object_token_variants(candidate_tokens) & requested_destination_variants:
+        return False
+    instruction_tokens = _tokenize_instruction(instruction) | instruction_raw_tokens
+    instruction_objects = _object_token_variants(
+        instruction_tokens
+        - requested_destination_variants
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - ACTION_OBJECT_STOPWORDS
+        - GENERIC_OBJECT_REQUEST_STOPWORDS
+    )
+    if not instruction_objects:
+        return False
+    candidate_variants = _object_token_variants(candidate_tokens)
+    if not (candidate_variants & instruction_objects):
+        return False
+    if requested_destinations & SETTINGS_REQUEST_WORDS and candidate_tokens & {"configure", "manage"}:
+        return False
+    return True
 
 
 def _filter_reset_action_mismatch(
@@ -6539,6 +6600,8 @@ def _object_only_action_context_mismatch(
         candidate_objects = _object_token_variants(candidate_raw_tokens & instruction_objects)
         if not candidate_objects:
             continue
+        if _browser_extension_access_action_match(instruction, instruction_raw_tokens, candidate):
+            return False
         candidate_non_objects = (
             candidate_raw_tokens
             - instruction_objects
@@ -6546,6 +6609,8 @@ def _object_only_action_context_mismatch(
             - FILE_IDENTITY_WORDS
         )
         if not candidate_non_objects:
+            return True
+        if not (candidate_raw_tokens & set().union(*EXCLUSIVE_ACTION_FAMILIES)):
             return True
         if not (candidate_non_objects - NEUTRAL_ACTION_DESTINATION_WORDS):
             return True
