@@ -9661,6 +9661,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
+    def test_duplicate_named_row_context_stays_ambiguous_without_position(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("alice_a", "Alice", "listitem", (20, 80, 500, 60)),
+            ControlCandidate("edit_a", "Edit", "button", (440, 95, 60, 30)),
+            ControlCandidate("alice_b", "Alice", "listitem", (20, 160, 500, 60)),
+            ControlCandidate("edit_b", "Edit", "button", (440, 175, 60, 30)),
+        ]
+        instruction = "Edit Alice row."
+
+        target_id = resolve_candidate_target(
+            target_id="edit_a",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(440, 95, 60, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(440, 95, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "edit_a",
+                    "target": {"x": 440, "y": 95, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
+    def test_below_positional_duplicate_rejects_upper_target_id_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("save_top", "Save", "button", (100, 100, 80, 32)),
+            ControlCandidate("save_below", "Save", "button", (100, 180, 80, 32)),
+        ]
+        instruction = "Click the Save below."
+
+        target_id = resolve_candidate_target(
+            target_id="save_top",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "save_top",
+                    "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(snap_target.target_id, "save_below")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.target_id, "save_below")
+        self.assertFalse(help_target.rejected_reason)
+
     def test_ambiguous_text_match_without_target_id_blocks_geometry_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -9880,6 +9960,107 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "Bob",
                 "cell",
                 (100, 90, 120, 32),
+                window_title="Orders",
+                window_rank=0,
+            ),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_table_cell_moved_to_background_window(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click this table cell.",
+                "target_id": "cell_0_0",
+                "target": {"x": 100, "y": 90, "width": 120, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "cell_0_0",
+                "Alice",
+                "cell",
+                (100, 90, 120, 32),
+                window_title="Orders",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate("modal", "Confirm dialog", "window", (80, 70, 360, 180), window_rank=0),
+            ControlCandidate(
+                "cell_0_0",
+                "Alice",
+                "cell",
+                (100, 90, 120, 32),
+                window_title="Orders",
+                window_rank=2,
+            ),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_headeritem_identity_change(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click this column header.",
+                "target_id": "col_0",
+                "target": {"x": 100, "y": 80, "width": 180, "height": 36},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "col_0",
+                "Status",
+                "headeritem",
+                (100, 80, 180, 36),
+                window_title="Orders",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "col_0",
+                "Amount",
+                "headeritem",
+                (100, 80, 180, 36),
                 window_title="Orders",
                 window_rank=0,
             ),

@@ -4456,6 +4456,14 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _same_contextual_duplicate_request_ambiguous(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _implicit_cell_target_request_matches(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _segmented_control_button_alternative_mismatch(
@@ -4465,14 +4473,6 @@ def _target_id_plausibility(
         candidates,
     ):
         return False, max(text_score, geometry_score), "target_id semantic mismatch"
-    if _same_contextual_duplicate_request_ambiguous(
-        instruction,
-        instruction_tokens,
-        candidate,
-        candidates,
-        control_intents,
-    ):
-        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _contextual_action_candidate_matches_surface_request(
         instruction,
         instruction_tokens,
@@ -9863,13 +9863,7 @@ def _context_carrier_rect_matches_action(
     context: ControlCandidate,
     action: ControlCandidate,
 ) -> bool:
-    return (
-        _contains_rect(_expand_rect(context.rect, 4), action.rect)
-        or _row_action_context_rect_matches(
-            context,
-            action,
-        )
-    )
+    return _contains_rect(_expand_rect(context.rect, 4), action.rect)
 
 
 def _contextual_action_candidate_matches_surface_request(
@@ -10954,9 +10948,10 @@ def _candidate_satisfies_positional_action_duplicate_request(
 
 def _positional_action_request_tokens(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & POSITIONAL_DUPLICATE_REQUEST_WORDS):
+    terminal_positions = _terminal_relative_position_request_tokens(instruction)
+    if not (raw_tokens & POSITIONAL_DUPLICATE_REQUEST_WORDS) and not terminal_positions:
         return set()
-    requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+    requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS) | terminal_positions
     if raw_tokens & {"arrow", "caret", "chevron"}:
         requested -= {"left", "right"}
     return requested
@@ -10972,7 +10967,10 @@ def _positional_action_request_tokens_for_candidate(
     if requested:
         return requested
     raw_tokens = _tokens_from_text(instruction)
-    requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+    requested = (
+        set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+        | _terminal_relative_position_request_tokens(instruction)
+    )
     if raw_tokens & {"arrow", "caret", "chevron"}:
         requested -= {"left", "right"}
     if not requested:
@@ -10983,6 +10981,18 @@ def _positional_action_request_tokens_for_candidate(
     if len(_positional_action_duplicate_candidates(candidate, candidates, request_tokens)) < 2:
         return set()
     return requested
+
+
+def _terminal_relative_position_request_tokens(instruction: str) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    if not words:
+        return set()
+    last = words[-1]
+    if last in {"below", "beneath"}:
+        return {"lower"}
+    if last in {"above", "over"}:
+        return {"upper"}
+    return set()
 
 
 def _positional_action_duplicate_position_tokens(

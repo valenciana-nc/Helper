@@ -272,6 +272,21 @@ def evaluate_target_quality(
         and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
         and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
         and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+        and _has_adjacent_selection_indicator(capture.png_bytes, clipped, target_control_type)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        _candidate_boundary_alignment_target(source, target_control_type)
+        and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
         and _has_visible_enclosing_boundary_outside(capture.png_bytes, clipped)
     ):
         return TargetQuality(
@@ -609,6 +624,54 @@ def _has_visible_enclosing_boundary_outside(
             return True
     except Exception:
         return False
+
+
+def _has_adjacent_selection_indicator(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    target_control_type: str,
+) -> bool:
+    if target_control_type.lower() not in {"checkbox", "radiobutton"}:
+        return False
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            image = img.convert("L")
+            x, y, width, height = rect
+            if width < 16 or height < 8:
+                return False
+            center_y = y + height // 2
+            max_size = max(12, min(32, height + 8))
+            min_size = max(10, min(18, height))
+            for size in range(min_size, max_size + 1, 2):
+                top_start = center_y - size // 2 - 6
+                top_stop = center_y - size // 2 + 7
+                for top in range(top_start, top_stop):
+                    for gap in range(2, 25):
+                        left_rect = (x - gap - size, top, size, size)
+                        right_rect = (x + width + gap, top, size, size)
+                        if _selection_indicator_rect_matches(image, left_rect):
+                            return True
+                        if _selection_indicator_rect_matches(image, right_rect):
+                            return True
+            return False
+    except Exception:
+        return False
+
+
+def _selection_indicator_rect_matches(
+    image: Image.Image,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    x, y, width, height = rect
+    if x < 0 or y < 0 or x + width > image.width or y + height > image.height:
+        return False
+    if abs(width - height) > max(2, min(width, height) // 5):
+        return False
+    crop = image.crop((x, y, x + width, y + height))
+    if _boundary_activity(crop) < MODEL_BOUNDARY_ACTIVITY_FLOOR:
+        return False
+    scores = _boundary_crossing_scores(image, rect)
+    return len(scores) >= 4 and all(score >= MODEL_BOUNDARY_ALIGNMENT_FLOOR for score in scores)
 
 
 def _strongest_vertical_edge_line(

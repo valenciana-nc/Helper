@@ -68,9 +68,21 @@ ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 ROW_REVALIDATION_GENERIC_WORDS = frozenset(
     {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
 )
-CELL_REVALIDATION_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
-CELL_REVALIDATION_GENERIC_WORDS = frozenset(
-    {"cell", "datagridcell", "gridcell", "table"}
+TABULAR_REVALIDATION_CONTROL_TYPES = frozenset(
+    {"cell", "datagridcell", "gridcell", "headeritem", "rowheader"}
+)
+TABULAR_REVALIDATION_GENERIC_WORDS = frozenset(
+    {
+        "cell",
+        "column",
+        "datagridcell",
+        "gridcell",
+        "header",
+        "headeritem",
+        "heading",
+        "rowheader",
+        "table",
+    }
 )
 ACTION_REVALIDATION_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
@@ -690,7 +702,14 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
-    if _revalidated_cell_identity_changed(
+    if _revalidated_tabular_identity_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_tabular_window_context_changed(
         previous_target,
         target,
         previous_candidates or [],
@@ -825,7 +844,7 @@ def _row_identity_tokens(text: str) -> set[str]:
     return _tokenize_control(text or "") - ROW_REVALIDATION_GENERIC_WORDS
 
 
-def _revalidated_cell_identity_changed(
+def _revalidated_tabular_identity_changed(
     previous_target: TargetResolution,
     target: TargetResolution,
     previous_candidates: list[ControlCandidate],
@@ -837,12 +856,12 @@ def _revalidated_cell_identity_changed(
     current = _revalidation_candidate_for_target(target, candidates)
     if previous is None or current is None:
         return False
-    if previous.control_type not in CELL_REVALIDATION_CONTROL_TYPES:
+    if previous.control_type not in TABULAR_REVALIDATION_CONTROL_TYPES:
         return False
-    if current.control_type not in CELL_REVALIDATION_CONTROL_TYPES:
+    if current.control_type not in TABULAR_REVALIDATION_CONTROL_TYPES:
         return False
-    previous_tokens = _cell_identity_tokens(previous_target.matched_text or previous.text)
-    current_tokens = _cell_identity_tokens(target.matched_text or current.text)
+    previous_tokens = _tabular_identity_tokens(previous_target.matched_text or previous.text)
+    current_tokens = _tabular_identity_tokens(target.matched_text or current.text)
     if not previous_tokens or not current_tokens:
         return False
     overlap = previous_tokens & current_tokens
@@ -850,10 +869,29 @@ def _revalidated_cell_identity_changed(
     return similarity < 0.5
 
 
-def _cell_identity_tokens(text: str) -> set[str]:
+def _revalidated_tabular_window_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type not in TABULAR_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current.control_type not in TABULAR_REVALIDATION_CONTROL_TYPES:
+        return False
+    return previous.window_rank != current.window_rank
+
+
+def _tabular_identity_tokens(text: str) -> set[str]:
     return (
         _tokenize_control(text or "") | _tokens_from_text(text or "")
-    ) - CELL_REVALIDATION_GENERIC_WORDS
+    ) - TABULAR_REVALIDATION_GENERIC_WORDS
 
 
 def _revalidated_action_identity_changed(

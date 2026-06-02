@@ -1258,6 +1258,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "candidate_checkbox_label_only_rect_rejects_overlay",
+            "capture": {"width": 260, "height": 160},
+            "draw": [
+                {"rect": [40, 76, 18, 18], "label": "", "fill": "white"},
+                {"kind": "text", "rect": [70, 76, 120, 20], "label": "I agree to terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check I agree to terms.",
+                "target_id": "agree",
+                "target": {"x": 68, "y": 72, "width": 112, "height": 28},
+            },
+            "candidates": [
+                {
+                    "id": "agree",
+                    "text": "I agree to terms",
+                    "control_type": "checkbox",
+                    "rect": [68, 72, 112, 28],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target boundary misaligned",
+                "rejected_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
