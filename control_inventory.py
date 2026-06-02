@@ -44,6 +44,7 @@ FOREGROUND_RANK_BONUS = 0.10
 FOREGROUND_SNAP_CONFLICT_GAP = 0.35
 MIN_TOPMOST_SAMPLE_FRACTION = 0.50
 DISMISS_DIALOG_CONTEXT_WORDS = frozenset({"dialog", "modal", "popup"})
+BACKGROUND_TRANSIENT_POSITION_WORDS = frozenset({"behind", "under", "underneath"})
 DISMISS_WINDOW_CONTEXT_WORDS = frozenset({"browser", "page", "tab", "window"})
 CLEAR_CLOSE_WORDS = frozenset({"cancel", "close", "dismiss"})
 CLEAR_CONTEXT_CONTROL_TYPES = frozenset({"combobox", "edit"})
@@ -2208,7 +2209,7 @@ def _first_distinct_ranked_candidate(
     selected: ControlCandidate,
 ) -> tuple[float, ControlCandidate] | None:
     for score, candidate in ranked:
-        if _same_visual_candidate(candidate, selected):
+        if _same_visual_and_context_candidate(candidate, selected):
             continue
         return (score, candidate)
     return None
@@ -2412,6 +2413,8 @@ def _text_match_score(
     if _browser_profile_page_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_chrome_app_context_mismatch(instruction, candidate):
+        return 0.0
+    if _background_transient_surface_target_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
@@ -2791,6 +2794,8 @@ def _context_text_match_score(
     if _browser_profile_page_action_mismatch(instruction, candidate):
         return 0.0
     if _browser_chrome_app_context_mismatch(instruction, candidate):
+        return 0.0
+    if _background_transient_surface_target_mismatch(instruction, candidate, candidates):
         return 0.0
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return 0.0
@@ -3325,6 +3330,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _browser_chrome_app_context_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _background_transient_surface_target_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4336,6 +4347,32 @@ def _browser_chrome_app_context_mismatch(
     if not (explicit_app_local or _instruction_requests_app_local_surface(instruction, raw_tokens)):
         return False
     return _looks_like_browser_chrome_surface(candidate)
+
+
+def _background_transient_surface_target_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & BACKGROUND_TRANSIENT_POSITION_WORDS):
+        return False
+    if not (raw_tokens & (UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS | DISMISS_DIALOG_CONTEXT_WORDS)):
+        return False
+    if not candidates:
+        return False
+    foreground_rank = min(item.window_rank for item in candidates)
+    if candidate.window_rank <= foreground_rank:
+        return False
+    return any(
+        item.window_rank == foreground_rank
+        and (
+            item.control_type in SURFACE_CONTEXT_CONTROL_TYPES
+            or _candidate_semantic_tokens(item) & UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS
+            or _surface_context_type_tokens(item.control_type) & UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS
+        )
+        for item in candidates
+    )
 
 
 def _instruction_has_explicit_app_local_context(
@@ -8217,9 +8254,9 @@ def _contextual_duplicate_evidence_tokens(
 ) -> set[str]:
     tokens = set(_candidate_semantic_tokens(candidate))
     if _looks_like_browser_toolbar_button(candidate):
-        tokens.add("toolbar")
+        tokens.update({"browser", "chrome", "toolbar"})
     tokens.update(_surface_context_type_tokens(candidate.control_type))
-    tokens.update(_tokenize_control(candidate.window_title))
+    tokens.update(_distinct_window_title_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_nearby_label_tokens(candidate, candidates))
@@ -8252,8 +8289,29 @@ def _contextual_duplicate_evidence_tokens(
         tokens.update(_surface_context_type_tokens(context.control_type))
         if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
             tokens.add("card")
-        tokens.update(_tokenize_control(context.window_title))
     return _object_token_variants(tokens)
+
+
+def _distinct_window_title_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    title_tokens = _tokenize_control(candidate.window_title)
+    if not title_tokens:
+        return set()
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return title_tokens
+    peer_tokens: set[str] = set()
+    for other in candidates:
+        if other.id == candidate.id:
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        if _contextual_duplicate_key(other) != duplicate_key:
+            continue
+        peer_tokens.update(_tokenize_control(other.window_title))
+    return title_tokens - peer_tokens
 
 
 def _candidate_has_rank_modal_evidence(
@@ -8358,7 +8416,6 @@ def _contextual_duplicate_aligned_header_tokens(
         tokens.update(_candidate_semantic_tokens(header))
         tokens.update(_tokens_from_text(header.descriptor))
         tokens.update(_surface_context_type_tokens(header.control_type))
-        tokens.update(_tokenize_control(header.window_title))
     return tokens
 
 
@@ -8388,7 +8445,6 @@ def _contextual_duplicate_nearby_label_tokens(
             continue
         tokens.update(_candidate_semantic_tokens(label))
         tokens.update(_tokens_from_text(label.descriptor))
-        tokens.update(_tokenize_control(label.window_title))
     return tokens
 
 
@@ -10255,6 +10311,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_chrome_app_context_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _background_transient_surface_target_mismatch(instruction, candidate, candidates):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
@@ -10458,6 +10516,12 @@ def _candidate_snap_score(
             max(
                 CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP,
                 0.45 * iou + 0.30 * proximity + 0.20,
+            )
+            + _foreground_rank_bonus(
+                candidate,
+                candidates,
+                model_rect=model_rect,
+                suppress_for_stronger_geometry=False,
             ),
         )
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
@@ -11520,6 +11584,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_profile_page_action_mismatch(instruction, candidate):
         return True
     if _browser_chrome_app_context_mismatch(instruction, candidate):
+        return True
+    if _background_transient_surface_target_mismatch(instruction, candidate, candidates):
         return True
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True

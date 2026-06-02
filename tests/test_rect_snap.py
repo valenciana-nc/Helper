@@ -26813,6 +26813,194 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rejected_reason, "ambiguous candidate snap")
 
+    def test_same_rect_candidate_snap_prefers_foreground_window(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        target = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate(
+                    "background",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Background Editor",
+                    window_rank=1,
+                ),
+                ControlCandidate(
+                    "foreground",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Foreground Editor",
+                    window_rank=0,
+                ),
+            ],
+            model_rect=(100, 100, 80, 32),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "foreground")
+        self.assertFalse(target.rejected_reason)
+
+    def test_same_rect_candidate_snap_rejects_same_rank_window_tie(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        target = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate(
+                    "alpha",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Alpha Editor",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "beta",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Beta Editor",
+                    window_rank=0,
+                ),
+            ],
+            model_rect=(100, 100, 80, 32),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "ambiguous candidate snap")
+
+    def test_contextual_duplicate_ignores_shared_window_title_for_row_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate(
+                "delete_profile",
+                "Delete",
+                "button",
+                (20, 100, 70, 24),
+                window_title="Billing - Admin",
+            ),
+            ControlCandidate(
+                "delete_billing",
+                "Delete",
+                "button",
+                (20, 200, 70, 24),
+                window_title="Billing - Admin",
+            ),
+            ControlCandidate(
+                "profile_label",
+                "Profile",
+                "text",
+                (20, 70, 100, 20),
+                window_title="Billing - Admin",
+            ),
+            ControlCandidate(
+                "billing_label",
+                "Billing",
+                "text",
+                (20, 170, 100, 20),
+                window_title="Billing - Admin",
+            ),
+        ]
+
+        stale_target = resolve_candidate_target(
+            target_id="delete_profile",
+            instruction="Click Delete in Billing.",
+            candidates=candidates,
+            model_rect=(20, 100, 70, 24),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Delete in Billing.",
+            candidates=candidates,
+            model_rect=(20, 100, 70, 24),
+        )
+
+        self.assertIsNotNone(stale_target)
+        assert stale_target is not None
+        self.assertEqual(stale_target.source, "target_id")
+        self.assertEqual(stale_target.target_id, "delete_profile")
+        self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
+
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "delete_billing")
+        self.assertFalse(text_target.rejected_reason)
+
+    def test_page_behind_dialog_target_id_rejects_background_overlay(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        target = resolve_candidate_target(
+            target_id="page_save",
+            instruction="Click Save on the page behind the dialog.",
+            candidates=[
+                ControlCandidate(
+                    "dialog",
+                    "Confirm changes dialog",
+                    "window",
+                    (360, 200, 300, 180),
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "dialog_cancel",
+                    "Cancel",
+                    "button",
+                    (420, 320, 80, 32),
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "page_save",
+                    "Save",
+                    "button",
+                    (100, 100, 70, 30),
+                    window_title="Editor",
+                    window_rank=1,
+                ),
+            ],
+            model_rect=(100, 100, 70, 30),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "page_save")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+
+    def test_stale_row_action_target_id_recovers_to_requested_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Archive for Bob invoice.",
+                    "target_id": "delete_bob",
+                    "target": {"x": 520, "y": 112, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("row_bob", "Bob invoice", "dataitem", (20, 100, 620, 48)),
+                ControlCandidate("delete_bob", "Delete", "button", (520, 112, 70, 30)),
+                ControlCandidate("archive_bob", "Archive", "button", (600, 112, 80, 30)),
+                ControlCandidate("row_ada", "Ada invoice", "dataitem", (20, 160, 620, 48)),
+                ControlCandidate("archive_ada", "Archive", "button", (600, 172, 80, 30)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "archive_bob")
+        self.assertFalse(target.rejected_reason)
+
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
