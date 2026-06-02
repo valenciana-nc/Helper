@@ -29,7 +29,12 @@ from PyQt6.QtWidgets import (
 from agent import _parse_live_help_decision
 from control_inventory import ControlCandidate, MAX_CANDIDATES, collect_control_candidates
 from help_live_probe import draw_candidate_overlay, screen_rect_to_image_box
-from help_session import build_target_diagnostic, clip_resolution_to_capture, resolve_help_target
+from help_session import (
+    build_target_diagnostic,
+    clip_resolution_to_capture,
+    resolve_help_target,
+    target_control_type_for_resolution,
+)
 from rect_snap import SnapResult
 from screen import Capture, capture_active_monitor
 from target_quality import evaluate_target_quality
@@ -318,6 +323,7 @@ def _run_resolution_case(
             source=target.source,
             confidence=target.confidence,
             instruction=decision.instruction,
+            target_control_type=target_control_type_for_resolution(target, candidates),
         )
         if not quality.accepted:
             rejected_reason = quality.reason

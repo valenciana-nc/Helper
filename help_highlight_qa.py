@@ -16,6 +16,7 @@ from help_session import (
     build_target_diagnostic,
     clip_resolution_to_capture,
     resolve_help_target,
+    target_control_type_for_resolution,
 )
 from rect_snap import SnapResult
 from screen import Capture
@@ -14797,6 +14798,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {"source": "model", "quality_reason": "target appears visually noisy", "overlay_emitted": False},
         },
         {
+            "name": "broad_noisy_candidate_snap_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"kind": "checker", "rect": [20, 80, 360, 120], "tile": 4},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this control.",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 120},
+            },
+            "candidates": [
+                {"id": "settings", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 360, 120]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "settings",
+                "quality_reason": "target appears visually noisy",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "text_only_model_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -22664,6 +22686,7 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
             source=target.source,
             confidence=target.confidence,
             instruction=decision.instruction,
+            target_control_type=target_control_type_for_resolution(target, candidates),
         )
         if not quality.accepted:
             rejected_reason = quality.reason

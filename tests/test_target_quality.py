@@ -217,6 +217,28 @@ class TargetQualityTests(unittest.TestCase):
 
         self.assertTrue(quality.accepted)
 
+    def test_rejects_noisy_broad_candidate_container_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (1000, 1000), "white")
+        draw = ImageDraw.Draw(img)
+        for y in range(80, 200, 4):
+            for x in range(20, 380, 4):
+                color = "black" if ((x + y) // 4) % 2 else "white"
+                draw.rectangle((x, y, x + 3, y + 3), fill=color)
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(20, 80, 360, 120),
+            source="candidate_snap",
+            confidence=0.95,
+            target_control_type="listitem",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears visually noisy")
+
     def test_rejects_candidate_rect_on_blank_space(self) -> None:
         from target_quality import evaluate_target_quality
 

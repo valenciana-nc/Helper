@@ -213,6 +213,24 @@ def _quality_payload(quality: TargetQuality | None) -> dict[str, Any] | None:
     }
 
 
+def target_control_type_for_resolution(
+    target: TargetResolution,
+    candidates: list[ControlCandidate],
+) -> str:
+    if target.target_id:
+        candidate = next((item for item in candidates if item.id == target.target_id), None)
+        if candidate is not None:
+            return candidate.control_type
+    matches = [
+        candidate
+        for candidate in candidates
+        if _rect_iou(candidate.rect, target.rect) >= 0.80
+    ]
+    if len(matches) == 1:
+        return matches[0].control_type
+    return ""
+
+
 def resolve_help_target(
     decision: "LiveHelpDecision",
     capture: "Capture",
@@ -1095,6 +1113,7 @@ class HelpSession(QObject):
                 source=target.source,
                 confidence=target.confidence,
                 instruction=decision.instruction,
+                target_control_type=target_control_type_for_resolution(target, candidates),
             )
             if not quality.accepted:
                 self._emit_target_diagnostic(

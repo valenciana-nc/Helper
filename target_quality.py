@@ -18,6 +18,21 @@ MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
+CANDIDATE_STRICT_QUALITY_CONTROL_TYPES = frozenset(
+    {
+        "dataitem",
+        "datagrid",
+        "grid",
+        "group",
+        "list",
+        "listitem",
+        "pane",
+        "table",
+        "toolbar",
+        "treeitem",
+        "window",
+    }
+)
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
     {
@@ -93,6 +108,7 @@ def evaluate_target_quality(
     source: str,
     confidence: float,
     instruction: str = "",
+    target_control_type: str = "",
 ) -> TargetQuality:
     image_rect = _screen_to_image_rect(capture, rect)
     clipped = _clip_rect(image_rect, (0, 0, capture.width, capture.height))
@@ -146,6 +162,19 @@ def evaluate_target_quality(
         return TargetQuality(
             accepted=False,
             reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        _strict_candidate_quality_target(source, target_control_type, image_rect)
+        and visual_activity > MODEL_NOISY_VISUAL_CEILING
+        and boundary_activity > MODEL_NOISY_BOUNDARY_FLOOR
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears visually noisy",
             visible_fraction=visible_fraction,
             visual_activity=visual_activity,
             boundary_activity=boundary_activity,
@@ -209,6 +238,18 @@ def _candidate_compound_action_request(instruction: str) -> bool:
 def _candidate_compound_rect_large_enough(rect: tuple[int, int, int, int]) -> bool:
     _x, _y, width, height = rect
     return width >= CANDIDATE_COMPOUND_MIN_WIDTH and width * height >= CANDIDATE_COMPOUND_MIN_AREA
+
+
+def _strict_candidate_quality_target(
+    source: str,
+    target_control_type: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if source == "model":
+        return False
+    if target_control_type.lower() not in CANDIDATE_STRICT_QUALITY_CONTROL_TYPES:
+        return False
+    return _candidate_compound_rect_large_enough(rect)
 
 
 def _screen_to_image_rect(
