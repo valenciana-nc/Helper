@@ -1881,6 +1881,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_surface_context_mismatch(instruction, candidate):
+        return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -1897,6 +1899,13 @@ def _text_match_score(
         instruction,
         instruction_tokens,
         candidate,
+    ):
+        return 0.0
+    if _browser_address_bar_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
     ):
         return 0.0
     if _browser_about_blank_title_info_mismatch(
@@ -2099,6 +2108,8 @@ def _context_text_match_score(
         return 0.0
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_surface_context_mismatch(instruction, candidate):
+        return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -2115,6 +2126,13 @@ def _context_text_match_score(
         instruction,
         instruction_tokens,
         candidate,
+    ):
+        return 0.0
+    if _browser_address_bar_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
     ):
         return 0.0
     if _browser_about_blank_title_info_mismatch(
@@ -2392,6 +2410,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _taskbar_surface_context_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return (
             False,
@@ -2432,6 +2456,17 @@ def _target_id_plausibility(
         instruction,
         instruction_tokens,
         candidate,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _browser_address_bar_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
     ):
         return (
             False,
@@ -3059,6 +3094,12 @@ def _browser_address_bar_content_mismatch(
     instruction_tokens: set[str],
     candidate: ControlCandidate,
 ) -> bool:
+    if _instruction_requests_page_address_field(instruction) and _looks_like_strong_browser_address_bar(
+        candidate
+    ):
+        return True
+    if _instruction_requests_page_address_field(instruction):
+        return False
     if not _looks_like_browser_address_bar(candidate):
         return False
     candidate_tokens = _candidate_semantic_tokens(candidate)
@@ -3070,7 +3111,7 @@ def _browser_address_bar_content_mismatch(
 def _looks_like_browser_address_bar(candidate: ControlCandidate) -> bool:
     if candidate.control_type not in {"edit", "combobox"}:
         return False
-    raw_tokens = _tokens_from_text(candidate.text)
+    raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
     if {"address", "bar"} <= raw_tokens:
         return True
     window_tokens = _tokens_from_text(candidate.window_title)
@@ -3079,11 +3120,53 @@ def _looks_like_browser_address_bar(candidate: ControlCandidate) -> bool:
     return bool(raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}))
 
 
+def _looks_like_strong_browser_address_bar(candidate: ControlCandidate) -> bool:
+    if not _looks_like_browser_address_bar(candidate):
+        return False
+    raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
+    return (
+        {"address", "bar"} <= raw_tokens
+        or {"url", "bar"} <= raw_tokens
+        or "omnibox" in raw_tokens
+        or {"address", "search"} <= raw_tokens
+    )
+
+
 def _instruction_requests_browser_address_bar(instruction: str) -> bool:
     raw_tokens = _tokens_from_text(instruction)
+    if _instruction_requests_page_address_field(instruction):
+        return False
     if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
         return True
     return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
+
+
+def _instruction_requests_page_address_field(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & BROWSER_PAGE_TARGET_WORDS):
+        return False
+    if raw_tokens & BROWSER_APP_IDENTITY_WORDS:
+        return False
+    return bool(raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}))
+
+
+def _browser_address_bar_alternative_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not _instruction_requests_browser_address_bar(instruction):
+        return False
+    if _looks_like_strong_browser_address_bar(candidate):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    if not (instruction_tokens & candidate_tokens & BROWSER_ADDRESS_BAR_ROLE_WORDS):
+        return False
+    return any(
+        other.id != candidate.id and _looks_like_strong_browser_address_bar(other)
+        for other in candidates
+    )
 
 
 def _looks_like_browser_menu_button(candidate: ControlCandidate) -> bool:
@@ -3666,6 +3749,29 @@ def _looks_like_site_information_button(candidate: ControlCandidate) -> bool:
     if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     return "site_info_lock" in _candidate_visible_text_tokens(candidate)
+
+
+def _taskbar_surface_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    is_taskbar = _candidate_is_taskbar_surface(candidate)
+    if "taskbar" in raw_tokens:
+        return not is_taskbar
+    if raw_tokens & BROWSER_PAGE_TARGET_WORDS:
+        return is_taskbar
+    return False
+
+
+def _candidate_is_taskbar_surface(candidate: ControlCandidate) -> bool:
+    window_tokens = _tokens_from_text(candidate.window_title)
+    automation_id = (candidate.automation_id or "").strip().lower()
+    return bool(window_tokens & TASKBAR_WINDOW_WORDS) or automation_id in {
+        "searchgleambutton",
+        "systemtrayicon",
+        "widgetsbutton",
+    }
 
 
 def _taskbar_app_state_action_mismatch(
@@ -5606,6 +5712,8 @@ def _target_id_ambiguity(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
+            continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -5622,6 +5730,13 @@ def _target_id_ambiguity(
             instruction,
             instruction_tokens,
             candidate,
+        ):
+            continue
+        if _browser_address_bar_alternative_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
         ):
             continue
         if _browser_about_blank_title_info_mismatch(
@@ -5892,6 +6007,8 @@ def _has_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
+            continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -5908,6 +6025,13 @@ def _has_semantic_alternative(
             instruction,
             instruction_tokens,
             candidate,
+        ):
+            continue
+        if _browser_address_bar_alternative_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
         ):
             continue
         if _browser_about_blank_title_info_mismatch(
@@ -6004,6 +6128,8 @@ def _has_visible_semantic_alternative(
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
+            continue
         if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
             continue
         if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -6020,6 +6146,13 @@ def _has_visible_semantic_alternative(
             instruction,
             instruction_tokens,
             candidate,
+        ):
+            continue
+        if _browser_address_bar_alternative_mismatch(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
         ):
             continue
         if _browser_about_blank_title_info_mismatch(
@@ -6126,6 +6259,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_surface_context_mismatch(instruction, candidate):
+        return 0.0
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -6142,6 +6277,13 @@ def _candidate_snap_score(
         instruction,
         instruction_tokens,
         candidate,
+    ):
+        return 0.0
+    if _browser_address_bar_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
     ):
         return 0.0
     if _browser_about_blank_title_info_mismatch(
@@ -6402,6 +6544,8 @@ def _contains_tighter_same_intent_action(
                 continue
             if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
                 continue
+            if _taskbar_surface_context_mismatch(instruction, candidate):
+                continue
             if _disclosure_state_action_mismatch(instruction_tokens, candidate):
                 continue
             if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
@@ -6420,6 +6564,8 @@ def _contains_tighter_same_intent_action(
         if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -6642,6 +6788,8 @@ def _single_contained_control_intent_candidate(
         if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
             continue
         if _disclosure_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -6924,6 +7072,8 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
         return True
+    if _taskbar_surface_context_mismatch(instruction, candidate):
+        return True
     if _browser_profile_identity_action_mismatch(instruction_tokens, candidate):
         return True
     if _browser_profile_page_action_mismatch(instruction, candidate):
@@ -6940,6 +7090,13 @@ def _candidate_snap_semantic_mismatch(
         instruction,
         instruction_tokens,
         candidate,
+    ):
+        return True
+    if _browser_address_bar_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
     ):
         return True
     if _browser_about_blank_title_info_mismatch(

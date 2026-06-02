@@ -1789,6 +1789,80 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "page_address_wording_recovers_from_browser_address_bar",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [88, 8, 520, 34], "label": "Address and search bar"},
+                {"rect": [120, 260, 300, 36], "label": "Address"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the address field on the page.",
+                "target_id": "browser_address",
+                "target": {"x": 88, "y": 8, "width": 520, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_address",
+                    "text": "Address and search bar",
+                    "control_type": "edit",
+                    "rect": [88, 8, 520, 34],
+                    "automation_id": "address and search bar",
+                    "window_title": "Checkout - Google Chrome",
+                },
+                {
+                    "id": "page_address",
+                    "text": "Address",
+                    "control_type": "edit",
+                    "rect": [120, 260, 300, 36],
+                    "window_title": "Checkout - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_address",
+                "rect": [120, 260, 300, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_address_wording_recovers_from_page_address_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [88, 8, 520, 34], "label": "Address and search bar"},
+                {"rect": [120, 260, 300, 36], "label": "Address"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Focus the address bar in Chrome.",
+                "target_id": "page_address",
+                "target": {"x": 120, "y": 260, "width": 300, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "browser_address",
+                    "text": "Address and search bar",
+                    "control_type": "edit",
+                    "rect": [88, 8, 520, 34],
+                    "automation_id": "address and search bar",
+                    "window_title": "Checkout - Google Chrome",
+                },
+                {
+                    "id": "page_address",
+                    "text": "Address",
+                    "control_type": "edit",
+                    "rect": [120, 260, 300, 36],
+                    "window_title": "Checkout - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "browser_address",
+                "rect": [88, 8, 520, 34],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "text_entry_action_wrong_target_id_recovers_to_edit",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7159,6 +7233,80 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "taskbar_wording_recovers_from_page_volume_control",
+            "capture": {"width": 1200, "height": 1000},
+            "draw": [
+                {"rect": [780, 960, 200, 36], "label": "Volume 24%"},
+                {"rect": [120, 260, 140, 36], "label": "Volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click taskbar volume.",
+                "target_id": "page_volume",
+                "target": {"x": 120, "y": 260, "width": 140, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "taskbar_volume",
+                    "text": "Volume Speakers (Realtek(R) Audio): 24%",
+                    "control_type": "button",
+                    "rect": [780, 960, 200, 36],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+                {
+                    "id": "page_volume",
+                    "text": "Volume",
+                    "control_type": "button",
+                    "rect": [120, 260, 140, 36],
+                    "window_title": "Player - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "taskbar_volume",
+                "rect": [780, 960, 200, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "page_wording_recovers_from_taskbar_volume_control",
+            "capture": {"width": 1200, "height": 1000},
+            "draw": [
+                {"rect": [780, 960, 200, 36], "label": "Volume 24%"},
+                {"rect": [120, 260, 140, 36], "label": "Volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click volume on the page.",
+                "target_id": "taskbar_volume",
+                "target": {"x": 780, "y": 960, "width": 200, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "taskbar_volume",
+                    "text": "Volume Speakers (Realtek(R) Audio): 24%",
+                    "control_type": "button",
+                    "rect": [780, 960, 200, 36],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+                {
+                    "id": "page_volume",
+                    "text": "Volume",
+                    "control_type": "button",
+                    "rect": [120, 260, 140, 36],
+                    "window_title": "Player - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_volume",
+                "rect": [120, 260, 140, 36],
+                "overlay_emitted": True,
             },
         },
         {

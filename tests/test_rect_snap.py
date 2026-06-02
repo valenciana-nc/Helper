@@ -4536,6 +4536,214 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id control type mismatch")
 
+    def test_page_address_wording_recovers_from_browser_address_bar_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Click the address field on the page.",
+                        "target_id": "browser_address",
+                        "target": {"x": 88, "y": 8, "width": 520, "height": 34},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate(
+                    "browser_address",
+                    "Address and search bar",
+                    "edit",
+                    (88, 8, 520, 34),
+                    automation_id="address and search bar",
+                    window_title="Checkout - Google Chrome",
+                ),
+                ControlCandidate(
+                    "page_address",
+                    "Address",
+                    "edit",
+                    (120, 260, 300, 36),
+                    window_title="Checkout - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "page_address")
+        self.assertEqual(target.rect, (120, 260, 300, 36))
+        self.assertFalse(target.rejected_reason)
+
+    def test_browser_address_wording_recovers_from_page_address_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Focus the address bar in Chrome.",
+                        "target_id": "page_address",
+                        "target": {"x": 120, "y": 260, "width": 300, "height": 36},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate(
+                    "browser_address",
+                    "Address and search bar",
+                    "edit",
+                    (88, 8, 520, 34),
+                    automation_id="address and search bar",
+                    window_title="Checkout - Google Chrome",
+                ),
+                ControlCandidate(
+                    "page_address",
+                    "Address",
+                    "edit",
+                    (120, 260, 300, 36),
+                    window_title="Checkout - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "browser_address")
+        self.assertEqual(target.rect, (88, 8, 520, 34))
+        self.assertFalse(target.rejected_reason)
+
+    def test_taskbar_wording_recovers_from_page_control_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1200
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Click taskbar volume.",
+                        "target_id": "page_volume",
+                        "target": {"x": 120, "y": 260, "width": 140, "height": 36},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate(
+                    "taskbar_volume",
+                    "Volume Speakers (Realtek(R) Audio): 24%",
+                    "button",
+                    (780, 960, 200, 36),
+                    automation_id="SystemTrayIcon",
+                    window_title="Taskbar",
+                ),
+                ControlCandidate(
+                    "page_volume",
+                    "Volume",
+                    "button",
+                    (120, 260, 140, 36),
+                    window_title="Player - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "taskbar_volume")
+        self.assertEqual(target.rect, (780, 960, 200, 36))
+        self.assertFalse(target.rejected_reason)
+
+    def test_page_wording_recovers_from_taskbar_control_target_id(self) -> None:
+        from control_inventory import ControlCandidate
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1200
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": "Click volume on the page.",
+                        "target_id": "taskbar_volume",
+                        "target": {"x": 780, "y": 960, "width": 200, "height": 36},
+                    }
+                )
+            ),
+            Capture(),
+            [
+                ControlCandidate(
+                    "taskbar_volume",
+                    "Volume Speakers (Realtek(R) Audio): 24%",
+                    "button",
+                    (780, 960, 200, 36),
+                    automation_id="SystemTrayIcon",
+                    window_title="Taskbar",
+                ),
+                ControlCandidate(
+                    "page_volume",
+                    "Volume",
+                    "button",
+                    (120, 260, 140, 36),
+                    window_title="Player - Google Chrome",
+                ),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "page_volume")
+        self.assertEqual(target.rect, (120, 260, 140, 36))
+        self.assertFalse(target.rejected_reason)
+
     def test_text_entry_action_target_id_rejects_plain_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
