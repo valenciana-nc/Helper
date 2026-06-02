@@ -4046,6 +4046,33 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_unlabeled_target_id_rejects_cross_role_visible_alternative(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("c001", "", "button", (10, 10, 32, 32)),
+            ControlCandidate("c002", "Save", "hyperlink", (100, 10, 60, 30)),
+        ]
+
+        target = resolve_candidate_target(
+            target_id="c001",
+            instruction="Click the Save button.",
+            candidates=candidates,
+            model_rect=(10, 10, 32, 32),
+        )
+        snap = snap_candidate_target(
+            instruction="Click the Save button.",
+            candidates=candidates,
+            model_rect=(10, 10, 32, 32),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+        if snap is not None:
+            self.assertNotEqual(snap.target_id, "c001")
+
     def test_automation_only_target_id_rejects_when_visible_alternative_matches(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -27000,6 +27027,60 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "archive_bob")
         self.assertFalse(target.rejected_reason)
+
+    def test_nested_row_label_target_id_recovers_to_requested_subrow_action(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Delete in Shipping for Acme order.",
+                    "target_id": "del_bill",
+                    "target": {"x": 650, "y": 106, "width": 70, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("row_acme", "Acme order", "dataitem", (20, 80, 760, 120)),
+                ControlCandidate("bill_label", "Billing", "text", (40, 110, 120, 20)),
+                ControlCandidate("ship_label", "Shipping", "text", (40, 160, 120, 20)),
+                ControlCandidate("del_bill", "Delete", "button", (650, 106, 70, 28)),
+                ControlCandidate("del_ship", "Delete", "button", (650, 156, 70, 28)),
+                ControlCandidate("row_globex", "Globex order", "dataitem", (20, 230, 760, 120)),
+                ControlCandidate("ship_label_g", "Shipping", "text", (40, 260, 120, 20)),
+                ControlCandidate("del_ship_g", "Delete", "button", (650, 256, 70, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "del_ship")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (650, 156, 70, 28))
+
+    def test_container_text_does_not_promote_contradictory_contained_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Save button.",
+                    "target": {"x": 100, "y": 100, "width": 300, "height": 100},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("panel", "Save settings", "pane", (100, 100, 300, 100)),
+                ControlCandidate("cancel", "Cancel", "button", (120, 130, 70, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+        self.assertNotEqual(target.target_id, "cancel")
 
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate

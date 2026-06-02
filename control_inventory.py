@@ -7116,8 +7116,28 @@ def _contained_row_action_context_mismatch(
             continue
         distinctive_objects = instruction_objects - ROW_CONTEXT_GENERIC_WORDS
         if distinctive_objects:
+            if distinctive_objects <= row_objects:
+                return False
+            if _duplicate_row_action_has_context_objects(
+                candidate,
+                candidates,
+                instruction,
+                _tokenize_instruction(instruction),
+                distinctive_objects,
+            ):
+                return True
             if distinctive_objects & row_objects:
                 return False
+            return True
+        if instruction_objects <= row_objects:
+            return False
+        if _duplicate_row_action_has_context_objects(
+            candidate,
+            candidates,
+            instruction,
+            _tokenize_instruction(instruction),
+            instruction_objects,
+        ):
             return True
         if instruction_objects & row_objects:
             return False
@@ -7154,9 +7174,40 @@ def _contained_row_action_context_mismatch(
                 candidate,
                 candidates,
             )
+        if instruction_objects <= row_objects:
+            return False
+        if _duplicate_row_action_has_context_objects(
+            candidate,
+            candidates,
+            instruction,
+            _tokenize_instruction(instruction),
+            instruction_objects,
+        ):
+            return True
         if instruction_objects & row_objects:
             return False
         return True
+    return False
+
+
+def _duplicate_row_action_has_context_objects(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    requested_objects: set[str],
+) -> bool:
+    if not requested_objects:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        if not _contained_row_action_candidate_matches(other, instruction_tokens, instruction):
+            continue
+        if requested_objects <= _contained_row_context_objects(other, candidates):
+            return True
     return False
 
 
@@ -7386,6 +7437,9 @@ def _contained_row_context_objects(
             _candidate_semantic_tokens(container)
             | _tokens_from_text(container.descriptor)
         )
+        container_tokens.update(
+            _contained_row_line_label_tokens(candidate, candidates, container)
+        )
         objects = _object_token_variants(
             {
                 token
@@ -7396,6 +7450,76 @@ def _contained_row_context_objects(
         if objects:
             return objects
     return set()
+
+
+def _contained_row_line_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    container: ControlCandidate,
+) -> set[str]:
+    tokens: set[str] = set()
+    for label in candidates:
+        if label.id == candidate.id or _same_visual_candidate(label, candidate):
+            continue
+        if label.id == container.id or _same_visual_candidate(label, container):
+            continue
+        if label.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+            label,
+        ):
+            continue
+        if label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES and not (
+            label.control_type in CLICKABLE_CONTROL_TYPES
+            and _clickable_context_label_candidate(label)
+        ):
+            continue
+        if not _row_line_label_rect_matches(label, candidate, container):
+            continue
+        tokens.update(_candidate_semantic_tokens(label))
+        tokens.update(_tokens_from_text(label.descriptor))
+        tokens.update(_surface_context_type_tokens(label.control_type))
+    return tokens
+
+
+def _row_line_label_rect_matches(
+    label: ControlCandidate,
+    action: ControlCandidate,
+    row: ControlCandidate,
+) -> bool:
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if not _contains_rect(_expand_rect(row.rect, 2), action.rect):
+        return False
+    if not _contains_rect(_expand_rect(row.rect, 2), label.rect):
+        return False
+    _label_x, label_y, label_width, label_height = label.rect
+    _action_x, action_y, action_width, action_height = action.rect
+    if min(label_width, label_height, action_width, action_height) <= 0:
+        return False
+    label_center_y = label_y + label_height / 2
+    action_center_y = action_y + action_height / 2
+    if abs(label_center_y - action_center_y) > max(8.0, min(label_height, action_height) * 0.75):
+        return False
+    vertical_overlap = min(label_y + label_height, action_y + action_height) - max(
+        label_y,
+        action_y,
+    )
+    return vertical_overlap >= min(label_height, action_height) * 0.35
+
+
+def _same_containing_row_line_label_rect_matches(
+    label: ControlCandidate,
+    action: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    return any(
+        row.id != label.id
+        and row.id != action.id
+        and row.control_type in ROW_CONTEXT_CONTROL_TYPES
+        and _row_line_label_rect_matches(label, action, row)
+        for row in candidates
+    )
 
 
 def _implicit_container_context_duplicate_mismatch(
@@ -7472,7 +7596,10 @@ def _implicit_container_context_evidence_tokens(
             if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
                 continue
         elif context.control_type in NEARBY_ROW_LABEL_CONTROL_TYPES:
-            if not _nearby_row_label_rect_matches(context, candidate):
+            if not (
+                _nearby_row_label_rect_matches(context, candidate)
+                or _same_containing_row_line_label_rect_matches(context, candidate, candidates)
+            ):
                 continue
         else:
             continue
@@ -8281,6 +8408,7 @@ def _contextual_duplicate_evidence_tokens(
             or _row_action_context_rect_matches(context, candidate)
             or _nearby_row_label_rect_matches(context, candidate)
             or _nearby_context_label_rect_matches(context, candidate)
+            or _same_containing_row_line_label_rect_matches(context, candidate, candidates)
         ):
             continue
         tokens.update(_candidate_semantic_tokens(context))
@@ -8441,6 +8569,7 @@ def _contextual_duplicate_nearby_label_tokens(
         if not (
             _nearby_row_label_rect_matches(label, candidate)
             or _nearby_context_label_rect_matches(label, candidate)
+            or _same_containing_row_line_label_rect_matches(label, candidate, candidates)
         ):
             continue
         tokens.update(_candidate_semantic_tokens(label))
@@ -10112,13 +10241,26 @@ def _has_visible_semantic_alternative(
         candidates,
     ):
         return False
+    selected_evidence_tokens = _candidate_semantic_tokens_with_field_label(
+        selected,
+        candidates,
+    )
+    allow_cross_role_visible_alternative = (
+        not _candidate_visible_text_tokens(selected)
+        and not (instruction_tokens & selected_evidence_tokens)
+        and bool(instruction_tokens - CONTAINED_CONTROL_REQUEST_WORDS)
+    )
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if not _candidate_matches_control_intent(
+        matches_requested_role = _candidate_matches_control_intent(
             candidate,
             control_intents,
             instruction=instruction,
+        )
+        if not matches_requested_role and not (
+            allow_cross_role_visible_alternative
+            and candidate.control_type in CLICKABLE_CONTROL_TYPES
         ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
@@ -11249,6 +11391,7 @@ def _single_contained_control_intent_candidate(
             candidate=candidate,
             candidates=candidates,
             model_rect=model_rect,
+            instruction=instruction,
             instruction_tokens=instruction_tokens,
         ):
             continue
@@ -11310,6 +11453,7 @@ def _contained_control_intent_has_evidence(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int],
+    instruction: str,
     instruction_tokens: set[str],
 ) -> bool:
     candidate_tokens = set(_candidate_semantic_tokens(candidate))
@@ -11326,11 +11470,39 @@ def _contained_control_intent_has_evidence(
     evidence_tokens = candidate_tokens | context_tokens
     if _text_evidence_score(instruction_tokens, evidence_tokens) < TARGET_ID_TEXT_FLOOR:
         return False
-    if (
-        _candidate_visible_text_tokens(candidate)
-        and not (instruction_tokens & candidate_tokens)
-        and not instruction_tokens <= context_tokens
-    ):
+    if _candidate_visible_text_tokens(candidate) and not (instruction_tokens & candidate_tokens):
+        if _direct_contained_control_label_conflict(
+            instruction,
+            instruction_tokens,
+            candidate,
+        ):
+            return False
+        if not instruction_tokens <= context_tokens:
+            return False
+    return True
+
+
+def _direct_contained_control_label_conflict(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    if not visible_tokens:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & {"for", "from", "in", "inside", "on", "with", "within"}:
+        return False
+    requested_tokens = _object_token_variants(
+        (raw_tokens | instruction_tokens)
+        - ACTION_OBJECT_STOPWORDS
+        - CONTAINED_CONTROL_REQUEST_WORDS
+        - CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+        - ROW_CONTEXT_GENERIC_WORDS
+    )
+    if not requested_tokens:
+        return False
+    if requested_tokens & (_candidate_semantic_tokens(candidate) | visible_tokens):
         return False
     return True
 

@@ -396,6 +396,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "unlabeled_target_id_rejects_cross_role_visible_alternative",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 32, 32], "label": ""},
+                {"rect": [180, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Save button.",
+                "target_id": "c001",
+                "target": {"x": 160, "y": 250, "width": 64, "height": 100},
+            },
+            "candidates": [
+                {"id": "c001", "text": "", "control_type": "button", "rect": [80, 80, 32, 32]},
+                {"id": "c002", "text": "Save", "control_type": "hyperlink", "rect": [180, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "automation_only_model_rect_recovers_to_visible_text_match",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -20259,6 +20283,64 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "archive_bob",
                 "rect": [600, 112, 80, 30],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "nested_row_label_recovers_to_requested_subrow_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 760, 120], "label": "Acme order"},
+                {"rect": [40, 110, 120, 20], "label": "Billing"},
+                {"rect": [650, 106, 70, 28], "label": "Delete"},
+                {"rect": [40, 160, 120, 20], "label": "Shipping"},
+                {"rect": [650, 156, 70, 28], "label": "Delete"},
+                {"rect": [20, 230, 760, 120], "label": "Globex order"},
+                {"rect": [40, 260, 120, 20], "label": "Shipping"},
+                {"rect": [650, 256, 70, 28], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Delete in Shipping for Acme order.",
+                "target_id": "del_bill",
+                "target": {"x": 650, "y": 106, "width": 70, "height": 28},
+            },
+            "candidates": [
+                {"id": "row_acme", "text": "Acme order", "control_type": "dataitem", "rect": [20, 80, 760, 120]},
+                {"id": "bill_label", "text": "Billing", "control_type": "text", "rect": [40, 110, 120, 20]},
+                {"id": "ship_label", "text": "Shipping", "control_type": "text", "rect": [40, 160, 120, 20]},
+                {"id": "del_bill", "text": "Delete", "control_type": "button", "rect": [650, 106, 70, 28]},
+                {"id": "del_ship", "text": "Delete", "control_type": "button", "rect": [650, 156, 70, 28]},
+                {"id": "row_globex", "text": "Globex order", "control_type": "dataitem", "rect": [20, 230, 760, 120]},
+                {"id": "ship_label_g", "text": "Shipping", "control_type": "text", "rect": [40, 260, 120, 20]},
+                {"id": "del_ship_g", "text": "Delete", "control_type": "button", "rect": [650, 256, 70, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "del_ship",
+                "rect": [650, 156, 70, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "container_text_does_not_promote_contradictory_contained_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 300, 100], "label": "Save settings"},
+                {"rect": [120, 130, 70, 28], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Save button.",
+                "target": {"x": 100, "y": 100, "width": 300, "height": 100},
+            },
+            "candidates": [
+                {"id": "panel", "text": "Save settings", "control_type": "pane", "rect": [100, 100, 300, 100]},
+                {"id": "cancel", "text": "Cancel", "control_type": "button", "rect": [120, 130, 70, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
             },
         },
         {
