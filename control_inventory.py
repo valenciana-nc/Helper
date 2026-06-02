@@ -84,6 +84,13 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+CARDINAL_DIRECTION_ACTION_PAIRS = (
+    (frozenset({"up"}), frozenset({"down"})),
+    (frozenset({"left"}), frozenset({"right"})),
+)
+CARDINAL_DIRECTION_ACTION_WORDS = frozenset().union(*(
+    words for pair in CARDINAL_DIRECTION_ACTION_PAIRS for words in pair
+))
 HISTORY_UNDO_WORDS = frozenset({"undo"})
 HISTORY_REDO_WORDS = frozenset({"redo"})
 CHECKBOX_ON_ACTION_WORDS = frozenset({"check", "enable", "tick"})
@@ -397,6 +404,7 @@ CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", 
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
+LOCK_ACTION_WORDS = frozenset({"lock", "unlock"})
 REVERSIBLE_ACTION_POLARITY_PAIRS = (
     (frozenset({"archive"}), frozenset({"unarchive"})),
     (frozenset({"connect"}), frozenset({"disconnect"})),
@@ -689,6 +697,7 @@ TASKBAR_STATUS_SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "se
 TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
 TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "date", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
+TASKBAR_NOTIFICATION_STATUS_IDENTITY_WORDS = frozenset({"notification", "notifications"})
 TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS = frozenset(
     {"minimize", "minus", "zoom_out"}
 )
@@ -1928,12 +1937,23 @@ def _text_match_score(
         and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
         and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
     )
-    if not matches_row_action and not _candidate_matches_control_intent(
-        candidate,
-        control_intents,
-        instruction=instruction,
+    if (
+        not matches_row_action
+        and not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        )
+        and not _cardinal_direction_request_matches_candidate(instruction, candidate)
     ):
         return 0.0
+    if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _named_dropdown_request_matches_candidate(instruction, candidate):
+        score = TEXT_MATCH_FLOOR + 0.08
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR
         if model_rect is not None:
@@ -1947,7 +1967,10 @@ def _text_match_score(
         control_intents=control_intents,
     ):
         return 0.0
-    if not instruction_tokens:
+    if not instruction_tokens and not _cardinal_direction_request_matches_candidate(
+        instruction,
+        candidate,
+    ):
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -2892,6 +2915,12 @@ def _target_id_plausibility(
             text_score,
             "target_id control type mismatch",
         )
+    if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -3810,6 +3839,70 @@ def _dropdown_option_launcher_mismatch(
     return _has_dropdown_launcher_candidate(candidate, candidates)
 
 
+def _named_dropdown_request_matches_candidate(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type != "combobox":
+        return False
+    if _tokens_from_text(instruction) & {"arrow", "caret", "chevron"}:
+        return False
+    if not _dropdown_launcher_requested(instruction):
+        return False
+    requested = _named_dropdown_request_tokens(instruction)
+    if not requested:
+        return False
+    identity = _candidate_visible_text_tokens(candidate) | _tokens_from_text(candidate.text)
+    return bool(requested & identity)
+
+
+def _named_dropdown_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "combobox":
+        return False
+    if _tokens_from_text(instruction) & {"arrow", "caret", "chevron"}:
+        return False
+    if not _dropdown_launcher_requested(instruction):
+        return False
+    requested = _named_dropdown_request_tokens(instruction)
+    if not requested:
+        return False
+    candidate_identity = _candidate_visible_text_tokens(candidate) | _tokens_from_text(candidate.text)
+    if requested & candidate_identity:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "combobox":
+            continue
+        other_identity = _candidate_visible_text_tokens(other) | _tokens_from_text(other.text)
+        if requested & other_identity:
+            return True
+    return False
+
+
+def _named_dropdown_request_tokens(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    return _tokenize_instruction(instruction) | (
+        raw_tokens - OPEN_VIEW_REQUEST_WORDS - CONTAINED_CONTROL_REQUEST_WORDS
+    )
+
+
+def _dropdown_launcher_requested(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    return (
+        "dropdown" in raw_tokens
+        or "combobox" in raw_tokens
+        or "combo" in raw_tokens
+        or "picker" in raw_tokens
+        or "selector" in raw_tokens
+        or {"drop", "down"} <= raw_tokens
+    )
+
+
 def _has_dropdown_launcher_candidate(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -4500,6 +4593,7 @@ def _explicit_action_context_mismatch(
         )
         or _confirm_action_context_mismatch(instruction, candidate)
         or _filter_reset_action_mismatch(instruction, candidate)
+        or _cardinal_direction_action_mismatch(instruction, candidate.descriptor)
         or _sort_direction_action_mismatch(instruction, candidate.descriptor)
         or _search_filter_action_mismatch(instruction, candidate.descriptor)
         or _add_remove_action_mismatch(instruction, candidate.descriptor)
@@ -4662,6 +4756,36 @@ def _sort_direction_action_mismatch(instruction: str, candidate_text: str) -> bo
     if candidate_ascending == candidate_descending:
         return False
     return requested_ascending != candidate_ascending
+
+
+def _cardinal_direction_action_mismatch(instruction: str, candidate_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    candidate_tokens = _tokenize_control(candidate_text) | _tokens_from_text(candidate_text)
+    for positive_words, negative_words in CARDINAL_DIRECTION_ACTION_PAIRS:
+        requested_positive = bool(instruction_tokens & positive_words)
+        requested_negative = bool(instruction_tokens & negative_words)
+        if requested_positive == requested_negative:
+            continue
+        candidate_positive = bool(candidate_tokens & positive_words)
+        candidate_negative = bool(candidate_tokens & negative_words)
+        if candidate_positive == candidate_negative:
+            continue
+        if requested_positive != candidate_positive:
+            return True
+    return False
+
+
+def _cardinal_direction_request_matches_candidate(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    requested = _tokens_from_text(instruction) & CARDINAL_DIRECTION_ACTION_WORDS
+    if not requested:
+        return False
+    visible = _candidate_visible_text_tokens(candidate)
+    return bool(requested & visible & CARDINAL_DIRECTION_ACTION_WORDS)
 
 
 def _search_filter_action_mismatch(instruction: str, candidate_text: str) -> bool:
@@ -5964,6 +6088,7 @@ def _ambiguous_exact_literal_alias_alternative(
         BROWSER_SIGN_OUT_ACTION_WORDS,
         CLEAR_CLOSE_WORDS,
         CONFIRM_ACTION_WORDS,
+        LOCK_ACTION_WORDS,
     ):
         exact_words = instruction_words & family
         if not exact_words or not (candidate_semantic & family):
@@ -6320,6 +6445,8 @@ def _taskbar_status_identity_tokens(
         return TASKBAR_CLOCK_STATUS_IDENTITY_WORDS
     if automation_id == "searchgleambutton":
         return TASKBAR_SEARCH_STATUS_IDENTITY_WORDS
+    if text_tokens & TASKBAR_NOTIFICATION_STATUS_IDENTITY_WORDS:
+        return TASKBAR_NOTIFICATION_STATUS_IDENTITY_WORDS
     if "onedrive" in text_tokens:
         return TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS
     return frozenset()
@@ -7083,6 +7210,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
@@ -7363,11 +7492,13 @@ def _candidate_match_instruction_tokens(
     candidate: ControlCandidate,
 ) -> set[str]:
     tokens = set(instruction_tokens)
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    if visible_tokens:
+        tokens.update(_tokens_from_text(instruction) & visible_tokens & CARDINAL_DIRECTION_ACTION_WORDS)
     if (
         _instruction_requests_contained_row_action(instruction)
         and candidate.control_type in TIGHT_ACTION_CONTROL_TYPES
     ):
-        visible_tokens = _candidate_visible_text_tokens(candidate)
         if visible_tokens:
             tokens.update(_tokens_from_text(instruction) & visible_tokens)
     return tokens

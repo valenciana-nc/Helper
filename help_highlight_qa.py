@@ -3757,6 +3757,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_dropdown_recovers_from_wrong_combobox_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 200, 32], "label": "Status"},
+                {"rect": [10, 50, 200, 32], "label": "Priority"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Priority dropdown.",
+                "target_id": "status",
+                "target": {"x": 10, "y": 10, "width": 200, "height": 32},
+            },
+            "candidates": [
+                {"id": "status", "text": "Status", "control_type": "combobox", "rect": [10, 10, 200, 32]},
+                {"id": "priority", "text": "Priority", "control_type": "combobox", "rect": [10, 50, 200, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "priority",
+                "rect": [10, 50, 200, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "textbox_wording_rejects_same_label_combobox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7750,6 +7774,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "lock_exact_neighbor_rejects_unlock_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Unlock"},
+                {"rect": [180, 80, 100, 32], "label": "Lock"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Lock account.",
+                "target_id": "unlock",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "unlock", "text": "Unlock", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "lock", "text": "Lock", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "unlock",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "security_action_target_id_accepts_shield_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -11336,6 +11384,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "notification_settings_recovers_from_taskbar_notification_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 940, 120, 32], "label": "Notifications"},
+                {"rect": [420, 180, 180, 32], "label": "Manage notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open notification settings.",
+                "target_id": "notif",
+                "target": {"x": 900, "y": 940, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "notif",
+                    "text": "Notifications",
+                    "control_type": "button",
+                    "rect": [900, 940, 120, 32],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+                {
+                    "id": "manage",
+                    "text": "Manage notifications",
+                    "control_type": "button",
+                    "rect": [420, 180, 180, 32],
+                    "window_title": "Notifications",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "manage",
+                "rect": [420, 180, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "system_tray_target_id_accepts_show_hidden_icons",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14456,6 +14541,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "cardinal_direction_text_match_overrides_opposite_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Up"},
+                {"rect": [180, 80, 100, 32], "label": "Down"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Move down.",
+                "target_id": "up",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "up", "text": "Up", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "down", "text": "Down", "control_type": "button", "rect": [180, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "down",
+                "rect": [180, 80, 100, 32],
                 "overlay_emitted": True,
             },
         },

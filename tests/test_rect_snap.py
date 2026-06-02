@@ -4220,6 +4220,38 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(named_target.target_id, "state")
         self.assertFalse(named_target.rejected_reason)
 
+        wrong_named_target = resolve_candidate_target(
+            target_id="country",
+            instruction="Open State dropdown.",
+            candidates=candidates,
+            model_rect=(10, 10, 200, 32),
+        )
+        named_text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open State dropdown.",
+            candidates=candidates,
+            model_rect=(10, 10, 200, 32),
+        )
+        named_help_target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps({
+                    "kind": "step",
+                    "instruction": "Open State dropdown.",
+                    "target_id": "country",
+                    "target": {"x": 10, "y": 10, "width": 200, "height": 32},
+                })
+            ),
+            Capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_named_target.target_id, "country")
+        self.assertEqual(wrong_named_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(named_text_target.target_id, "state")
+        self.assertFalse(named_text_target.rejected_reason)
+        self.assertEqual(named_help_target.target_id, "state")
+        self.assertFalse(named_help_target.rejected_reason)
+
     def test_selector_wording_keeps_explicit_picker_button_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -17928,6 +17960,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("New item.", "add", "Add", "new", "New"),
             ("Cancel dialog.", "close", "Close", "cancel", "Cancel"),
             ("Sign out.", "logout_all", "Logout all sessions", "signout", "Sign out"),
+            ("Lock account.", "unlock", "Unlock", "lock", "Lock"),
             ("Download report.", "export", "Export", "download", "Download"),
             ("Refresh page.", "reload", "Reload", "refresh", "Refresh"),
             ("Edit profile.", "pencil", "Pencil", "edit", "Edit"),
@@ -17978,6 +18011,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertTrue(help_target.rejected_reason)
                 else:
                     self.assertFalse(help_target.rejected_reason)
+
+    def test_cardinal_direction_text_match_overrides_opposite_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Move down.", "up", "Up", "down", "Down"),
+            ("Move up.", "down", "Down", "up", "Up"),
+            ("Move left.", "right", "Right", "left", "Left"),
+            ("Move right.", "left", "Left", "right", "Right"),
+        )
+        for instruction, wrong_id, wrong_label, right_id, right_label in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    ControlCandidate(wrong_id, wrong_label, "button", (120, 160, 100, 32)),
+                    ControlCandidate(right_id, right_label, "button", (300, 160, 100, 32)),
+                ]
+
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 160, 100, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 160, 100, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 160, 100, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {"x": 120, "y": 160, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, wrong_id)
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.target_id, right_id)
+                self.assertFalse(text_target.rejected_reason)
+                if snap_target is not None:
+                    self.assertEqual(snap_target.target_id, wrong_id)
+                    self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.target_id, right_id)
+                self.assertFalse(help_target.rejected_reason)
 
     def test_notification_action_alias_target_id_accepts_bell_button(self) -> None:
         from control_inventory import ControlCandidate
@@ -18031,6 +18121,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 140, 32))
+
+    def test_notification_settings_recovers_from_taskbar_notification_status(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "notif",
+                "Notifications",
+                "button",
+                (900, 940, 120, 32),
+                automation_id="SystemTrayIcon",
+                window_title="Taskbar",
+            ),
+            ControlCandidate(
+                "manage",
+                "Manage notifications",
+                "button",
+                (420, 180, 180, 32),
+                window_title="Notifications",
+            ),
+        ]
+        instruction = "Open notification settings."
+
+        wrong_target = resolve_candidate_target(
+            target_id="notif",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 940, 120, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 940, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 940, 120, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "notif",
+                    "target": {"x": 900, "y": 940, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "notif")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "manage")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "manage")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_notification_alias_rejects_ambiguous_bell_and_notifications_actions(self) -> None:
         from control_inventory import ControlCandidate
