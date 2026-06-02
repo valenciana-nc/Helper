@@ -229,6 +229,51 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target appears to contain multiple controls")
 
+    def test_rejects_candidate_rect_spanning_two_segmented_buttons(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 74, 240, 106), outline="black", fill="#f3f4f6")
+        draw.line((150, 74, 150, 106), fill="black")
+        draw.text((92, 84), "Back", fill="black")
+        draw.text((178, 84), "Next", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(60, 74, 180, 32),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Next.",
+            target_control_type="button",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_accepts_candidate_icon_label_button_with_internal_edges(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (240, 160), color=(244, 246, 249))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 50, 160, 82), fill=(45, 100, 190), outline=(18, 48, 130), width=2)
+        draw.rectangle((48, 58, 72, 74), fill=(245, 248, 255))
+        draw.line((82, 60, 150, 60), fill=(245, 248, 255), width=3)
+        draw.line((82, 70, 132, 70), fill=(245, 248, 255), width=3)
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 50, 120, 32),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Save changes.",
+            target_control_type="button",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_rejects_candidate_action_rect_containing_multiple_button_boundaries(self) -> None:
         from target_quality import evaluate_target_quality
 

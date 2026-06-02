@@ -15000,6 +15000,28 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "segmented_candidate_rect_over_two_buttons_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [60, 74, 180, 32], "label": "Back | Next"},
+                {"rect": [150, 74, 1, 32], "fill": "black"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Next.",
+                "target_id": "seg",
+            },
+            "candidates": [
+                {"id": "seg", "text": "Back Next", "control_type": "button", "rect": [60, 74, 180, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "seg",
+                "quality_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "splitbutton_menu_model_rect_snaps_to_menu_segment",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

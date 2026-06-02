@@ -19,6 +19,7 @@ MODEL_COMPOUND_SEPARATOR_FLOOR = 0.65
 MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
 MODEL_BOUNDARY_ALIGNMENT_FLOOR = 0.08
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
+CANDIDATE_SEGMENTED_SEPARATOR_FLOOR = 0.85
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
 CANDIDATE_STRICT_QUALITY_CONTROL_TYPES = frozenset(
@@ -60,6 +61,7 @@ CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
         "approve",
         "archive",
         "attach",
+        "back",
         "cancel",
         "check",
         "clear",
@@ -79,9 +81,12 @@ CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
         "export",
         "filter",
         "finish",
+        "forward",
         "invite",
         "lock",
+        "next",
         "pay",
+        "previous",
         "publish",
         "refund",
         "reject",
@@ -174,7 +179,10 @@ def evaluate_target_quality(
         source != "model"
         and _candidate_compound_action_request(instruction)
         and _candidate_compound_rect_large_enough(image_rect)
-        and _has_compound_control_separators(capture.png_bytes, clipped)
+        and (
+            _has_compound_control_separators(capture.png_bytes, clipped)
+            or _has_segmented_control_separator(capture.png_bytes, clipped)
+        )
     ):
         return TargetQuality(
             accepted=False,
@@ -498,6 +506,45 @@ def _has_compound_control_separators(
             )
     except Exception:
         return False
+
+
+def _has_segmented_control_separator(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 48 or crop.height < 20:
+                return False
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return _strong_center_vertical_separator_groups(edges) >= 1
+    except Exception:
+        return False
+
+
+def _strong_center_vertical_separator_groups(edges: Image.Image) -> int:
+    width, height = edges.size
+    band = max(2, min(5, width // 12, height // 12))
+    margin_x = max(band * 3, int(width * 0.12))
+    if width <= margin_x * 2 or height <= band * 2:
+        return 0
+    pixels = edges.load()
+    line_length = height - band * 2
+    groups = 0
+    last_strong: int | None = None
+    for position in range(margin_x, width - margin_x):
+        strong = 0
+        for y in range(band, height - band):
+            if int(pixels[position, y]) > 32:
+                strong += 1
+        if strong / max(1, line_length) < CANDIDATE_SEGMENTED_SEPARATOR_FLOOR:
+            continue
+        if last_strong is None or position - last_strong > 2:
+            groups += 1
+        last_strong = position
+    return groups
 
 
 def _strong_internal_separator_groups(edges: Image.Image, *, vertical: bool) -> int:

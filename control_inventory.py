@@ -3627,8 +3627,7 @@ def _single_dialog_dismiss_candidate(
         exact_label_candidates = [
             candidate
             for candidate in selected
-            if _literal_words_from_text(candidate.text)
-            == _exact_visible_label_request_words(instruction)
+            if _exact_visible_label_matches_request(instruction, candidate)
         ]
         if len(exact_label_candidates) == 1:
             candidate = exact_label_candidates[0]
@@ -10994,15 +10993,17 @@ def _exact_visible_label_alternative_mismatch(
 ) -> bool:
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
-    requested_words = _exact_visible_label_request_words(instruction)
-    if not requested_words:
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if not requested_sequence:
         return False
-    candidate_words = _literal_words_from_text(candidate.text)
-    if not requested_words or not candidate_words:
+    requested_words = set(requested_sequence)
+    candidate_sequence = tuple(_literal_word_sequence(candidate.text))
+    if not candidate_sequence:
         return False
-    if candidate_words == requested_words:
+    if candidate_sequence == requested_sequence:
         return False
-    if not requested_words < candidate_words:
+    candidate_words = set(candidate_sequence)
+    if candidate_words != requested_words and not requested_words < candidate_words:
         return False
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
@@ -11013,7 +11014,7 @@ def _exact_visible_label_alternative_mismatch(
             instruction=instruction,
         ):
             continue
-        if _literal_words_from_text(other.text) == requested_words:
+        if _visible_label_sequence_matches_request_text(instruction, other.text):
             return True
     return False
 
@@ -11024,15 +11025,22 @@ def _exact_visible_label_matches_request(
 ) -> bool:
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
-    requested_words = _exact_visible_label_request_words(instruction)
-    if not requested_words:
+    return _visible_label_sequence_matches_request_text(instruction, candidate.text)
+
+
+def _visible_label_sequence_matches_request_text(instruction: str, text: str) -> bool:
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if not requested_sequence:
         return False
-    return _literal_words_from_text(candidate.text) == requested_words
+    return tuple(_literal_word_sequence(text)) == requested_sequence
 
 
 def _exact_visible_label_request_words(instruction: str) -> set[str]:
-    words = _literal_words_from_text(instruction)
-    requested_words = words - (
+    return set(_exact_visible_label_request_sequence(instruction))
+
+
+def _exact_visible_label_request_sequence(instruction: str) -> tuple[str, ...]:
+    excluded_words = (
         OPEN_VIEW_REQUEST_WORDS
         | (GENERIC_OBJECT_REQUEST_WORDS - frozenset({"find", "go", "search"}))
         | frozenset(
@@ -11058,9 +11066,15 @@ def _exact_visible_label_request_words(instruction: str) -> set[str]:
             }
         )
     )
+    requested_words = tuple(
+        word for word in _literal_word_sequence(instruction) if word not in excluded_words
+    )
     if requested_words:
         return requested_words
-    return _single_word_visible_action_label(instruction)
+    fallback_words = _single_word_visible_action_label(instruction)
+    if len(fallback_words) == 1:
+        return (next(iter(fallback_words)),)
+    return ()
 
 
 def _single_word_visible_action_label(instruction: str) -> set[str]:
@@ -11401,7 +11415,7 @@ def _state_label_action_mismatch(
     instruction_tokens = _literal_words_from_text(instruction)
     if _same_form_state_label_action_mismatch(instruction, candidate_text):
         return True
-    if control_tokens == _exact_visible_label_request_words(instruction):
+    if _visible_label_sequence_matches_request_text(instruction, candidate_text):
         return False
     if _state_label_is_target_identity(instruction_tokens, control_tokens):
         return False
@@ -11436,7 +11450,7 @@ def _state_action_object_only_alternative_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if _literal_words_from_text(candidate.text) == _exact_visible_label_request_words(instruction):
+    if _visible_label_sequence_matches_request_text(instruction, candidate.text):
         return False
     if candidate.control_type == "checkbox" and (
         raw_tokens & {"checkbox", "switch", "toggle"} or {"check", "box"} <= raw_tokens
@@ -14334,8 +14348,8 @@ def _exact_visible_label_duplicate_ambiguous(
 ) -> bool:
     if not _exact_visible_label_matches_request(instruction, selected):
         return False
-    requested_words = _exact_visible_label_request_words(instruction)
-    if not requested_words:
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if not requested_sequence:
         return False
     control_intents = _instruction_control_intents(instruction)
     for candidate in candidates:
@@ -14351,7 +14365,7 @@ def _exact_visible_label_duplicate_ambiguous(
             instruction=instruction,
         ):
             continue
-        if _literal_words_from_text(candidate.text) != requested_words:
+        if not _visible_label_sequence_matches_request_text(instruction, candidate.text):
             continue
         if candidate.window_rank < selected.window_rank:
             return True

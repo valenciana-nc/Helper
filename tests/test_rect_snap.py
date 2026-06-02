@@ -8318,6 +8318,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
 
+    def test_exact_visible_label_preserves_phrase_order(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("wrong", "York New", "button", (10, 10, 100, 30)),
+            ControlCandidate("right", "New York", "button", (10, 60, 100, 30)),
+        ]
+        instruction = "Click New York."
+
+        wrong_target = resolve_candidate_target(
+            target_id="wrong",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "wrong",
+                    "target": {"x": 10, "y": 10, "width": 100, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "right")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "right")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "right")
+        self.assertFalse(help_target.rejected_reason)
+
     def test_reversible_action_wrong_target_id_recovers_to_exact_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -9508,6 +9557,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.target_id, "row")
         self.assertFalse(target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_recycled_target_id_when_independent_is_ambiguous(self) -> None:
+        from dataclasses import replace
+
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate("c001", "Save", "button", (100, 100, 80, 32)),
+        ]
+        current_candidates = [
+            ControlCandidate("c001", "Save", "button", (100, 100, 80, 32)),
+            ControlCandidate("c002", "Save", "button", (300, 100, 80, 32)),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+        independent = resolve_help_target(
+            replace(decision, target_id=""),
+            self._capture(),
+            current_candidates,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(current_target.source, "target_id")
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(independent.rejected_reason, "ambiguous text match")
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_revalidation_rejects_action_moved_to_background_window(self) -> None:

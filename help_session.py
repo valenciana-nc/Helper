@@ -704,6 +704,16 @@ def _guard_revalidated_target(
         return replace(target, rejected_reason="current screen recheck target changed")
     if _model_only_revalidation_lacks_fresh_evidence(previous_target, target):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if decision.target_id and target.source == "target_id":
+        independent = resolve_help_target(
+            replace(decision, target_id=""),
+            capture,
+            candidates,
+            snapper=snapper,
+            clip_to_capture=False,
+        )
+        if independent.rejected_reason or not _same_revalidated_target(target, independent):
+            return replace(target, rejected_reason="current screen recheck target changed")
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     if (
@@ -715,21 +725,6 @@ def _guard_revalidated_target(
     if not decision.target_id or target.source != "target_id":
         return replace(target, rejected_reason="current screen recheck target changed")
 
-    independent = resolve_help_target(
-        replace(decision, target_id=""),
-        capture,
-        candidates,
-        snapper=snapper,
-        clip_to_capture=False,
-    )
-    if (
-        not independent.rejected_reason
-        and _same_revalidated_target(target, independent)
-        and _within_revalidation_drift(previous_target.rect, target.rect)
-        and _revalidation_overlap_fraction(previous_target.rect, target.rect)
-        >= MIN_REVALIDATION_OVERLAP_FRACTION
-    ):
-        return target
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     return replace(target, rejected_reason="current screen recheck target changed")
