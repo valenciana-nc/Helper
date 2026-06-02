@@ -15546,6 +15546,60 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (200, 90, 90, 30))
 
+    def test_cell_only_grid_row_context_recovers_far_action_column(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("customer_header", "Customer", "headeritem", (20, 40, 150, 30)),
+            ControlCandidate("status_header", "Status", "headeritem", (220, 40, 120, 30)),
+            ControlCandidate("actions_header", "Actions", "headeritem", (480, 40, 120, 30)),
+            ControlCandidate("cell_acme", "Acme", "cell", (20, 90, 150, 30)),
+            ControlCandidate("status_acme", "Paid", "cell", (220, 90, 120, 30)),
+            ControlCandidate("refund_acme", "Refund", "button", (500, 90, 80, 30)),
+            ControlCandidate("cell_globex", "Globex", "cell", (20, 140, 150, 30)),
+            ControlCandidate("status_globex", "Open", "cell", (220, 140, 120, 30)),
+            ControlCandidate("refund_globex", "Refund", "button", (500, 140, 80, 30)),
+        ]
+        instruction = "Click Refund for Acme."
+
+        wrong_target = resolve_candidate_target(
+            target_id="refund_globex",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 80, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 80, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 80, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "refund_globex",
+                    "target": {"x": 500, "y": 140, "width": 80, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "refund_globex")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "refund_acme")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 90, 80, 30))
+
     def test_contextual_duplicate_action_first_rowheader_rejects_wrong_row_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -22297,6 +22351,66 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (450, 160, 80, 28))
 
+    def test_matrix_scoped_duplicate_action_uses_under_header_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("stage_col", "Staging", "headeritem", (220, 40, 160, 36)),
+            ControlCandidate("prod_col", "Production", "headeritem", (400, 40, 160, 36)),
+            ControlCandidate("acme_row", "Acme Corp", "listitem", (20, 90, 560, 48)),
+            ControlCandidate("acme_stage", "Approve", "button", (270, 100, 80, 28)),
+            ControlCandidate("acme_prod", "Approve", "button", (450, 100, 80, 28)),
+            ControlCandidate("globex_row", "Globex Corp", "listitem", (20, 150, 560, 48)),
+            ControlCandidate("globex_stage", "Approve", "button", (270, 160, 80, 28)),
+            ControlCandidate("globex_prod", "Approve", "button", (450, 160, 80, 28)),
+        ]
+        for instruction in (
+            "Click Approve for the Globex row under Production.",
+            "Click Approve for the Globex row below Production.",
+            "Click Approve for the Globex row beneath Production.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="acme_stage",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(270, 100, 80, 28),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(270, 100, 80, 28),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(270, 100, 80, 28),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "acme_stage",
+                            "target": {"x": 270, "y": 100, "width": 80, "height": 28},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "acme_stage")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(text_target.target_id, "globex_prod")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "globex_prod")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (450, 160, 80, 28))
+
     def test_shorthand_header_context_recovers_requested_column_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -28061,48 +28175,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
             (20, 120, 180, 32),
             window_title="MyApp - Google Chrome",
         )
-        instruction = "Click the Settings left rail item."
+        for instruction in (
+            "Click the Settings left rail item.",
+            "Open Settings in the left rail.",
+            "Open Settings in the rail.",
+        ):
+            with self.subTest(instruction=instruction):
+                target_id = resolve_candidate_target(
+                    target_id="tab",
+                    instruction=instruction,
+                    candidates=[browser_tab, rail_item],
+                    model_rect=browser_tab.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=[browser_tab, rail_item],
+                    model_rect=browser_tab.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=[browser_tab, rail_item],
+                    model_rect=browser_tab.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "tab",
+                            "target": {"x": 20, "y": 10, "width": 220, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [browser_tab, rail_item],
+                )
 
-        target_id = resolve_candidate_target(
-            target_id="tab",
-            instruction=instruction,
-            candidates=[browser_tab, rail_item],
-            model_rect=browser_tab.rect,
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=[browser_tab, rail_item],
-            model_rect=browser_tab.rect,
-        )
-        snap_target = snap_candidate_target(
-            instruction=instruction,
-            candidates=[browser_tab, rail_item],
-            model_rect=browser_tab.rect,
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "tab",
-                    "target": {"x": 20, "y": 10, "width": 220, "height": 32},
-                }
-            ),
-            self._capture(),
-            [browser_tab, rail_item],
-        )
-
-        self.assertEqual(target_id.source, "target_id")
-        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
-        self.assertEqual(text_target.source, "text_match")
-        self.assertEqual(text_target.target_id, "item")
-        self.assertFalse(text_target.rejected_reason)
-        self.assertEqual(snap_target.source, "candidate_snap")
-        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
-        self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "item")
-        self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "item")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "item")
+                self.assertFalse(help_target.rejected_reason)
 
     def test_table_row_broad_group_rejects_multiple_listitems(self) -> None:
         from control_inventory import ControlCandidate

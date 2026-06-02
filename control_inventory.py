@@ -303,6 +303,8 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
     {
         "by",
         "click",
+        "below",
+        "beneath",
         "for",
         "from",
         "inside",
@@ -311,6 +313,7 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
         "on",
         "press",
         "tap",
+        "under",
         "use",
         "within",
         "with",
@@ -9870,6 +9873,7 @@ def _contextual_duplicate_nearby_label_tokens(
             continue
         if not (
             _nearby_row_label_rect_matches(label, candidate)
+            or _same_row_cell_label_rect_matches(label, candidate)
             or _nearby_context_label_rect_matches(label, candidate)
             or _same_containing_row_line_label_rect_matches(label, candidate, candidates)
         ):
@@ -9922,6 +9926,34 @@ def _nearby_row_label_rect_matches(
     horizontal_gap = max(action_x - label_right, label_x - action_right, 0)
     max_gap = max(48, min(220, max(label_height, action_height) * 6))
     return horizontal_gap <= max_gap
+
+
+def _same_row_cell_label_rect_matches(
+    label: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if label.control_type not in {"cell", "datagridcell", "gridcell", "rowheader"}:
+        return False
+    label_x, label_y, label_width, label_height = label.rect
+    action_x, action_y, action_width, action_height = action.rect
+    if min(label_width, label_height, action_width, action_height) <= 0:
+        return False
+    label_center_y = label_y + label_height / 2
+    action_center_y = action_y + action_height / 2
+    if abs(label_center_y - action_center_y) > max(8.0, min(label_height, action_height) * 0.55):
+        return False
+    vertical_overlap = min(label_y + label_height, action_y + action_height) - max(
+        label_y,
+        action_y,
+    )
+    if vertical_overlap < min(label_height, action_height) * 0.45:
+        return False
+    label_right = label_x + label_width
+    action_right = action_x + action_width
+    horizontal_gap = max(action_x - label_right, label_x - action_right, 0)
+    return horizontal_gap <= max(260, max(label_width, action_width) * 4)
 
 
 def _nearby_context_label_rect_matches(
@@ -11238,8 +11270,6 @@ def _browser_tab_contextual_item_mismatch(
         return False
     raw_tokens = _tokens_from_text(instruction)
     if raw_tokens & BROWSER_TAB_WORDS:
-        return False
-    if "item" not in raw_tokens:
         return False
     if not (raw_tokens & CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS):
         return False
