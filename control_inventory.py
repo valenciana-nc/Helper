@@ -2248,6 +2248,20 @@ def snap_candidate_target(
             target_id=conflict_candidate.id,
             rejected_reason="candidate semantic mismatch",
         )
+    if _candidate_snap_global_ambiguity(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=best_score,
+            source="candidate_snap",
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason="ambiguous candidate snap",
+        )
     if best_score < confidence_floor:
         contained = _single_contained_control_intent_candidate(
             candidates=candidates,
@@ -4223,6 +4237,12 @@ def _target_id_plausibility(
         candidates,
     ):
         return False, max(text_score, geometry_score), "target_id ambiguous"
+    if _generic_shared_prefix_duplicate_ambiguous(
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _contains_tighter_same_intent_action(
@@ -4287,7 +4307,7 @@ def _target_id_plausibility(
         )
 
     if not instruction_tokens:
-        if _has_nearby_unlabeled_competitor(candidate, candidates):
+        if _has_ambiguous_unlabeled_competitor(candidate, candidates, instruction_tokens):
             return (
                 False,
                 geometry_score,
@@ -4363,7 +4383,7 @@ def _target_id_plausibility(
                 geometry_score,
                 "target_id ambiguous",
             )
-        if _has_nearby_unlabeled_competitor(candidate, candidates):
+        if _has_ambiguous_unlabeled_competitor(candidate, candidates, instruction_tokens):
             return (
                 False,
                 geometry_score,
@@ -12928,6 +12948,96 @@ def _has_nearby_unlabeled_competitor(
         if _intersects(candidate.rect, search_rect):
             return True
     return False
+
+
+def _has_ambiguous_unlabeled_competitor(
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction_tokens: set[str],
+) -> bool:
+    if _candidate_visible_text_tokens(selected):
+        return False
+    selected_automation = _candidate_automation_tokens(selected)
+    selected_has_specific_evidence = bool(instruction_tokens & selected_automation)
+    if _has_nearby_unlabeled_competitor(selected, candidates):
+        return True
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type != selected.control_type:
+            continue
+        if _candidate_visible_text_tokens(candidate):
+            continue
+        if not selected_has_specific_evidence:
+            return True
+        candidate_automation = _candidate_automation_tokens(candidate)
+        if instruction_tokens & candidate_automation:
+            return True
+        if selected.automation_id.strip() and _candidate_text_key(
+            selected.automation_id
+        ) == _candidate_text_key(candidate.automation_id):
+            return True
+    return False
+
+
+def _generic_shared_prefix_duplicate_ambiguous(
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not instruction_tokens:
+        return False
+    if selected.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    selected_tokens = _candidate_visible_text_tokens(selected)
+    if len(selected_tokens) < 2:
+        return False
+    requested = _object_token_variants(instruction_tokens)
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type != selected.control_type:
+            continue
+        if _same_visual_candidate(candidate, selected):
+            continue
+        candidate_tokens = _candidate_visible_text_tokens(candidate)
+        if len(candidate_tokens) < 2:
+            continue
+        shared_tokens = selected_tokens & candidate_tokens
+        if not (requested & _object_token_variants(shared_tokens)):
+            continue
+        selected_distinct = selected_tokens - candidate_tokens
+        candidate_distinct = candidate_tokens - selected_tokens
+        if not selected_distinct or not candidate_distinct:
+            continue
+        if requested & _object_token_variants(selected_distinct):
+            continue
+        return True
+    return False
+
+
+def _candidate_snap_global_ambiguity(
+    instruction: str,
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        selected,
+        candidates,
+    ):
+        return False
+    return _has_ambiguous_unlabeled_competitor(
+        selected,
+        candidates,
+        instruction_tokens,
+    ) or _generic_shared_prefix_duplicate_ambiguous(
+        instruction_tokens,
+        selected,
+        candidates,
+    )
 
 
 def _proximity_score(

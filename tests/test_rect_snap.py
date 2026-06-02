@@ -5998,6 +5998,108 @@ class ControlInventoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.rejected_reason, "target_id ambiguous unlabeled control")
 
+    def test_far_duplicate_icon_buttons_reject_generic_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("c001", "", "button", (100, 100, 32, 32), automation_id="MoreOptions"),
+            ControlCandidate("c002", "", "button", (400, 100, 32, 32), automation_id="MoreOptions"),
+        ]
+        instruction = "Click the icon button."
+
+        target_id = resolve_candidate_target(
+            target_id="c001",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous unlabeled control")
+        self.assertEqual(snap.target_id, "c001")
+        self.assertEqual(snap.rejected_reason, "ambiguous candidate snap")
+
+    def test_specific_icon_target_allows_unrelated_far_icon(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("more", "", "button", (100, 100, 32, 32), automation_id="MoreOptions"),
+            ControlCandidate("search", "", "button", (400, 100, 32, 32), automation_id="SearchButton"),
+        ]
+        instruction = "Click More options."
+
+        target_id = resolve_candidate_target(
+            target_id="more",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+
+        for target in (target_id, snap):
+            self.assertEqual(target.target_id, "more")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (100, 100, 32, 32))
+
+    def test_shared_prefix_listitem_rejects_generic_target_id_and_snap(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("alpha", "Project Alpha", "listitem", (100, 100, 160, 40)),
+            ControlCandidate("beta", "Project Beta", "listitem", (100, 200, 160, 40)),
+        ]
+        instruction = "Open project."
+
+        target_id = resolve_candidate_target(
+            target_id="beta",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 200, 160, 40),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 200, 160, 40),
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertEqual(snap.target_id, "beta")
+        self.assertEqual(snap.rejected_reason, "ambiguous candidate snap")
+
+    def test_shared_prefix_listitem_accepts_disambiguating_identity(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("alpha", "Project Alpha", "listitem", (100, 100, 160, 40)),
+            ControlCandidate("beta", "Project Beta", "listitem", (100, 200, 160, 40)),
+        ]
+        instruction = "Open Project Beta."
+
+        target_id = resolve_candidate_target(
+            target_id="beta",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 200, 160, 40),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 200, 160, 40),
+        )
+
+        for target in (target_id, snap):
+            self.assertEqual(target.target_id, "beta")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (100, 200, 160, 40))
+
     def test_resolve_text_match_beats_nearby_wrong_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
