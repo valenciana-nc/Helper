@@ -1098,6 +1098,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "candidate_backed_compound_row_action_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 48], "label": "Request 42"},
+                {"rect": [240, 88, 70, 32], "label": "Approve"},
+                {"rect": [322, 88, 50, 32], "label": "Reject"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve request 42.",
+                "target_id": "row",
+                "target": {"x": 20, "y": 80, "width": 360, "height": 48},
+            },
+            "candidates": [
+                {
+                    "id": "row",
+                    "text": "Request 42 Approve Reject",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 360, 48],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -22634,6 +22663,7 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
             rect=target.rect,
             source=target.source,
             confidence=target.confidence,
+            instruction=decision.instruction,
         )
         if not quality.accepted:
             rejected_reason = quality.reason

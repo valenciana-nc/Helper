@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 
 from PIL import Image, ImageFilter, ImageStat
@@ -15,7 +16,64 @@ MODEL_NOISY_BOUNDARY_FLOOR = 0.25
 MODEL_COMPOUND_SEPARATOR_FLOOR = 0.65
 MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
+CANDIDATE_COMPOUND_MIN_AREA = 3000
+CANDIDATE_COMPOUND_MIN_WIDTH = 120
 MAX_TARGET_AREA_FRACTION = 0.25
+CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
+    {
+        "accept",
+        "activate",
+        "add",
+        "apply",
+        "approve",
+        "archive",
+        "attach",
+        "cancel",
+        "check",
+        "clear",
+        "close",
+        "complete",
+        "confirm",
+        "copy",
+        "create",
+        "deactivate",
+        "decline",
+        "delete",
+        "disable",
+        "dismiss",
+        "download",
+        "edit",
+        "enable",
+        "export",
+        "filter",
+        "finish",
+        "invite",
+        "lock",
+        "pay",
+        "publish",
+        "refund",
+        "reject",
+        "remove",
+        "reset",
+        "resolve",
+        "restore",
+        "revoke",
+        "save",
+        "send",
+        "share",
+        "sort",
+        "start",
+        "stop",
+        "submit",
+        "sync",
+        "toggle",
+        "trash",
+        "uncheck",
+        "unlock",
+        "update",
+        "upload",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +92,7 @@ def evaluate_target_quality(
     rect: tuple[int, int, int, int],
     source: str,
     confidence: float,
+    instruction: str = "",
 ) -> TargetQuality:
     image_rect = _screen_to_image_rect(capture, rect)
     clipped = _clip_rect(image_rect, (0, 0, capture.width, capture.height))
@@ -73,6 +132,20 @@ def evaluate_target_quality(
         return TargetQuality(
             accepted=False,
             reason="target appears visually empty",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
+        and _candidate_compound_action_request(instruction)
+        and _candidate_compound_rect_large_enough(image_rect)
+        and _has_compound_control_separators(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
             visible_fraction=visible_fraction,
             visual_activity=visual_activity,
             boundary_activity=boundary_activity,
@@ -126,6 +199,16 @@ def evaluate_target_quality(
         boundary_activity=boundary_activity,
         target_area_fraction=target_area_fraction,
     )
+
+
+def _candidate_compound_action_request(instruction: str) -> bool:
+    words = set(re.findall(r"[a-z0-9]+", (instruction or "").lower()))
+    return bool(words & CANDIDATE_COMPOUND_ACTION_WORDS)
+
+
+def _candidate_compound_rect_large_enough(rect: tuple[int, int, int, int]) -> bool:
+    _x, _y, width, height = rect
+    return width >= CANDIDATE_COMPOUND_MIN_WIDTH and width * height >= CANDIDATE_COMPOUND_MIN_AREA
 
 
 def _screen_to_image_rect(

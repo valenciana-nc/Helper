@@ -317,6 +317,7 @@ def _run_resolution_case(
             rect=target.rect,
             source=target.source,
             confidence=target.confidence,
+            instruction=decision.instruction,
         )
         if not quality.accepted:
             rejected_reason = quality.reason

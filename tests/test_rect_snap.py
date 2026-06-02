@@ -31228,6 +31228,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, model_rect)
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
+    def test_weak_fresh_snap_candidate_does_not_fall_back_to_raw_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        model_rect = (110, 150, 300, 80)
+        button = _make_button("", 120, 160, 180, 44)
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 1000, 1000, [button])])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the highlighted area.",
+                    "target": {
+                        "x": model_rect[0],
+                        "y": model_rect[1],
+                        "width": model_rect[2],
+                        "height": model_rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, (120, 160, 180, 44))
+        self.assertEqual(target.rejected_reason, "candidate evidence missing")
+
+    def test_multiple_weak_fresh_snap_candidates_do_not_fall_back_to_raw_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        model_rect = (110, 150, 220, 52)
+        first = _make_button("Alpha", 120, 160, 80, 32)
+        second = _make_button("Beta", 220, 160, 80, 32)
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 1000, 1000, [first, second])])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the control.",
+                    "target": {
+                        "x": model_rect[0],
+                        "y": model_rect[1],
+                        "width": model_rect[2],
+                        "height": model_rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rejected_reason, "fresh snap ambiguous")
+        self.assertNotEqual(target.rect, model_rect)
+
     def test_empty_inventory_fresh_snap_rejects_action_word_conflict(self) -> None:
         from help_session import resolve_help_target
         from rect_snap import SnapResult

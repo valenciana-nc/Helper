@@ -1248,6 +1248,24 @@ def snap_to_control(
             return semantic_action_mismatch_result
         if compound_target_result is not None:
             return compound_target_result
+        weak_model_candidates = _weak_model_fallback_candidates(
+            ranked,
+            model_rect,
+            confidence_floor=confidence_floor,
+        )
+        if weak_model_candidates:
+            reason = (
+                "fresh snap ambiguous"
+                if len(weak_model_candidates) > 1
+                else "candidate evidence missing"
+            )
+            return SnapResult(
+                rect=best_result.rect,
+                confidence=best_score,
+                source="uia",
+                matched_text=best_result.matched_text,
+                rejected_reason=reason,
+            )
         log.debug(
             "Snap fallback: best=%.2f (floor=%.2f); using model rect",
             best_score,
@@ -1265,6 +1283,22 @@ def snap_to_control(
         model_rect,
     )
     return best_result
+
+
+def _weak_model_fallback_candidates(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    model_rect: tuple[int, int, int, int],
+    *,
+    confidence_floor: float,
+) -> list[SnapResult]:
+    weak: list[SnapResult] = []
+    for score, result, _semantic_text, _ctype, _window_rank in ranked:
+        if score >= confidence_floor:
+            continue
+        if not _semantic_mismatch_targets_model_rect(result.rect, model_rect):
+            continue
+        weak.append(result)
+    return weak
 
 
 def _default_desktop():

@@ -915,6 +915,7 @@ class HelpSession(QObject):
                 rect=final_rect,
                 source=target.source,
                 confidence=target.confidence,
+                instruction=decision.instruction,
             )
             if not quality.accepted:
                 self._emit_target_diagnostic(
