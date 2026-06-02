@@ -6100,7 +6100,11 @@ def _named_control_label_missing(
 ) -> bool:
     if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
         return False
-    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    requested_label, _requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_label:
         return False
     evidence = _named_control_candidate_label_tokens(candidate, candidates)
@@ -6114,18 +6118,22 @@ def _named_control_label_context_mismatch(
 ) -> bool:
     if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
         return False
-    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    requested_label, requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_label:
         return False
-    requested_context = _named_control_requested_context_tokens(
-        instruction,
-        requested_label,
-    )
     if not requested_context:
         return False
     candidate_evidence = _named_control_candidate_label_tokens(candidate, candidates)
     if requested_label & candidate_evidence and requested_context <= candidate_evidence:
         return False
+    if requested_label & candidate_evidence:
+        candidate_context = _named_control_candidate_context_tokens(candidate, candidates)
+        if candidate_context and not (requested_context & candidate_context):
+            return True
     return any(
         other.id != candidate.id
         and not _same_visual_candidate(other, candidate)
@@ -6157,15 +6165,15 @@ def _named_control_label_context_matches_request(
 ) -> bool:
     if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
         return False
-    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    requested_label, requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_label:
         return False
     if not _named_control_requested_literal_context_tokens(instruction, requested_label):
         return False
-    requested_context = _named_control_requested_context_tokens(
-        instruction,
-        requested_label,
-    )
     if not requested_context:
         return False
     return _named_control_matches_label_context(
@@ -6183,7 +6191,11 @@ def _named_control_label_request_matches_candidate(
 ) -> bool:
     if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
         return False
-    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    requested_label, _requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_label:
         return False
     evidence = _named_control_candidate_label_tokens(candidate, candidates)
@@ -6280,6 +6292,28 @@ def _named_control_requested_label_tokens(instruction: str, control_type: str) -
     return set()
 
 
+def _named_control_effective_label_context_tokens(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> tuple[set[str], set[str]]:
+    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    if not requested_label:
+        return set(), set()
+    requested_context = _named_control_requested_context_tokens(instruction, requested_label)
+    if requested_context:
+        return requested_label, requested_context
+    if len(requested_label) < 2:
+        return requested_label, set()
+    direct_label = _named_control_candidate_direct_label_tokens(candidate, candidates)
+    direct_overlap = requested_label & direct_label
+    if direct_overlap and direct_overlap != requested_label:
+        inferred_context = requested_label - direct_overlap
+        if inferred_context:
+            return direct_overlap, inferred_context
+    return requested_label, set()
+
+
 def _named_control_trailing_label_tokens(words: list[str], start_index: int) -> set[str]:
     cursor = start_index
     while cursor < len(words):
@@ -6353,6 +6387,32 @@ def _named_control_candidate_label_tokens(
         | _nearby_unlabeled_control_label_tokens(candidate, candidates)
     )
     return _object_token_variants(tokens) - NAMED_CONTROL_LABEL_STOPWORDS
+
+
+def _named_control_candidate_direct_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
+        return set()
+    tokens = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.automation_id)
+        | _nearby_field_label_tokens(candidate, candidates)
+        | _tabular_field_label_tokens(candidate, candidates)
+        | _nearby_unlabeled_control_label_tokens(candidate, candidates)
+    )
+    return _object_token_variants(tokens) - NAMED_CONTROL_LABEL_STOPWORDS
+
+
+def _named_control_candidate_context_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    return (
+        _named_control_candidate_label_tokens(candidate, candidates)
+        - _named_control_candidate_direct_label_tokens(candidate, candidates)
+    )
 
 
 def _nearby_unlabeled_control_label_tokens(

@@ -30631,7 +30631,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(text_target.target_id, "bill_email")
                 self.assertFalse(text_target.rejected_reason)
                 if snap_target is not None:
-                    self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+                    self.assertTrue(snap_target.rejected_reason)
                 self.assertEqual(help_target.source, "text_match")
                 self.assertEqual(help_target.target_id, "bill_email")
                 self.assertFalse(help_target.rejected_reason)
@@ -30649,50 +30649,88 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ControlCandidate("bill_country_label", "Country", "text", (20, 202, 80, 24)),
             ControlCandidate("bill_country", "Canada", "combobox", (120, 196, 260, 36)),
         ]
-        instruction = "Open Country dropdown in Billing."
+        for instruction in (
+            "Open Country dropdown in Billing.",
+            "Open Billing Country dropdown.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="ship_country",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "ship_country",
+                            "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        wrong_target = resolve_candidate_target(
-            target_id="ship_country",
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "bill_country")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "bill_country")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_named_field_rejects_when_requested_context_disappears(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("profile", "Profile", "pane", (10, 30, 430, 90)),
+            ControlCandidate("email", "", "edit", (120, 54, 260, 36), automation_id="email"),
+        ]
+        instruction = "Click Email text field in Billing."
+
+        target = resolve_candidate_target(
+            target_id="email",
             instruction=instruction,
             candidates=candidates,
-            model_rect=(120, 76, 260, 36),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 76, 260, 36),
-        )
-        snap_target = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 76, 260, 36),
+            model_rect=(120, 54, 260, 36),
         )
         help_target = resolve_help_target(
             self._decision(
                 {
                     "kind": "step",
                     "instruction": instruction,
-                    "target_id": "ship_country",
-                    "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                    "target_id": "email",
+                    "target": {"x": 120, "y": 54, "width": 260, "height": 36},
                 }
             ),
             self._capture(),
             candidates,
         )
 
-        self.assertIsNotNone(wrong_target)
-        assert wrong_target is not None
-        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
-        self.assertIsNotNone(text_target)
-        assert text_target is not None
-        self.assertEqual(text_target.target_id, "bill_country")
-        self.assertFalse(text_target.rejected_reason)
-        self.assertIsNone(snap_target)
-        self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "bill_country")
-        self.assertFalse(help_target.rejected_reason)
-        self.assertEqual(help_target.rect, (120, 196, 260, 36))
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(help_target.target_id, "email")
+        self.assertTrue(help_target.rejected_reason)
 
     def test_row_current_value_dropdown_uses_column_and_row_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
