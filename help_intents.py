@@ -792,7 +792,7 @@ _SELECTOR_BLOCKING_WORDS = frozenset(
         "splitbutton",
     }
 )
-_OPTION_INTENT_TYPES = frozenset({"radiobutton", "listitem", "treeitem", "menuitem"})
+_OPTION_INTENT_TYPES = frozenset({"checkbox", "radiobutton", "listitem", "treeitem", "menuitem"})
 _OPTION_INTENT_WORDS = frozenset({"choice", "choices", "option"})
 _SELECTION_ACTION_INTENT_TYPES = _OPTION_INTENT_TYPES | frozenset({"combobox"})
 _SELECTION_ACTION_WORDS = frozenset({"select"})

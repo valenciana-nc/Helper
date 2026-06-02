@@ -1020,10 +1020,12 @@ class HelpIntentLanguageTests(unittest.TestCase):
         radio_intents = instruction_control_intents("Select Weekly radio.")
         radio_option_intents = instruction_control_intents("Select Weekly radio option.")
         checkbox_option_intents = instruction_control_intents("Select Weekly checkbox option.")
+        generic_option_intents = instruction_control_intents("Select Weekly option.")
 
         self.assertEqual(radio_intents, {"radiobutton"})
         self.assertEqual(radio_option_intents, {"radiobutton"})
         self.assertEqual(checkbox_option_intents, {"checkbox"})
+        self.assertIn("checkbox", generic_option_intents)
 
     def test_menu_option_intent_does_not_broaden_to_radio_options(self) -> None:
         from help_intents import instruction_control_intents
@@ -7512,6 +7514,138 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
+
+    def test_button_wording_recovers_to_plain_button_from_splitbutton(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings button.",
+                    "target_id": "split",
+                    "target": {"x": 10, "y": 60, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("button", "Settings", "button", (10, 10, 100, 32)),
+                ControlCandidate("split", "Settings", "splitbutton", (10, 60, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "button")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 100, 32))
+
+    def test_bare_option_recovers_checkbox_from_button_target(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings option.",
+                    "target_id": "button",
+                    "target": {"x": 10, "y": 60, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("check", "Settings", "checkbox", (10, 10, 140, 32)),
+                ControlCandidate("button", "Settings", "button", (10, 60, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "check")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 140, 32))
+
+    def test_bare_option_same_label_role_collision_rejects_overlay(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings option.",
+                    "target_id": "menu",
+                    "target": {"x": 10, "y": 60, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("radio", "Settings", "radiobutton", (10, 10, 140, 32)),
+                ControlCandidate("menu", "Settings", "menuitem", (10, 60, 140, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "menu")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_plain_field_wording_recovers_to_edit_from_combobox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings input field.",
+                    "target_id": "combo",
+                    "target": {"x": 10, "y": 60, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("edit", "Settings", "edit", (10, 10, 180, 32)),
+                ControlCandidate("combo", "Settings", "combobox", (10, 60, 180, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "edit")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 10, 180, 32))
+
+    def test_cell_subtype_wording_recovers_to_exact_role(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click the Settings grid cell.", "cell", "grid", (10, 60, 120, 30)),
+            ("Click the Settings data grid cell.", "cell", "data", (10, 100, 120, 30)),
+            ("Click the Settings cell.", "grid", "cell", (10, 10, 120, 30)),
+        )
+        for instruction, wrong_id, wanted_id, wanted_rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {"x": 10, "y": 60, "width": 120, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("cell", "Settings", "cell", (10, 10, 120, 30)),
+                        ControlCandidate("grid", "Settings", "gridcell", (10, 60, 120, 30)),
+                        ControlCandidate("data", "Settings", "datagridcell", (10, 100, 120, 30)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, wanted_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, wanted_rect)
 
     def test_text_entry_action_wrong_target_id_recovers_to_edit(self) -> None:
         from control_inventory import ControlCandidate

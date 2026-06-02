@@ -19233,6 +19233,126 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "plain_button_wording_recovers_from_splitbutton",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Settings"},
+                {"rect": [20, 130, 140, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings button.",
+                "target_id": "split",
+                "target": {"x": 20, "y": 130, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "button", "text": "Settings", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "split", "text": "Settings", "control_type": "splitbutton", "rect": [20, 130, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "button",
+                "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bare_option_recovers_checkbox_from_button_target",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Settings"},
+                {"rect": [20, 130, 140, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings option.",
+                "target_id": "button",
+                "target": {"x": 20, "y": 130, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "check", "text": "Settings", "control_type": "checkbox", "rect": [20, 80, 140, 32]},
+                {"id": "button", "text": "Settings", "control_type": "button", "rect": [20, 130, 140, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "check",
+                "rect": [20, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bare_option_mixed_roles_reject_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Settings"},
+                {"rect": [20, 130, 140, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings option.",
+                "target_id": "menu",
+                "target": {"x": 20, "y": 130, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "radio", "text": "Settings", "control_type": "radiobutton", "rect": [20, 80, 140, 32]},
+                {"id": "menu", "text": "Settings", "control_type": "menuitem", "rect": [20, 130, 140, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "menu",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "plain_field_wording_recovers_from_combobox",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Settings"},
+                {"rect": [20, 130, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings input field.",
+                "target_id": "combo",
+                "target": {"x": 20, "y": 130, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "edit", "text": "Settings", "control_type": "edit", "rect": [20, 80, 180, 32]},
+                {"id": "combo", "text": "Settings", "control_type": "combobox", "rect": [20, 130, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "grid_cell_wording_recovers_from_plain_cell",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 120, 30], "label": "Settings"},
+                {"rect": [20, 130, 120, 30], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings grid cell.",
+                "target_id": "cell",
+                "target": {"x": 20, "y": 130, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "grid", "text": "Settings", "control_type": "gridcell", "rect": [20, 80, 120, 30]},
+                {"id": "cell", "text": "Settings", "control_type": "cell", "rect": [20, 130, 120, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "grid",
+                "rect": [20, 80, 120, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "blank_candidate_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {

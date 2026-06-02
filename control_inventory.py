@@ -1200,6 +1200,7 @@ NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
     {"cell", "datagridcell", "gridcell", "rowheader"}
 )
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
+OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
@@ -2419,6 +2420,8 @@ def _text_match_score(
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _surface_context_contains_tighter_action(
         selected=candidate,
         candidates=candidates,
@@ -2708,6 +2711,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2983,6 +2988,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4979,6 +4990,64 @@ def _field_alternative_label_tokens(
     }
 
 
+def _subtype_alternative_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    return _field_alternative_label_tokens(candidate, candidates) - {
+        "button",
+        "buttons",
+        "cell",
+        "cells",
+        "checkbox",
+        "data",
+        "datagridcell",
+        "grid",
+        "gridcell",
+        "split",
+        "splitbutton",
+        "table",
+    }
+
+
+def _same_label_candidate_has_type(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_types: frozenset[str] | set[str],
+) -> bool:
+    candidate_tokens = _subtype_alternative_label_tokens(candidate, candidates)
+    if not candidate_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in control_types:
+            continue
+        other_tokens = _subtype_alternative_label_tokens(other, candidates)
+        if other_tokens and candidate_tokens & other_tokens:
+            return True
+    return False
+
+
+def _same_label_option_control_types(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    candidate_tokens = _subtype_alternative_label_tokens(candidate, candidates)
+    if not candidate_tokens:
+        return set()
+    control_types = {candidate.control_type} if candidate.control_type in OPTION_ROLE_CONTROL_TYPES else set()
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in OPTION_ROLE_CONTROL_TYPES:
+            continue
+        other_tokens = _subtype_alternative_label_tokens(other, candidates)
+        if other_tokens and candidate_tokens & other_tokens:
+            control_types.add(other.control_type)
+    return control_types
+
+
 def _explicit_option_alternative_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -4995,12 +5064,135 @@ def _explicit_option_alternative_mismatch(
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
-        if other.control_type not in {"listitem", "menuitem", "radiobutton", "treeitem"}:
+        if other.control_type not in OPTION_ROLE_CONTROL_TYPES:
             continue
         option_label_tokens = _field_alternative_label_tokens(other, candidates)
         if option_label_tokens and candidate_label_tokens & option_label_tokens:
             return True
     return False
+
+
+def _explicit_subtype_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    return (
+        _explicit_plain_button_subtype_alternative_mismatch(instruction, candidate, candidates)
+        or _explicit_plain_field_subtype_alternative_mismatch(instruction, candidate, candidates)
+        or _explicit_bare_option_role_alternative_mismatch(instruction, candidate, candidates)
+        or _explicit_cell_subtype_alternative_mismatch(instruction, candidate, candidates)
+    )
+
+
+def _explicit_plain_button_subtype_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"button", "buttons"}):
+        return False
+    if "splitbutton" in raw_tokens or "split" in raw_tokens:
+        return False
+    if candidate.control_type != "splitbutton":
+        return False
+    return _same_label_candidate_has_type(candidate, candidates, {"button"})
+
+
+def _explicit_plain_field_subtype_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"field", "fields", "input", "inputs"}):
+        return False
+    if raw_tokens & {"button", "buttons"}:
+        return False
+    if raw_tokens & {
+        "address",
+        "calendar",
+        "combo",
+        "combobox",
+        "date",
+        "dropdown",
+        "find",
+        "picker",
+        "search",
+        "selector",
+        "spinbox",
+        "spinner",
+        "stepper",
+        "time",
+    }:
+        return False
+    if {"drop", "down"} <= raw_tokens or {"spin", "box"} <= raw_tokens:
+        return False
+    if candidate.control_type == "edit":
+        return False
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    return _same_label_candidate_has_type(candidate, candidates, {"edit"})
+
+
+def _explicit_bare_option_role_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"choice", "choices", "option", "options"}):
+        return False
+    if raw_tokens & {
+        "checkbox",
+        "combo",
+        "combobox",
+        "dropdown",
+        "list",
+        "listitem",
+        "menu",
+        "menuitem",
+        "radio",
+        "radiobutton",
+        "tree",
+        "treeitem",
+    }:
+        return False
+    if raw_tokens & (CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS):
+        return False
+    if {"check", "box"} <= raw_tokens or {"drop", "down"} <= raw_tokens:
+        return False
+    if candidate.control_type in OPTION_ROLE_CONTROL_TYPES:
+        return len(_same_label_option_control_types(candidate, candidates)) > 1
+    return _same_label_candidate_has_type(candidate, candidates, OPTION_ROLE_CONTROL_TYPES)
+
+
+def _explicit_cell_subtype_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_type = _explicit_cell_subtype_request(instruction)
+    if requested_type is None:
+        return False
+    if candidate.control_type == requested_type:
+        return False
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return False
+    return _same_label_candidate_has_type(candidate, candidates, {requested_type})
+
+
+def _explicit_cell_subtype_request(instruction: str) -> str | None:
+    raw_tokens = _tokens_from_text(instruction)
+    cell_requested = bool(raw_tokens & {"cell", "cells"})
+    if "datagridcell" in raw_tokens or (cell_requested and {"data", "grid"} <= raw_tokens):
+        return "datagridcell"
+    if "gridcell" in raw_tokens or (cell_requested and "grid" in raw_tokens):
+        return "gridcell"
+    if cell_requested:
+        return "cell"
+    return None
 
 
 def _explicit_checkbox_like_alternative_mismatch(
@@ -8831,6 +9023,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _surface_context_contains_tighter_action(
         selected=candidate,
         candidates=candidates,
@@ -10029,6 +10223,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _positional_action_duplicate_mismatch(
         instruction,
