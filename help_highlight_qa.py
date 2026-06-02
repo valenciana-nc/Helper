@@ -2312,6 +2312,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "activate_notifications_recovers_from_deactivate_notifications_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 170, 32], "label": "Enable notifications"},
+                {"rect": [20, 130, 190, 32], "label": "Deactivate notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Activate notifications.",
+                "target_id": "deactivate_notifications",
+                "target": {"x": 20, "y": 130, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "enable_notifications", "text": "Enable notifications", "control_type": "button", "rect": [20, 80, 170, 32]},
+                {"id": "deactivate_notifications", "text": "Deactivate notifications", "control_type": "button", "rect": [20, 130, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "enable_notifications",
+                "rect": [20, 80, 170, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "enable_notifications_target_id_rejects_enabled_notifications_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10424,6 +10448,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_new_tab_chrome_rejects_app_new_tab_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Browser New tab"},
+                {"rect": [120, 160, 180, 32], "label": "New tab"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open New tab in the app.",
+                "target_id": "browser_new_tab",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_new_tab",
+                    "text": "New tab",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_new_tab",
+                    "text": "New tab",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_new_tab",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15911,6 +15971,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "approve_acme",
                 "rect": [180, 90, 90, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "static_text_row_label_with_request_noun_recovers_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 120, 30], "label": "Acme"},
+                {"rect": [180, 90, 90, 30], "label": "Approve"},
+                {"rect": [20, 140, 120, 30], "label": "Globex"},
+                {"rect": [180, 140, 90, 30], "label": "Approve"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve Acme request.",
+                "target_id": "approve_globex",
+                "target": {"x": 180, "y": 140, "width": 90, "height": 30},
+            },
+            "candidates": [
+                {"id": "label_acme", "text": "Acme", "control_type": "text", "rect": [20, 90, 120, 30]},
+                {"id": "approve_acme", "text": "Approve", "control_type": "button", "rect": [180, 90, 90, 30]},
+                {"id": "label_globex", "text": "Globex", "control_type": "text", "rect": [20, 140, 120, 30]},
+                {"id": "approve_globex", "text": "Approve", "control_type": "button", "rect": [180, 140, 90, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "approve_acme",
+                "rect": [180, 90, 90, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "grid_cell_row_label_rejects_wrong_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 140, 30], "label": "Nimbus"},
+                {"rect": [200, 90, 90, 30], "label": "Approve"},
+                {"rect": [20, 140, 140, 30], "label": "Orion"},
+                {"rect": [200, 140, 90, 30], "label": "Approve"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve Nimbus.",
+                "target_id": "approve_orion",
+                "target": {"x": 200, "y": 140, "width": 90, "height": 30},
+            },
+            "candidates": [
+                {"id": "cell_nimbus", "text": "Nimbus", "control_type": "cell", "rect": [20, 90, 140, 30]},
+                {"id": "approve_nimbus", "text": "Approve", "control_type": "button", "rect": [200, 90, 90, 30]},
+                {"id": "cell_orion", "text": "Orion", "control_type": "cell", "rect": [20, 140, 140, 30]},
+                {"id": "approve_orion", "text": "Approve", "control_type": "button", "rect": [200, 140, 90, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "approve_nimbus",
+                "rect": [200, 90, 90, 30],
                 "overlay_emitted": True,
             },
         },

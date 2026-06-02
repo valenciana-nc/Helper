@@ -181,6 +181,7 @@ GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
 REVERSIBLE_ACTION_POLARITY_PAIRS = (
+    (frozenset({"activate"}), frozenset({"deactivate"})),
     (frozenset({"archive"}), frozenset({"unarchive"})),
     (frozenset({"connect"}), frozenset({"disconnect"})),
     (frozenset({"lock"}), frozenset({"unlock"})),
@@ -197,6 +198,8 @@ TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"add"}), frozenset({"added"})),
+    (frozenset({"activate"}), frozenset({"activated"})),
+    (frozenset({"deactivate"}), frozenset({"deactivated"})),
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
     (frozenset({"apply"}), frozenset({"applied"})),
@@ -266,6 +269,7 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
     (frozenset({"lock", "unlock"}), frozenset({"locked", "unlocked"})),
     (frozenset({"connect", "disconnect"}), frozenset({"connected", "disconnected"})),
+    (frozenset({"activate", "deactivate"}), frozenset({"activated", "deactivated"})),
     (frozenset({"archive", "unarchive"}), frozenset({"archived", "unarchived"})),
     (frozenset({"select", "deselect"}), frozenset({"deselected", "selected", "unselected"})),
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
@@ -1716,6 +1720,8 @@ def _looks_like_browser_chrome_surface(
         return False
     if _looks_like_browser_toolbar_button(visible_text, automation_id, ctype, window_title, rect):
         return True
+    if _looks_like_browser_new_tab_button(visible_text, automation_id, ctype, window_title):
+        return True
     if _looks_like_browser_profile_chrome_button(visible_text, automation_id, ctype, window_title, rect):
         return True
     return ctype == "tabitem" and rect[1] <= 72
@@ -1897,20 +1903,28 @@ def _browser_new_tab_action_mismatch(
     ctype: str,
     window_title: str,
 ) -> bool:
-    if ctype not in {"button", "splitbutton"}:
-        return False
-    if _tokenize_control(window_title or "") and not (
-        _tokenize_control(window_title or "") & BROWSER_PROFILE_WINDOW_WORDS
-    ):
-        return False
-    raw_control_tokens = _tokens_from_text(visible_text or "")
-    if not {"new", "tab"} <= raw_control_tokens:
+    if not _looks_like_browser_new_tab_button(visible_text, "", ctype, window_title):
         return False
     if not (instruction_tokens & BROWSER_NEW_TAB_RELATED_REQUEST_WORDS):
         return False
     if _instruction_mentions_tab_context(instruction):
         return False
     return True
+
+
+def _looks_like_browser_new_tab_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokenize_control(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    raw_control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    return {"new", "tab"} <= raw_control_tokens
 
 
 def _browser_extension_access_action_mismatch(

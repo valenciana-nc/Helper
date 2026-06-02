@@ -2567,6 +2567,8 @@ class SnapToControlTests(unittest.TestCase):
             ("Unsubscribe channel.", "Subscribe channel", "App"),
             ("Connect account.", "Disconnect account", "App"),
             ("Disconnect account.", "Connect account", "App"),
+            ("Activate notifications.", "Deactivate notifications", "App"),
+            ("Deactivate notifications.", "Activate notifications", "App"),
             ("Start recording.", "Stop recording", "App"),
             ("Stop recording.", "Start recording", "App"),
         )
@@ -2814,6 +2816,12 @@ class SnapToControlTests(unittest.TestCase):
                 ),
                 "Dashboard - Google Chrome",
                 (900, 8, 80, 34),
+            ),
+            (
+                "Open New tab in the app.",
+                _make_button("New tab", 904, 8, 42, 34),
+                "CRM - Microsoft Edge",
+                (904, 8, 42, 34),
             ),
         )
         for instruction, button, window_title, rect in cases:
@@ -9500,6 +9508,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Open New tab in the app.",
+                ControlCandidate(
+                    "c001",
+                    "New tab",
+                    "button",
+                    (904, 8, 42, 34),
+                    window_title="CRM - Microsoft Edge",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "New tab",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="CRM - Microsoft Edge",
+                ),
+            ),
+            (
                 "Open Home in the sidebar.",
                 ControlCandidate(
                     "c001",
@@ -13694,48 +13719,107 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ControlCandidate("label_globex", "Globex", "text", (20, 140, 120, 30)),
             ControlCandidate("approve_globex", "Approve", "button", (180, 140, 90, 30)),
         ]
-        instruction = "Approve Acme."
+        instructions = (
+            "Approve Acme.",
+            "Approve Acme request.",
+            "Approve request for Acme.",
+        )
+
+        for instruction in instructions:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="approve_globex",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 140, 90, 30),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 140, 90, 30),
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 140, 90, 30),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "approve_globex",
+                            "target": {"x": 180, "y": 140, "width": 90, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "approve_globex")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(text_target.target_id, "approve_acme")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(wrong_snap.target_id, "approve_acme")
+                self.assertFalse(wrong_snap.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "approve_acme")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (180, 90, 90, 30))
+
+    def test_contextual_duplicate_cell_label_rejects_wrong_row_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("cell_nimbus", "Nimbus", "cell", (20, 90, 140, 30)),
+            ControlCandidate("approve_nimbus", "Approve", "button", (200, 90, 90, 30)),
+            ControlCandidate("cell_orion", "Orion", "cell", (20, 140, 140, 30)),
+            ControlCandidate("approve_orion", "Approve", "button", (200, 140, 90, 30)),
+        ]
+        instruction = "Approve Nimbus."
 
         wrong_target = resolve_candidate_target(
-            target_id="approve_globex",
+            target_id="approve_orion",
             instruction=instruction,
             candidates=candidates,
-            model_rect=(180, 140, 90, 30),
+            model_rect=(200, 140, 90, 30),
         )
         text_target = resolve_candidate_target(
             target_id="",
             instruction=instruction,
             candidates=candidates,
-            model_rect=(180, 140, 90, 30),
+            model_rect=(200, 140, 90, 30),
         )
         wrong_snap = snap_candidate_target(
             instruction=instruction,
             candidates=candidates,
-            model_rect=(180, 140, 90, 30),
+            model_rect=(200, 140, 90, 30),
         )
         help_target = resolve_help_target(
             self._decision(
                 {
                     "kind": "step",
                     "instruction": instruction,
-                    "target_id": "approve_globex",
-                    "target": {"x": 180, "y": 140, "width": 90, "height": 30},
+                    "target_id": "approve_orion",
+                    "target": {"x": 200, "y": 140, "width": 90, "height": 30},
                 }
             ),
             self._capture(),
             candidates,
         )
 
-        self.assertEqual(wrong_target.target_id, "approve_globex")
+        self.assertEqual(wrong_target.target_id, "approve_orion")
         self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
-        self.assertEqual(text_target.target_id, "approve_acme")
+        self.assertEqual(text_target.target_id, "approve_nimbus")
         self.assertFalse(text_target.rejected_reason)
-        self.assertEqual(wrong_snap.target_id, "approve_acme")
+        self.assertEqual(wrong_snap.target_id, "approve_nimbus")
         self.assertFalse(wrong_snap.rejected_reason)
         self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "approve_acme")
+        self.assertEqual(help_target.target_id, "approve_nimbus")
         self.assertFalse(help_target.rejected_reason)
-        self.assertEqual(help_target.rect, (180, 90, 90, 30))
+        self.assertEqual(help_target.rect, (200, 90, 90, 30))
 
     def test_row_scoped_clear_field_rejects_wrong_row_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -13904,6 +13988,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Connect account.", "Disconnected account", "button"),
             ("Disconnect account.", "Disconnected account", "button"),
             ("Disconnect account.", "Connected account", "button"),
+            ("Activate notifications.", "Activated notifications", "button"),
+            ("Activate notifications.", "Deactivated notifications", "button"),
+            ("Deactivate notifications.", "Deactivated notifications", "button"),
+            ("Deactivate notifications.", "Activated notifications", "button"),
             ("Archive email.", "Archived email", "button"),
             ("Archive email.", "Unarchived email", "button"),
             ("Unarchive email.", "Unarchived email", "button"),
@@ -14552,6 +14640,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Disable notifications.", "Enable notifications", "checkbox", (120, 160, 190, 32)),
             ("Enable notifications.", "Turn off notifications", "checkbox", (120, 160, 210, 32)),
             ("Turn on notifications.", "Disable notifications", "checkbox", (120, 160, 190, 32)),
+            ("Activate notifications.", "Deactivate notifications", "button", (120, 160, 210, 32)),
+            ("Deactivate notifications.", "Activate notifications", "button", (120, 160, 200, 32)),
             ("Check Remember me.", "Uncheck Remember me", "checkbox", (120, 160, 190, 32)),
             ("Uncheck Remember me.", "Check Remember me", "checkbox", (120, 160, 190, 32)),
         )

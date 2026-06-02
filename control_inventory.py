@@ -242,7 +242,9 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
         "with",
     }
 )
-CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS = frozenset({"field", "fields", "invoice", "invoices"})
+CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS = frozenset(
+    {"field", "fields", "invoice", "invoices", "request", "requests"}
+)
 CONTEXTUAL_DUPLICATE_POSITION_WORDS = frozenset(
     {
         "1",
@@ -456,6 +458,7 @@ GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
 LOCK_ACTION_WORDS = frozenset({"lock", "unlock"})
 REVERSIBLE_ACTION_POLARITY_PAIRS = (
+    (frozenset({"activate"}), frozenset({"deactivate"})),
     (frozenset({"archive"}), frozenset({"unarchive"})),
     (frozenset({"connect"}), frozenset({"disconnect"})),
     (frozenset({"lock"}), frozenset({"unlock"})),
@@ -472,6 +475,8 @@ TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"add"}), frozenset({"added"})),
+    (frozenset({"activate"}), frozenset({"activated"})),
+    (frozenset({"deactivate"}), frozenset({"deactivated"})),
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
     (frozenset({"apply"}), frozenset({"applied"})),
@@ -547,6 +552,7 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
     (frozenset({"lock", "unlock"}), frozenset({"locked", "unlocked"})),
     (frozenset({"connect", "disconnect"}), frozenset({"connected", "disconnected"})),
+    (frozenset({"activate", "deactivate"}), frozenset({"activated", "deactivated"})),
     (frozenset({"archive", "unarchive"}), frozenset({"archived", "unarchived"})),
     (frozenset({"select", "deselect"}), frozenset({"deselected", "selected", "unselected"})),
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
@@ -1104,6 +1110,9 @@ CLICKABLE_CONTROL_TYPES = frozenset(
     }
 )
 NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
+NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
+    {"cell", "gridcell"}
+)
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
@@ -3683,6 +3692,8 @@ def _looks_like_browser_chrome_surface(candidate: ControlCandidate) -> bool:
         return False
     if _looks_like_browser_toolbar_button(candidate) or _looks_like_browser_menu_button(candidate):
         return True
+    if _looks_like_browser_new_tab_button(candidate):
+        return True
     if _looks_like_browser_profile_chrome_button(candidate):
         return True
     return candidate.control_type == "tabitem" and candidate.rect[1] <= 72
@@ -5995,7 +6006,7 @@ def _implicit_container_context_evidence_tokens(
         elif context.control_type in SURFACE_CONTEXT_CONTROL_TYPES:
             if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
                 continue
-        elif context.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        elif context.control_type in NEARBY_ROW_LABEL_CONTROL_TYPES:
             if not _nearby_row_label_rect_matches(context, candidate):
                 continue
         else:
@@ -6511,7 +6522,7 @@ def _contextual_duplicate_nearby_label_tokens(
         return set()
     tokens: set[str] = set()
     for label in candidates:
-        if label.id == candidate.id or label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+        if label.id == candidate.id or label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
             continue
         if not _nearby_row_label_rect_matches(label, candidate):
             continue
@@ -8607,6 +8618,12 @@ def _candidate_matches_control_intent(
         control_intents,
     ):
         return True
+    if _app_local_row_item_matches_exact_text_intent(
+        instruction,
+        candidate,
+        control_intents,
+    ):
+        return True
     if (
         control_intents & BROWSER_MENU_CONTROL_INTENTS
         and (
@@ -8621,6 +8638,28 @@ def _candidate_matches_control_intent(
     }:
         return True
     return False
+
+
+def _app_local_row_item_matches_exact_text_intent(
+    instruction: str,
+    candidate: ControlCandidate,
+    control_intents: set[str],
+) -> bool:
+    if not control_intents or candidate.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not _instruction_has_explicit_app_local_context(instruction, raw_tokens):
+        return False
+    visible_tokens = _tokens_from_text(candidate.text) | _tokens_from_text(candidate.automation_id)
+    if not visible_tokens or not (visible_tokens <= raw_tokens):
+        return False
+    return (
+        _text_evidence_score(
+            _tokenize_instruction(instruction),
+            _candidate_semantic_tokens(candidate),
+        )
+        >= TARGET_ID_TEXT_FLOOR
+    )
 
 
 def _state_action_button_matches_checkbox_intent(
