@@ -21366,6 +21366,86 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (20, 80, 300, 180),
             ),
             (
+                "dialog_window",
+                "Click Details dialog.",
+                [
+                    ControlCandidate("container", "Details dialog", "window", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "modal_window",
+                "Click Details modal.",
+                [
+                    ControlCandidate("container", "Details modal", "window", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "toast_window",
+                "Click Details toast.",
+                [
+                    ControlCandidate("container", "Details toast", "window", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "notification_window",
+                "Click Details notification.",
+                [
+                    ControlCandidate("container", "Details notification", "window", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "form_pane",
+                "Click Details form.",
+                [
+                    ControlCandidate("container", "Details form", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "footer_pane",
+                "Click Details footer.",
+                [
+                    ControlCandidate("container", "Details footer", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "navigation_pane",
+                "Click Details navigation.",
+                [
+                    ControlCandidate("container", "Details navigation", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "rail_pane",
+                "Click Details left rail.",
+                [
+                    ControlCandidate("container", "Details left rail", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
                 "column",
                 "Click Status column.",
                 [

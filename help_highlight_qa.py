@@ -17013,6 +17013,102 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_dialog_target_recovers_window_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 80, 300, 180], "label": "Details dialog"},
+                {"rect": [450, 110, 90, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details dialog.",
+                "target_id": "child",
+                "target": {"x": 450, "y": 110, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Details dialog", "control_type": "window", "rect": [420, 80, 300, 180]},
+                {"id": "child", "text": "Details", "control_type": "button", "rect": [450, 110, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [420, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_toast_target_recovers_window_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 80, 300, 180], "label": "Details toast"},
+                {"rect": [450, 110, 90, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details toast.",
+                "target_id": "child",
+                "target": {"x": 450, "y": 110, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Details toast", "control_type": "window", "rect": [420, 80, 300, 180]},
+                {"id": "child", "text": "Details", "control_type": "button", "rect": [450, 110, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [420, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_form_target_recovers_pane_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 180], "label": "Details form"},
+                {"rect": [40, 100, 100, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details form.",
+                "target_id": "child",
+                "target": {"x": 40, "y": 100, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Details form", "control_type": "pane", "rect": [20, 80, 300, 180]},
+                {"id": "child", "text": "Details", "control_type": "button", "rect": [40, 100, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [20, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_navigation_target_recovers_pane_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 180], "label": "Details navigation"},
+                {"rect": [40, 100, 100, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details navigation.",
+                "target_id": "child",
+                "target": {"x": 40, "y": 100, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Details navigation", "control_type": "pane", "rect": [20, 80, 300, 180]},
+                {"id": "child", "text": "Details", "control_type": "button", "rect": [40, 100, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [20, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "named_column_target_recovers_header_not_same_label_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
