@@ -20993,8 +20993,14 @@ class HelpTargetHarnessTests(unittest.TestCase):
             "popups",
             "popover",
             "popovers",
+            "prompt",
+            "prompts",
+            "snackbar",
+            "snackbars",
             "toast",
             "toasts",
+            "warning",
+            "warnings",
         ):
             with self.subTest(surface=surface):
                 candidates = [

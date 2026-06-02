@@ -198,10 +198,13 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "modal",
         "modals",
         "notification",
+        "notifications",
         "panel",
         "pane",
         "popover",
         "popovers",
+        "prompt",
+        "prompts",
         "popup",
         "popups",
         "row",
@@ -209,11 +212,15 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "section",
         "sidebar",
         "sidebars",
+        "snackbar",
+        "snackbars",
         "table",
         "toast",
         "toasts",
         "toolbar",
         "toolbars",
+        "warning",
+        "warnings",
         "window",
         "windows",
     }
@@ -732,18 +739,25 @@ CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
         "modal",
         "modals",
         "notification",
+        "notifications",
         "panel",
         "pane",
         "popover",
         "popovers",
+        "prompt",
+        "prompts",
         "popup",
         "popups",
         "section",
+        "snackbar",
+        "snackbars",
         "sidebar",
         "table",
         "toast",
         "toasts",
         "toolbar",
+        "warning",
+        "warnings",
     }
 )
 EXCLUSIVE_ACTION_FAMILIES = (
@@ -1206,10 +1220,16 @@ UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS = frozenset(
         "notification",
         "popover",
         "popovers",
+        "prompt",
+        "prompts",
         "popup",
         "popups",
+        "snackbar",
+        "snackbars",
         "toast",
         "toasts",
+        "warning",
+        "warnings",
     }
 )
 CONTAINED_CONTROL_REQUEST_WORDS = frozenset(
@@ -2148,6 +2168,14 @@ def _text_match_score(
         control_intents=control_intents,
     ):
         return 0.0
+    if _surface_context_contains_tighter_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if (
         not instruction_tokens
         and not literal_match_tokens
@@ -2325,6 +2353,14 @@ def _text_match_score(
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _surface_context_contains_tighter_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=_instruction_control_intents(instruction),
+    ):
         return 0.0
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -8414,6 +8450,14 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _surface_context_contains_tighter_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
@@ -8782,6 +8826,59 @@ def _contains_tighter_same_intent_action(
             continue
         if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
             return True
+    return False
+
+
+def _surface_context_contains_tighter_action(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    if not _instruction_requests_contained_surface_action(instruction, selected):
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    requested_surfaces = _expand_token_aliases(
+        _object_token_variants(raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
+    )
+    requested_action_tokens = _object_token_variants(
+        (raw_tokens | instruction_tokens)
+        - requested_surfaces
+        - CONTEXTUAL_DUPLICATE_STOPWORDS
+    )
+    if not requested_action_tokens:
+        return False
+    selected_area = selected.rect[2] * selected.rect[3]
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        candidate_area = candidate.rect[2] * candidate.rect[3]
+        if selected_area < candidate_area * 1.8:
+            continue
+        if not _contains_rect(selected.rect, candidate.rect):
+            continue
+        candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(
+            candidate.descriptor
+        )
+        if not (requested_action_tokens & candidate_tokens):
+            continue
+        if _browser_profile_page_action_mismatch(instruction, candidate):
+            continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
+            continue
+        if _browser_menu_button_action_mismatch(instruction, candidate):
+            continue
+        if _browser_navigation_chrome_action_mismatch(instruction, candidate):
+            continue
+        if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
+            continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
+            continue
+        return True
     return False
 
 
