@@ -203,7 +203,18 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
     }
 )
 ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
-    {"item", "items", "listitem", "treeitem"}
+    {
+        "entries",
+        "entry",
+        "item",
+        "items",
+        "listitem",
+        "record",
+        "records",
+        "result",
+        "results",
+        "treeitem",
+    }
 )
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {

@@ -17595,44 +17595,46 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
 
-        candidates = [
-            ControlCandidate("row_acme", "Acme item", "listitem", (20, 90, 560, 48)),
-            ControlCandidate("refund_acme", "Refund", "button", (610, 99, 80, 30)),
-            ControlCandidate("row_globex", "Globex item", "listitem", (20, 150, 560, 48)),
-            ControlCandidate("refund_globex", "Refund", "button", (610, 159, 80, 30)),
-        ]
-        instruction = "Click Refund for Globex item."
-        wrong_target = resolve_candidate_target(
-            target_id="refund_acme",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(610, 99, 80, 30),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(610, 99, 80, 30),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "refund_acme",
-                    "target": {"x": 610, "y": 99, "width": 80, "height": 30},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+        for noun in ("item", "record", "entry", "result"):
+            with self.subTest(noun=noun):
+                candidates = [
+                    ControlCandidate("row_acme", f"Acme {noun}", "listitem", (20, 90, 560, 48)),
+                    ControlCandidate("refund_acme", "Refund", "button", (610, 99, 80, 30)),
+                    ControlCandidate("row_globex", f"Globex {noun}", "listitem", (20, 150, 560, 48)),
+                    ControlCandidate("refund_globex", "Refund", "button", (610, 159, 80, 30)),
+                ]
+                instruction = f"Click Refund for Globex {noun}."
+                wrong_target = resolve_candidate_target(
+                    target_id="refund_acme",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(610, 99, 80, 30),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(610, 99, 80, 30),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "refund_acme",
+                            "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        self.assertEqual(wrong_target.target_id, "refund_acme")
-        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
-        for resolved in (text_target, help_target):
-            self.assertEqual(resolved.target_id, "refund_globex")
-            self.assertFalse(resolved.rejected_reason)
-            self.assertEqual(resolved.rect, (610, 159, 80, 30))
+                self.assertEqual(wrong_target.target_id, "refund_acme")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                for resolved in (text_target, help_target):
+                    self.assertEqual(resolved.target_id, "refund_globex")
+                    self.assertFalse(resolved.rejected_reason)
+                    self.assertEqual(resolved.rect, (610, 159, 80, 30))
 
     def test_row_scoped_action_wrong_target_id_recovers_to_filtered_action_word(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

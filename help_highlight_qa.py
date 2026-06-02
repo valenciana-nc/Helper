@@ -14454,6 +14454,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_refund_action_uses_record_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 560, 48], "label": "Acme record"},
+                {"rect": [610, 99, 80, 30], "label": "Refund"},
+                {"rect": [20, 150, 560, 48], "label": "Globex record"},
+                {"rect": [610, 159, 80, 30], "label": "Refund"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Refund for Globex record.",
+                "target_id": "refund_acme",
+                "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "row_acme", "text": "Acme record", "control_type": "listitem", "rect": [20, 90, 560, 48]},
+                {"id": "refund_acme", "text": "Refund", "control_type": "button", "rect": [610, 99, 80, 30]},
+                {"id": "row_globex", "text": "Globex record", "control_type": "listitem", "rect": [20, 150, 560, 48]},
+                {"id": "refund_globex", "text": "Refund", "control_type": "button", "rect": [610, 159, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "refund_globex",
+                "rect": [610, 159, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_clear_email_uses_requested_row_over_wrong_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
