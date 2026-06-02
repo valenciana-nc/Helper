@@ -64,6 +64,32 @@ ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 ROW_REVALIDATION_GENERIC_WORDS = frozenset(
     {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
 )
+ACTION_REVALIDATION_CONTROL_TYPES = frozenset(
+    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+)
+ACTION_CONTEXT_REVALIDATION_CONTROL_TYPES = (
+    ROW_REVALIDATION_CONTROL_TYPES
+    | frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
+)
+ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS = ROW_REVALIDATION_GENERIC_WORDS | frozenset(
+    {
+        "account",
+        "accounts",
+        "button",
+        "menu",
+        "pane",
+        "panel",
+        "people",
+        "person",
+        "persons",
+        "profile",
+        "profiles",
+        "request",
+        "requests",
+        "user",
+        "users",
+    }
+)
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -499,6 +525,7 @@ def _guard_revalidated_target(
     capture: "Capture",
     candidates: list[ControlCandidate],
     previous_target: TargetResolution,
+    previous_candidates: list[ControlCandidate] | None = None,
     target: TargetResolution,
     snapper: Snapper,
 ) -> TargetResolution:
@@ -506,6 +533,13 @@ def _guard_revalidated_target(
     if target.rejected_reason:
         return target
     if _revalidated_row_identity_changed(previous_target, target, candidates):
+        return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_action_context_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
         return replace(target, rejected_reason="current screen recheck target changed")
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
@@ -559,6 +593,55 @@ def _revalidated_row_identity_changed(
 
 def _row_identity_tokens(text: str) -> set[str]:
     return _tokenize_control(text or "") - ROW_REVALIDATION_GENERIC_WORDS
+
+
+def _revalidated_action_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id or previous_target.target_id != target.target_id:
+        return False
+    previous = next(
+        (candidate for candidate in previous_candidates if candidate.id == previous_target.target_id),
+        None,
+    )
+    current = next((candidate for candidate in candidates if candidate.id == target.target_id), None)
+    if previous is None or current is None:
+        return False
+    if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    previous_tokens = _action_context_revalidation_tokens(previous, previous_candidates)
+    current_tokens = _action_context_revalidation_tokens(current, candidates)
+    if not previous_tokens or not current_tokens:
+        return False
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.5
+
+
+def _action_context_revalidation_tokens(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    target_tokens = _surface_evidence_tokens(target)
+    contexts: list[ControlCandidate] = []
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type not in ACTION_CONTEXT_REVALIDATION_CONTROL_TYPES:
+            continue
+        if not _rect_contains(_expand_rect(candidate.rect, 4), target.rect):
+            continue
+        contexts.append(candidate)
+    contexts.sort(key=lambda candidate: candidate.rect[2] * candidate.rect[3])
+    for context in contexts:
+        tokens = _surface_evidence_tokens(context) - target_tokens
+        tokens -= ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS
+        if tokens:
+            return tokens
+    return set()
 
 
 def _same_revalidated_target(a: TargetResolution, b: TargetResolution) -> bool:
@@ -854,6 +937,7 @@ class HelpSession(QObject):
                 capture, candidates, target = self._revalidate_target_on_current_screen(
                     decision,
                     previous_target=target,
+                    previous_candidates=candidates,
                 )
             except Exception as exc:
                 reason = "current screen recheck failed"
@@ -1008,6 +1092,7 @@ class HelpSession(QObject):
         decision: "LiveHelpDecision",
         *,
         previous_target: TargetResolution,
+        previous_candidates: list[ControlCandidate] | None = None,
     ) -> tuple["Capture", list[ControlCandidate], TargetResolution]:
         self._clear_overlays(wait_for_flush=True)
         capture = self._capture_provider()
@@ -1033,6 +1118,7 @@ class HelpSession(QObject):
             capture=capture,
             candidates=candidates,
             previous_target=previous_target,
+            previous_candidates=previous_candidates,
             target=target,
             snapper=self._snapper,
         )

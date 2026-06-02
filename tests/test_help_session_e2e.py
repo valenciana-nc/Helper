@@ -509,6 +509,96 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
 
+    def test_current_screen_recheck_rejects_reused_row_action_context_change(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        current_candidates = [
+            ControlCandidate("row_0", "Globex account", "dataitem", (20, 100, 700, 42)),
+            ControlCandidate("approve", "Approve", "button", (600, 106, 80, 30)),
+        ]
+        previous_candidates = [
+            ControlCandidate("row_0", "Acme account", "dataitem", (20, 100, 700, 42)),
+            ControlCandidate("approve", "Approve", "button", (600, 106, 80, 30)),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: current_candidates,
+        )
+        previous_target = TargetResolution(
+            rect=(600, 106, 80, 30),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Approve",
+            target_id="approve",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Approve.",
+            target_id="approve",
+            target_norm_x=600,
+            target_norm_y=106,
+            target_norm_width=80,
+            target_norm_height=30,
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_candidates=previous_candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_allows_reused_row_action_same_context(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        candidates = [
+            ControlCandidate("row_0", "Acme account", "dataitem", (20, 100, 700, 42)),
+            ControlCandidate("approve", "Approve", "button", (600, 106, 80, 30)),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: candidates,
+        )
+        previous_target = TargetResolution(
+            rect=(600, 106, 80, 30),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Approve",
+            target_id="approve",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Approve.",
+            target_id="approve",
+            target_norm_x=600,
+            target_norm_y=106,
+            target_norm_width=80,
+            target_norm_height=30,
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_candidates=candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "target_id")
+        self.assertFalse(target.rejected_reason)
+
     def test_current_screen_recheck_rejects_nearby_nonoverlapping_target_id_rebind(self) -> None:
         app = _qt_app()
         capture = _button_capture()
