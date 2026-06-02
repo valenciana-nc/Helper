@@ -13180,6 +13180,157 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "grid_item_wording_recovers_from_same_label_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Settings"},
+                {"rect": [20, 60, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings grid item.",
+                "target_id": "button",
+                "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "button", "text": "Settings", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "item", "text": "Settings", "control_type": "dataitem", "rect": [20, 60, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "item",
+                "rect": [20, 60, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_table_cell_model_rect_snaps_to_cell",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 100, 620, 42], "label": "Acme row"},
+                {"rect": [260, 112, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this table cell.",
+                "target": {"x": 260, "y": 112, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "row1", "text": "Acme row", "control_type": "dataitem", "rect": [20, 100, 620, 42]},
+                {"id": "status1", "text": "Active", "control_type": "cell", "rect": [260, 112, 120, 30]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "status1",
+                "rect": [260, 112, 120, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_table_cell_broad_row_rejects_multiple_cells",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [260, 112, 120, 30], "label": "Active"},
+                {"rect": [420, 112, 120, 30], "label": "Morgan"},
+                {"rect": [580, 112, 120, 30], "label": "Enterprise"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this table cell.",
+                "target": {"x": 260, "y": 112, "width": 360, "height": 30},
+            },
+            "candidates": [
+                {"id": "status1", "text": "Active", "control_type": "cell", "rect": [260, 112, 120, 30]},
+                {"id": "owner1", "text": "Morgan", "control_type": "cell", "rect": [420, 112, 120, 30]},
+                {"id": "plan1", "text": "Enterprise", "control_type": "cell", "rect": [580, 112, 120, 30]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "copied_field_automation_id_uses_nearby_label_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 28], "label": "Shipping"},
+                {"rect": [140, 80, 220, 32], "label": "Address"},
+                {"rect": [20, 130, 100, 28], "label": "Billing"},
+                {"rect": [140, 130, 220, 32], "label": "Address"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Fill the Billing Address field.",
+                "target_id": "ship_addr",
+                "target": {"x": 140, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "ship_lbl", "text": "Shipping", "control_type": "text", "rect": [20, 80, 100, 28]},
+                {
+                    "id": "ship_addr",
+                    "text": "Address",
+                    "control_type": "edit",
+                    "rect": [140, 80, 220, 32],
+                    "automation_id": "address",
+                },
+                {"id": "bill_lbl", "text": "Billing", "control_type": "text", "rect": [20, 130, 100, 28]},
+                {
+                    "id": "bill_addr",
+                    "text": "Address",
+                    "control_type": "edit",
+                    "rect": [140, 130, 220, 32],
+                    "automation_id": "address",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_addr",
+                "rect": [140, 130, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "tab_context_action_recovers_action_not_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 90, 32], "label": "Alpha"},
+                {"rect": [110, 20, 90, 32], "label": "Beta"},
+                {"rect": [240, 100, 70, 30], "label": "Run"},
+                {"rect": [240, 160, 70, 30], "label": "Run"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Run in the Beta tab.",
+                "target_id": "alpha_run",
+                "target": {"x": 240, "y": 100, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "alpha_tab", "text": "Alpha", "control_type": "tabitem", "rect": [20, 20, 90, 32]},
+                {"id": "beta_tab", "text": "Beta", "control_type": "tabitem", "rect": [110, 20, 90, 32]},
+                {
+                    "id": "alpha_run",
+                    "text": "Run",
+                    "control_type": "button",
+                    "rect": [240, 100, 70, 30],
+                    "window_title": "Alpha",
+                },
+                {
+                    "id": "beta_run",
+                    "text": "Run",
+                    "control_type": "button",
+                    "rect": [240, 160, 70, 30],
+                    "window_title": "Beta",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "beta_run",
+                "rect": [240, 160, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "target_id_copied_wrong_geometry_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

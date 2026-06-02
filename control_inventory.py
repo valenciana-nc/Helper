@@ -1175,11 +1175,14 @@ UNNAMED_BOOKMARK_DESTINATION_STOPWORDS = frozenset(
 CLICKABLE_CONTROL_TYPES = frozenset(
     {
         "button",
+        "cell",
         "menuitem",
         "tabitem",
         "hyperlink",
         "listitem",
         "dataitem",
+        "datagridcell",
+        "gridcell",
         "treeitem",
         "edit",
         "combobox",
@@ -1191,6 +1194,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "slider",
     }
 )
+CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
     {"cell", "datagridcell", "gridcell", "rowheader"}
@@ -1259,6 +1263,9 @@ CONTAINED_CONTROL_REQUEST_WORDS = frozenset(
         "switch",
         "tab",
         "tabitem",
+        "cell",
+        "datagridcell",
+        "gridcell",
         "textbox",
         "toggle",
     }
@@ -2125,6 +2132,10 @@ def _text_match_score(
     )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
+    if _cell_target_request_mismatch(instruction, candidate):
+        return 0.0
+    if _tab_context_candidate_mismatch(instruction, candidate, candidates):
+        return 0.0
     matches_row_action = (
         _instruction_requests_contained_row_action(instruction)
         and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
@@ -2450,6 +2461,10 @@ def _context_text_match_score(
     if not instruction_tokens:
         return 0.0
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
+    if _cell_target_request_mismatch(instruction, candidate):
+        return 0.0
+    if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
@@ -2824,6 +2839,18 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id control type mismatch",
+        )
+    if _cell_target_request_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _tab_context_candidate_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
         )
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return (
@@ -3538,6 +3565,15 @@ def _nearby_field_label_tokens(
     if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
         return set()
     if _candidate_visible_text_tokens(candidate) or candidate.automation_id.strip():
+        return set()
+    return _nearby_field_context_label_tokens(candidate, candidates)
+
+
+def _nearby_field_context_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
         return set()
     best_score = 0.0
     best_tokens: set[str] = set()
@@ -4781,6 +4817,13 @@ def _explicit_item_alternative_mismatch(
         if item_label_tokens and candidate_label_tokens & item_label_tokens:
             return True
     return False
+
+
+def _cell_target_request_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    return not bool(raw_tokens & {"cell", "datagridcell", "gridcell"})
 
 
 def _field_alternative_label_tokens(
@@ -6955,6 +6998,7 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_nearby_label_tokens(candidate, candidates))
+    tokens.update(_nearby_field_context_label_tokens(candidate, candidates))
     if _candidate_has_foreground_unnamed_transient_surface_evidence(candidate, candidates):
         tokens.update(_expand_token_aliases(set(UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS)))
     if _candidate_has_rank_modal_evidence(candidate, candidates):
@@ -7381,6 +7425,8 @@ def _positional_duplicate_control_tokens(candidate: ControlCandidate) -> set[str
         tokens.update({"field", "input", "spinner"})
     elif candidate.control_type == "listitem":
         tokens.update({"entry", "item", "listitem", "result", "row"})
+    elif candidate.control_type == "dataitem":
+        tokens.update({"dataitem", "entry", "grid", "item", "result", "row", "table"})
     elif candidate.control_type == "treeitem":
         tokens.update({"entry", "item", "treeitem", "row"})
     elif candidate.control_type == "radiobutton":
@@ -7395,6 +7441,8 @@ def _positional_duplicate_control_tokens(candidate: ControlCandidate) -> set[str
         tokens.update({"tab", "tabitem"})
     elif candidate.control_type == "headeritem":
         tokens.update({"column", "header", "headeritem", "heading"})
+    elif candidate.control_type in CELL_CONTROL_TYPES:
+        tokens.update({"cell", "datagridcell", "gridcell"})
     elif candidate.control_type == "slider":
         tokens.update({"slider"})
     return tokens
@@ -8136,6 +8184,94 @@ def _browser_tab_contextual_item_mismatch(
     return bool(window_tokens & BROWSER_PROFILE_WINDOW_WORDS)
 
 
+def _tab_context_candidate_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    context_tokens = _tab_context_tokens(instruction)
+    if not context_tokens:
+        return False
+    action_tokens = _tab_context_action_tokens(instruction, context_tokens)
+    if not action_tokens:
+        return False
+    if candidate.control_type == "tabitem":
+        return any(
+            other.id != candidate.id
+            and not _same_visual_candidate(other, candidate)
+            and _tab_context_action_candidate_matches(other, action_tokens)
+            and _tab_context_candidate_matches_context(other, context_tokens, candidates)
+            for other in candidates
+        )
+    if not _tab_context_action_candidate_matches(candidate, action_tokens):
+        return False
+    if _tab_context_candidate_matches_context(candidate, context_tokens, candidates):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and _tab_context_action_candidate_matches(other, action_tokens)
+        and _tab_context_candidate_matches_context(other, context_tokens, candidates)
+        for other in candidates
+    )
+
+
+def _tab_context_tokens(instruction: str) -> set[str]:
+    text = (instruction or "").lower()
+    matches = re.findall(
+        r"\b(?:in|inside|on|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
+        r"(?:tab|tabs|tabitem)\b",
+        text,
+    )
+    tokens: set[str] = set()
+    for match in matches:
+        tokens.update(_tokens_from_text(match))
+    return _object_token_variants(
+        tokens
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - CONTAINED_CONTROL_REQUEST_WORDS
+        - {"a", "an", "in", "inside", "on", "the", "within"}
+    )
+
+
+def _tab_context_action_tokens(instruction: str, context_tokens: set[str]) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    return _object_token_variants(
+        (_tokenize_instruction(instruction) | raw_tokens)
+        - context_tokens
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - CONTAINED_CONTROL_REQUEST_WORDS
+        - {"a", "an", "in", "inside", "on", "the", "within"}
+    )
+
+
+def _tab_context_action_candidate_matches(
+    candidate: ControlCandidate,
+    action_tokens: set[str],
+) -> bool:
+    if candidate.control_type == "tabitem":
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    return bool(action_tokens & _object_token_variants(candidate_tokens))
+
+
+def _tab_context_candidate_matches_context(
+    candidate: ControlCandidate,
+    context_tokens: set[str],
+    candidates: list[ControlCandidate],
+) -> bool:
+    evidence_tokens = (
+        _tokenize_control(candidate.window_title)
+        | _contextual_duplicate_evidence_tokens(candidate, candidates)
+    )
+    return _contextual_duplicate_request_matches_evidence(
+        context_tokens,
+        _object_token_variants(evidence_tokens),
+    )
+
+
 def _instruction_mentions_tab_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
 
@@ -8470,6 +8606,10 @@ def _candidate_snap_score(
     )
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
+    if _cell_target_request_mismatch(instruction, candidate):
+        return 0.0
+    if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
@@ -9517,6 +9657,10 @@ def _candidate_snap_semantic_mismatch(
         candidates,
     )
     if _browser_menu_button_action_mismatch(instruction, candidate):
+        return True
+    if _cell_target_request_mismatch(instruction, candidate):
+        return True
+    if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True

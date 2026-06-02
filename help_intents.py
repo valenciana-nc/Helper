@@ -123,6 +123,21 @@ _PHRASE_TOKEN_REWRITES = (
         {"field"},
     ),
     (
+        re.compile(r"\bdata\s+grid\s+cell\b"),
+        {"datagridcell"},
+        {"cell", "data", "grid"},
+    ),
+    (
+        re.compile(r"\b(?:grid|table)\s+cell\b"),
+        {"gridcell"},
+        {"cell", "grid", "table"},
+    ),
+    (
+        re.compile(r"\b(?:data|grid|table)\s+item\b"),
+        {"dataitem"},
+        {"data", "grid", "item", "table"},
+    ),
+    (
         re.compile(r"\b(?:hide|minimi[sz]e)\s+all\s+windows\b"),
         {"show_desktop"},
         {"all", "hide", "minimise", "minimize", "minus", "windows"},
@@ -599,6 +614,10 @@ _INSTRUCTION_STOPWORDS = frozenset(
         "side",
         "row",
         "column",
+        "cell",
+        "dataitem",
+        "datagridcell",
+        "gridcell",
         "listitem",
         "treeitem",
         "menuitem",
@@ -804,6 +823,8 @@ _SELECTION_ACTION_BLOCKING_WORDS = frozenset(
 )
 _LIST_ITEM_INTENT_TYPES = frozenset({"listitem"})
 _TREE_ITEM_INTENT_TYPES = frozenset({"treeitem"})
+_DATA_ITEM_INTENT_TYPES = frozenset({"dataitem"})
+_CELL_INTENT_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 _NAV_ITEM_INTENT_TYPES = frozenset(
     {"button", "hyperlink", "listitem", "treeitem", "menuitem", "tabitem"}
 )
@@ -1091,10 +1112,12 @@ def instruction_control_intents(instruction: str) -> set[str]:
     tab_button_action_requested = tab_close_action_requested or (
         bookmark_action_requested and bool(raw_tokens & {"tab", "tabs", "tabitem"})
     )
+    tab_context_requested = _tab_context_requested(raw_tokens)
     tab_item_button_requested = (
         bool(raw_tokens & {"tab", "tabs", "tabitem"})
         and bool(raw_tokens & {"button", "buttons"})
         and not tab_button_action_requested
+        and not tab_context_requested
     )
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
@@ -1223,9 +1246,13 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_DISCLOSURE_INTENT_TYPES)
     if raw_tokens & {"link", "hyperlink"}:
         intents.add("hyperlink")
-    if raw_tokens & {"tab", "tabs"} and not tab_button_action_requested:
+    if (
+        raw_tokens & {"tab", "tabs"}
+        and not tab_button_action_requested
+        and not tab_context_requested
+    ):
         intents.add("tabitem")
-    if "tabitem" in raw_tokens and not tab_button_action_requested:
+    if "tabitem" in raw_tokens and not tab_button_action_requested and not tab_context_requested:
         intents.add("tabitem")
     if "listitem" in raw_tokens or ("list" in raw_tokens and explicit_item_words):
         intents.update(_LIST_ITEM_INTENT_TYPES)
@@ -1233,6 +1260,12 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if "treeitem" in raw_tokens or ("tree" in raw_tokens and explicit_item_words):
         intents.update(_TREE_ITEM_INTENT_TYPES)
+    if "dataitem" in raw_tokens or (
+        explicit_item_words and raw_tokens & {"data", "grid", "table"}
+    ):
+        intents.update(_DATA_ITEM_INTENT_TYPES)
+    if raw_tokens & _CELL_INTENT_TYPES:
+        intents.update(_CELL_INTENT_TYPES)
     if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
     if raw_tokens & _OPTION_INTENT_WORDS and not (
@@ -1451,6 +1484,19 @@ def _dialog_dismiss_action_tokens(raw_tokens: set[str]) -> set[str]:
 
 def _edit_action_requested(raw_tokens: set[str]) -> bool:
     return "edit" in raw_tokens and bool(raw_tokens & _EDIT_ACTION_CONTEXT_WORDS)
+
+
+def _tab_context_requested(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & {"tab", "tabs", "tabitem"}):
+        return False
+    if not (raw_tokens & {"in", "inside", "on", "within"}):
+        return False
+    action_tokens = (
+        raw_tokens
+        - _INSTRUCTION_STOPWORDS
+        - {"in", "inside", "on", "tab", "tabs", "tabitem", "within"}
+    )
+    return bool(action_tokens)
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:

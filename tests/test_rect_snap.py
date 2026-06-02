@@ -508,6 +508,18 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(instruction_control_intents("Click Settings list result."), {"listitem"})
         self.assertEqual(instruction_control_intents("Click Settings list entry."), {"listitem"})
         self.assertEqual(instruction_control_intents("Click Settings tree node."), {"treeitem"})
+        self.assertEqual(instruction_control_intents("Click Settings data item."), {"dataitem"})
+        self.assertEqual(instruction_control_intents("Click Settings grid item."), {"dataitem"})
+        self.assertEqual(
+            instruction_control_intents("Click this table cell."),
+            {"cell", "datagridcell", "gridcell"},
+        )
+        self.assertEqual(
+            instruction_control_intents("Click this grid cell."),
+            {"cell", "datagridcell", "gridcell"},
+        )
+        self.assertEqual(instruction_control_intents("Click Run in the Beta tab."), set())
+        self.assertEqual(instruction_control_intents("Click Beta tab."), {"tabitem"})
         self.assertEqual(instruction_control_intents("Click Settings tab button."), {"tabitem"})
 
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
@@ -13279,6 +13291,104 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 100, 180, 32))
 
+    def test_copied_field_automation_id_uses_nearby_label_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("ship_lbl", "Shipping", "text", (20, 80, 100, 28)),
+            ControlCandidate("ship_addr", "Address", "edit", (140, 80, 220, 32), automation_id="address"),
+            ControlCandidate("bill_lbl", "Billing", "text", (20, 130, 100, 28)),
+            ControlCandidate("bill_addr", "Address", "edit", (140, 130, 220, 32), automation_id="address"),
+        ]
+        instruction = "Fill the Billing Address field."
+
+        wrong_target = resolve_candidate_target(
+            target_id="ship_addr",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 80, 220, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 80, 220, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 80, 220, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "ship_addr",
+                    "target": {"x": 140, "y": 80, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "ship_addr")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "bill_addr")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (140, 130, 220, 32))
+
+    def test_tab_context_action_recovers_same_label_action_not_tab(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("alpha_tab", "Alpha", "tabitem", (20, 20, 90, 32)),
+            ControlCandidate("beta_tab", "Beta", "tabitem", (110, 20, 90, 32)),
+            ControlCandidate("alpha_run", "Run", "button", (240, 100, 70, 30), window_title="Alpha"),
+            ControlCandidate("beta_run", "Run", "button", (240, 160, 70, 30), window_title="Beta"),
+        ]
+        instruction = "Click Run in the Beta tab."
+
+        wrong_target = resolve_candidate_target(
+            target_id="alpha_run",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 70, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "alpha_run",
+                    "target": {"x": 240, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "alpha_run")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "beta_run")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (240, 160, 70, 30))
+
     def test_menu_option_wording_rejects_same_label_radio_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -13408,6 +13518,32 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (10, 10, 300, 300),
                 (20, 60, 180, 32),
                 False,
+            ),
+            (
+                "data_item_button",
+                "Click Settings data item.",
+                [
+                    ControlCandidate("button", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("item", "Settings", "dataitem", (20, 60, 180, 32)),
+                ],
+                "button",
+                "item",
+                (20, 20, 120, 32),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "grid_item_stale_menuitem",
+                "Click Settings grid item.",
+                [
+                    ControlCandidate("stale", "Settings", "menuitem", (20, 20, 180, 28)),
+                    ControlCandidate("item", "Settings", "dataitem", (20, 60, 180, 32)),
+                ],
+                "stale",
+                "item",
+                (20, 20, 180, 28),
+                (20, 60, 180, 32),
+                True,
             ),
         )
 
@@ -24673,6 +24809,60 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "src", "treeitem", (10, 10, 160, 32)),
                 ControlCandidate("c002", "tests", "treeitem", (10, 50, 160, 32)),
                 ControlCandidate("c003", "docs", "treeitem", (10, 90, 160, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_table_cell_model_rect_highlights_cell(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click this table cell.", "cell"),
+            ("Click this grid cell.", "gridcell"),
+            ("Click this data grid cell.", "datagridcell"),
+        )
+        for instruction, control_type in cases:
+            with self.subTest(instruction=instruction, control_type=control_type):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 260, "y": 112, "width": 120, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("row1", "Acme row", "dataitem", (20, 100, 620, 42)),
+                        ControlCandidate("status1", "Active", control_type, (260, 112, 120, 30)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "candidate_snap")
+                self.assertEqual(target.target_id, "status1")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (260, 112, 120, 30))
+
+    def test_generic_table_cell_broad_row_rejects_multiple_cells(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this table cell.",
+                    "target": {"x": 260, "y": 112, "width": 360, "height": 30},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("status1", "Active", "cell", (260, 112, 120, 30)),
+                ControlCandidate("owner1", "Morgan", "cell", (420, 112, 120, 30)),
+                ControlCandidate("plan1", "Enterprise", "cell", (580, 112, 120, 30)),
             ],
         )
 
