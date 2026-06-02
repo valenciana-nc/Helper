@@ -23404,6 +23404,96 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertFalse(resolved.rejected_reason)
                     self.assertEqual(resolved.rect, expected_rect)
 
+    def test_explicit_surface_targets_reject_compound_child_controls(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "panel",
+                "Click the Settings panel.",
+                [
+                    ControlCandidate("container", "Settings panel", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("save", "Save", "button", (40, 104, 80, 32)),
+                    ControlCandidate("cancel", "Cancel", "button", (140, 104, 80, 32)),
+                ],
+            ),
+            (
+                "card",
+                "Click Acme card.",
+                [
+                    ControlCandidate("container", "Acme card", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("approve", "Approve", "button", (40, 104, 80, 32)),
+                    ControlCandidate("delete", "Delete", "button", (140, 104, 80, 32)),
+                ],
+            ),
+            (
+                "list",
+                "Click the Settings list.",
+                [
+                    ControlCandidate("container", "Settings list", "list", (20, 80, 300, 180)),
+                    ControlCandidate("general", "General", "listitem", (40, 104, 240, 32)),
+                    ControlCandidate("billing", "Billing", "listitem", (40, 144, 240, 32)),
+                ],
+            ),
+            (
+                "toolbar",
+                "Click the Formatting toolbar.",
+                [
+                    ControlCandidate(
+                        "container",
+                        "Formatting toolbar",
+                        "toolbar",
+                        (20, 80, 300, 80),
+                    ),
+                    ControlCandidate("bold", "Bold", "button", (40, 104, 40, 32)),
+                    ControlCandidate("italic", "Italic", "button", (92, 104, 40, 32)),
+                ],
+            ),
+            (
+                "table",
+                "Click the Orders table.",
+                [
+                    ControlCandidate("container", "Orders table", "table", (20, 80, 360, 180)),
+                    ControlCandidate("order", "Order 123", "cell", (40, 104, 120, 32)),
+                    ControlCandidate("status", "Pending", "cell", (180, 104, 120, 32)),
+                ],
+            ),
+        )
+
+        for name, instruction, candidates in cases:
+            with self.subTest(name=name):
+                container = candidates[0]
+                target_id_target = resolve_candidate_target(
+                    target_id="container",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=container.rect,
+                )
+                raw_rect_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": container.rect[0],
+                                "y": container.rect[1],
+                                "width": container.rect[2],
+                                "height": container.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id_target)
+                assert target_id_target is not None
+                self.assertEqual(target_id_target.target_id, "container")
+                self.assertEqual(target_id_target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(raw_rect_target.source, "candidate_snap")
+                self.assertEqual(raw_rect_target.rejected_reason, "candidate snapshot no match")
+
     def test_surface_action_model_rect_promotes_contained_menu_and_header_buttons(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

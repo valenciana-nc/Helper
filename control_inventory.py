@@ -1491,6 +1491,9 @@ OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radi
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
+COMPOUND_SURFACE_CONTROL_TYPES = SURFACE_CONTEXT_CONTROL_TYPES | frozenset(
+    {"datagrid", "grid", "table"}
+)
 SURFACE_ROW_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane"})
 FIELD_SECTION_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "pane"})
 SURFACE_CONTEXT_TYPE_WORDS = {
@@ -2769,6 +2772,14 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
+    if _contains_multiple_tight_surface_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if matches_direct_surface_container:
         score = TEXT_MATCH_FLOOR + 0.06
         if visible_tokens:
@@ -2828,6 +2839,14 @@ def _text_match_score(
     ):
         return 0.0
     if _contains_multiple_tight_row_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
+    if _contains_multiple_tight_surface_action_candidates(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -3102,6 +3121,14 @@ def _text_match_score(
         instruction=instruction,
         instruction_tokens=instruction_tokens,
         control_intents=_instruction_control_intents(instruction),
+    ):
+        return 0.0
+    if _contains_multiple_tight_surface_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
     ):
         return 0.0
     if (
@@ -4460,6 +4487,18 @@ def _target_id_plausibility(
             "target_id ambiguous",
         )
     if _contains_multiple_tight_row_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+    if _contains_multiple_tight_surface_action_candidates(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -12552,6 +12591,14 @@ def _candidate_snap_score(
         control_intents=control_intents,
     ):
         return 0.0
+    if _contains_multiple_tight_surface_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if exact_visible_label_match:
         return min(
             1.0,
@@ -12924,6 +12971,81 @@ def _contains_multiple_tight_row_action_candidates(
         if len(action_rects) >= 2:
             return True
     return False
+
+
+def _contains_multiple_tight_surface_action_candidates(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    if selected.control_type not in COMPOUND_SURFACE_CONTROL_TYPES:
+        return False
+    if _instruction_requests_contained_surface_action(instruction, selected):
+        return False
+    if (
+        selected.control_type in SURFACE_CONTEXT_CONTROL_TYPES
+        and not _explicit_surface_container_target_request(
+            instruction,
+            control_intents,
+            selected.control_type,
+        )
+        and not _direct_surface_container_candidate_matches_request(
+            instruction,
+            selected,
+            candidates,
+        )
+    ):
+        return False
+    if (
+        selected.control_type not in SURFACE_CONTEXT_CONTROL_TYPES
+        and not _object_token_variants(instruction_tokens | _tokens_from_text(instruction))
+        & _compound_surface_control_type_tokens(selected.control_type)
+    ):
+        return False
+    selected_area = max(1, selected.rect[2] * selected.rect[3])
+    action_rects: set[tuple[int, int, int, int]] = set()
+    for candidate in candidates:
+        if candidate.id == selected.id or _same_visual_candidate(candidate, selected):
+            continue
+        if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
+            continue
+        candidate_area = max(1, candidate.rect[2] * candidate.rect[3])
+        if selected_area < candidate_area * 1.8:
+            continue
+        if not _contains_rect(_expand_rect(selected.rect, 4), candidate.rect):
+            continue
+        if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+            continue
+        if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
+            continue
+        if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_show_desktop_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_surface_context_mismatch(instruction, candidate):
+            continue
+        if _disclosure_state_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+            continue
+        action_rects.add(candidate.rect)
+        if len(action_rects) >= 2:
+            return True
+    return False
+
+
+def _compound_surface_control_type_tokens(control_type: str) -> set[str]:
+    tokens = _object_token_variants(_tokens_from_text(control_type))
+    if control_type == "datagrid":
+        tokens |= {"data", "grid"}
+    return tokens
 
 
 def _contained_row_action_candidate_matches(
