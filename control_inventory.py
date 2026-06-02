@@ -210,6 +210,8 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "toasts",
         "toolbar",
         "toolbars",
+        "window",
+        "windows",
     }
 )
 ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
@@ -238,6 +240,7 @@ CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_
         "on",
         "press",
         "tap",
+        "use",
         "within",
         "with",
     }
@@ -338,6 +341,7 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
     }
 )
 FIELD_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "input", "type"})
+LITERAL_STOPWORD_NAME_TOKENS = frozenset({"drop"})
 ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
     {
         "content",
@@ -493,8 +497,8 @@ TURN_ON_RE = re.compile(r"\bturn\s+on\b", re.IGNORECASE)
 TURN_OFF_RE = re.compile(r"\bturn\s+off\b", re.IGNORECASE)
 STATE_LABEL_ACTION_FAMILIES = (
     (frozenset({"add"}), frozenset({"added"})),
-    (frozenset({"activate"}), frozenset({"activated"})),
-    (frozenset({"deactivate"}), frozenset({"deactivated"})),
+    (frozenset({"activate"}), frozenset({"active", "activated"})),
+    (frozenset({"deactivate"}), frozenset({"deactivated", "inactive"})),
     (frozenset({"enable", "check", "tick"}), frozenset({"checked", "enabled"})),
     (frozenset({"disable", "uncheck", "untick"}), frozenset({"disabled", "unchecked"})),
     (frozenset({"apply"}), frozenset({"applied"})),
@@ -570,7 +574,7 @@ STATE_LABEL_ACTION_GROUPS = (
     (frozenset({"expand", "collapse"}), frozenset({"collapsed", "expanded"})),
     (frozenset({"lock", "unlock"}), frozenset({"locked", "unlocked"})),
     (frozenset({"connect", "disconnect"}), frozenset({"connected", "disconnected"})),
-    (frozenset({"activate", "deactivate"}), frozenset({"activated", "deactivated"})),
+    (frozenset({"activate", "deactivate"}), frozenset({"active", "activated", "deactivated", "inactive"})),
     (frozenset({"archive", "unarchive"}), frozenset({"archived", "unarchived"})),
     (frozenset({"select", "deselect"}), frozenset({"deselected", "selected", "unselected"})),
     (frozenset({"start", "stop"}), frozenset({"running", "started", "stopped"})),
@@ -717,6 +721,9 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"share"}),
     frozenset({"sort"}),
 )
+AUTOMATION_ONLY_ACTION_MATCH_WORDS = frozenset(
+    word for action_words, _state_words in STATE_LABEL_ACTION_GROUPS for word in action_words
+) | frozenset(word for family in EXCLUSIVE_ACTION_FAMILIES for word in family)
 OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     CONFIRM_ACTION_WORDS,
     CANCEL_ACTION_WORDS,
@@ -2258,6 +2265,8 @@ def _text_match_score(
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+        if _automation_only_exact_action_match(candidate, overlap):
+            score = max(score, TEXT_MATCH_FLOOR + 0.02)
     if label_tokens and overlap & label_tokens:
         score = max(score, TEXT_MATCH_FLOOR + 0.03)
     if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
@@ -2498,6 +2507,8 @@ def _context_text_match_score(
         score += VISIBLE_TEXT_MATCH_BONUS
     elif candidate.automation_id.strip():
         score -= AUTOMATION_ONLY_MATCH_PENALTY
+        if _automation_only_exact_action_match(candidate, overlap):
+            score = max(score, TEXT_MATCH_FLOOR + 0.02)
     if label_tokens and overlap & label_tokens:
         score = max(score, TEXT_MATCH_FLOOR + 0.03)
     if _action_object_alias_context_requested(instruction) and _exact_visible_action_word_match(
@@ -2542,7 +2553,14 @@ def _single_dialog_dismiss_candidate(
     model_rect: tuple[int, int, int, int] | None,
 ) -> TargetResolution | None:
     raw_tokens = _tokens_from_text(instruction)
-    if raw_tokens & DISMISS_WINDOW_CONTEXT_WORDS and not raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
+    window_close_requested = "window" in raw_tokens and not (
+        raw_tokens & (DISMISS_WINDOW_CONTEXT_WORDS - {"window"})
+    )
+    if (
+        raw_tokens & DISMISS_WINDOW_CONTEXT_WORDS
+        and not raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS
+        and not window_close_requested
+    ):
         return None
     close_context_tokens = raw_tokens & CLOSE_CONTEXT_TARGET_WORDS
     if close_context_tokens and not (close_context_tokens & DISMISS_DIALOG_CONTEXT_WORDS):
@@ -2566,15 +2584,18 @@ def _single_dialog_dismiss_candidate(
         ):
             preferred.append(candidate)
     selected = preferred or dismiss_candidates
-    contextual_selected = [
-        candidate
-        for candidate in selected
-        if _candidate_satisfies_contextual_duplicate_request(
-            instruction,
-            candidate,
-            candidates,
-        )
-    ]
+    if window_close_requested:
+        contextual_selected = []
+    else:
+        contextual_selected = [
+            candidate
+            for candidate in selected
+            if _candidate_satisfies_contextual_duplicate_request(
+                instruction,
+                candidate,
+                candidates,
+            )
+        ]
     if contextual_selected:
         selected = contextual_selected
     elif close_context_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
@@ -2582,6 +2603,15 @@ def _single_dialog_dismiss_candidate(
     if len(selected) != 1:
         if not selected:
             return None
+        if window_close_requested:
+            candidate = sorted(selected, key=_candidate_sort_key)[0]
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=TEXT_MATCH_FLOOR,
+                source="text_match",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
         if model_rect is not None:
             ranked_by_geometry = sorted(
                 (
@@ -3691,6 +3721,8 @@ def _instruction_requests_app_local_surface(
     surface_tokens = _object_token_variants(raw_tokens)
     if surface_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
         return True
+    if _instruction_requests_named_page_local_surface(raw_tokens):
+        return True
     if raw_tokens & FOLDER_IDENTITY_WORDS:
         return True
     if raw_tokens & ACTION_OBJECT_ALIAS_CONTEXT_WORDS:
@@ -3701,6 +3733,23 @@ def _instruction_requests_app_local_surface(
         or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
         or re.search(r"\bin[-\s]?page\b", text)
     )
+
+
+def _instruction_requests_named_page_local_surface(raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & BROWSER_PAGE_TARGET_WORDS):
+        return False
+    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS:
+        return False
+    if not (raw_tokens & (OPEN_VIEW_REQUEST_WORDS | GENERIC_OBJECT_REQUEST_WORDS)):
+        return False
+    object_tokens = _object_token_variants(
+        raw_tokens
+        - BROWSER_PAGE_TARGET_WORDS
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - ACTION_OBJECT_STOPWORDS
+    )
+    return bool(object_tokens)
 
 
 def _looks_like_browser_chrome_surface(candidate: ControlCandidate) -> bool:
@@ -8382,6 +8431,7 @@ def _candidate_match_instruction_tokens(
     visible_tokens = _candidate_visible_text_tokens(candidate)
     if visible_tokens:
         tokens.update(_tokens_from_text(instruction) & visible_tokens & CARDINAL_DIRECTION_ACTION_WORDS)
+        tokens.update(_literal_stopword_name_match_tokens(instruction, visible_tokens))
     if (
         _instruction_requests_contained_row_action(instruction)
         and candidate.control_type in TIGHT_ACTION_CONTROL_TYPES
@@ -8389,6 +8439,28 @@ def _candidate_match_instruction_tokens(
         if visible_tokens:
             tokens.update(_tokens_from_text(instruction) & visible_tokens)
     return tokens
+
+
+def _automation_only_exact_action_match(
+    candidate: ControlCandidate,
+    overlap: set[str],
+) -> bool:
+    if _candidate_visible_text_tokens(candidate):
+        return False
+    if not candidate.automation_id.strip():
+        return False
+    return bool(overlap & AUTOMATION_ONLY_ACTION_MATCH_WORDS)
+
+
+def _literal_stopword_name_match_tokens(
+    instruction: str,
+    visible_tokens: set[str],
+) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    matches = raw_tokens & visible_tokens & LITERAL_STOPWORD_NAME_TOKENS
+    if "drop" in matches and ({"drop", "down"} <= raw_tokens or "dropdown" in raw_tokens):
+        matches.remove("drop")
+    return matches
 
 
 def _row_scoped_action_target_matches_context(

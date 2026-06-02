@@ -9550,6 +9550,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Open Drop in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Downloads",
+                    "button",
+                    (904, 8, 42, 34),
+                    automation_id="downloads",
+                    window_title="CRM - Microsoft Edge",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Drop",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="CRM - Microsoft Edge",
+                ),
+            ),
+            (
                 "Open Home in the sidebar.",
                 ControlCandidate(
                     "c001",
@@ -14720,6 +14738,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.source, "candidate_snap")
                 self.assertEqual(snap_target.target_id, "c001")
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_activate_account_recovers_from_active_status_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status", "Active account", "button", (100, 100, 140, 32)),
+            ControlCandidate("activate", "", "button", (100, 150, 32, 32), automation_id="ActivateButton"),
+        ]
+        instruction = "Click Activate account."
+
+        wrong_target = resolve_candidate_target(
+            target_id="status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 140, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 140, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 140, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "status",
+                    "target": {"x": 100, "y": 100, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "status")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "activate")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "status")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "activate")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (100, 150, 32, 32))
 
     def test_clear_and_delete_target_id_accepts_common_icon_labels(self) -> None:
         from control_inventory import ControlCandidate
@@ -20128,6 +20197,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, expected.rect)
 
+    def test_window_context_recovers_requested_duplicate_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("alpha_window", "Alpha window", "window", (20, 80, 300, 100)),
+            ControlCandidate("alpha_duplicate", "Duplicate", "button", (240, 140, 80, 32)),
+            ControlCandidate("beta_window", "Beta window", "window", (420, 80, 300, 100)),
+            ControlCandidate("beta_duplicate", "Duplicate", "button", (640, 140, 80, 32)),
+        ]
+        instruction = "Use Duplicate on the Beta window."
+
+        wrong_target = resolve_candidate_target(
+            target_id="alpha_duplicate",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 140, 80, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 140, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 140, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "alpha_duplicate",
+                    "target": {"x": 240, "y": 140, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "alpha_duplicate")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "beta_duplicate")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "beta_duplicate")
+        self.assertEqual(help_target.rect, (640, 140, 80, 32))
+        self.assertFalse(help_target.rejected_reason)
+
     def test_shorthand_group_context_recovers_requested_duplicate_field(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
@@ -21487,6 +21608,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "launcher")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (20, 20, 120, 32))
+
+    def test_drop_down_phrase_does_not_match_literal_drop_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("launcher", "Export", "splitbutton", (120, 80, 120, 32)),
+            ControlCandidate("drop_literal", "Drop", "button", (300, 80, 80, 32)),
+        ]
+        instruction = "Open Export drop down."
+
+        wrong_target = resolve_candidate_target(
+            target_id="drop_literal",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 80, 80, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 80, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 80, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "drop_literal",
+                    "target": {"x": 300, "y": 80, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "drop_literal")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "drop_literal")
+        self.assertEqual(help_target.rejected_reason, "target_id control type mismatch")
 
     def test_textbox_wrong_target_id_rejects_same_label_combobox(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -23292,6 +23460,71 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.source, "candidate_snap")
         self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
         self.assertEqual(help_target.target_id, "c002")
+        self.assertFalse(help_target.rejected_reason)
+
+    def test_named_page_route_rejects_browser_tabitem_collision(self) -> None:
+        from control_inventory import (
+            ControlCandidate,
+            resolve_candidate_target,
+            snap_candidate_target,
+        )
+        from help_session import resolve_help_target
+
+        browser_tab = ControlCandidate(
+            "tab",
+            "Customers - MyApp - Google Chrome",
+            "tabitem",
+            (20, 10, 220, 32),
+            window_title="MyApp - Google Chrome",
+        )
+        page_item = ControlCandidate(
+            "customers",
+            "Customers",
+            "listitem",
+            (20, 120, 180, 32),
+            window_title="MyApp - Google Chrome",
+        )
+        instruction = "Open Customers page."
+
+        target_id = resolve_candidate_target(
+            target_id="tab",
+            instruction=instruction,
+            candidates=[browser_tab, page_item],
+            model_rect=browser_tab.rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=[browser_tab, page_item],
+            model_rect=browser_tab.rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=[browser_tab, page_item],
+            model_rect=browser_tab.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "tab",
+                    "target": {"x": 20, "y": 10, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [browser_tab, page_item],
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "customers")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "customers")
         self.assertFalse(help_target.rejected_reason)
 
     def test_table_row_broad_group_rejects_multiple_listitems(self) -> None:

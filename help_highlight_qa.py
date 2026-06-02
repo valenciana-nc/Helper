@@ -2360,6 +2360,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "activate_account_recovers_from_active_account_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 140, 32], "label": "Active account"},
+                {"rect": [100, 150, 32, 32], "label": "Activate"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Activate account.",
+                "target_id": "status",
+                "target": {"x": 100, "y": 100, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "status", "text": "Active account", "control_type": "button", "rect": [100, 100, 140, 32]},
+                {"id": "activate", "text": "", "control_type": "button", "rect": [100, 150, 32, 32], "automation_id": "ActivateButton"},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "activate",
+                "rect": [100, 150, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "enable_notifications_target_id_rejects_enabled_notifications_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10544,6 +10568,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "literal_drop_app_target_recovers_from_browser_downloads_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Browser Downloads"},
+                {"rect": [120, 160, 180, 32], "label": "Drop"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Drop in the app.",
+                "target_id": "browser_downloads",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "downloads",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_drop",
+                    "text": "Drop",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_drop",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -12783,6 +12844,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "text_match",
                 "target_id": "c002",
+                "rect": [20, 120, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_page_route_rejects_browser_tabitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 220, 32], "label": "Customers - MyApp - Google Chrome"},
+                {"rect": [20, 120, 180, 32], "label": "Customers"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Customers page.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Customers - MyApp - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 220, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {
+                    "id": "customers",
+                    "text": "Customers",
+                    "control_type": "listitem",
+                    "rect": [20, 120, 180, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "customers",
                 "rect": [20, 120, 180, 32],
                 "overlay_emitted": True,
             },
@@ -16143,6 +16240,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "billing_email",
                 "rect": [150, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "window_scoped_duplicate_action_recovers_requested_window",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 100], "label": "Alpha window"},
+                {"rect": [240, 140, 80, 32], "label": "Duplicate"},
+                {"rect": [420, 80, 300, 100], "label": "Beta window"},
+                {"rect": [640, 140, 80, 32], "label": "Duplicate"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Use Duplicate on the Beta window.",
+                "target_id": "alpha_duplicate",
+                "target": {"x": 240, "y": 140, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "alpha_window", "text": "Alpha window", "control_type": "window", "rect": [20, 80, 300, 100]},
+                {"id": "alpha_duplicate", "text": "Duplicate", "control_type": "button", "rect": [240, 140, 80, 32]},
+                {"id": "beta_window", "text": "Beta window", "control_type": "window", "rect": [420, 80, 300, 100]},
+                {"id": "beta_duplicate", "text": "Duplicate", "control_type": "button", "rect": [640, 140, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "beta_duplicate",
+                "rect": [640, 140, 80, 32],
                 "overlay_emitted": True,
             },
         },
