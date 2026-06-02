@@ -18109,6 +18109,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.rect, expected_rect)
                 self.assertFalse(help_target.rejected_reason)
 
+    def test_spelled_out_higher_ordinal_recovers_requested_duplicate_control(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("c1", "Option", "checkbox", (100, 100, 120, 32)),
+            ControlCandidate("c2", "Option", "checkbox", (100, 140, 120, 32)),
+            ControlCandidate("c3", "Option", "checkbox", (100, 180, 120, 32)),
+            ControlCandidate("c4", "Option", "checkbox", (100, 220, 120, 32)),
+        ]
+        wrong_rect = (100, 100, 120, 32)
+        instruction = "Check the fourth checkbox."
+
+        wrong_target = resolve_candidate_target(
+            target_id="c1",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=wrong_rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=wrong_rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "c1",
+                    "target": {
+                        "x": wrong_rect[0],
+                        "y": wrong_rect[1],
+                        "width": wrong_rect[2],
+                        "height": wrong_rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "c1")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "c4")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "c4")
+        self.assertEqual(help_target.rect, (100, 220, 120, 32))
+        self.assertFalse(help_target.rejected_reason)
+
     def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

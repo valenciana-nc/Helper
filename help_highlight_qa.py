@@ -14725,6 +14725,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "spelled_out_higher_ordinal_recovers_requested_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 120, 32], "label": "Option"},
+                {"rect": [100, 140, 120, 32], "label": "Option"},
+                {"rect": [100, 180, 120, 32], "label": "Option"},
+                {"rect": [100, 220, 120, 32], "label": "Option"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check the fourth checkbox.",
+                "target_id": "c1",
+                "target": {"x": 100, "y": 100, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c1", "text": "Option", "control_type": "checkbox", "rect": [100, 100, 120, 32]},
+                {"id": "c2", "text": "Option", "control_type": "checkbox", "rect": [100, 140, 120, 32]},
+                {"id": "c3", "text": "Option", "control_type": "checkbox", "rect": [100, 180, 120, 32]},
+                {"id": "c4", "text": "Option", "control_type": "checkbox", "rect": [100, 220, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c4",
+                "rect": [100, 220, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "card_context_recovers_from_modal_duplicate_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
