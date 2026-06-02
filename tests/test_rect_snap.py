@@ -29897,28 +29897,37 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from rect_snap import SnapResult
 
         model_rect = (100, 100, 80, 32)
-        target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Click Save.",
-                    "target": {"x": 100, "y": 100, "width": 80, "height": 32},
-                }
-            ),
-            self._capture(),
-            [],
-            snapper=lambda _rect, _instruction: SnapResult(
-                rect=model_rect,
-                confidence=0.90,
-                source="uia",
-                matched_text="Delete",
-            ),
+        cases = (
+            ("Click Save.", "Delete"),
+            ("Click Submit.", "Delete"),
+            ("Archive the invoice.", "Print"),
+            ("Approve the request.", "Reject"),
         )
 
-        self.assertEqual(target.source, "snap")
-        self.assertEqual(target.rect, model_rect)
-        self.assertEqual(target.matched_text, "Delete")
-        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        for instruction, matched_text in cases:
+            with self.subTest(instruction=instruction, matched_text=matched_text):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=lambda _rect, _instruction, text=matched_text: SnapResult(
+                        rect=model_rect,
+                        confidence=0.90,
+                        source="uia",
+                        matched_text=text,
+                    ),
+                )
+
+                self.assertEqual(target.source, "snap")
+                self.assertEqual(target.rect, model_rect)
+                self.assertEqual(target.matched_text, matched_text)
+                self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_fresh_snap_control_type_mismatch_does_not_fall_back_to_raw_model_rect(self) -> None:
         from help_session import resolve_help_target

@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from control_inventory import (
+    ADD_ACTION_WORDS,
+    CLEAR_CLOSE_WORDS,
+    CONFIRM_ACTION_WORDS,
     ControlCandidate,
+    EXCLUSIVE_ACTION_FAMILIES,
+    PAY_ACTION_WORDS,
     TargetResolution,
     collect_control_candidates,
     resolve_candidate_target,
@@ -59,15 +64,11 @@ MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
 RAW_SNAP_EXCLUSIVE_ACTION_FAMILIES = (
-    frozenset({"apply", "checkmark", "confirm", "ok", "okay"}),
-    frozenset({"cancel", "dismiss"}),
-    frozenset({"add", "create", "new", "plus"}),
-    frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
-    frozenset({"disk", "floppy", "save"}),
-    frozenset({"download", "export"}),
-    frozenset({"import", "upload"}),
-    frozenset({"clone", "copy", "duplicate"}),
-    frozenset({"edit", "pencil"}),
+    CONFIRM_ACTION_WORDS,
+    CLEAR_CLOSE_WORDS,
+    ADD_ACTION_WORDS,
+    PAY_ACTION_WORDS,
+    *EXCLUSIVE_ACTION_FAMILIES,
 )
 
 
