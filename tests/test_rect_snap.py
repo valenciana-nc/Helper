@@ -13957,6 +13957,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (200, 90, 90, 30))
 
+    def test_contextual_duplicate_action_first_rowheader_rejects_wrong_row_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("approve_acme", "Approve", "button", (20, 90, 90, 30)),
+            ControlCandidate("label_acme", "Acme", "rowheader", (140, 90, 120, 30)),
+            ControlCandidate("approve_globex", "Approve", "button", (20, 140, 90, 30)),
+            ControlCandidate("label_globex", "Globex", "rowheader", (140, 140, 120, 30)),
+        ]
+        instruction = "Approve Acme."
+
+        wrong_target = resolve_candidate_target(
+            target_id="approve_globex",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 140, 90, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 140, 90, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 140, 90, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "approve_globex",
+                    "target": {"x": 20, "y": 140, "width": 90, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "approve_globex")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "approve_acme")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (20, 90, 90, 30))
+
     def test_row_scoped_clear_field_rejects_wrong_row_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -16664,6 +16713,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.target_id, "c001")
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
+    def test_next_page_prefers_page_control_over_media_window_next(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "media_next",
+                "Next",
+                "button",
+                (100, 100, 32, 32),
+                window_title="Music Player",
+            ),
+            ControlCandidate("page_next", "Next page", "button", (200, 100, 100, 32), window_title="Docs"),
+        ]
+        instruction = "Go to the next page."
+
+        wrong_target = resolve_candidate_target(
+            target_id="media_next",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 32, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "media_next",
+                    "target": {"x": 100, "y": 100, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "media_next")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "page_next")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "media_next")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "page_next")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (200, 100, 100, 32))
+
     def test_media_transport_instruction_still_accepts_next_previous_track(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -18632,6 +18738,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 100, 32))
 
+    def test_calendar_exact_label_overrides_date_alias_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("date_modified", "Date modified", "button", (100, 100, 130, 32)),
+            ControlCandidate("calendar", "Calendar", "button", (260, 100, 130, 32)),
+        ]
+        instruction = "Open calendar."
+
+        wrong_target = resolve_candidate_target(
+            target_id="date_modified",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 130, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 130, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 130, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "date_modified",
+                    "target": {"x": 100, "y": 100, "width": 130, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "date_modified")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "calendar")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (260, 100, 130, 32))
+
     def test_home_alias_rejects_ambiguous_home_and_house_actions(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -19574,6 +19727,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "pay2")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (620, 64, 60, 30))
+
+    def test_row_scoped_action_matches_separated_action_column(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Alpha", "listitem", (10, 10, 600, 32)),
+            ControlCandidate("pay1", "Pay", "button", (730, 10, 60, 30)),
+            ControlCandidate("r2", "Beta", "listitem", (10, 60, 600, 32)),
+            ControlCandidate("pay2", "Pay", "button", (730, 60, 60, 30)),
+        ]
+        instruction = "Click Pay for Beta row."
+
+        target_id = resolve_candidate_target(
+            target_id="pay2",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(730, 60, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(730, 60, 60, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(730, 60, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "pay2",
+                    "target": {"x": 730, "y": 60, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "pay2")
+        self.assertFalse(target_id.rejected_reason)
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "pay2")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (730, 60, 60, 30))
 
     def test_row_scoped_action_matches_automation_only_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

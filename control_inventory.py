@@ -2218,6 +2218,8 @@ def _text_match_score(
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return 0.0
+    if _calendar_exact_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _navigation_backup_action_mismatch(instruction, candidate):
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
@@ -2472,6 +2474,8 @@ def _context_text_match_score(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return 0.0
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return 0.0
+    if _calendar_exact_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _navigation_backup_action_mismatch(instruction, candidate):
         return 0.0
@@ -3024,6 +3028,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _calendar_exact_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -5419,7 +5429,34 @@ def _navigation_media_transport_action_mismatch(
     control_tokens = _tokens_from_text(candidate.descriptor)
     if not (control_tokens & NAVIGATION_DIRECTION_WORDS):
         return False
+    control_context_tokens = control_tokens | _tokens_from_text(candidate.window_title)
+    if instruction_tokens & BROWSER_PAGE_TARGET_WORDS:
+        return bool(control_context_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
     return bool(control_tokens & MEDIA_TRANSPORT_CONTEXT_WORDS)
+
+
+def _calendar_exact_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if "calendar" not in raw_tokens:
+        return False
+    candidate_tokens = _tokens_from_text(candidate.text) | _tokens_from_text(
+        candidate.automation_id
+    )
+    if "calendar" in candidate_tokens:
+        return False
+    if "date" not in candidate_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        other_tokens = _tokens_from_text(other.text) | _tokens_from_text(other.automation_id)
+        if "calendar" in other_tokens:
+            return True
+    return False
 
 
 def _navigation_backup_action_mismatch(
@@ -6386,7 +6423,7 @@ def _row_action_context_rect_matches(
     action_left = action_x
     action_right = action_x + action_width
     horizontal_gap = max(row_left - action_right, action_left - row_right, 0)
-    max_gap = max(24, min(120, row_height * 2))
+    max_gap = max(24, min(220, max(row_height * 5, row_width * 0.25)))
     return horizontal_gap <= max_gap
 
 
@@ -6889,8 +6926,6 @@ def _nearby_row_label_rect_matches(
         return False
     label_right = label_x + label_width
     action_right = action_x + action_width
-    if label_x >= action_right:
-        return False
     label_center_y = label_y + label_height / 2
     action_center_y = action_y + action_height / 2
     if abs(label_center_y - action_center_y) > max(8.0, min(label_height, action_height) * 0.55):
@@ -8357,6 +8392,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _navigation_media_transport_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _calendar_exact_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
@@ -9345,6 +9382,8 @@ def _candidate_snap_semantic_mismatch(
     if _checkbox_state_action_mismatch(instruction, candidate):
         return True
     if _navigation_media_transport_action_mismatch(instruction, candidate):
+        return True
+    if _calendar_exact_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _navigation_backup_action_mismatch(instruction, candidate):
         return True

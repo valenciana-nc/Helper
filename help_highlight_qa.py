@@ -8898,6 +8898,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "calendar_exact_label_overrides_date_modified_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 130, 32], "label": "Date modified"},
+                {"rect": [260, 100, 130, 32], "label": "Calendar"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open calendar.",
+                "target_id": "date_modified",
+                "target": {"x": 100, "y": 100, "width": 130, "height": 32},
+            },
+            "candidates": [
+                {"id": "date_modified", "text": "Date modified", "control_type": "button", "rect": [100, 100, 130, 32]},
+                {"id": "calendar", "text": "Calendar", "control_type": "button", "rect": [260, 100, 130, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "calendar",
+                "rect": [260, 100, 130, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "clock_action_target_id_accepts_time_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15529,6 +15553,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "next_page_rejects_media_window_next_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 32, 32], "label": "Next"},
+                {"rect": [200, 100, 100, 32], "label": "Next page"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Go to the next page.",
+                "target_id": "media_next",
+                "target": {"x": 100, "y": 100, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "media_next",
+                    "text": "Next",
+                    "control_type": "button",
+                    "rect": [100, 100, 32, 32],
+                    "window_title": "Music Player",
+                },
+                {
+                    "id": "page_next",
+                    "text": "Next page",
+                    "control_type": "button",
+                    "rect": [200, 100, 100, 32],
+                    "window_title": "Docs",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_next",
+                "rect": [200, 100, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "navigation_back_text_match_overrides_undo_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16090,6 +16150,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_pay_action_promotes_separated_action_column",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 600, 32], "label": "Alpha"},
+                {"rect": [730, 10, 60, 30], "label": "Pay"},
+                {"rect": [10, 60, 600, 32], "label": "Beta"},
+                {"rect": [730, 60, 60, 30], "label": "Pay"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Beta row.",
+                "target_id": "pay2",
+                "target": {"x": 730, "y": 60, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Alpha", "control_type": "listitem", "rect": [10, 10, 600, 32]},
+                {"id": "pay1", "text": "Pay", "control_type": "button", "rect": [730, 10, 60, 30]},
+                {"id": "r2", "text": "Beta", "control_type": "listitem", "rect": [10, 60, 600, 32]},
+                {"id": "pay2", "text": "Pay", "control_type": "button", "rect": [730, 60, 60, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "pay2",
+                "rect": [730, 60, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_pay_action_promotes_automation_only_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16261,6 +16349,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "approve_acme",
                 "rect": [180, 90, 90, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "action_first_rowheader_label_recovers_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 90, 30], "label": "Approve"},
+                {"rect": [140, 90, 120, 30], "label": "Acme"},
+                {"rect": [20, 140, 90, 30], "label": "Approve"},
+                {"rect": [140, 140, 120, 30], "label": "Globex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve Acme.",
+                "target_id": "approve_globex",
+                "target": {"x": 20, "y": 140, "width": 90, "height": 30},
+            },
+            "candidates": [
+                {"id": "approve_acme", "text": "Approve", "control_type": "button", "rect": [20, 90, 90, 30]},
+                {"id": "label_acme", "text": "Acme", "control_type": "rowheader", "rect": [140, 90, 120, 30]},
+                {"id": "approve_globex", "text": "Approve", "control_type": "button", "rect": [20, 140, 90, 30]},
+                {"id": "label_globex", "text": "Globex", "control_type": "rowheader", "rect": [140, 140, 120, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "approve_acme",
+                "rect": [20, 90, 90, 30],
                 "overlay_emitted": True,
             },
         },
