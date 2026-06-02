@@ -27410,6 +27410,193 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(generic_target.target_id, "edit")
         self.assertFalse(generic_target.rejected_reason)
 
+    def test_named_role_controls_require_label_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = [
+            (
+                "Open the Country dropdown.",
+                ControlCandidate("combo", "", "combobox", (220, 100, 240, 32)),
+                ControlCandidate("label", "Country", "text", (120, 102, 80, 24)),
+            ),
+            (
+                "Click the Age spinner.",
+                ControlCandidate("spinner", "", "spinner", (220, 100, 120, 32)),
+                ControlCandidate("label", "Age", "text", (120, 102, 80, 24)),
+            ),
+            (
+                "Click the Volume slider.",
+                ControlCandidate("slider", "", "slider", (220, 100, 240, 32)),
+                ControlCandidate("label", "Volume", "text", (120, 102, 80, 24)),
+            ),
+            (
+                "Click the Terms checkbox.",
+                ControlCandidate("checkbox", "", "checkbox", (220, 100, 24, 24)),
+                ControlCandidate("label", "Terms", "text", (252, 100, 80, 24)),
+            ),
+            (
+                "Select Weekly radio.",
+                ControlCandidate("radio", "", "radiobutton", (220, 100, 24, 24)),
+                ControlCandidate("label", "Weekly", "text", (252, 100, 80, 24)),
+            ),
+        ]
+
+        for instruction, control, label in cases:
+            with self.subTest(instruction=instruction):
+                unlabeled = [control]
+                labelled = [control, label]
+                target_id = resolve_candidate_target(
+                    target_id=control.id,
+                    instruction=instruction,
+                    candidates=unlabeled,
+                    model_rect=control.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=unlabeled,
+                    model_rect=control.rect,
+                )
+                snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=unlabeled,
+                    model_rect=control.rect,
+                )
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": control.id,
+                            "target": {
+                                "x": control.rect[0],
+                                "y": control.rect[1],
+                                "width": control.rect[2],
+                                "height": control.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    unlabeled,
+                )
+                labelled_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": control.id,
+                            "target": {
+                                "x": control.rect[0],
+                                "y": control.rect[1],
+                                "width": control.rect[2],
+                                "height": control.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    labelled,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNone(text_target)
+                self.assertIsNone(snap)
+                self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(labelled_target.source, "target_id")
+                self.assertEqual(labelled_target.target_id, control.id)
+                self.assertFalse(labelled_target.rejected_reason)
+
+        generic_dropdown = resolve_candidate_target(
+            target_id="combo",
+            instruction="Open this dropdown.",
+            candidates=[ControlCandidate("combo", "", "combobox", (220, 100, 240, 32))],
+            model_rect=(220, 100, 240, 32),
+        )
+        generic_checkbox = resolve_candidate_target(
+            target_id="checkbox",
+            instruction="Click this checkbox.",
+            candidates=[ControlCandidate("checkbox", "", "checkbox", (220, 100, 24, 24))],
+            model_rect=(220, 100, 24, 24),
+        )
+
+        for generic_target in (generic_dropdown, generic_checkbox):
+            self.assertIsNotNone(generic_target)
+            assert generic_target is not None
+            self.assertFalse(generic_target.rejected_reason)
+
+    def test_named_role_controls_parse_trailing_label_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        instruction = "Click the dropdown for Country."
+        unlabeled = [ControlCandidate("combo", "", "combobox", (220, 100, 240, 32))]
+        labelled = [
+            ControlCandidate("label", "Country", "text", (120, 102, 80, 24)),
+            ControlCandidate("combo", "", "combobox", (220, 100, 240, 32)),
+        ]
+        wrong_candidates = [
+            ControlCandidate("intended_label", "Country", "text", (120, 102, 80, 24)),
+            ControlCandidate("intended", "", "combobox", (220, 100, 240, 32)),
+            ControlCandidate("wrong", "", "combobox", (220, 150, 240, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="combo",
+            instruction=instruction,
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+        labelled_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "combo",
+                    "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            labelled,
+        )
+        wrong_target = resolve_candidate_target(
+            target_id="wrong",
+            instruction=instruction,
+            candidates=wrong_candidates,
+            model_rect=(220, 150, 240, 32),
+        )
+        recovered_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "wrong",
+                    "target": {"x": 220, "y": 150, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            wrong_candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(snap)
+        self.assertEqual(labelled_target.target_id, "combo")
+        self.assertFalse(labelled_target.rejected_reason)
+        self.assertIsNotNone(wrong_target)
+        assert wrong_target is not None
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(recovered_target.source, "text_match")
+        self.assertEqual(recovered_target.target_id, "intended")
+        self.assertFalse(recovered_target.rejected_reason)
+
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

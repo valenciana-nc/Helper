@@ -426,6 +426,69 @@ TEXT_ENTRY_LABEL_BOUNDARY_WORDS = (
         }
     )
 )
+NAMED_CONTROL_LABEL_TYPES = frozenset(
+    {"checkbox", "combobox", "edit", "radiobutton", "slider", "spinner"}
+)
+NAMED_CONTROL_ROLE_WORDS = TEXT_ENTRY_FIELD_WORDS | frozenset(
+    {
+        "checkbox",
+        "combo",
+        "combobox",
+        "down",
+        "dropdown",
+        "radio",
+        "radiobutton",
+        "select",
+        "selector",
+        "slider",
+        "spinbox",
+        "spinner",
+        "stepper",
+        "switch",
+        "toggle",
+    }
+)
+NAMED_CONTROL_LABEL_BOUNDARY_WORDS = (
+    OPEN_VIEW_REQUEST_WORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
+    | FIELD_ENTRY_ACTION_WORDS
+    | CHECKBOX_ON_ACTION_WORDS
+    | CHECKBOX_OFF_ACTION_WORDS
+    | NAMED_CONTROL_ROLE_WORDS
+    | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+    | CONTEXTUAL_DUPLICATE_POSITION_WORDS
+    | frozenset(
+        {
+            "a",
+            "an",
+            "at",
+            "current",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "into",
+            "of",
+            "on",
+            "that",
+            "the",
+            "this",
+            "to",
+            "within",
+            "with",
+        }
+    )
+)
+NAMED_CONTROL_TRAILING_LABEL_MARKERS = frozenset(
+    {"called", "for", "label", "labeled", "labelled", "named"}
+)
+NAMED_CONTROL_LABEL_STOPWORDS = NAMED_CONTROL_ROLE_WORDS | frozenset(
+    {
+        "button",
+        "control",
+        "option",
+    }
+)
 RECORD_TARGET_WORDS = frozenset({"record", "records"})
 RECORD_TARGET_TRAILING_CONTEXT_WORDS = frozenset({"tab", "tabs", "tabitem"})
 RECORD_TARGET_LABEL_BOUNDARY_WORDS = (
@@ -2354,7 +2417,7 @@ def _text_match_score(
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
-    if _named_text_entry_label_missing(instruction, candidate, candidates):
+    if _named_control_label_missing(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2747,7 +2810,7 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(max(score, 0.0), 1.0)
-    label_tokens = _nearby_field_label_tokens(candidate, candidates)
+    label_tokens = _named_control_candidate_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
         return 0.0
@@ -2866,7 +2929,7 @@ def _context_text_match_score(
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
-    if _named_text_entry_label_missing(instruction, candidate, candidates):
+    if _named_control_label_missing(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3064,7 +3127,7 @@ def _context_text_match_score(
     if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    label_tokens = _nearby_field_label_tokens(candidate, candidates)
+    label_tokens = _named_control_candidate_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
         return 0.0
@@ -3358,7 +3421,7 @@ def _target_id_plausibility(
             text_score,
             "target_id control type mismatch",
         )
-    if _named_text_entry_label_missing(instruction, candidate, candidates):
+    if _named_control_label_missing(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4162,7 +4225,7 @@ def _candidate_semantic_tokens_with_field_label(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
-    return _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+    return _candidate_semantic_tokens(candidate) | _named_control_candidate_label_tokens(
         candidate,
         candidates,
     )
@@ -5288,7 +5351,7 @@ def _single_strict_text_entry_candidate(
             candidate,
         ):
             continue
-        if _named_text_entry_label_missing(instruction, candidate, candidates):
+        if _named_control_label_missing(instruction, candidate, candidates):
             continue
         if selected is not None and not _same_visual_candidate(selected, candidate):
             return None
@@ -5296,40 +5359,173 @@ def _single_strict_text_entry_candidate(
     return selected
 
 
-def _named_text_entry_label_missing(
+def _named_control_label_missing(
     instruction: str,
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    if candidate.control_type != "edit":
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
         return False
-    requested_label = _strict_text_entry_requested_label_tokens(instruction)
+    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
     if not requested_label:
         return False
-    evidence = _object_token_variants(_field_alternative_label_tokens(candidate, candidates))
+    evidence = _named_control_candidate_label_tokens(candidate, candidates)
     return not bool(requested_label & evidence)
 
 
 def _strict_text_entry_requested_label_tokens(instruction: str) -> set[str]:
-    if not _strict_text_entry_requested(instruction):
-        return set()
+    return _named_control_requested_label_tokens(instruction, "edit")
+
+
+def _named_control_requested_label_tokens(instruction: str, control_type: str) -> set[str]:
     words = _literal_word_sequence(instruction)
     for index, word in enumerate(words):
-        if word not in TEXT_ENTRY_FIELD_WORDS - frozenset({"text"}):
+        role_prefix = _named_control_role_prefix_width(words, index, control_type)
+        if role_prefix is None:
             continue
-        cursor = index - 1
-        if cursor >= 0 and words[cursor] == "text":
-            cursor -= 1
+        trailing = _named_control_trailing_label_tokens(words, index + 1)
+        if trailing:
+            return trailing
+        cursor = index - role_prefix
         label_words: list[str] = []
         while cursor >= 0:
             current = words[cursor]
-            if current in TEXT_ENTRY_LABEL_BOUNDARY_WORDS:
+            if current in NAMED_CONTROL_LABEL_BOUNDARY_WORDS:
                 break
             label_words.append(current)
             cursor -= 1
         if label_words:
             return _object_token_variants(set(label_words))
     return set()
+
+
+def _named_control_trailing_label_tokens(words: list[str], start_index: int) -> set[str]:
+    cursor = start_index
+    while cursor < len(words):
+        marker = words[cursor]
+        if marker not in NAMED_CONTROL_TRAILING_LABEL_MARKERS:
+            cursor += 1
+            continue
+        cursor += 1
+        label_words: list[str] = []
+        while cursor < len(words):
+            current = words[cursor]
+            if current in NAMED_CONTROL_LABEL_BOUNDARY_WORDS:
+                break
+            label_words.append(current)
+            cursor += 1
+        if label_words:
+            return _object_token_variants(set(label_words))
+    return set()
+
+
+def _named_control_role_prefix_width(
+    words: list[str],
+    index: int,
+    control_type: str,
+) -> int | None:
+    word = words[index]
+    previous = words[index - 1] if index > 0 else ""
+    if control_type == "edit":
+        if word in {"textbox", "textarea", "field", "input"}:
+            return 2 if word in {"field", "input"} and previous == "text" else 1
+        if word == "box" and previous == "text":
+            return 2
+        return None
+    if control_type == "combobox":
+        if word in {"combo", "combobox", "dropdown", "selector"}:
+            return 1
+        if word == "down" and previous == "drop":
+            return 2
+        return None
+    if control_type == "spinner":
+        if word in {"spinbox", "spinner", "stepper"}:
+            return 1
+        if word == "box" and previous == "spin":
+            return 2
+        return None
+    if control_type == "slider":
+        return 1 if word == "slider" else None
+    if control_type == "checkbox":
+        if word in {"checkbox", "switch", "toggle"}:
+            return 1
+        if word == "box" and previous == "check":
+            return 2
+        return None
+    if control_type == "radiobutton":
+        if word in {"radio", "radiobutton"}:
+            return 1
+        if word == "button" and previous == "radio":
+            return 2
+        return None
+    return None
+
+
+def _named_control_candidate_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
+        return set()
+    tokens = (
+        _field_alternative_label_tokens(candidate, candidates)
+        | _nearby_unlabeled_control_label_tokens(candidate, candidates)
+    )
+    return _object_token_variants(tokens) - NAMED_CONTROL_LABEL_STOPWORDS
+
+
+def _nearby_unlabeled_control_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
+        return set()
+    if _candidate_visible_text_tokens(candidate) or candidate.automation_id.strip():
+        return set()
+    best_score = 0.0
+    best_tokens: set[str] = set()
+    control_area = max(1, candidate.rect[2] * candidate.rect[3])
+    for label in candidates:
+        if label.id == candidate.id:
+            continue
+        if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        tokens = _candidate_visible_text_tokens(label)
+        if not tokens or len(tokens) > 8:
+            continue
+        label_area = max(1, label.rect[2] * label.rect[3])
+        if label_area > control_area * 8:
+            continue
+        score = (
+            _nearby_option_label_score(candidate.rect, label.rect)
+            if candidate.control_type in {"checkbox", "radiobutton"}
+            else _nearby_field_label_score(candidate.rect, label.rect)
+        )
+        if score > best_score:
+            best_score = score
+            best_tokens = tokens
+    if best_score < 0.5:
+        return set()
+    return best_tokens
+
+
+def _nearby_option_label_score(
+    option_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    option_left, option_top, option_width, option_height = option_rect
+    option_right = option_left + option_width
+    option_bottom = option_top + option_height
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+
+    y_overlap = max(0, min(option_bottom, label_bottom) - max(option_top, label_top))
+    y_ratio = y_overlap / max(1, min(option_height, label_height))
+    right_gap = label_left - option_right
+    if y_ratio >= 0.45 and -4 <= right_gap <= 240 and label_right >= option_right:
+        return 0.75 + 0.25 * (1.0 - min(1.0, max(0, right_gap) / 240.0))
+    return _nearby_field_label_score(option_rect, label_rect)
 
 
 def _explicit_field_alternative_mismatch(
@@ -10711,7 +10907,7 @@ def _candidate_snap_score(
 ) -> float:
     iou = _iou(candidate.rect, model_rect)
     proximity = _proximity_score(candidate.rect, model_rect)
-    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _named_control_candidate_label_tokens(
         candidate,
         candidates,
     )
@@ -10725,7 +10921,7 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
-    if _named_text_entry_label_missing(instruction, candidate, candidates):
+    if _named_control_label_missing(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -12024,7 +12220,7 @@ def _candidate_snap_semantic_mismatch(
     instruction_tokens: set[str],
     model_rect: tuple[int, int, int, int],
 ) -> bool:
-    semantic_tokens = _candidate_semantic_tokens(candidate) | _nearby_field_label_tokens(
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _named_control_candidate_label_tokens(
         candidate,
         candidates,
     )
@@ -12036,7 +12232,7 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
-    if _named_text_entry_label_missing(instruction, candidate, candidates):
+    if _named_control_label_missing(instruction, candidate, candidates):
         return True
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return True

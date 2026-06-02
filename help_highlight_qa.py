@@ -20534,6 +20534,146 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_dropdown_rejects_unlabeled_combobox_without_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country dropdown.",
+                "target_id": "combo",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [220, 100, 240, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "combo",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_dropdown_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 102, 80, 24], "label": "Country"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country dropdown.",
+                "target_id": "combo",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Country", "control_type": "text", "rect": [120, 102, 80, 24]},
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [220, 100, 240, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "combo",
+                "rect": [220, 100, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "trailing_label_dropdown_rejects_unlabeled_combobox",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the dropdown for Country.",
+                "target_id": "combo",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [220, 100, 240, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "combo",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "trailing_label_dropdown_recovers_from_wrong_unlabeled_combobox",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 102, 80, 24], "label": "Country"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+                {"rect": [220, 150, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the dropdown for Country.",
+                "target_id": "wrong",
+                "target": {"x": 220, "y": 150, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Country", "control_type": "text", "rect": [120, 102, 80, 24]},
+                {"id": "intended", "text": "", "control_type": "combobox", "rect": [220, 100, 240, 32]},
+                {"id": "wrong", "text": "", "control_type": "combobox", "rect": [220, 150, 240, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "intended",
+                "rect": [220, 100, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_checkbox_rejects_unlabeled_control_without_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 100, 24, 24], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Terms checkbox.",
+                "target_id": "checkbox",
+                "target": {"x": 220, "y": 100, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "checkbox", "text": "", "control_type": "checkbox", "rect": [220, 100, 24, 24]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "checkbox",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_checkbox_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 100, 24, 24], "label": ""},
+                {"rect": [252, 100, 80, 24], "label": "Terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Terms checkbox.",
+                "target_id": "checkbox",
+                "target": {"x": 220, "y": 100, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "checkbox", "text": "", "control_type": "checkbox", "rect": [220, 100, 24, 24]},
+                {"id": "label", "text": "Terms", "control_type": "text", "rect": [252, 100, 80, 24]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "checkbox",
+                "rect": [220, 100, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "panel_sized_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
