@@ -8674,7 +8674,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
-    def test_generic_settings_and_downloads_reject_browser_tab_title(self) -> None:
+    def test_generic_settings_downloads_and_history_reject_browser_tab_title(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
@@ -8711,6 +8711,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "button",
                     (500, 120, 120, 32),
                     window_title="Downloads - Google Chrome",
+                ),
+            ),
+            (
+                "Open history.",
+                ControlCandidate(
+                    "tab",
+                    "History - Google Chrome",
+                    "tabitem",
+                    (80, 0, 220, 40),
+                    window_title="History - Google Chrome",
+                ),
+                ControlCandidate(
+                    "button",
+                    "History",
+                    "button",
+                    (500, 120, 100, 32),
+                    automation_id="history",
+                    window_title="History - Google Chrome",
                 ),
             ),
         )
@@ -17261,6 +17279,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 32, 32))
 
+    def test_show_hidden_files_accepts_exact_visibility_object_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "c001",
+                "Show hidden files",
+                "checkbox",
+                (120, 160, 180, 32),
+                window_title="File Explorer Options",
+            )
+        ]
+        instruction = "Show hidden files."
+
+        target_id = resolve_candidate_target(
+            target_id="c001",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 180, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 180, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 180, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "c001",
+                    "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "c001")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(text_target.target_id, "c001")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "c001")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "c001")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (120, 160, 180, 32))
+
     def test_system_tray_aliases_do_not_cross_notifications_or_generic_show(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -18687,6 +18762,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "combo")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (10, 10, 180, 32))
+
+    def test_textbox_wrong_target_id_rejects_same_label_combobox(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("edit", "Email", "edit", (100, 100, 220, 32)),
+            ControlCandidate("combo", "Email", "combobox", (100, 150, 220, 32)),
+        ]
+        instruction = "Type in the Email textbox."
+
+        wrong_target = resolve_candidate_target(
+            target_id="combo",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "combo",
+                    "target": {"x": 100, "y": 150, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "combo")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "edit")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "edit")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "edit")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (100, 100, 220, 32))
 
     def test_generic_dropdown_launcher_recovers_from_open_option_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

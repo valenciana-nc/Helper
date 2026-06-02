@@ -754,7 +754,17 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
-    {"download", "downloads", "home", "house", "options", "overview", "preferences", "settings"}
+    {
+        "download",
+        "downloads",
+        "history",
+        "home",
+        "house",
+        "options",
+        "overview",
+        "preferences",
+        "settings",
+    }
 )
 BROWSER_MENU_BUTTON_TOKENS = frozenset(
     {"browser", "chrome", "menu", "more", "options", "preferences", "settings"}
@@ -3719,9 +3729,20 @@ def _explicit_text_field_control_type_mismatch(
     instruction: str,
     candidate: ControlCandidate,
 ) -> bool:
-    if candidate.control_type != "spinner":
+    if candidate.control_type not in {"combobox", "spinner"}:
         return False
     raw_tokens = _tokens_from_text(instruction)
+    if (
+        candidate.control_type == "combobox"
+        and (
+            "textbox" in raw_tokens
+            or "textarea" in raw_tokens
+            or {"text", "box"} <= raw_tokens
+        )
+    ):
+        return True
+    if candidate.control_type != "spinner":
+        return False
     if raw_tokens & {"spinner", "stepper"}:
         return False
     return (
@@ -5705,6 +5726,16 @@ def _state_label_is_target_identity(
         return True
     if {"hidden", "bookmarks"} <= control_tokens and {"hidden", "bookmarks"} <= instruction_tokens:
         return True
+    visibility_states = frozenset({"hidden", "shown", "visible"})
+    if (
+        instruction_tokens & GENERIC_VISIBILITY_ACTION_WORDS
+        and instruction_tokens & control_tokens & visibility_states
+    ):
+        identity_stopwords = CONFIRM_OBJECT_STOPWORDS | GENERIC_VISIBILITY_ACTION_WORDS | visibility_states
+        instruction_objects = _object_token_variants(instruction_tokens - identity_stopwords)
+        control_objects = _object_token_variants(control_tokens - identity_stopwords)
+        if instruction_objects and control_objects and instruction_objects & control_objects:
+            return True
     if "group" in control_tokens and control_tokens & BROWSER_GROUP_STATE_WORDS:
         identity_tokens = control_tokens - BROWSER_GROUP_STATE_WORDS - {"group", "tab", "tabs"}
         return "group" in instruction_tokens or bool(identity_tokens & instruction_tokens)

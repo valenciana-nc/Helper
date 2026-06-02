@@ -3608,6 +3608,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "textbox_wording_rejects_same_label_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 220, 32], "label": "Email"},
+                {"rect": [100, 150, 220, 32], "label": "Email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type in the Email textbox.",
+                "target_id": "combo",
+                "target": {"x": 100, "y": 150, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "edit", "text": "Email", "control_type": "edit", "rect": [100, 100, 220, 32]},
+                {"id": "combo", "text": "Email", "control_type": "combobox", "rect": [100, 150, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit",
+                "rect": [100, 100, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_settings_rejects_browser_tab_title_for_settings_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -3634,6 +3658,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "control_type": "button",
                     "rect": [500, 120, 100, 32],
                     "window_title": "Settings - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "button",
+                "rect": [500, 120, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_history_rejects_browser_tab_title_for_history_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 20, 220, 40], "label": "History - Google Chrome"},
+                {"rect": [500, 120, 100, 32], "label": "History"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open history.",
+                "target_id": "tab",
+                "target": {"x": 80, "y": 20, "width": 220, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "History - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [80, 20, 220, 40],
+                    "window_title": "History - Google Chrome",
+                },
+                {
+                    "id": "button",
+                    "text": "History",
+                    "control_type": "button",
+                    "rect": [500, 120, 100, 32],
+                    "automation_id": "history",
+                    "window_title": "History - Google Chrome",
                 },
             ],
             "expected": {
@@ -10923,6 +10984,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "show_hidden_files_accepts_exact_visibility_object_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [120, 160, 180, 32], "label": "Show hidden files"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Show hidden files.",
+                "target_id": "c001",
+                "target": {"x": 120, "y": 160, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Show hidden files",
+                    "control_type": "checkbox",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "File Explorer Options",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rect": [120, 160, 180, 32],
                 "overlay_emitted": True,
             },
         },
