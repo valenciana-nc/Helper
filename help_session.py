@@ -247,8 +247,10 @@ def resolve_help_target(
                 )
                 if candidate_snap is not None and not candidate_snap.rejected_reason:
                     return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
-            if text_target is not None and text_target.rejected_reason == "ambiguous text match":
-                return text_target
+                if text_target is not None and not text_target.rejected_reason:
+                    return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
+                if text_target is not None and text_target.rejected_reason == "ambiguous text match":
+                    return text_target
             return target
 
         if model_rect is not None:

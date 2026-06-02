@@ -29847,6 +29847,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (650, 156, 70, 28))
 
+    def test_contextual_action_rejects_when_requested_context_disappears(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("profile_label", "Profile", "text", (20, 70, 100, 20)),
+            ControlCandidate("delete", "Delete", "button", (20, 100, 70, 24)),
+        ]
+        instruction = "Click Delete in Billing."
+
+        target_id_target = resolve_candidate_target(
+            target_id="delete",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 100, 70, 24),
+        )
+        raw_rect_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 20, "y": 100, "width": 70, "height": 24},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "delete",
+                    "target": {"x": 20, "y": 100, "width": 70, "height": 24},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id_target)
+        assert target_id_target is not None
+        self.assertEqual(target_id_target.rejected_reason, "target_id semantic mismatch")
+        self.assertTrue(raw_rect_target.rejected_reason)
+        self.assertTrue(help_target.rejected_reason)
+
     def test_container_text_does_not_promote_contradictory_contained_button(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

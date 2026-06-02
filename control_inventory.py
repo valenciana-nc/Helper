@@ -3006,6 +3006,8 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_action_context_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _delimited_context_only_target_alternative_mismatch(
         instruction,
         candidate,
@@ -3414,6 +3416,8 @@ def _context_text_match_score(
         candidate,
         candidates,
     ):
+        return 0.0
+    if _prepositional_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_action_context_mismatch_without_contextual_evidence(
         instruction,
@@ -4252,6 +4256,12 @@ def _target_id_plausibility(
         candidate,
         candidates,
     ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _prepositional_action_context_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -9787,6 +9797,78 @@ def _prepositional_context_action_alternative_mismatch(
     return False
 
 
+def _prepositional_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    target_tokens, context_tokens = _prepositional_context_action_tokens(instruction)
+    if not target_tokens or not context_tokens:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(
+        candidate.descriptor
+    )
+    if not (candidate_tokens & target_tokens):
+        return False
+    evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    if _contextual_duplicate_request_matches_evidence(context_tokens, evidence_tokens):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        other_tokens = _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+        if not (other_tokens & target_tokens):
+            continue
+        if _prepositional_context_tokens_match_candidate(context_tokens, other, candidates):
+            return False
+    conflicting_context = _action_candidate_conflicting_context_tokens(candidate, candidates)
+    return bool(conflicting_context and not (context_tokens & conflicting_context))
+
+
+def _action_candidate_conflicting_context_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens: set[str] = set()
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+            context,
+        ):
+            continue
+        if not (
+            _contains_rect(_expand_rect(context.rect, 4), candidate.rect)
+            or _row_action_context_rect_matches(context, candidate)
+            or _nearby_row_label_rect_matches(context, candidate)
+            or _nearby_context_label_rect_matches(context, candidate)
+            or _same_containing_row_line_label_rect_matches(context, candidate, candidates)
+        ):
+            continue
+        tokens.update(_candidate_semantic_tokens(context))
+        tokens.update(_tokens_from_text(context.descriptor))
+        tokens.update(_tokens_from_text(context.control_type))
+        tokens.update(_surface_context_type_tokens(context.control_type))
+        if context.control_type == "menu":
+            tokens.add("context")
+        if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
+            tokens.add("card")
+    ignored = (
+        _candidate_semantic_tokens(candidate)
+        | _tokens_from_text(candidate.descriptor)
+        | CONTEXTUAL_DUPLICATE_POSITION_WORDS
+        | CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+        | CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS
+        | FOREGROUND_CONTEXT_WORDS
+        | {"context", "menu"}
+    )
+    return _object_token_variants(tokens) - ignored
+
+
 def _prepositional_context_only_target_alternative_mismatch(
     instruction: str,
     instruction_tokens: set[str],
@@ -12563,6 +12645,8 @@ def _candidate_snap_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_action_context_mismatch(instruction, candidate, candidates):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _delimited_context_only_target_alternative_mismatch(
         instruction,
         candidate,
@@ -14054,6 +14138,8 @@ def _candidate_snap_semantic_mismatch(
         candidate,
         candidates,
     ):
+        return True
+    if _prepositional_action_context_mismatch(instruction, candidate, candidates):
         return True
     if _delimited_context_only_target_alternative_mismatch(
         instruction,
