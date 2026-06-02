@@ -392,6 +392,8 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
         "bookmarks",
+        "collection",
+        "collections",
         "copy",
         "download",
         "downloads",
@@ -2147,6 +2149,8 @@ def _text_match_score(
         return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2391,6 +2395,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2597,6 +2603,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4225,6 +4237,30 @@ def _explicit_slider_alternative_mismatch(
             continue
         slider_label_tokens = _field_alternative_label_tokens(other, candidates)
         if slider_label_tokens and candidate_label_tokens & slider_label_tokens:
+            return True
+    return False
+
+
+def _explicit_pane_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"pane", "panel"}):
+        return False
+    if candidate.control_type == "pane":
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "pane":
+            continue
+        pane_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if pane_label_tokens and candidate_label_tokens & pane_label_tokens:
             return True
     return False
 
@@ -5929,13 +5965,13 @@ def _row_action_context_rect_matches(
         return True
     if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
         return False
-    if _tokens_from_text(row.descriptor) & {"card", "cards"}:
-        return False
     if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     row_x, row_y, row_width, row_height = row.rect
     action_x, action_y, action_width, action_height = action.rect
     if min(row_width, row_height, action_width, action_height) <= 0:
+        return False
+    if _tokens_from_text(row.descriptor) & {"card", "cards"} and action_x + action_width <= row_x:
         return False
     _action_center_x, action_center_y = _center(action.rect)
     row_top = row_y - 4
@@ -7734,6 +7770,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -8604,6 +8642,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True

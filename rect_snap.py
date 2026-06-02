@@ -467,6 +467,8 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
         "bookmarks",
+        "collection",
+        "collections",
         "download",
         "downloads",
         "extensions",

@@ -10218,6 +10218,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "edge_collections_chrome_rejects_app_collections_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Edge Collections"},
+                {"rect": [120, 160, 180, 32], "label": "Collections"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Collections in the app.",
+                "target_id": "edge_collections",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_collections",
+                    "text": "Collections",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "Collections",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_collections",
+                    "text": "Collections",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_collections",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15921,6 +15958,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "shorthand_adjacent_card_context_recovers_requested_save_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 500, 48], "label": "Alpha card"},
+                {"rect": [540, 88, 70, 32], "label": "Save"},
+                {"rect": [20, 140, 500, 48], "label": "Beta card"},
+                {"rect": [540, 148, 70, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Beta Save.",
+                "target_id": "alpha_save",
+                "target": {"x": 540, "y": 88, "width": 70, "height": 32},
+            },
+            "candidates": [
+                {"id": "alpha_card", "text": "Alpha card", "control_type": "listitem", "rect": [20, 80, 500, 48]},
+                {"id": "alpha_save", "text": "Save", "control_type": "button", "rect": [540, 88, 70, 32]},
+                {"id": "beta_card", "text": "Beta card", "control_type": "listitem", "rect": [20, 140, 500, 48]},
+                {"id": "beta_save", "text": "Save", "control_type": "button", "rect": [540, 148, 70, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "beta_save",
+                "rect": [540, 148, 70, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "shorthand_pane_context_recovers_requested_save_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16780,6 +16845,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "settings_slider",
                 "rect": [10, 60, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_panel_rejects_same_label_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 120, 32], "label": "Settings button"},
+                {"rect": [10, 60, 220, 120], "label": "Settings panel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings panel.",
+                "target_id": "settings_button",
+                "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "settings_button", "text": "Settings", "control_type": "button", "rect": [10, 10, 120, 32]},
+                {"id": "settings_pane", "text": "Settings panel", "control_type": "pane", "rect": [10, 60, 220, 120]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_pane",
+                "rect": [10, 60, 220, 120],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "select_button_rejects_same_label_radio_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 100, 30], "label": "Settings radio"},
+                {"rect": [10, 60, 100, 30], "label": "Settings button"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Settings button.",
+                "target_id": "settings_radio",
+                "target": {"x": 10, "y": 10, "width": 100, "height": 30},
+            },
+            "candidates": [
+                {"id": "settings_radio", "text": "Settings", "control_type": "radiobutton", "rect": [10, 10, 100, 30]},
+                {"id": "settings_button", "text": "Settings", "control_type": "button", "rect": [10, 60, 100, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_button",
+                "rect": [10, 60, 100, 30],
                 "overlay_emitted": True,
             },
         },

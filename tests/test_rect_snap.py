@@ -484,6 +484,13 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(instruction_control_intents("Click this table row."), {"listitem"})
         self.assertNotIn("listitem", instruction_control_intents("Edit this row."))
 
+    def test_select_button_wording_preserves_explicit_button_intent(self) -> None:
+        from help_intents import instruction_control_intents
+
+        intents = instruction_control_intents("Select the Settings button.")
+
+        self.assertEqual(intents, {"button", "splitbutton"})
+
     def test_row_scoped_menu_wording_targets_menu_launcher_button(self) -> None:
         from help_intents import instruction_control_intents
 
@@ -2768,6 +2775,12 @@ class SnapToControlTests(unittest.TestCase):
                 _make_button("site_info_lock", 90, 8, 28, 34),
                 "",
                 (90, 8, 28, 34),
+            ),
+            (
+                "Open Collections in the app.",
+                _make_button("Collections", 904, 8, 42, 34, automation_id="Collections"),
+                "CRM - Microsoft Edge",
+                (904, 8, 42, 34),
             ),
         )
         for instruction, button, window_title, rect in cases:
@@ -9361,6 +9374,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "button",
                     (420, 180, 130, 32),
                     window_title="Catalog - Microsoft Edge",
+                ),
+            ),
+            (
+                "Open Collections in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Collections",
+                    "button",
+                    (904, 8, 42, 34),
+                    automation_id="Collections",
+                    window_title="CRM - Microsoft Edge",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Collections",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="CRM - Microsoft Edge",
                 ),
             ),
             (
@@ -20403,6 +20434,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (540, 148, 90, 32))
 
+    def test_shorthand_card_context_recovers_adjacent_requested_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("alpha_card", "Alpha card", "listitem", (20, 80, 500, 48)),
+            ControlCandidate("alpha_save", "Save", "button", (540, 88, 70, 32)),
+            ControlCandidate("beta_card", "Beta card", "listitem", (20, 140, 500, 48)),
+            ControlCandidate("beta_save", "Save", "button", (540, 148, 70, 32)),
+        ]
+        instruction = "Click Beta Save."
+
+        wrong_target = resolve_candidate_target(
+            target_id="alpha_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "alpha_save",
+                    "target": {"x": 540, "y": 88, "width": 70, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "alpha_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "beta_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (540, 148, 70, 32))
+
     def test_positional_duplicate_controls_recover_requested_field_and_option(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -20860,6 +20940,114 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "settings_slider")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (10, 60, 120, 32))
+
+    def test_explicit_pane_wording_rejects_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Click Settings pane.", "Settings pane"),
+            ("Click Settings panel.", "Settings panel"),
+        )
+        for instruction, pane_text in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    ControlCandidate("settings_button", "Settings", "button", (10, 10, 120, 32)),
+                    ControlCandidate("settings_pane", pane_text, "pane", (10, 60, 220, 120)),
+                ]
+
+                wrong_target = resolve_candidate_target(
+                    target_id="settings_button",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 120, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 120, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 120, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "settings_button",
+                            "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "settings_button")
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                self.assertIsNone(snap_target)
+                for resolved in (text_target, help_target):
+                    self.assertEqual(resolved.target_id, "settings_pane")
+                    self.assertFalse(resolved.rejected_reason)
+                    self.assertEqual(resolved.rect, (10, 60, 220, 120))
+
+    def test_select_button_rejects_same_label_radio_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("settings_radio", "Settings", "radiobutton", (10, 10, 100, 30)),
+            ControlCandidate("settings_button", "Settings", "button", (10, 60, 100, 30)),
+        ]
+        instruction = "Select the Settings button."
+
+        wrong_target = resolve_candidate_target(
+            target_id="settings_radio",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        correct_target = resolve_candidate_target(
+            target_id="settings_button",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "settings_radio",
+                    "target": {"x": 10, "y": 10, "width": 100, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "settings_radio")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(correct_target.target_id, "settings_button")
+        self.assertFalse(correct_target.rejected_reason)
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "settings_button")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (10, 60, 100, 30))
 
     def test_dropdown_launcher_rejects_same_label_menuitem_option(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

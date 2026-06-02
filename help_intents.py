@@ -1192,7 +1192,6 @@ def instruction_control_intents(instruction: str) -> set[str]:
         and not text_object_action_requested
         and not format_action_requested
         and not clear_action_requested
-        and not selection_action_requested
         and not zoom_action_requested
         and not external_link_action_requested
         and not confirm_action_requested
@@ -1223,7 +1222,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
     ):
         intents.update(_OPTION_INTENT_TYPES)
     if selection_action_requested and not (
-        checkbox_requested or radio_requested or menu_option_requested
+        explicit_button_requested or checkbox_requested or radio_requested or menu_option_requested
     ):
         intents.update(_SELECTION_ACTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
