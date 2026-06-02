@@ -373,6 +373,7 @@ BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
         "table",
         "widget",
         "wizard",
+        "workspace",
     }
 )
 BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
@@ -2086,6 +2087,8 @@ def _text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _positional_action_duplicate_mismatch(
@@ -2133,11 +2136,11 @@ def _text_match_score(
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
-        return 0.0
-    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2326,6 +2329,8 @@ def _context_text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _positional_action_duplicate_mismatch(
@@ -2370,6 +2375,8 @@ def _context_text_match_score(
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2559,6 +2566,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -2828,6 +2841,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id ambiguous",
+        )
+    if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
         )
     if _generic_control_group_target_ambiguous(
         instruction=instruction,
@@ -4081,6 +4100,33 @@ def _explicit_field_alternative_mismatch(
             continue
         field_label_tokens = _field_alternative_label_tokens(other, candidates)
         if field_label_tokens and candidate_label_tokens & field_label_tokens:
+            return True
+    return False
+
+
+def _explicit_combobox_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    explicit_combobox = "combobox" in raw_tokens or "combo" in raw_tokens
+    if not explicit_combobox:
+        return False
+    if candidate.control_type == "combobox":
+        return False
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "combobox":
+            continue
+        combo_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if combo_label_tokens and candidate_label_tokens & combo_label_tokens:
             return True
     return False
 
@@ -5688,6 +5734,93 @@ def _contained_row_context_objects(
         if objects:
             return objects
     return set()
+
+
+def _implicit_container_context_duplicate_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    requested_context = _implicit_container_context_request_tokens(instruction, candidate)
+    if not requested_context:
+        return False
+    duplicates = [
+        item
+        for item in candidates
+        if item.control_type == candidate.control_type
+        and _contextual_duplicate_key(item) == duplicate_key
+        and not (item.id != candidate.id and _same_visual_candidate(item, candidate))
+    ]
+    if len(duplicates) < 2:
+        return False
+    candidate_evidence = _implicit_container_context_evidence_tokens(candidate, candidates)
+    if _contextual_duplicate_request_matches_evidence(requested_context, candidate_evidence):
+        return False
+    return any(
+        other.id != candidate.id
+        and _contextual_duplicate_request_matches_evidence(
+            requested_context,
+            _implicit_container_context_evidence_tokens(other, candidates),
+        )
+        for other in duplicates
+    )
+
+
+def _implicit_container_context_request_tokens(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    instruction_tokens = _tokenize_instruction(instruction)
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    matched_action_tokens = (raw_tokens | instruction_tokens) & candidate_tokens
+    if not matched_action_tokens:
+        return set()
+    request_tokens = _object_token_variants(
+        (raw_tokens | instruction_tokens)
+        - candidate_tokens
+        - CONTEXTUAL_DUPLICATE_STOPWORDS
+        - ROW_CONTEXT_OBJECT_STOPWORDS
+    )
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if matched_action_tokens & family:
+            request_tokens -= family
+    return request_tokens
+
+
+def _implicit_container_context_evidence_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens: set[str] = set()
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
+            if not _row_action_context_rect_matches(context, candidate):
+                continue
+        elif context.control_type in SURFACE_CONTEXT_CONTROL_TYPES:
+            if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+                continue
+        else:
+            continue
+        tokens.update(_candidate_semantic_tokens(context))
+        tokens.update(_tokens_from_text(context.descriptor))
+        tokens.update(_tokens_from_text(context.control_type))
+        tokens.update(_surface_context_type_tokens(context.control_type))
+        tokens.update(_tokenize_control(context.window_title))
+    return _object_token_variants(
+        {
+            token
+            for token in tokens - ROW_CONTEXT_OBJECT_STOPWORDS
+            if token and token not in {"click", "press", "tap"}
+        }
+    )
 
 
 def _row_action_context_rect_matches(
@@ -7470,6 +7603,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
+    if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -7576,6 +7711,8 @@ def _candidate_snap_score(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
         return 0.0
@@ -8333,6 +8470,8 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
+    if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
+        return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -8448,6 +8587,8 @@ def _candidate_snap_semantic_mismatch(
     if _navigation_backup_action_mismatch(instruction, candidate):
         return True
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+        return True
+    if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True

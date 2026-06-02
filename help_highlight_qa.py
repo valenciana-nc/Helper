@@ -10002,6 +10002,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_downloads_rejects_workspace_downloads_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 8, 80, 34], "label": "Browser Downloads"},
+                {"rect": [300, 120, 500, 500], "label": "Workspace"},
+                {"rect": [420, 180, 120, 32], "label": "Downloads"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Downloads in the workspace.",
+                "target_id": "chrome_downloads",
+                "target": {"x": 900, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "chrome_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [900, 8, 80, 34],
+                    "automation_id": "downloads",
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "workspace",
+                    "text": "Workspace",
+                    "control_type": "group",
+                    "rect": [300, 120, 500, 500],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "app_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [420, 180, 120, 32],
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_downloads",
+                "rect": [420, 180, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15621,6 +15666,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "shorthand_row_context_recovers_requested_review_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 500, 48], "label": "Alice"},
+                {"rect": [540, 88, 90, 32], "label": "Review"},
+                {"rect": [20, 140, 500, 48], "label": "Bob"},
+                {"rect": [540, 148, 90, 32], "label": "Review"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Review Bob.",
+                "target_id": "review_alice",
+                "target": {"x": 540, "y": 88, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "row_alice", "text": "Alice", "control_type": "listitem", "rect": [20, 80, 500, 48]},
+                {"id": "review_alice", "text": "Review", "control_type": "button", "rect": [540, 88, 90, 32]},
+                {"id": "row_bob", "text": "Bob", "control_type": "listitem", "rect": [20, 140, 500, 48]},
+                {"id": "review_bob", "text": "Review", "control_type": "button", "rect": [540, 148, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "review_bob",
+                "rect": [540, 148, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "shorthand_pane_context_recovers_requested_save_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 100], "label": "Profile"},
+                {"rect": [240, 140, 70, 30], "label": "Save"},
+                {"rect": [360, 80, 300, 100], "label": "Billing"},
+                {"rect": [580, 140, 70, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save Billing.",
+                "target_id": "profile_save",
+                "target": {"x": 240, "y": 140, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "profile_card", "text": "Profile", "control_type": "pane", "rect": [20, 80, 300, 100]},
+                {"id": "profile_save", "text": "Save", "control_type": "button", "rect": [240, 140, 70, 30]},
+                {"id": "billing_card", "text": "Billing", "control_type": "pane", "rect": [360, 80, 300, 100]},
+                {"id": "billing_save", "text": "Save", "control_type": "button", "rect": [580, 140, 70, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "billing_save",
+                "rect": [580, 140, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_numeric_action_target_id_uses_context_over_wrong_model_rect",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16356,6 +16457,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_combo_box_rejects_same_label_edit_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Settings edit"},
+                {"rect": [100, 150, 180, 32], "label": "Settings combo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings combo box.",
+                "target_id": "settings_edit",
+                "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "settings_edit", "text": "Settings", "control_type": "edit", "rect": [100, 100, 180, 32]},
+                {"id": "settings_combo", "text": "Settings", "control_type": "combobox", "rect": [100, 150, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_combo",
+                "rect": [100, 150, 180, 32],
                 "overlay_emitted": True,
             },
         },
