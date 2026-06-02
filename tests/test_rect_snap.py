@@ -9329,6 +9329,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Click Downloads in sidebars.",
+                ControlCandidate(
+                    "c001",
+                    "Downloads",
+                    "button",
+                    (900, 8, 80, 34),
+                    automation_id="downloads",
+                    window_title="Project - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Downloads",
+                    "button",
+                    (420, 180, 120, 32),
+                    window_title="Project - Google Chrome",
+                ),
+            ),
+            (
                 "Open Home in the sidebar.",
                 ControlCandidate(
                     "c001",
@@ -20286,6 +20304,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (240, 150, 80, 30))
 
+    def test_shorthand_dataitem_row_context_recovers_requested_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row_alice", "Alice", "dataitem", (20, 80, 760, 48)),
+            ControlCandidate("delete_alice", "Delete", "button", (540, 88, 90, 32)),
+            ControlCandidate("row_bob", "Bob", "dataitem", (20, 140, 760, 48)),
+            ControlCandidate("delete_bob", "Delete", "button", (540, 148, 90, 32)),
+        ]
+        instruction = "Delete Bob."
+
+        wrong_target = resolve_candidate_target(
+            target_id="delete_alice",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 90, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 90, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 90, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "delete_alice",
+                    "target": {"x": 540, "y": 88, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "delete_alice")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "delete_bob")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (540, 148, 90, 32))
+
     def test_positional_duplicate_controls_recover_requested_field_and_option(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -20598,6 +20665,102 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
         for resolved in (text_target, snap_target, help_target):
             self.assertEqual(resolved.target_id, "settings_combo")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (100, 150, 180, 32))
+
+    def test_explicit_dropdown_rejects_same_label_button_for_combobox(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("settings_button", "Settings", "button", (100, 100, 180, 32)),
+            ControlCandidate("settings_combo", "Settings", "combobox", (100, 150, 180, 32)),
+        ]
+        instruction = "Click Settings dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="settings_button",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "settings_button",
+                    "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "settings_button")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(snap_target.target_id, "settings_button")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "settings_combo")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (100, 150, 180, 32))
+
+    def test_explicit_spin_box_rejects_same_label_edit_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("quantity_edit", "Quantity", "edit", (100, 100, 180, 32)),
+            ControlCandidate("quantity_spinner", "Quantity", "spinner", (100, 150, 180, 32)),
+        ]
+        instruction = "Use Quantity spin box."
+
+        wrong_target = resolve_candidate_target(
+            target_id="quantity_edit",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 180, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "quantity_edit",
+                    "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "quantity_edit")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "quantity_spinner")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 150, 180, 32))
 

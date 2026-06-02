@@ -1049,6 +1049,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "tabitem",
         "hyperlink",
         "listitem",
+        "dataitem",
         "treeitem",
         "edit",
         "combobox",
@@ -1062,8 +1063,8 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 )
 NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
-ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "treeitem", "edit", "combobox"})
-ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "treeitem"})
+ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
+ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "group": frozenset({"group"}),
@@ -2138,6 +2139,8 @@ def _text_match_score(
         return 0.0
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2378,6 +2381,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2572,6 +2577,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -3558,7 +3569,8 @@ def _instruction_requests_app_local_surface(
     instruction: str,
     raw_tokens: set[str],
 ) -> bool:
-    if raw_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
+    surface_tokens = _object_token_variants(raw_tokens)
+    if surface_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
         return True
     if raw_tokens & FOLDER_IDENTITY_WORDS:
         return True
@@ -4110,12 +4122,19 @@ def _explicit_combobox_alternative_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    explicit_combobox = "combobox" in raw_tokens or "combo" in raw_tokens
+    explicit_combobox = (
+        "combobox" in raw_tokens
+        or "combo" in raw_tokens
+        or "dropdown" in raw_tokens
+        or {"drop", "down"} <= raw_tokens
+    )
     if not explicit_combobox:
         return False
     if candidate.control_type == "combobox":
         return False
-    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+    if raw_tokens & {"button", "buttons", "launcher"}:
+        return False
+    if candidate.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"button", "splitbutton"}):
         return False
     candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
     if not candidate_label_tokens:
@@ -4127,6 +4146,38 @@ def _explicit_combobox_alternative_mismatch(
             continue
         combo_label_tokens = _field_alternative_label_tokens(other, candidates)
         if combo_label_tokens and candidate_label_tokens & combo_label_tokens:
+            return True
+    return False
+
+
+def _explicit_spinner_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    explicit_spinner = (
+        "spinner" in raw_tokens
+        or "spinbox" in raw_tokens
+        or "stepper" in raw_tokens
+        or {"spin", "box"} <= raw_tokens
+    )
+    if not explicit_spinner:
+        return False
+    if candidate.control_type == "spinner":
+        return False
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "spinner":
+            continue
+        spinner_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if spinner_label_tokens and candidate_label_tokens & spinner_label_tokens:
             return True
     return False
 
@@ -7605,6 +7656,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -8471,6 +8524,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True

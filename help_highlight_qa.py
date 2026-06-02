@@ -10047,6 +10047,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_downloads_rejects_plural_sidebars_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 8, 80, 34], "label": "Browser Downloads"},
+                {"rect": [300, 120, 500, 500], "label": "Sidebars"},
+                {"rect": [420, 180, 120, 32], "label": "Downloads"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Downloads in sidebars.",
+                "target_id": "chrome_downloads",
+                "target": {"x": 900, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "chrome_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [900, 8, 80, 34],
+                    "automation_id": "downloads",
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "sidebars",
+                    "text": "Sidebars",
+                    "control_type": "group",
+                    "rect": [300, 120, 500, 500],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "app_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [420, 180, 120, 32],
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_downloads",
+                "rect": [420, 180, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15694,6 +15739,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "shorthand_dataitem_row_context_recovers_requested_delete_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 760, 48], "label": "Alice"},
+                {"rect": [540, 88, 90, 32], "label": "Delete"},
+                {"rect": [20, 140, 760, 48], "label": "Bob"},
+                {"rect": [540, 148, 90, 32], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete Bob.",
+                "target_id": "delete_alice",
+                "target": {"x": 540, "y": 88, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "row_alice", "text": "Alice", "control_type": "dataitem", "rect": [20, 80, 760, 48]},
+                {"id": "delete_alice", "text": "Delete", "control_type": "button", "rect": [540, 88, 90, 32]},
+                {"id": "row_bob", "text": "Bob", "control_type": "dataitem", "rect": [20, 140, 760, 48]},
+                {"id": "delete_bob", "text": "Delete", "control_type": "button", "rect": [540, 148, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "delete_bob",
+                "rect": [540, 148, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "shorthand_pane_context_recovers_requested_save_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16480,6 +16553,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "text_match",
                 "target_id": "settings_combo",
+                "rect": [100, 150, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_dropdown_rejects_same_label_button_for_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Settings button"},
+                {"rect": [100, 150, 180, 32], "label": "Settings combo"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings dropdown.",
+                "target_id": "settings_button",
+                "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "settings_button", "text": "Settings", "control_type": "button", "rect": [100, 100, 180, 32]},
+                {"id": "settings_combo", "text": "Settings", "control_type": "combobox", "rect": [100, 150, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_combo",
+                "rect": [100, 150, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_spin_box_rejects_same_label_edit_field",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Quantity edit"},
+                {"rect": [100, 150, 180, 32], "label": "Quantity spinner"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Use Quantity spin box.",
+                "target_id": "quantity_edit",
+                "target": {"x": 100, "y": 100, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "quantity_edit", "text": "Quantity", "control_type": "edit", "rect": [100, 100, 180, 32]},
+                {"id": "quantity_spinner", "text": "Quantity", "control_type": "spinner", "rect": [100, 150, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "quantity_spinner",
                 "rect": [100, 150, 180, 32],
                 "overlay_emitted": True,
             },
