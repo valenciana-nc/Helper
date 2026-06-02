@@ -27120,6 +27120,92 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
 
+    def test_fresh_snap_rejects_browser_menu_for_app_local_context(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        menu = _make_button(
+            "Settings and more",
+            930,
+            12,
+            44,
+            36,
+            automation_id="SettingsAndMore",
+        )
+        desktop = _FakeDesktop(
+            [_make_window("Acme - Google Chrome", 0, 0, 1000, 800, [menu])]
+        )
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open settings in the app.",
+                    "target": {"x": 930, "y": 12, "width": 44, "height": 36},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, text: snap_to_control(
+                rect,
+                text,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.matched_text, "Settings and more | SettingsAndMore")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_rejects_taskbar_button_for_page_local_context(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        settings = _make_button("Settings pinned", 250, 960, 80, 32)
+        desktop = _FakeDesktop([_make_window("Taskbar", 0, 940, 1000, 60, [settings])])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open settings on the page.",
+                    "target": {"x": 250, "y": 960, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, text: snap_to_control(
+                rect,
+                text,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+        taskbar_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Settings on the taskbar.",
+                    "target": {"x": 250, "y": 960, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, text: snap_to_control(
+                rect,
+                text,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.matched_text, "Settings pinned")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(taskbar_target.source, "snap")
+        self.assertEqual(taskbar_target.rect, (250, 960, 80, 32))
+        self.assertFalse(taskbar_target.rejected_reason)
+
     def test_browser_window_page_menu_button_beats_chrome_menu_fallback(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

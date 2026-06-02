@@ -800,6 +800,12 @@ def snap_to_control(
             ctype,
             window_title,
         )
+        taskbar_surface_context_mismatch = _taskbar_surface_context_mismatch(
+            instruction,
+            visible_text,
+            automation_id,
+            window_title,
+        )
         program_manager_action_mismatch = _program_manager_desktop_item_action_mismatch(
             instruction_tokens,
             visible_text,
@@ -963,6 +969,7 @@ def snap_to_control(
             or show_desktop_action_mismatch
             or taskbar_file_action_mismatch
             or taskbar_search_status_action_mismatch
+            or taskbar_surface_context_mismatch
             or program_manager_action_mismatch
             or browser_profile_identity_action_mismatch
             or browser_profile_page_action_mismatch
@@ -1698,6 +1705,52 @@ def _taskbar_search_status_action_mismatch(
     return bool(overlap & TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS)
 
 
+def _taskbar_surface_context_mismatch(
+    instruction: str,
+    visible_text: str,
+    automation_id: str,
+    window_title: str,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    is_taskbar = _looks_like_taskbar_surface(visible_text, automation_id, window_title)
+    if "taskbar" in raw_tokens:
+        return not is_taskbar
+    if not is_taskbar:
+        return False
+    if _instruction_requests_local_app_content_surface(instruction, raw_tokens):
+        return True
+    return bool(raw_tokens & BROWSER_PAGE_TARGET_WORDS)
+
+
+def _looks_like_taskbar_surface(
+    visible_text: str,
+    automation_id: str,
+    window_title: str,
+) -> bool:
+    window_tokens = _tokens_from_text(window_title or "")
+    automation_key = (automation_id or "").strip().lower()
+    if window_tokens & TASKBAR_WINDOW_WORDS:
+        return True
+    if automation_key in {"searchgleambutton", "systemtrayicon", "widgetsbutton"}:
+        return True
+    return bool(_tokens_from_text(visible_text or "") & TASKBAR_APP_STATE_CONTEXT_WORDS)
+
+
+def _instruction_requests_local_app_content_surface(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    local_surface_words = BROWSER_CHROME_APP_CONTEXT_WORDS - {"app", "application"}
+    if raw_tokens & local_surface_words:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?app\b", text)
+        or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
+
+
 def _browser_profile_identity_action_mismatch(
     instruction_tokens: set[str],
     visible_text: str,
@@ -1821,6 +1874,8 @@ def _looks_like_browser_chrome_surface(
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     if _looks_like_browser_toolbar_button(visible_text, automation_id, ctype, window_title, rect):
+        return True
+    if _looks_like_browser_menu_button(visible_text, automation_id, ctype, window_title, rect):
         return True
     if _looks_like_browser_new_tab_button(visible_text, automation_id, ctype, window_title):
         return True
@@ -1966,6 +2021,25 @@ def _looks_like_browser_toolbar_button(
     if toolbar_words and rect[1] > 144:
         return False
     return bool(toolbar_words and (compact_toolbar_shape or compact_text_toolbar_shape))
+
+
+def _looks_like_browser_menu_button(
+    visible_text: str,
+    automation_id: str,
+    ctype: str,
+    window_title: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if ctype not in {"button", "splitbutton"}:
+        return False
+    window_tokens = _tokens_from_text(window_title or "")
+    if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
+        return False
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    if control_tokens == {"chrome"}:
+        return True
+    compact_topbar_shape = rect[2] <= 96 and rect[3] <= 48 and rect[1] <= 72
+    return bool(compact_topbar_shape and {"settings", "more"} <= control_tokens)
 
 
 def _browser_address_bar_content_mismatch(
