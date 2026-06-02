@@ -10605,6 +10605,67 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "literal_text_app_target_recovers_from_browser_downloads_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Browser Downloads"},
+                {"rect": [120, 160, 180, 32], "label": "Text"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Text in the app.",
+                "target_id": "browser_downloads",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "downloads",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_text",
+                    "text": "Text",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_text",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "singleton_literal_item_recovers_from_stale_archive_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [320, 100, 90, 32], "label": "Archive"},
+                {"rect": [100, 100, 90, 32], "label": "Item"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Item.",
+                "target_id": "stale",
+                "target": {"x": 320, "y": 100, "width": 90, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Archive", "control_type": "button", "rect": [320, 100, 90, 32]},
+                {"id": "item", "text": "Item", "control_type": "button", "rect": [100, 100, 90, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "item",
+                "rect": [100, 100, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16272,6 +16333,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "active_window_duplicate_action_recovers_foreground_window",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 360, 280], "label": "Main window"},
+                {"rect": [70, 130, 80, 32], "label": "Save"},
+                {"rect": [420, 80, 360, 280], "label": "Settings window"},
+                {"rect": [470, 130, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the active window.",
+                "target_id": "main_save",
+                "target": {"x": 70, "y": 130, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "main_window",
+                    "text": "Main window",
+                    "control_type": "window",
+                    "rect": [20, 80, 360, 280],
+                    "window_title": "Main",
+                    "window_rank": 1,
+                },
+                {
+                    "id": "main_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [70, 130, 80, 32],
+                    "window_title": "Main",
+                    "window_rank": 1,
+                },
+                {
+                    "id": "settings_window",
+                    "text": "Settings window",
+                    "control_type": "window",
+                    "rect": [420, 80, 360, 280],
+                    "window_title": "Settings",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "settings_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [470, 130, 80, 32],
+                    "window_title": "Settings",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_save",
+                "rect": [470, 130, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_clear_email_uses_requested_row_over_wrong_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -17471,6 +17588,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "combo",
                 "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_item_request_recovers_from_launcher_target_id",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 180, 32], "label": "Status"},
+                {"rect": [10, 46, 180, 28], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Active in the dropdown.",
+                "target_id": "combo",
+                "target": {"x": 10, "y": 46, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "combo", "text": "Status", "control_type": "combobox", "rect": [10, 10, 180, 32]},
+                {"id": "active", "text": "Active", "control_type": "menuitem", "rect": [10, 46, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "active",
+                "rect": [10, 46, 180, 28],
                 "overlay_emitted": True,
             },
         },
