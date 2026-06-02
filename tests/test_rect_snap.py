@@ -26506,6 +26506,45 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "tab",
                 (20, 20, 100, 32),
             ),
+            (
+                "Click Billing tile.",
+                [
+                    ControlCandidate("nav", "Billing", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Billing", "pane", (260, 80, 300, 100)),
+                ],
+                "nav",
+                (20, 80, 160, 32),
+            ),
+            (
+                "Open Settings screen.",
+                [
+                    ControlCandidate("tab", "Settings", "tabitem", (20, 20, 100, 32)),
+                    ControlCandidate("nav", "Settings", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Settings", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 100, 32),
+            ),
+            (
+                "Open Settings view.",
+                [
+                    ControlCandidate("tab", "Settings", "tabitem", (20, 20, 100, 32)),
+                    ControlCandidate("nav", "Settings", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Settings", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 100, 32),
+            ),
+            (
+                "Open the Acme detail view.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
         ]
 
         for instruction, candidates, stale_target_id, stale_rect in cases:
