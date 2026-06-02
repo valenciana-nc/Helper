@@ -399,6 +399,62 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
     }
 )
 FIELD_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "input", "type"})
+TEXT_ENTRY_FIELD_WORDS = frozenset(
+    {"box", "field", "fields", "input", "inputs", "text", "textbox", "textarea"}
+)
+TEXT_ENTRY_LABEL_BOUNDARY_WORDS = (
+    OPEN_VIEW_REQUEST_WORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
+    | FIELD_ENTRY_ACTION_WORDS
+    | TEXT_ENTRY_FIELD_WORDS
+    | frozenset(
+        {
+            "a",
+            "an",
+            "at",
+            "current",
+            "for",
+            "in",
+            "into",
+            "of",
+            "on",
+            "that",
+            "the",
+            "this",
+            "to",
+            "with",
+        }
+    )
+)
+RECORD_TARGET_WORDS = frozenset({"record", "records"})
+RECORD_TARGET_TRAILING_CONTEXT_WORDS = frozenset({"tab", "tabs", "tabitem"})
+RECORD_TARGET_LABEL_BOUNDARY_WORDS = (
+    OPEN_VIEW_REQUEST_WORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
+    | FIELD_ENTRY_ACTION_WORDS
+    | RECORD_TARGET_WORDS
+    | frozenset(
+        {
+            "a",
+            "an",
+            "at",
+            "current",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "of",
+            "on",
+            "that",
+            "the",
+            "this",
+            "to",
+            "within",
+            "with",
+        }
+    )
+)
+ACCESS_PERMISSION_ACTION_WORDS = frozenset({"grant", "revoke"})
 LITERAL_STOPWORD_NAME_TOKENS = frozenset(
     {
         "area",
@@ -2298,6 +2354,12 @@ def _text_match_score(
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _named_text_entry_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _record_target_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _access_permission_action_mismatch(instruction, candidate, candidates):
+        return 0.0
     if model_rect is not None and _container_only_request_blocks_contained_candidate(
         instruction=instruction,
         instruction_tokens=instruction_tokens,
@@ -2804,6 +2866,12 @@ def _context_text_match_score(
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _named_text_entry_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _record_target_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _access_permission_action_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
     if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
@@ -3289,6 +3357,24 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id control type mismatch",
+        )
+    if _named_text_entry_label_missing(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _record_target_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _access_permission_action_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
         )
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return (
@@ -5202,10 +5288,48 @@ def _single_strict_text_entry_candidate(
             candidate,
         ):
             continue
+        if _named_text_entry_label_missing(instruction, candidate, candidates):
+            continue
         if selected is not None and not _same_visual_candidate(selected, candidate):
             return None
         selected = candidate
     return selected
+
+
+def _named_text_entry_label_missing(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "edit":
+        return False
+    requested_label = _strict_text_entry_requested_label_tokens(instruction)
+    if not requested_label:
+        return False
+    evidence = _object_token_variants(_field_alternative_label_tokens(candidate, candidates))
+    return not bool(requested_label & evidence)
+
+
+def _strict_text_entry_requested_label_tokens(instruction: str) -> set[str]:
+    if not _strict_text_entry_requested(instruction):
+        return set()
+    words = _literal_word_sequence(instruction)
+    for index, word in enumerate(words):
+        if word not in TEXT_ENTRY_FIELD_WORDS - frozenset({"text"}):
+            continue
+        cursor = index - 1
+        if cursor >= 0 and words[cursor] == "text":
+            cursor -= 1
+        label_words: list[str] = []
+        while cursor >= 0:
+            current = words[cursor]
+            if current in TEXT_ENTRY_LABEL_BOUNDARY_WORDS:
+                break
+            label_words.append(current)
+            cursor -= 1
+        if label_words:
+            return _object_token_variants(set(label_words))
+    return set()
 
 
 def _explicit_field_alternative_mismatch(
@@ -5415,6 +5539,91 @@ def _explicit_generic_item_control_type_mismatch(
         return False
     item_control_types = ROW_CONTEXT_CONTROL_TYPES | {"menuitem", "tabitem"}
     return candidate.control_type not in item_control_types
+
+
+def _record_target_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_label = _record_target_requested_label_tokens(instruction)
+    if not requested_label:
+        return False
+    candidate_label = _record_target_candidate_label_tokens(candidate)
+    if not (candidate_label & requested_label):
+        return False
+    candidate_priority = _record_target_control_priority(candidate)
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and _record_target_control_priority(other) < candidate_priority
+        and bool(_record_target_candidate_label_tokens(other) & requested_label)
+        for other in candidates
+    )
+
+
+def _record_target_requested_label_tokens(instruction: str) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    for index, word in enumerate(words):
+        if word not in RECORD_TARGET_WORDS:
+            continue
+        if any(
+            next_word in RECORD_TARGET_TRAILING_CONTEXT_WORDS
+            for next_word in words[index + 1 : index + 3]
+        ):
+            continue
+        cursor = index - 1
+        label_words: list[str] = []
+        while cursor >= 0:
+            current = words[cursor]
+            if current in RECORD_TARGET_LABEL_BOUNDARY_WORDS:
+                break
+            label_words.append(current)
+            cursor -= 1
+        if label_words:
+            return _object_token_variants(set(label_words))
+    return set()
+
+
+def _record_target_candidate_label_tokens(candidate: ControlCandidate) -> set[str]:
+    return _object_token_variants(
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _tokens_from_text(candidate.automation_id)
+    ) - RECORD_TARGET_WORDS
+
+
+def _record_target_control_priority(candidate: ControlCandidate) -> int:
+    if candidate.control_type == "dataitem":
+        return 0
+    if candidate.control_type in {"listitem", "treeitem"}:
+        return 1
+    return 2
+
+
+def _access_permission_action_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    instruction_tokens = _tokens_from_text(instruction)
+    requested_actions = instruction_tokens & ACCESS_PERMISSION_ACTION_WORDS
+    if not requested_actions or "access" not in instruction_tokens:
+        return False
+    candidate_tokens = _tokens_from_text(candidate.descriptor)
+    if "access" not in candidate_tokens:
+        return False
+    if candidate_tokens & requested_actions:
+        return False
+    if _browser_extension_access_action_match(instruction, instruction_tokens, candidate):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and "access" in _tokens_from_text(other.descriptor)
+        and bool(_tokens_from_text(other.descriptor) & requested_actions)
+        for other in candidates
+    )
 
 
 def _cell_target_request_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
@@ -10516,6 +10725,12 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
+    if _named_text_entry_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _record_target_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _access_permission_action_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
@@ -11820,6 +12035,12 @@ def _candidate_snap_semantic_mismatch(
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
+        return True
+    if _named_text_entry_label_missing(instruction, candidate, candidates):
+        return True
+    if _record_target_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _access_permission_action_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return True

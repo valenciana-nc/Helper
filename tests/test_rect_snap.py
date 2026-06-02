@@ -513,6 +513,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(instruction_control_intents("Click Settings node."), {"treeitem"})
         self.assertEqual(instruction_control_intents("Click Settings data item."), {"dataitem"})
         self.assertEqual(instruction_control_intents("Click Settings grid item."), {"dataitem"})
+        self.assertEqual(instruction_control_intents("Open the Acme record."), {"dataitem"})
+        self.assertEqual(instruction_control_intents("Open the Acme records."), {"dataitem"})
         self.assertEqual(
             instruction_control_intents("Click this table cell."),
             {"cell", "datagridcell", "gridcell"},
@@ -524,6 +526,9 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(instruction_control_intents("Click Run in the Beta tab."), set())
         self.assertEqual(instruction_control_intents("Click Beta tab."), {"tabitem"})
         self.assertEqual(instruction_control_intents("Click Settings tab button."), {"tabitem"})
+        self.assertEqual(instruction_control_intents("Click DNS records tab."), {"tabitem"})
+        self.assertNotIn("dataitem", instruction_control_intents("Record clip."))
+        self.assertNotIn("dataitem", instruction_control_intents("Start recording."))
 
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
@@ -27227,6 +27232,183 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "reset")
         self.assertFalse(target.rejected_reason)
+
+    def test_record_request_prefers_dataitem_over_same_name_tab_and_nav(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+            ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+            ControlCandidate("record", "Acme", "dataitem", (260, 80, 400, 48)),
+        ]
+        instruction = "Open the Acme record."
+
+        tab_target = resolve_candidate_target(
+            target_id="tab",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        nav_target = resolve_candidate_target(
+            target_id="nav",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 80, 160, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "tab",
+                    "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for wrong_target in (tab_target, nav_target):
+            self.assertIsNotNone(wrong_target)
+            assert wrong_target is not None
+            self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(snap)
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "record")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "record")
+        self.assertFalse(target.rejected_reason)
+
+    def test_revoke_access_recovers_from_role_access_chip(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("morgan", "Morgan", "dataitem", (20, 80, 760, 64)),
+            ControlCandidate("role", "Admin access", "button", (220, 100, 130, 32)),
+            ControlCandidate("revoke", "Revoke access", "button", (680, 100, 120, 32)),
+        ]
+        instruction = "Revoke access for Morgan."
+
+        target_id = resolve_candidate_target(
+            target_id="role",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 130, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 130, 32),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "role",
+                    "target": {"x": 220, "y": 100, "width": 130, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(snap)
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "revoke")
+        self.assertFalse(target.rejected_reason)
+
+    def test_named_text_field_requires_label_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        instruction = "Click the Email text field."
+        unlabeled = [ControlCandidate("edit", "", "edit", (220, 100, 240, 32))]
+        labelled = [
+            ControlCandidate("label", "Email", "text", (120, 102, 80, 24)),
+            ControlCandidate("edit", "", "edit", (220, 100, 240, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="edit",
+            instruction=instruction,
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "edit",
+                    "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            unlabeled,
+        )
+        labelled_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "edit",
+                    "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+                }
+            ),
+            self._capture(),
+            labelled,
+        )
+        generic_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click this text field.",
+            candidates=unlabeled,
+            model_rect=(220, 100, 240, 32),
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap)
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(labelled_target.source, "target_id")
+        self.assertEqual(labelled_target.target_id, "edit")
+        self.assertFalse(labelled_target.rejected_reason)
+        self.assertIsNotNone(generic_target)
+        assert generic_target is not None
+        self.assertEqual(generic_target.target_id, "edit")
+        self.assertFalse(generic_target.rejected_reason)
 
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate

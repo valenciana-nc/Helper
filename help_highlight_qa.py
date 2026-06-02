@@ -20436,6 +20436,104 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "open_same_name_record_prefers_dataitem_over_tab_and_nav",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 400, 48], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Acme record.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "record", "text": "Acme", "control_type": "dataitem", "rect": [260, 80, 400, 48]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "record",
+                "rect": [260, 80, 400, 48],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "revoke_access_recovers_from_role_access_chip",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 80, 760, 64], "label": "Morgan"},
+                {"rect": [220, 100, 130, 32], "label": "Admin access"},
+                {"rect": [680, 100, 120, 32], "label": "Revoke access"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Revoke access for Morgan.",
+                "target_id": "role",
+                "target": {"x": 220, "y": 100, "width": 130, "height": 32},
+            },
+            "candidates": [
+                {"id": "morgan", "text": "Morgan", "control_type": "dataitem", "rect": [20, 80, 760, 64]},
+                {"id": "role", "text": "Admin access", "control_type": "button", "rect": [220, 100, 130, 32]},
+                {"id": "revoke", "text": "Revoke access", "control_type": "button", "rect": [680, 100, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "revoke",
+                "rect": [680, 100, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_text_field_rejects_unlabeled_edit_without_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Email text field.",
+                "target_id": "edit",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "edit", "text": "", "control_type": "edit", "rect": [220, 100, 240, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "edit",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "named_text_field_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 102, 80, 24], "label": "Email"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Email text field.",
+                "target_id": "edit",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Email", "control_type": "text", "rect": [120, 102, 80, 24]},
+                {"id": "edit", "text": "", "control_type": "edit", "rect": [220, 100, 240, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "edit",
+                "rect": [220, 100, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "panel_sized_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

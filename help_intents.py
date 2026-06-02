@@ -828,6 +828,32 @@ _CELL_INTENT_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 _NAV_ITEM_INTENT_TYPES = frozenset(
     {"button", "hyperlink", "listitem", "treeitem", "menuitem", "tabitem"}
 )
+_RECORD_TARGET_WORDS = frozenset({"record", "records"})
+_RECORD_TRAILING_CONTEXT_WORDS = frozenset({"tab", "tabs", "tabitem"})
+_RECORD_LABEL_BOUNDARY_WORDS = (
+    _SELECT_NOUN_ACTION_WORDS
+    | _SELECTION_ACTION_WORDS
+    | frozenset(
+        {
+            "a",
+            "an",
+            "at",
+            "current",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "of",
+            "on",
+            "that",
+            "the",
+            "this",
+            "to",
+            "within",
+            "with",
+        }
+    )
+)
 _CONTEXT_LOCATION_WORDS = frozenset(
     {
         "card",
@@ -1165,6 +1191,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or split_button_requested
         or bool(raw_tokens & {"button", "header", "heading", "headeritem", "icon"})
     )
+    record_target_requested = _record_target_requested(instruction, raw_tokens)
     if checkbox_requested or toggle_requested or switch_requested:
         intents.add("checkbox")
     if radio_requested:
@@ -1268,6 +1295,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if row_requested:
         intents.update(_LIST_ITEM_INTENT_TYPES)
+    if record_target_requested:
+        intents.update(_DATA_ITEM_INTENT_TYPES)
     if "treeitem" in raw_tokens or ("tree" in raw_tokens and explicit_item_words) or bare_tree_item_requested:
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "dataitem" in raw_tokens or (
@@ -1301,6 +1330,34 @@ def instruction_control_intents(instruction: str) -> set[str]:
     if "menuitem" in raw_tokens:
         intents.add("menuitem")
     return intents
+
+
+def _record_target_requested(instruction: str, raw_tokens: set[str]) -> bool:
+    if not (raw_tokens & _RECORD_TARGET_WORDS):
+        return False
+    if raw_tokens & _RECORD_TRAILING_CONTEXT_WORDS:
+        return False
+    if raw_tokens & {"button", "buttons", "control", "controls", "icon", "icons", "menu"}:
+        return False
+    if not (raw_tokens & (_SELECT_NOUN_ACTION_WORDS | _SELECTION_ACTION_WORDS)):
+        return False
+    words = _TOKEN_RE.findall(instruction.lower())
+    for index, word in enumerate(words):
+        if word not in _RECORD_TARGET_WORDS:
+            continue
+        if any(
+            next_word in _RECORD_TRAILING_CONTEXT_WORDS
+            for next_word in words[index + 1 : index + 3]
+        ):
+            continue
+        cursor = index - 1
+        while cursor >= 0:
+            current = words[cursor]
+            if current in _RECORD_LABEL_BOUNDARY_WORDS:
+                break
+            return True
+        return False
+    return False
 
 
 def control_type_matches_intent(control_type: str, control_intents: set[str]) -> bool:
