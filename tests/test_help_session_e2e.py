@@ -42,6 +42,31 @@ def _button_capture(button_rect: tuple[int, int, int, int] = (40, 50, 120, 32)) 
     )
 
 
+def _dialog_ok_capture(
+    title: str,
+    body: str,
+    button_rect: tuple[int, int, int, int] = (120, 110, 60, 28),
+) -> Capture:
+    image = Image.new("RGB", (240, 160), color=(238, 240, 244))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 18, 224, 148), fill=(255, 255, 255), outline=(130, 136, 148), width=2)
+    draw.text((28, 34), title, fill=(18, 24, 38))
+    draw.text((28, 58), body, fill=(56, 63, 77))
+    x, y, width, height = button_rect
+    draw.rectangle((x, y, x + width, y + height), fill=(52, 103, 190), outline=(26, 60, 130), width=2)
+    draw.text((x + 21, y + 8), "OK", fill=(255, 255, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return Capture(
+        png_bytes=buffer.getvalue(),
+        width=image.width,
+        height=image.height,
+        monitor_left=0,
+        monitor_top=0,
+        scale=1.0,
+    )
+
+
 class _AbortController:
     def is_aborted(self) -> bool:
         return False
@@ -140,6 +165,28 @@ class _ModelRectAgent:
                 target_norm_y=313,
                 target_norm_width=333,
                 target_norm_height=200,
+            )
+        return LiveHelpDecision(kind="done", message="Done.")
+
+
+class _OkAgent:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def plan_next_step(
+        self,
+        history: Any,
+        *,
+        control_candidates: list[ControlCandidate] | None = None,
+        capture: Capture | None = None,
+    ) -> LiveHelpDecision:
+        self.calls += 1
+        if self.calls == 1:
+            return LiveHelpDecision(
+                kind="step",
+                instruction="Click OK.",
+                expected_change="The dialog closes.",
+                target_id="ok",
             )
         return LiveHelpDecision(kind="done", message="Done.")
 
@@ -763,6 +810,122 @@ class HelpSessionEndToEndTests(unittest.TestCase):
 
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
+
+    def test_current_screen_recheck_allows_generic_action_when_visual_context_stable(self) -> None:
+        app = _qt_app()
+        rect = (120, 110, 60, 28)
+        capture = _dialog_ok_capture(
+            "Delete customer?",
+            "This will remove Acme from the workspace.",
+            button_rect=rect,
+        )
+        candidates = [
+            ControlCandidate("ok", "OK", "button", rect),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: candidates,
+        )
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="OK",
+            target_id="ok",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click OK.",
+            target_id="ok",
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_capture=capture,
+                previous_candidates=candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "target_id")
+        self.assertFalse(target.rejected_reason)
+
+    def test_help_session_downgrades_generic_action_when_visual_context_changes(self) -> None:
+        app = _qt_app()
+        rect = (120, 110, 60, 28)
+        first_capture = _dialog_ok_capture(
+            "Delete customer?",
+            "This will remove Acme from the workspace.",
+            button_rect=rect,
+        )
+        current_capture = _dialog_ok_capture(
+            "Archive project?",
+            "This will hide Project Orion from active lists.",
+            button_rect=rect,
+        )
+        capture_calls: list[Capture] = []
+
+        def capture_provider() -> Capture:
+            capture = first_capture if not capture_calls else current_capture
+            capture_calls.append(capture)
+            return capture
+
+        candidates = [
+            ControlCandidate("ok", "OK", "button", rect),
+        ]
+        session = HelpSession(
+            agent=_OkAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=lambda _capture: candidates,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me confirm this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Done."])
+        self.assertGreaterEqual(len(capture_calls), 2)
+        self.assertEqual(highlights, [])
+        self.assertGreaterEqual(len(diagnostics), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["resolution"]["source"], "target_id")
+        self.assertEqual(
+            diagnostics[0]["resolution"]["rejected_reason"],
+            "current screen recheck target changed",
+        )
 
     def test_current_screen_recheck_rejects_reused_control_identity_change(self) -> None:
         app = _qt_app()

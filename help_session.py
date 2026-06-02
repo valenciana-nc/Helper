@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
@@ -12,6 +13,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
+from PIL import Image, ImageChops, ImageStat
 
 from control_inventory import (
     ADD_ACTION_WORDS,
@@ -60,6 +62,8 @@ UIA_BACKED_TARGET_SOURCES = frozenset(
     {"target_id", "text_match", "candidate_snap", "snap"}
 )
 MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
+GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX = 96
+GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.010
 ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 ROW_REVALIDATION_GENERIC_WORDS = frozenset(
     {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
@@ -137,6 +141,13 @@ CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS = ACTION_IDENTITY_REVALIDATION_GENER
         "toggle",
         "value",
     }
+)
+GENERIC_ACTION_REVALIDATION_WORDS = (
+    CONFIRM_ACTION_WORDS
+    | CLEAR_CLOSE_WORDS
+    | ADD_ACTION_WORDS
+    | PAY_ACTION_WORDS
+    | set().union(*EXCLUSIVE_ACTION_FAMILIES)
 )
 
 OVERSIZED_AREA_THRESHOLD = 100_000
@@ -591,6 +602,7 @@ def _guard_revalidated_target(
     capture: "Capture",
     candidates: list[ControlCandidate],
     previous_target: TargetResolution,
+    previous_capture: Any = None,
     previous_candidates: list[ControlCandidate] | None = None,
     target: TargetResolution,
     snapper: Snapper,
@@ -617,6 +629,15 @@ def _guard_revalidated_target(
     if _revalidated_control_identity_changed(
         previous_target,
         target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
+    if _contextless_generic_action_visual_context_changed(
+        previous_target,
+        target,
+        previous_capture,
+        capture,
         previous_candidates or [],
         candidates,
     ):
@@ -827,6 +848,88 @@ def _revalidated_action_context_changed(
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
+
+
+def _contextless_generic_action_visual_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_capture: Any,
+    capture: "Capture",
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if previous_capture is None:
+        return False
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if _action_specific_revalidation_tokens(previous, previous_target.matched_text):
+        return False
+    if _action_specific_revalidation_tokens(current, target.matched_text):
+        return False
+    if _action_context_revalidation_tokens(previous, previous_candidates):
+        return False
+    if _action_context_revalidation_tokens(current, candidates):
+        return False
+    previous_crop = _capture_rect_image(
+        previous_capture,
+        _expand_rect(previous_target.rect, GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX),
+    )
+    current_crop = _capture_rect_image(
+        capture,
+        _expand_rect(target.rect, GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX),
+    )
+    if previous_crop is None or current_crop is None:
+        return False
+    if previous_crop.size != current_crop.size:
+        current_crop = current_crop.resize(previous_crop.size, Image.Resampling.BILINEAR)
+    diff = ImageChops.difference(previous_crop.convert("RGB"), current_crop.convert("RGB"))
+    stat = ImageStat.Stat(diff)
+    normalized = sum(stat.mean) / max(1, len(stat.mean) * 255)
+    return normalized > GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR
+
+
+def _action_specific_revalidation_tokens(
+    candidate: ControlCandidate,
+    matched_text: str,
+) -> set[str]:
+    return _action_identity_revalidation_tokens(candidate, matched_text) - GENERIC_ACTION_REVALIDATION_WORDS
+
+
+def _capture_rect_image(
+    capture: "Capture",
+    rect: tuple[int, int, int, int],
+) -> Image.Image | None:
+    image_rect = _screen_rect_to_image_rect(capture, rect)
+    clipped = _intersection_rect(image_rect, (0, 0, capture.width, capture.height))
+    if clipped is None:
+        return None
+    try:
+        image = Image.open(io.BytesIO(capture.png_bytes))
+        image.load()
+    except Exception:
+        return None
+    x, y, width, height = clipped
+    return image.convert("RGB").crop((x, y, x + width, y + height))
+
+
+def _screen_rect_to_image_rect(
+    capture: "Capture",
+    rect: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    x, y, width, height = rect
+    left = int((x - capture.monitor_left) * capture.scale)
+    top = int((y - capture.monitor_top) * capture.scale)
+    scaled_width = max(1, int(width * capture.scale))
+    scaled_height = max(1, int(height * capture.scale))
+    return (left, top, scaled_width, scaled_height)
 
 
 def _action_context_revalidation_tokens(
@@ -1147,6 +1250,7 @@ class HelpSession(QObject):
                 capture, candidates, target = self._revalidate_target_on_current_screen(
                     decision,
                     previous_target=target,
+                    previous_capture=capture,
                     previous_candidates=candidates,
                 )
             except Exception as exc:
@@ -1303,6 +1407,7 @@ class HelpSession(QObject):
         decision: "LiveHelpDecision",
         *,
         previous_target: TargetResolution,
+        previous_capture: Any = None,
         previous_candidates: list[ControlCandidate] | None = None,
     ) -> tuple["Capture", list[ControlCandidate], TargetResolution]:
         self._clear_overlays(wait_for_flush=True)
@@ -1329,6 +1434,7 @@ class HelpSession(QObject):
             capture=capture,
             candidates=candidates,
             previous_target=previous_target,
+            previous_capture=previous_capture,
             previous_candidates=previous_candidates,
             target=target,
             snapper=self._snapper,
