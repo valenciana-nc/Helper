@@ -2439,9 +2439,23 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
+    if _delimited_context_only_target_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
     if _prepositional_context_only_target_alternative_mismatch(
         instruction,
         instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
+    if _reversible_action_exact_alternative_mismatch(
+        instruction,
         candidate,
         candidates,
         control_intents,
@@ -2523,6 +2537,13 @@ def _text_match_score(
         control_intents=_instruction_control_intents(instruction),
     ):
         return 0.0
+    if _delimited_context_target_match(instruction, candidate):
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
@@ -2943,6 +2964,21 @@ def _single_dialog_dismiss_candidate(
     if len(selected) != 1:
         if not selected:
             return None
+        exact_label_candidates = [
+            candidate
+            for candidate in selected
+            if _literal_words_from_text(candidate.text)
+            == _exact_visible_label_request_words(instruction)
+        ]
+        if len(exact_label_candidates) == 1:
+            candidate = exact_label_candidates[0]
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=TEXT_MATCH_FLOOR,
+                source="text_match",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
         if window_close_requested:
             candidate = sorted(selected, key=_candidate_sort_key)[0]
             return TargetResolution(
@@ -3424,9 +3460,31 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _delimited_context_only_target_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _prepositional_context_only_target_alternative_mismatch(
         instruction,
         instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _reversible_action_exact_alternative_mismatch(
+        instruction,
         candidate,
         candidates,
         control_intents,
@@ -7516,6 +7574,94 @@ def _prepositional_context_only_target_alternative_mismatch(
     return False
 
 
+def _delimited_context_only_target_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
+        return False
+    target_tokens, context_tokens = _delimited_context_action_tokens(instruction)
+    if not target_tokens or not context_tokens:
+        return False
+    candidate_variants = _object_token_variants(
+        _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    )
+    if candidate_variants & target_tokens:
+        return False
+    if not (candidate_variants & context_tokens):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        other_tokens = _object_token_variants(
+            _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+        )
+        if other_tokens & target_tokens:
+            return True
+    return False
+
+
+def _delimited_context_target_match(instruction: str, candidate: ControlCandidate) -> bool:
+    target_tokens, _context_tokens = _delimited_context_action_tokens(instruction)
+    if not target_tokens:
+        return False
+    candidate_tokens = _object_token_variants(
+        _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    )
+    return bool(candidate_tokens & target_tokens)
+
+
+def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    parts = re.split(r"\s+(?:-|:|\u2013|\u2014)\s+", instruction or "", maxsplit=1)
+    if len(parts) != 2:
+        return set(), set()
+    target_words = _literal_word_sequence(parts[0])
+    context_words = _literal_word_sequence(parts[1])
+    while len(target_words) > 1 and target_words[0] in {
+        "activate",
+        "choose",
+        "click",
+        "enter",
+        "fill",
+        "focus",
+        "hit",
+        "input",
+        "open",
+        "press",
+        "select",
+        "tap",
+        "type",
+        "use",
+    }:
+        target_words.pop(0)
+    while target_words and target_words[0] in {"a", "an", "the", "this", "that"}:
+        target_words.pop(0)
+    while context_words and context_words[0] in {"a", "an", "the", "this", "that"}:
+        context_words.pop(0)
+    target_tokens = _object_token_variants(set(target_words)) - (
+        CONTAINED_CONTROL_REQUEST_WORDS
+        | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+        | CONTEXTUAL_DUPLICATE_STOPWORDS
+    )
+    context_tokens = _object_token_variants(set(context_words)) - {
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+    }
+    context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    return target_tokens, context_tokens
+
+
 def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
     words = _literal_word_sequence(instruction)
     if not words:
@@ -8355,7 +8501,7 @@ def _exact_visible_label_alternative_mismatch(
 def _exact_visible_label_request_words(instruction: str) -> set[str]:
     return _literal_words_from_text(instruction) - (
         OPEN_VIEW_REQUEST_WORDS
-        | GENERIC_OBJECT_REQUEST_WORDS
+        | (GENERIC_OBJECT_REQUEST_WORDS - frozenset({"find", "go", "search"}))
         | frozenset(
             {
                 "a",
@@ -8557,6 +8703,55 @@ def _reversible_action_polarity_mismatch(
     if instruction_objects and control_objects:
         return True
     return not instruction_objects and not control_objects
+
+
+def _reversible_action_exact_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if not _reversible_action_polarity_mismatch(instruction, candidate.descriptor):
+        return False
+    instruction_kind = _reversible_action_polarity_kind(_tokens_from_text(instruction))
+    if not instruction_kind:
+        return False
+    family_index, instruction_side = instruction_kind.split(":", 1)
+    positive_words, negative_words = REVERSIBLE_ACTION_POLARITY_PAIRS[int(family_index)]
+    requested_words = positive_words if instruction_side == "positive" else negative_words
+    if _literal_words_from_text(candidate.descriptor) & requested_words:
+        return False
+    instruction_objects = _object_token_variants(
+        _action_object_tokens(
+            _tokens_from_text(instruction),
+            REVERSIBLE_ACTION_POLARITY_WORDS,
+            ACTION_OBJECT_STOPWORDS,
+        )
+    )
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        other_words = _literal_words_from_text(other.descriptor)
+        if not (other_words & requested_words):
+            continue
+        if not instruction_objects:
+            return True
+        other_objects = _object_token_variants(
+            _action_object_tokens(
+                _tokens_from_text(other.descriptor),
+                REVERSIBLE_ACTION_POLARITY_WORDS,
+                ACTION_OBJECT_STOPWORDS,
+            )
+        )
+        if instruction_objects & other_objects:
+            return True
+    return False
 
 
 def _check_in_out_action_mismatch(
@@ -9703,9 +9898,23 @@ def _candidate_snap_score(
         candidates,
     ):
         return 0.0
+    if _delimited_context_only_target_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
     if _prepositional_context_only_target_alternative_mismatch(
         instruction,
         instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
+    if _reversible_action_exact_alternative_mismatch(
+        instruction,
         candidate,
         candidates,
         control_intents,
@@ -10912,9 +11121,23 @@ def _candidate_snap_semantic_mismatch(
         candidates,
     ):
         return True
+    if _delimited_context_only_target_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        _instruction_control_intents(instruction),
+    ):
+        return True
     if _prepositional_context_only_target_alternative_mismatch(
         instruction,
         instruction_tokens,
+        candidate,
+        candidates,
+        _instruction_control_intents(instruction),
+    ):
+        return True
+    if _reversible_action_exact_alternative_mismatch(
+        instruction,
         candidate,
         candidates,
         _instruction_control_intents(instruction),

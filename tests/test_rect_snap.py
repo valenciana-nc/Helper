@@ -3836,29 +3836,36 @@ class ControlInventoryTests(unittest.TestCase):
     def test_stale_target_id_longer_action_label_recovers_to_exact_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
-        candidates = [
-            ControlCandidate("stale", "Save as", "button", (10, 10, 100, 32)),
-            ControlCandidate("exact", "Save", "button", (10, 60, 100, 32)),
-        ]
-        wrong_target = resolve_candidate_target(
-            target_id="stale",
-            instruction="Click Save.",
-            candidates=candidates,
-            model_rect=(10, 10, 100, 32),
+        cases = (
+            ("Click Save.", "Save as", "Save"),
+            ("Click Cancel.", "Cancel subscription", "Cancel"),
+            ("Click Search.", "Search filters", "Search"),
         )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction="Click Save.",
-            candidates=candidates,
-            model_rect=(10, 10, 100, 32),
-        )
+        for instruction, stale_label, exact_label in cases:
+            with self.subTest(instruction=instruction, stale_label=stale_label):
+                candidates = [
+                    ControlCandidate("stale", stale_label, "button", (10, 10, 140, 32)),
+                    ControlCandidate("exact", exact_label, "button", (10, 60, 100, 32)),
+                ]
+                wrong_target = resolve_candidate_target(
+                    target_id="stale",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 140, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 140, 32),
+                )
 
-        self.assertEqual(wrong_target.source, "target_id")
-        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
-        self.assertEqual(text_target.source, "text_match")
-        self.assertEqual(text_target.target_id, "exact")
-        self.assertFalse(text_target.rejected_reason)
-        self.assertEqual(text_target.rect, (10, 60, 100, 32))
+                self.assertEqual(wrong_target.source, "target_id")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "exact")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(text_target.rect, (10, 60, 100, 32))
 
     def test_text_match_prefers_visible_label_over_automation_only_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -7615,6 +7622,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
+
+    def test_reversible_action_wrong_target_id_recovers_to_exact_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("open_notification", "Open notification", "button", (100, 100, 160, 32)),
+            ControlCandidate("close_notification", "Close notification", "button", (320, 100, 160, 32)),
+        ]
+        wrong_target = resolve_candidate_target(
+            target_id="open_notification",
+            instruction="Close notification.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Close notification.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Close notification.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close notification.",
+                    "target_id": "open_notification",
+                    "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(snap_target)
+        for target in (text_target, help_target):
+            self.assertEqual(target.source, "text_match")
+            self.assertEqual(target.target_id, "close_notification")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (320, 100, 160, 32))
 
     def test_open_wrong_target_id_recovers_from_publish_action(self) -> None:
         from control_inventory import ControlCandidate
@@ -24595,6 +24649,46 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(target.source, "candidate_snap")
             self.assertEqual(target.target_id, "context")
             self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_action_label_with_context_suffix_overrides_exact_context_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("context", "Team settings", "button", (20, 20, 170, 32)),
+            ControlCandidate("target", "Invite", "button", (20, 90, 100, 32)),
+        ]
+        instruction = "Click Invite - Team settings."
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 170, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 170, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 20, "y": 20, "width": 170, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "target")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "target")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_generic_field_model_rect_with_clear_action_highlights_field(self) -> None:
         from control_inventory import ControlCandidate

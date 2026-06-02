@@ -131,6 +131,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "stale_search_filters_target_id_recovers_to_exact_search",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 140, 32], "label": "Search filters"},
+                {"rect": [10, 60, 100, 32], "label": "Search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Search.",
+                "target_id": "stale",
+                "target": {"x": 10, "y": 10, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Search filters", "control_type": "button", "rect": [10, 10, 140, 32]},
+                {"id": "exact", "text": "Search", "control_type": "button", "rect": [10, 60, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [10, 60, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "close_notification_recovers_from_open_notification_target_id",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 160, 32], "label": "Open notification"},
+                {"rect": [320, 100, 160, 32], "label": "Close notification"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close notification.",
+                "target_id": "open_notification",
+                "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "open_notification", "text": "Open notification", "control_type": "button", "rect": [100, 100, 160, 32]},
+                {"id": "close_notification", "text": "Close notification", "control_type": "button", "rect": [320, 100, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "close_notification",
+                "rect": [320, 100, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "open_wrong_target_id_recovers_from_publish_action",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -658,6 +706,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "candidate_snap",
                 "rejected_reason": "candidate snapshot no match",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "action_label_with_context_suffix_overrides_exact_context_geometry",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 170, 32], "label": "Team settings"},
+                {"rect": [20, 90, 100, 32], "label": "Invite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Invite - Team settings.",
+                "target": {"x": 20, "y": 20, "width": 170, "height": 32},
+            },
+            "candidates": [
+                {"id": "context", "text": "Team settings", "control_type": "button", "rect": [20, 20, 170, 32]},
+                {"id": "target", "text": "Invite", "control_type": "button", "rect": [20, 90, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "target",
+                "rect": [20, 90, 100, 32],
+                "overlay_emitted": True,
             },
         },
         {
