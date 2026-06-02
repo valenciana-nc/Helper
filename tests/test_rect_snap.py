@@ -5241,6 +5241,67 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(target.rect, (100, 100, 180, 32))
                 self.assertFalse(target.rejected_reason)
 
+    def test_explicit_toggle_in_toolbar_recovers_from_same_label_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return x, y
+
+        candidates = [
+            ControlCandidate("toggle", "Notifications", "checkbox", (100, 100, 180, 32)),
+            ControlCandidate("button", "Notifications", "button", (100, 150, 180, 32)),
+        ]
+        instruction = "Click the Notifications toggle in the toolbar."
+
+        wrong_target = resolve_candidate_target(
+            target_id="button",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        help_target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps(
+                    {
+                        "kind": "step",
+                        "instruction": instruction,
+                        "target_id": "button",
+                        "target": {"x": 100, "y": 150, "width": 180, "height": 32},
+                    }
+                )
+            ),
+            Capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "button")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "toggle")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (100, 100, 180, 32))
+
     def test_state_action_target_id_accepts_matching_action_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -19537,6 +19598,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (450, 160, 80, 28))
 
+    def test_shorthand_header_context_recovers_requested_column_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("name_col", "Name", "headeritem", (20, 40, 160, 36)),
+            ControlCandidate("status_col", "Status", "headeritem", (200, 40, 160, 36)),
+            ControlCandidate("name_filter", "Filter", "button", (140, 86, 70, 28)),
+            ControlCandidate("status_filter", "Filter", "button", (320, 86, 70, 28)),
+        ]
+        instruction = "Click Filter Status."
+
+        wrong_target = resolve_candidate_target(
+            target_id="name_filter",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 86, 70, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 86, 70, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(140, 86, 70, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "name_filter",
+                    "target": {"x": 140, "y": 86, "width": 70, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "name_filter")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "status_filter")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "status_filter")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (320, 86, 70, 28))
+
     def test_container_only_menu_request_does_not_recover_arbitrary_child(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -20026,6 +20139,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "edit2")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (150, 100, 32, 32))
+
+    def test_shorthand_positional_row_context_recovers_requested_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row_top", "Top", "listitem", (80, 90, 240, 50)),
+            ControlCandidate("archive_top", "Archive", "button", (240, 100, 80, 30)),
+            ControlCandidate("row_bottom", "Bottom", "listitem", (80, 140, 240, 50)),
+            ControlCandidate("archive_bottom", "Archive", "button", (240, 150, 80, 30)),
+        ]
+        instruction = "Archive Bottom."
+
+        wrong_target = resolve_candidate_target(
+            target_id="archive_top",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 80, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 80, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 100, 80, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "archive_top",
+                    "target": {"x": 240, "y": 100, "width": 80, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "archive_top")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "archive_bottom")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (240, 150, 80, 30))
 
     def test_positional_duplicate_controls_recover_requested_field_and_option(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

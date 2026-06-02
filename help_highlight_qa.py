@@ -2246,6 +2246,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_toggle_in_toolbar_recovers_from_same_label_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 180, 32], "label": "Notifications toggle"},
+                {"rect": [100, 150, 180, 32], "label": "Notifications button"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Notifications toggle in the toolbar.",
+                "target_id": "button",
+                "target": {"x": 100, "y": 150, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "toggle", "text": "Notifications", "control_type": "checkbox", "rect": [100, 100, 180, 32]},
+                {"id": "button", "text": "Notifications", "control_type": "button", "rect": [100, 150, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "toggle",
+                "rect": [100, 100, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "state_action_target_id_rejects_opposite_checkbox_label",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15569,6 +15593,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "shorthand_header_context_recovers_requested_column_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 40, 160, 36], "label": "Name"},
+                {"rect": [200, 40, 160, 36], "label": "Status"},
+                {"rect": [140, 86, 70, 28], "label": "Filter"},
+                {"rect": [320, 86, 70, 28], "label": "Filter"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Filter Status.",
+                "target_id": "name_filter",
+                "target": {"x": 140, "y": 86, "width": 70, "height": 28},
+            },
+            "candidates": [
+                {"id": "name_col", "text": "Name", "control_type": "headeritem", "rect": [20, 40, 160, 36]},
+                {"id": "status_col", "text": "Status", "control_type": "headeritem", "rect": [200, 40, 160, 36]},
+                {"id": "name_filter", "text": "Filter", "control_type": "button", "rect": [140, 86, 70, 28]},
+                {"id": "status_filter", "text": "Filter", "control_type": "button", "rect": [320, 86, 70, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_filter",
+                "rect": [320, 86, 70, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_numeric_action_target_id_uses_context_over_wrong_model_rect",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16008,6 +16060,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "edit2",
                 "rect": [150, 100, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "shorthand_positional_row_context_recovers_requested_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 90, 240, 50], "label": "Top"},
+                {"rect": [240, 100, 80, 30], "label": "Archive"},
+                {"rect": [80, 140, 240, 50], "label": "Bottom"},
+                {"rect": [240, 150, 80, 30], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Archive Bottom.",
+                "target_id": "archive_top",
+                "target": {"x": 240, "y": 100, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "row_top", "text": "Top", "control_type": "listitem", "rect": [80, 90, 240, 50]},
+                {"id": "archive_top", "text": "Archive", "control_type": "button", "rect": [240, 100, 80, 30]},
+                {"id": "row_bottom", "text": "Bottom", "control_type": "listitem", "rect": [80, 140, 240, 50]},
+                {"id": "archive_bottom", "text": "Archive", "control_type": "button", "rect": [240, 150, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "archive_bottom",
+                "rect": [240, 150, 80, 30],
                 "overlay_emitted": True,
             },
         },

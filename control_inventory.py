@@ -2137,6 +2137,10 @@ def _text_match_score(
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2371,6 +2375,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2565,6 +2571,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4126,6 +4138,56 @@ def _explicit_option_alternative_mismatch(
     return False
 
 
+def _explicit_checkbox_like_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    explicit_checkbox_like = (
+        "checkbox" in raw_tokens
+        or {"check", "box"} <= raw_tokens
+        or bool(raw_tokens & {"switch", "toggle"})
+    )
+    if not explicit_checkbox_like:
+        return False
+    if raw_tokens & {"button", "buttons"}:
+        return False
+    if candidate.control_type == "checkbox":
+        return False
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    candidate_tokens = _checkbox_like_alternative_label_tokens(candidate)
+    if not candidate_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "checkbox":
+            continue
+        other_tokens = _checkbox_like_alternative_label_tokens(other)
+        if other_tokens and candidate_tokens & other_tokens:
+            return True
+    return False
+
+
+def _checkbox_like_alternative_label_tokens(candidate: ControlCandidate) -> set[str]:
+    tokens = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _tokens_from_text(candidate.automation_id)
+    )
+    return _object_token_variants(tokens) - {
+        "box",
+        "button",
+        "buttons",
+        "check",
+        "checkbox",
+        "switch",
+        "toggle",
+    }
+
+
 def _spinner_stepper_button_match(
     instruction: str,
     candidate: ControlCandidate,
@@ -5664,7 +5726,11 @@ def _unresolved_contextual_duplicate_mismatch(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_context:
         return False
     duplicate_key = _contextual_duplicate_key(candidate)
@@ -5698,7 +5764,11 @@ def _generic_pane_context_duplicate_ambiguous(
         return False
     if not (raw_tokens & {"in", "inside", "on", "within"}):
         return False
-    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if requested_context != {"pane"}:
         return False
     duplicate_key = _contextual_duplicate_key(candidate)
@@ -5776,7 +5846,11 @@ def _candidate_satisfies_contextual_duplicate_request(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_context:
         return False
     evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
@@ -5816,7 +5890,11 @@ def _contextual_surface_action_alternative_mismatch(
         return False
     if not (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS):
         return False
-    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
     if not requested_context:
         return False
     if _candidate_satisfies_contextual_duplicate_request(
@@ -5894,13 +5972,22 @@ def _contextual_surface_tokens_match(
 def _contextual_duplicate_request_tokens(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
 ) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
-        return set()
     instruction_tokens = _tokenize_instruction(instruction)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     surface_tokens = raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+        if _positional_action_request_tokens(instruction):
+            return set()
+        return _implicit_contextual_duplicate_request_tokens(
+            instruction_tokens,
+            raw_tokens,
+            candidate,
+            candidate_tokens,
+            candidates,
+        )
     request_tokens = _object_token_variants(
         (instruction_tokens | raw_tokens | surface_tokens)
         - candidate_tokens
@@ -5919,6 +6006,54 @@ def _contextual_duplicate_request_tokens(
         if matched_action_tokens & family:
             request_tokens -= family
     return request_tokens
+
+
+def _implicit_contextual_duplicate_request_tokens(
+    instruction_tokens: set[str],
+    raw_tokens: set[str],
+    candidate: ControlCandidate,
+    candidate_tokens: set[str],
+    candidates: list[ControlCandidate] | None,
+) -> set[str]:
+    if not candidates:
+        return set()
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return set()
+    matched_action_tokens = (instruction_tokens | raw_tokens) & candidate_tokens
+    if not matched_action_tokens:
+        return set()
+    request_tokens = _object_token_variants(
+        (instruction_tokens | raw_tokens)
+        - candidate_tokens
+        - CONTEXTUAL_DUPLICATE_STOPWORDS
+    )
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if matched_action_tokens & family:
+            request_tokens -= family
+    if not request_tokens:
+        return set()
+    positional_request = bool(request_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+    for other in candidates:
+        if other.id != candidate.id and _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        if _contextual_duplicate_key(other) != duplicate_key:
+            continue
+        evidence_tokens = (
+            _contextual_duplicate_evidence_tokens(other, candidates)
+            if positional_request
+            else _object_token_variants(
+                _contextual_duplicate_aligned_header_tokens(other, candidates)
+            )
+        )
+        if _contextual_duplicate_request_matches_evidence(
+            request_tokens,
+            evidence_tokens,
+        ):
+            return request_tokens
+    return set()
 
 
 def _contextual_duplicate_key(candidate: ControlCandidate) -> str:
@@ -6077,7 +6212,12 @@ def _positional_action_duplicate_mismatch(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    requested_positions = _positional_action_request_tokens(instruction)
+    requested_positions = _positional_action_request_tokens_for_candidate(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
     if not requested_positions:
         return False
     request_tokens = instruction_tokens | _tokens_from_text(instruction)
@@ -6099,7 +6239,12 @@ def _candidate_satisfies_positional_action_duplicate_request(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    requested_positions = _positional_action_request_tokens(instruction)
+    requested_positions = _positional_action_request_tokens_for_candidate(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
     if not requested_positions:
         return False
     request_tokens = instruction_tokens | _tokens_from_text(instruction)
@@ -6120,6 +6265,29 @@ def _positional_action_request_tokens(instruction: str) -> set[str]:
     requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
     if raw_tokens & {"arrow", "caret", "chevron"}:
         requested -= {"left", "right"}
+    return requested
+
+
+def _positional_action_request_tokens_for_candidate(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    requested = _positional_action_request_tokens(instruction)
+    if requested:
+        return requested
+    raw_tokens = _tokens_from_text(instruction)
+    requested = set(raw_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
+    if raw_tokens & {"arrow", "caret", "chevron"}:
+        requested -= {"left", "right"}
+    if not requested:
+        return set()
+    request_tokens = instruction_tokens | raw_tokens
+    if not _positional_action_duplicate_action_tokens(request_tokens, candidate):
+        return set()
+    if len(_positional_action_duplicate_candidates(candidate, candidates, request_tokens)) < 2:
+        return set()
     return requested
 
 
@@ -7306,6 +7474,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
@@ -8166,6 +8336,15 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_checkbox_like_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _positional_action_duplicate_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True
