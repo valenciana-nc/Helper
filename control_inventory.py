@@ -995,6 +995,9 @@ ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
         "list",
         "order",
         "orders",
+        "people",
+        "person",
+        "persons",
         "record",
         "records",
         "row",
@@ -9997,11 +10000,13 @@ def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[st
         target_words.pop(0)
     while context_words and context_words[0] in {"a", "an", "the", "this", "that"}:
         context_words.pop(0)
+    target_action_tokens = set(target_words) & set().union(*EXCLUSIVE_ACTION_FAMILIES)
     target_tokens = _object_token_variants(set(target_words)) - (
         CONTAINED_CONTROL_REQUEST_WORDS
         | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
         | CONTEXTUAL_DUPLICATE_STOPWORDS
     )
+    target_tokens |= _object_token_variants(target_action_tokens)
     context_tokens = _object_token_variants(set(context_words)) - {
         "a",
         "an",
@@ -10045,11 +10050,13 @@ def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], se
             target_words.pop(0)
         while target_words and target_words[0] in {"a", "an", "the", "this", "that"}:
             target_words.pop(0)
+        target_action_tokens = set(target_words) & set().union(*EXCLUSIVE_ACTION_FAMILIES)
         target_tokens = _object_token_variants(set(target_words)) - (
             CONTAINED_CONTROL_REQUEST_WORDS
             | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
             | CONTEXTUAL_DUPLICATE_STOPWORDS
         )
+        target_tokens |= _object_token_variants(target_action_tokens)
         context_tokens = _object_token_variants(set(context_words)) - {
             "a",
             "an",

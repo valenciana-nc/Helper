@@ -29672,6 +29672,112 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, "acme_open")
                 self.assertFalse(help_target.rejected_reason)
 
+    def test_edit_row_action_rejects_when_requested_row_context_disappears(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row", "Globex account", "dataitem", (20, 100, 700, 42)),
+            ControlCandidate("edit", "Edit", "button", (600, 106, 80, 30)),
+        ]
+
+        for instruction in ("Edit Acme account.", "Click Edit for Acme account."):
+            with self.subTest(instruction=instruction):
+                stale_target = resolve_candidate_target(
+                    target_id="edit",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(600, 106, 80, 30),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "edit",
+                            "target": {"x": 600, "y": 106, "width": 80, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(stale_target)
+                assert stale_target is not None
+                self.assertEqual(stale_target.source, "target_id")
+                self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(help_target.source, "target_id")
+                self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
+
+        matching_target = resolve_candidate_target(
+            target_id="edit",
+            instruction="Click Edit for Globex account.",
+            candidates=candidates,
+            model_rect=(600, 106, 80, 30),
+        )
+        self.assertIsNotNone(matching_target)
+        assert matching_target is not None
+        self.assertFalse(matching_target.rejected_reason)
+
+    def test_edit_action_rejects_when_requested_surface_context_disappears(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "pane",
+                "Click Edit in the Details pane.",
+                "Click Edit in the Summary pane.",
+                [
+                    ControlCandidate("pane", "Summary", "pane", (20, 80, 500, 200)),
+                    ControlCandidate("edit", "Edit", "button", (430, 95, 80, 30)),
+                ],
+            ),
+            (
+                "card",
+                "Click Edit in the Acme card.",
+                "Click Edit in the Globex card.",
+                [
+                    ControlCandidate("card", "Globex account", "group", (20, 80, 500, 80)),
+                    ControlCandidate("edit", "Edit", "button", (430, 95, 80, 30)),
+                ],
+            ),
+        )
+        for name, stale_instruction, matching_instruction, candidates in cases:
+            with self.subTest(name=name):
+                stale_target = resolve_candidate_target(
+                    target_id="edit",
+                    instruction=stale_instruction,
+                    candidates=candidates,
+                    model_rect=(430, 95, 80, 30),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": stale_instruction,
+                            "target_id": "edit",
+                            "target": {"x": 430, "y": 95, "width": 80, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+                matching_target = resolve_candidate_target(
+                    target_id="edit",
+                    instruction=matching_instruction,
+                    candidates=candidates,
+                    model_rect=(430, 95, 80, 30),
+                )
+
+                self.assertIsNotNone(stale_target)
+                assert stale_target is not None
+                self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNotNone(matching_target)
+                assert matching_target is not None
+                self.assertFalse(matching_target.rejected_reason)
+
     def test_business_object_request_prefers_content_card_over_same_name_nav(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
