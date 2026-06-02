@@ -21,6 +21,7 @@ MODEL_BOUNDARY_ALIGNMENT_FLOOR = 0.08
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 CANDIDATE_SEGMENTED_SEPARATOR_FLOOR = 0.85
 CANDIDATE_INNER_CONTROL_EDGE_FLOOR = 0.40
+CANDIDATE_ENCLOSING_EDGE_FLOOR = 0.35
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
 CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES = frozenset(
@@ -257,6 +258,21 @@ def evaluate_target_quality(
                 instruction,
             ),
         )
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        _candidate_boundary_alignment_target(source, target_control_type)
+        and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+        and _has_visible_enclosing_boundary_outside(capture.png_bytes, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -536,6 +552,136 @@ def _average_boundary_difference(
     if count == 0:
         return 0.0
     return total / (count * 255)
+
+
+def _has_visible_enclosing_boundary_outside(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            image = img.convert("L").filter(ImageFilter.FIND_EDGES)
+            x, y, width, height = rect
+            if width < 16 or height < 8:
+                return False
+            image_width, image_height = image.size
+            x2 = x + width
+            y2 = y + height
+            max_x_margin = max(32, min(160, width * 2))
+            max_y_margin = max(16, min(96, height * 3))
+            left = _strongest_vertical_edge_line(
+                image,
+                range(max(4, x - max_x_margin), max(4, x - 4)),
+                y,
+                y2,
+            )
+            right = _strongest_vertical_edge_line(
+                image,
+                range(
+                    min(image_width - 4, x2 + 4),
+                    min(image_width - 4, x2 + max_x_margin),
+                ),
+                y,
+                y2,
+            )
+            top = _strongest_horizontal_edge_line(
+                image,
+                range(max(4, y - max_y_margin), max(4, y - 4)),
+                x,
+                x2,
+            )
+            bottom = _strongest_horizontal_edge_line(
+                image,
+                range(
+                    min(image_height - 4, y2 + 4),
+                    min(image_height - 4, y2 + max_y_margin),
+                ),
+                x,
+                x2,
+            )
+            if min(left[0], right[0], top[0], bottom[0]) < CANDIDATE_ENCLOSING_EDGE_FLOOR:
+                return False
+            if (
+                _vertical_edge_groups_between(image, left[1] + 4, x - 4, y, y2) >= 2
+                or _vertical_edge_groups_between(image, x2 + 4, right[1] - 4, y, y2) >= 2
+            ):
+                return False
+            return True
+    except Exception:
+        return False
+
+
+def _strongest_vertical_edge_line(
+    image: Image.Image,
+    positions: Iterable[int],
+    y1: int,
+    y2: int,
+) -> tuple[float, int]:
+    pixels = image.load()
+    height = image.height
+    top = max(0, min(height, y1))
+    bottom = max(0, min(height, y2))
+    if bottom <= top:
+        return 0.0, 0
+    best = (0.0, 0)
+    for x in positions:
+        if x < 0 or x >= image.width:
+            continue
+        total = sum(int(pixels[x, y]) for y in range(top, bottom))
+        score = total / ((bottom - top) * 255)
+        if score > best[0]:
+            best = (score, x)
+    return best
+
+
+def _strongest_horizontal_edge_line(
+    image: Image.Image,
+    positions: Iterable[int],
+    x1: int,
+    x2: int,
+) -> tuple[float, int]:
+    pixels = image.load()
+    width = image.width
+    left = max(0, min(width, x1))
+    right = max(0, min(width, x2))
+    if right <= left:
+        return 0.0, 0
+    best = (0.0, 0)
+    for y in positions:
+        if y < 0 or y >= image.height:
+            continue
+        total = sum(int(pixels[x, y]) for x in range(left, right))
+        score = total / ((right - left) * 255)
+        if score > best[0]:
+            best = (score, y)
+    return best
+
+
+def _vertical_edge_groups_between(
+    image: Image.Image,
+    x1: int,
+    x2: int,
+    y1: int,
+    y2: int,
+) -> int:
+    pixels = image.load()
+    left = max(0, min(image.width, x1))
+    right = max(0, min(image.width, x2))
+    top = max(0, min(image.height, y1))
+    bottom = max(0, min(image.height, y2))
+    if right <= left or bottom <= top:
+        return 0
+    groups = 0
+    last_strong: int | None = None
+    for x in range(left, right):
+        total = sum(int(pixels[x, y]) for y in range(top, bottom))
+        score = total / ((bottom - top) * 255)
+        if score < CANDIDATE_ENCLOSING_EDGE_FLOOR:
+            continue
+        if last_strong is None or x - last_strong > 2:
+            groups += 1
+        last_strong = x
+    return groups
 
 
 def _has_compound_control_separators(

@@ -9614,6 +9614,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
+    def test_duplicate_named_card_context_stays_ambiguous_without_position(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_a", "Billing", "group", (20, 80, 360, 100)),
+            ControlCandidate("save_a", "Save", "button", (300, 112, 60, 30)),
+            ControlCandidate("billing_b", "Billing", "group", (20, 220, 360, 100)),
+            ControlCandidate("save_b", "Save", "button", (300, 252, 60, 30)),
+        ]
+        instruction = "Click Save in the Billing card."
+
+        target_id = resolve_candidate_target(
+            target_id="save_a",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 112, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=None,
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 112, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "save_a",
+                    "target": {"x": 300, "y": 112, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
     def test_ambiguous_text_match_without_target_id_blocks_geometry_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -9785,6 +9832,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (100, 100, 220, 44),
                 window_title="Customers",
                 window_rank=2,
+            ),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_table_cell_identity_change(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click this table cell.",
+                "target_id": "cell_0_0",
+                "target": {"x": 100, "y": 90, "width": 120, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "cell_0_0",
+                "Alice",
+                "cell",
+                (100, 90, 120, 32),
+                window_title="Orders",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "cell_0_0",
+                "Bob",
+                "cell",
+                (100, 90, 120, 32),
+                window_title="Orders",
+                window_rank=0,
             ),
         ]
         previous_target = resolve_help_target(decision, self._capture(), previous_candidates)

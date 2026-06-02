@@ -1230,6 +1230,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "candidate_button_inner_label_rect_rejects_overlay",
+            "capture": {"width": 500, "height": 240},
+            "draw": [
+                {"rect": [40, 80, 220, 52], "label": ""},
+                {"kind": "text", "rect": [104, 98, 120, 20], "label": "Submit order"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Submit order.",
+                "target_id": "submit",
+                "target": {"x": 100, "y": 94, "width": 120, "height": 24},
+            },
+            "candidates": [
+                {
+                    "id": "submit",
+                    "text": "Submit order",
+                    "control_type": "button",
+                    "rect": [100, 94, 120, 24],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target boundary misaligned",
+                "rejected_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

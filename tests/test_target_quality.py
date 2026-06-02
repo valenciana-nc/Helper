@@ -464,6 +464,27 @@ class TargetQualityTests(unittest.TestCase):
 
         self.assertTrue(quality.accepted)
 
+    def test_rejects_candidate_button_rect_over_inner_label_only(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (500, 240), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 80, 260, 132), outline="black", fill="#f3f4f6")
+        draw.text((104, 98), "Submit order", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(100, 94, 120, 24),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Submit order.",
+            target_control_type="button",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
     def test_rejects_noisy_model_rect_without_candidate_evidence(self) -> None:
         from target_quality import evaluate_target_quality
 

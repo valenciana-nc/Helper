@@ -9789,7 +9789,7 @@ def _same_contextual_duplicate_request_ambiguous(
         if _contextual_duplicate_request_matches_evidence(
             requested_context,
             evidence,
-        ) and _candidates_share_requested_context_carrier(
+        ) and _candidates_have_requested_context_carriers(
             requested_context,
             selected,
             candidate,
@@ -9816,28 +9816,36 @@ def _contextual_duplicate_literal_identity(candidate: ControlCandidate) -> str:
     return ""
 
 
-def _candidates_share_requested_context_carrier(
+def _candidates_have_requested_context_carriers(
     requested_context: set[str],
     selected: ControlCandidate,
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
+    return bool(
+        _requested_context_carrier_ids(requested_context, selected, candidates)
+    ) and bool(_requested_context_carrier_ids(requested_context, candidate, candidates))
+
+
+def _requested_context_carrier_ids(
+    requested_context: set[str],
+    action: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    carrier_ids: set[str] = set()
     for context in candidates:
-        if context.id in {selected.id, candidate.id}:
+        if context.id == action.id:
             continue
-        if _same_visual_candidate(context, selected) or _same_visual_candidate(
+        if _same_visual_candidate(
             context,
-            candidate,
+            action,
         ):
             continue
         if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
             context,
         ):
             continue
-        if not (
-            _context_carrier_rect_matches_action(context, selected)
-            and _context_carrier_rect_matches_action(context, candidate)
-        ):
+        if not _context_carrier_rect_matches_action(context, action):
             continue
         carrier_tokens = _object_token_variants(
             _candidate_semantic_tokens(context)
@@ -9847,8 +9855,8 @@ def _candidates_share_requested_context_carrier(
             | _tokenize_control(context.window_title)
         )
         if _contextual_duplicate_request_matches_evidence(requested_context, carrier_tokens):
-            return True
-    return False
+            carrier_ids.add(context.id)
+    return carrier_ids
 
 
 def _context_carrier_rect_matches_action(
