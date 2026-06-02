@@ -5869,11 +5869,20 @@ def _record_target_alternative_mismatch(
     candidate_label = _record_target_candidate_label_tokens(candidate)
     if not (candidate_label & requested_label):
         return False
-    candidate_priority = _record_target_control_priority(candidate)
+    candidate_priority = _record_target_control_priority(
+        candidate,
+        candidates=candidates,
+        requested_label=requested_label,
+    )
     return any(
         other.id != candidate.id
         and not _same_visual_candidate(other, candidate)
-        and _record_target_control_priority(other) < candidate_priority
+        and _record_target_control_priority(
+            other,
+            candidates=candidates,
+            requested_label=requested_label,
+        )
+        < candidate_priority
         and bool(_record_target_candidate_label_tokens(other) & requested_label)
         for other in candidates
     )
@@ -5923,12 +5932,61 @@ def _record_target_candidate_label_tokens(candidate: ControlCandidate) -> set[st
     ) - RECORD_TARGET_WORDS
 
 
-def _record_target_control_priority(candidate: ControlCandidate) -> int:
+def _record_target_control_priority(
+    candidate: ControlCandidate,
+    *,
+    candidates: list[ControlCandidate] | None = None,
+    requested_label: set[str] | None = None,
+) -> int:
     if candidate.control_type == "dataitem":
         return 0
-    if candidate.control_type in {"listitem", "treeitem"}:
+    if candidate.control_type == "listitem":
+        if _record_target_listitem_is_content_card(
+            candidate,
+            candidates or [],
+            requested_label or set(),
+        ):
+            return 1
+        return 2
+    if candidate.control_type == "treeitem":
         return 1
-    return 2
+    return 3
+
+
+def _record_target_listitem_is_content_card(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    requested_label: set[str],
+) -> bool:
+    if candidate.control_type != "listitem" or not requested_label:
+        return False
+    candidate_label = _record_target_candidate_label_tokens(candidate)
+    if not (candidate_label & requested_label):
+        return False
+    x, _y, width, height = candidate.rect
+    area = max(0, width) * max(0, height)
+    if area <= 0:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "listitem":
+            continue
+        other_label = _record_target_candidate_label_tokens(other)
+        if not (other_label & requested_label):
+            continue
+        other_x, _other_y, other_width, other_height = other.rect
+        other_area = max(0, other_width) * max(0, other_height)
+        if other_area <= 0:
+            continue
+        is_larger_card = area >= other_area * 1.8 and (
+            width >= other_width * 1.35
+            or height >= other_height * 1.35
+            or x >= other_x + max(24, other_width // 2)
+        )
+        if is_larger_card:
+            return True
+    return False
 
 
 def _access_permission_action_mismatch(

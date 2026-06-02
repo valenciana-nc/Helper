@@ -20628,6 +20628,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_name_project_card_prefers_content_card_over_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 36], "label": "Acme"},
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme project.",
+                "target_id": "nav",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 36]},
+                {"id": "card", "text": "Acme", "control_type": "listitem", "rect": [260, 170, 420, 72]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card",
+                "rect": [260, 170, 420, 72],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_report_card_prefers_content_card_over_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 36], "label": "Acme"},
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme report.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 36]},
+                {"id": "card", "text": "Acme", "control_type": "listitem", "rect": [260, 170, 420, 72]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card",
+                "rect": [260, 170, 420, 72],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "same_rect_foreground_snap_prefers_active_window",
             "capture": {"width": 500, "height": 320},
             "draw": [

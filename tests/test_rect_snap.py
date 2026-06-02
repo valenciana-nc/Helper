@@ -27433,6 +27433,106 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, "acme_open")
                 self.assertFalse(help_target.rejected_reason)
 
+    def test_business_object_request_prefers_content_card_over_same_name_nav(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+            ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 36)),
+            ControlCandidate("card", "Acme", "listitem", (260, 170, 420, 72)),
+        ]
+
+        for instruction, stale_id, stale_rect in (
+            ("Open Acme project.", "nav", (20, 80, 160, 36)),
+            ("Open Acme customer.", "nav", (20, 80, 160, 36)),
+            ("Open Acme report.", "tab", (20, 20, 80, 32)),
+        ):
+            with self.subTest(instruction=instruction, stale_id=stale_id):
+                target_id = resolve_candidate_target(
+                    target_id=stale_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": stale_id,
+                            "target": {
+                                "x": stale_rect[0],
+                                "y": stale_rect[1],
+                                "width": stale_rect[2],
+                                "height": stale_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "card")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "card")
+                self.assertFalse(help_target.rejected_reason)
+
+    def test_explicit_list_item_request_keeps_same_name_listitem_target(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 36)),
+            ControlCandidate("card", "Acme", "listitem", (260, 170, 420, 72)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="nav",
+            instruction="Click Acme list item.",
+            candidates=candidates,
+            model_rect=(20, 80, 160, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Acme list item.",
+                    "target_id": "nav",
+                    "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.target_id, "nav")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "nav")
+        self.assertFalse(help_target.rejected_reason)
+
     def test_nested_row_label_target_id_recovers_to_requested_subrow_action(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
