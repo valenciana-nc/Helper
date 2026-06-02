@@ -19403,6 +19403,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "context_field_recovers_from_context_label_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 40, 400, 160], "label": "Settings form", "fill": "#f1f5f9"},
+                {"rect": [40, 80, 220, 32], "label": "Email"},
+                {"rect": [40, 130, 120, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type Email in the Settings form.",
+                "target_id": "settings_button",
+                "target": {"x": 40, "y": 130, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "form", "text": "Settings form", "control_type": "pane", "rect": [20, 40, 400, 160]},
+                {"id": "email", "text": "Email", "control_type": "edit", "rect": [40, 80, 220, 32]},
+                {"id": "settings_button", "text": "Settings", "control_type": "button", "rect": [40, 130, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "email",
+                "rect": [40, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "blank_candidate_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {

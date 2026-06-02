@@ -7733,6 +7733,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (30, 40, 100, 32))
 
+    def test_context_field_recovers_from_context_label_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("context", "Settings form", "pane", (10, 10, 400, 160)),
+            ControlCandidate("field", "Email", "edit", (30, 40, 220, 32)),
+            ControlCandidate("wrong", "Settings", "button", (30, 90, 120, 32)),
+        ]
+        for instruction in (
+            "Type Email in the Settings form.",
+            "Enter Email in the Settings form.",
+            "Fill Email in the Settings form.",
+            "Click Email in the Settings form.",
+            "Focus Email in the Settings form.",
+        ):
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "wrong",
+                            "target": {"x": 30, "y": 90, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "field")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (30, 40, 220, 32))
+
+    def test_context_field_keeps_prepositional_target_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings in the Email form.",
+                    "target_id": "settings",
+                    "target": {"x": 30, "y": 40, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("context", "Email form", "pane", (10, 10, 400, 160)),
+                ControlCandidate("settings", "Settings", "button", (30, 40, 120, 32)),
+                ControlCandidate("email", "Email", "edit", (30, 90, 220, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "settings")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (30, 40, 120, 32))
+
     def test_icon_wording_recovers_from_same_label_checkbox(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

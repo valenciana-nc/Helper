@@ -7171,7 +7171,7 @@ def _prepositional_context_action_alternative_mismatch(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+    if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
         return False
     target_tokens, context_tokens = _prepositional_context_action_tokens(instruction)
     if not target_tokens or not context_tokens:
@@ -7187,7 +7187,7 @@ def _prepositional_context_action_alternative_mismatch(
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
-        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        if other.control_type not in CLICKABLE_CONTROL_TYPES:
             continue
         other_tokens = _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
         if not (other_tokens & target_tokens):
@@ -7214,12 +7214,16 @@ def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], se
             "activate",
             "choose",
             "click",
+            "enter",
+            "fill",
             "focus",
             "hit",
+            "input",
             "open",
             "press",
             "select",
             "tap",
+            "type",
             "use",
         }:
             target_words.pop(0)
