@@ -918,6 +918,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "text_field_wording_rejects_spinner_target",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Name"},
+                {"rect": [20, 120, 160, 32], "label": "Retries"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type in this text field.",
+                "target_id": "spin",
+                "target": {"x": 20, "y": 120, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "edit", "text": "Name", "control_type": "edit", "rect": [20, 80, 160, 32]},
+                {"id": "spin", "text": "Retries", "control_type": "spinner", "rect": [20, 120, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "spin",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_spinner_broad_group_rejects_multiple_spinners",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14933,6 +14957,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "combo",
                 "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_dropdown_launcher_recovers_from_open_option",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Country"},
+                {"rect": [20, 114, 160, 28], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open this dropdown.",
+                "target_id": "option",
+                "target": {"x": 20, "y": 114, "width": 160, "height": 28},
+            },
+            "candidates": [
+                {"id": "combo", "text": "Country", "control_type": "combobox", "rect": [20, 80, 160, 32]},
+                {"id": "option", "text": "Canada", "control_type": "menuitem", "rect": [20, 114, 160, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "combo",
+                "rect": [20, 80, 160, 32],
                 "overlay_emitted": True,
             },
         },

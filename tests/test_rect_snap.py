@@ -4377,6 +4377,25 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 120, 32))
 
+    def test_text_field_wording_rejects_spinner_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="spin",
+            instruction="Type in this text field.",
+            candidates=[
+                ControlCandidate("edit", "Name", "edit", (10, 10, 160, 32)),
+                ControlCandidate("spin", "Retries", "spinner", (10, 50, 160, 32)),
+            ],
+            model_rect=(10, 50, 160, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertEqual(result.target_id, "spin")
+        self.assertEqual(result.rejected_reason, "target_id control type mismatch")
+
     def test_generic_hyperlink_target_id_accepts_hyperlink_without_label_match(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -18339,6 +18358,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "combo")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (10, 10, 180, 32))
+
+    def test_generic_dropdown_launcher_recovers_from_open_option_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("combo", "Country", "combobox", (10, 10, 160, 32)),
+            ControlCandidate("option", "Canada", "menuitem", (10, 44, 160, 28)),
+        ]
+        instruction = "Open this dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="option",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 44, 160, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 44, 160, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "option",
+                    "target": {"x": 10, "y": 44, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "option")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "combo")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "combo")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (10, 10, 160, 32))
 
     def test_selector_model_rect_highlights_combobox(self) -> None:
         from control_inventory import ControlCandidate

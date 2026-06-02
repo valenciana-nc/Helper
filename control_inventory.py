@@ -1881,6 +1881,11 @@ def _text_match_score(
         instruction=instruction,
     ):
         return 0.0
+    if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
+        score = TEXT_MATCH_FLOOR
+        if model_rect is not None:
+            score = min(1.0, score + 0.05 * _proximity_score(candidate.rect, model_rect))
+        return score
     if _contains_tighter_row_action_candidate(
         selected=candidate,
         candidates=candidates,
@@ -2027,11 +2032,6 @@ def _text_match_score(
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
-    if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
-        score = TEXT_MATCH_FLOOR
-        if model_rect is not None:
-            score = min(1.0, score + 0.05 * _proximity_score(candidate.rect, model_rect))
-        return score
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -3613,20 +3613,59 @@ def _dropdown_option_launcher_mismatch(
         return False
     if candidate.control_type != "menuitem":
         return False
+    return _has_dropdown_launcher_candidate(candidate, candidates)
+
+
+def _has_dropdown_launcher_candidate(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
     candidate_tokens = _candidate_visible_text_tokens(candidate)
-    if not candidate_tokens:
-        return False
     for launcher in candidates:
         if launcher.id == candidate.id or _same_visual_candidate(launcher, candidate):
             continue
         if launcher.control_type not in {"combobox", "edit"}:
             continue
+        if _menuitem_is_below_aligned_launcher(candidate, launcher):
+            return True
         launcher_tokens = _candidate_visible_text_tokens(launcher)
-        if not launcher_tokens:
-            continue
-        if _text_evidence_score(candidate_tokens, launcher_tokens) >= TARGET_ID_TEXT_FLOOR:
+        if (
+            candidate_tokens
+            and launcher_tokens
+            and _text_evidence_score(candidate_tokens, launcher_tokens) >= TARGET_ID_TEXT_FLOOR
+        ):
             return True
     return False
+
+
+def _menuitem_is_below_aligned_launcher(
+    candidate: ControlCandidate,
+    launcher: ControlCandidate,
+) -> bool:
+    item_left, item_top, item_width, _item_height = candidate.rect
+    item_right = item_left + item_width
+    launcher_left, launcher_top, launcher_width, launcher_height = launcher.rect
+    launcher_right = launcher_left + launcher_width
+    horizontal_overlap = max(0, min(item_right, launcher_right) - max(item_left, launcher_left))
+    overlap_ratio = horizontal_overlap / max(1, min(item_width, launcher_width))
+    vertical_gap = item_top - (launcher_top + launcher_height)
+    return overlap_ratio >= 0.55 and -8 <= vertical_gap <= 320
+
+
+def _explicit_text_field_control_type_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type != "spinner":
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & {"spinner", "stepper"}:
+        return False
+    return (
+        "textbox" in raw_tokens
+        or "textarea" in raw_tokens
+        or ("text" in raw_tokens and bool(raw_tokens & {"box", "field", "input"}))
+    )
 
 
 def _has_combobox_dropdown_arrow_button(
@@ -6939,6 +6978,8 @@ def _candidate_matches_control_intent(
     *,
     instruction: str = "",
 ) -> bool:
+    if _explicit_text_field_control_type_mismatch(instruction, candidate):
+        return False
     if _control_type_matches_intent(candidate.control_type, control_intents):
         return True
     if _state_action_button_matches_checkbox_intent(
@@ -7077,6 +7118,8 @@ def _candidate_snap_semantic_mismatch(
         candidates,
     )
     if _browser_menu_button_action_mismatch(instruction, candidate):
+        return True
+    if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True
