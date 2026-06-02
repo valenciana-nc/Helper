@@ -43,7 +43,7 @@ POST_ACTION_SETTLE_SEC = 0.6
 POST_CLICK_SETTLE_SEC = 0.35
 OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
-SURFACE_PROMOTION_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
+SURFACE_PROMOTION_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
 CANDIDATE_EMPTY_RETRIES = 2
 CANDIDATE_EMPTY_RETRY_SEC = 0.08
 UIA_BACKED_TARGET_SOURCES = frozenset(
@@ -334,7 +334,7 @@ def _instruction_has_surface_promotion_context(instruction: str) -> bool:
     return bool(
         re.search(
             r"\b(?:in|inside|on|within)\s+(?:the\s+)?"
-            r"(?:group|header|menu|pane|panel|toolbar|window)\b",
+            r"(?:group|header|list|menu|pane|panel|toolbar|window)\b",
             instruction or "",
             re.IGNORECASE,
         )

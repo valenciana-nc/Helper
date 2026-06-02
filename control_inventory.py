@@ -1470,11 +1470,12 @@ LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
-SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
+SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
 SURFACE_ROW_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "group": frozenset({"group"}),
     "headeritem": frozenset({"column", "header", "heading"}),
+    "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),
     "pane": frozenset({"pane"}),
     "toolbar": frozenset({"toolbar"}),
@@ -1483,6 +1484,7 @@ SURFACE_CONTEXT_TYPE_WORDS = {
 DIRECT_SURFACE_CONTAINER_ALIASES = {
     "group": frozenset({"group"}),
     "headeritem": frozenset({"column", "header", "heading"}),
+    "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),
     "pane": frozenset(
         {
@@ -9115,6 +9117,7 @@ def _contextual_duplicate_request_tokens(
         - candidate_tokens
         - (CONTEXTUAL_DUPLICATE_STOPWORDS - CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     )
+    request_tokens |= _prepositional_list_surface_request_tokens(instruction)
     if matched_action_tokens & CLEAR_CLOSE_WORDS and raw_tokens & {
         "modal",
         "notification",
@@ -9127,6 +9130,37 @@ def _contextual_duplicate_request_tokens(
         if matched_action_tokens & family:
             request_tokens -= family
     return request_tokens
+
+
+def _prepositional_list_surface_request_tokens(instruction: str) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    for index, word in enumerate(words):
+        if word not in {"in", "inside", "on", "within"}:
+            continue
+        context_words = list(words[index + 1 :])
+        while context_words and context_words[0] in {"a", "an", "the", "this", "that"}:
+            context_words.pop(0)
+        for context_index, context_word in enumerate(context_words):
+            if context_word not in {"list", "lists"}:
+                continue
+            next_word = context_words[context_index + 1] if context_index + 1 < len(context_words) else ""
+            if next_word in {
+                "entry",
+                "entries",
+                "item",
+                "items",
+                "listitem",
+                "record",
+                "records",
+                "result",
+                "results",
+                "row",
+                "rows",
+                "treeitem",
+            }:
+                continue
+            return {"list"}
+    return set()
 
 
 def _named_page_context_request_tokens(instruction: str) -> set[str]:
@@ -12102,6 +12136,8 @@ def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str],
         ("window", {"window"}),
         ("header", {"header"}),
         ("heading", {"heading"}),
+        ("list", {"list"}),
+        ("lists", {"list"}),
     )
     label_required_phrases = frozenset(
         {

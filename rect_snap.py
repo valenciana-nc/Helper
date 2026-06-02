@@ -52,6 +52,8 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
         "bar",
         "card",
         "drawer",
+        "list",
+        "lists",
         "menu",
         "modal",
         "notification",
@@ -65,6 +67,7 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
         "toolbar",
     }
 )
+SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
 PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
@@ -400,6 +403,9 @@ OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     frozenset({"decline", "deny", "reject"}),
     frozenset({"share"}),
 )
+AUTOMATION_ONLY_ACTION_MATCH_WORDS = frozenset(
+    word for action_words, _state_words in STATE_LABEL_ACTION_GROUPS for word in action_words
+) | frozenset(word for family in EXCLUSIVE_ACTION_FAMILIES for word in family)
 GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES
 DISCLOSURE_EXPAND_ACTION_WORDS = frozenset({"expand"})
 DISCLOSURE_COLLAPSE_ACTION_WORDS = frozenset({"collapse"})
@@ -707,6 +713,8 @@ def snap_to_control(
     compound_target_result: SnapResult | None = None
     contained_control_intent_results: list[tuple[SnapResult, str]] = []
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
     )
@@ -729,13 +737,15 @@ def snap_to_control(
         foreground_handle,
     ):
         ctype = _control_type(control)
-        if ctype not in CLICKABLE_CONTROL_TYPES:
-            continue
         if not _is_enabled(control) or not _is_visible(control):
             continue
         text = _control_text(control)
         visible_text = _control_visible_text(control)
         automation_id = _control_automation_id(control)
+        if ctype in SURFACE_CONTEXT_CONTROL_TYPES:
+            surface_contexts.append((rect, text, ctype))
+        if ctype not in CLICKABLE_CONTROL_TYPES:
+            continue
         semantic_text = visible_text or automation_id
         start_button_action_mismatch = _start_button_action_mismatch(
             instruction_tokens,
@@ -886,6 +896,13 @@ def snap_to_control(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
+        surface_context_action_mismatch = _surface_context_action_mismatch(
+            instruction,
+            instruction_tokens,
+            semantic_text,
+            rect,
+            surface_contexts,
+        )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,
             instruction_tokens,
@@ -944,6 +961,7 @@ def snap_to_control(
             or explicit_action_context_mismatch
             or exclusive_action_family_mismatch
             or object_only_action_context_mismatch
+            or surface_context_action_mismatch
             or clear_close_action_mismatch
             or close_context_action_mismatch
             or unparsed_visible_text_action_mismatch
@@ -976,6 +994,36 @@ def snap_to_control(
                     rejected_reason="own process target",
                 )
             continue
+        if _explicit_control_type_mismatch(
+            instruction,
+            ctype,
+            visible_text,
+            automation_id,
+            control_intents,
+        ) or _dropdown_launcher_option_mismatch(
+            instruction,
+            ctype,
+            visible_text,
+            automation_id,
+        ):
+            if (
+                instruction_tokens
+                and semantic_text
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                control_intent_contexts.append((rect, semantic_text))
+            if (
+                control_type_mismatch_result is None
+                and _semantic_mismatch_targets_model_rect(rect, model_rect)
+            ):
+                control_type_mismatch_result = SnapResult(
+                    rect=rect,
+                    confidence=0.0,
+                    source="uia",
+                    matched_text=text,
+                    rejected_reason="control type mismatch",
+                )
+            continue
         if control_intents and not _control_matches_effective_intent(
             ctype,
             visible_text,
@@ -1001,6 +1049,13 @@ def snap_to_control(
                     rejected_reason="control type mismatch",
                 )
             continue
+        surface_scoped_action = _surface_scoped_action_match(
+            instruction,
+            instruction_tokens,
+            semantic_text,
+            rect,
+            surface_contexts,
+        )
         score = _score(
             rect=rect,
             semantic_text=semantic_text,
@@ -1011,6 +1066,9 @@ def snap_to_control(
             diagonal=diagonal,
             semantic_action_mismatch=semantic_action_mismatch,
         )
+        if surface_scoped_action:
+            score = max(score, min(1.0, confidence_floor + 0.08))
+            surface_scoped_action_rects.append(rect)
         if (
             semantic_action_mismatch
             and semantic_action_mismatch_result is None
@@ -1072,6 +1130,7 @@ def snap_to_control(
         best_result is not None
         and best_is_automation_only
         and best_visible_result is not None
+        and best_result.rect not in surface_scoped_action_rects
     ):
         if best_visible_score >= confidence_floor:
             return best_visible_result
@@ -2953,6 +3012,171 @@ def _browser_tab_contextual_item_mismatch(
         return False
     window_tokens = _tokens_from_text(window_title or "")
     return bool(window_tokens & BROWSER_PROFILE_WINDOW_WORDS)
+
+
+def _explicit_control_type_mismatch(
+    instruction: str,
+    ctype: str,
+    visible_text: str,
+    automation_id: str,
+    control_intents: set[str],
+) -> bool:
+    requested_types = _explicit_strict_role_control_types(instruction)
+    if not requested_types:
+        return False
+    if ctype in requested_types:
+        return False
+    if (
+        requested_types == {"checkbox"}
+        and ctype in {"button", "splitbutton"}
+        and _control_matches_effective_intent(
+            ctype,
+            visible_text,
+            automation_id,
+            instruction,
+            control_intents,
+        )
+    ):
+        return False
+    return True
+
+
+def _explicit_strict_role_control_types(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    requested: set[str] = set()
+    if (
+        raw_tokens & {"tab", "tabs", "tabitem"}
+        and not raw_tokens & {"bookmark", "close", "dismiss", "favorite", "new", "search", "star"}
+    ):
+        requested.add("tabitem")
+    literal_words = _literal_word_sequence(instruction)
+    if raw_tokens & {"checkbox"} or {"check", "box"} <= raw_tokens:
+        requested.add("checkbox")
+    if literal_words and literal_words[-1] == "toggle":
+        requested.add("checkbox")
+    if "slider" in raw_tokens:
+        requested.add("slider")
+    if raw_tokens & {"hyperlink", "link"} and not raw_tokens & {
+        "copy",
+        "external",
+        "new",
+        "share",
+        "tab",
+        "window",
+    }:
+        requested.add("hyperlink")
+    dropdown_requested = (
+        raw_tokens & {"combo", "combobox", "dropdown", "picker", "selector"}
+        or {"drop", "down"} <= raw_tokens
+    )
+    if dropdown_requested and raw_tokens & {"choice", "choices", "option", "options"}:
+        requested.add("menuitem")
+    return requested
+
+
+def _dropdown_launcher_option_mismatch(
+    instruction: str,
+    ctype: str,
+    visible_text: str = "",
+    automation_id: str = "",
+) -> bool:
+    if ctype != "menuitem":
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    dropdown_requested = (
+        raw_tokens & {"combo", "combobox", "dropdown", "picker", "selector"}
+        or {"drop", "down"} <= raw_tokens
+    )
+    if not dropdown_requested:
+        return False
+    control_tokens = _tokens_from_text(" ".join((visible_text or "", automation_id or "")))
+    if control_tokens & {"dropdown", "menu"} or {"drop", "down"} <= control_tokens:
+        return False
+    return not bool(raw_tokens & {"choice", "choices", "option", "options"})
+
+
+def _surface_scoped_action_match(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    rect: tuple[int, int, int, int],
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    if not surface_contexts:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    requested_surfaces = _object_token_variants(raw_tokens) & CLOSE_CONTEXT_TARGET_WORDS
+    if not requested_surfaces:
+        return False
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
+    action_tokens = instruction_tokens & control_tokens & AUTOMATION_ONLY_ACTION_MATCH_WORDS
+    if not action_tokens:
+        return False
+    if not _surface_context_request_applies(instruction, action_tokens):
+        return False
+    requested_context = _object_token_variants(
+        (raw_tokens | instruction_tokens)
+        - action_tokens
+        - ACTION_OBJECT_STOPWORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - {"a", "an", "the", "this", "that"}
+    )
+    required_identity = requested_context - CLOSE_CONTEXT_TARGET_WORDS
+    for context_rect, context_text, context_type in surface_contexts:
+        if not _contains_rect(_expand_rect(context_rect, 4), rect):
+            continue
+        context_tokens = _object_token_variants(
+            _tokenize_control(_semantic_text(context_text))
+            | _tokens_from_text(context_text)
+            | {context_type}
+        )
+        if not (requested_surfaces & context_tokens):
+            continue
+        if required_identity and not required_identity <= context_tokens:
+            continue
+        return True
+    return False
+
+
+def _surface_context_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    rect: tuple[int, int, int, int],
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (_object_token_variants(raw_tokens) & CLOSE_CONTEXT_TARGET_WORDS):
+        return False
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
+    action_tokens = instruction_tokens & control_tokens & AUTOMATION_ONLY_ACTION_MATCH_WORDS
+    if not action_tokens:
+        return False
+    if not _surface_context_request_applies(instruction, action_tokens):
+        return False
+    return not _surface_scoped_action_match(
+        instruction,
+        instruction_tokens,
+        semantic_text,
+        rect,
+        surface_contexts,
+    )
+
+
+def _surface_context_request_applies(
+    instruction: str,
+    action_tokens: set[str],
+) -> bool:
+    words = _literal_word_sequence(instruction)
+    if set(words) & {"in", "inside", "on", "within"}:
+        return True
+    for index, word in enumerate(words):
+        if not (_object_token_variants({word}) & CLOSE_CONTEXT_TARGET_WORDS):
+            continue
+        later_tokens = _object_token_variants(set(words[index + 1 :]))
+        if later_tokens & action_tokens:
+            return True
+    return False
 
 
 def _control_matches_effective_intent(

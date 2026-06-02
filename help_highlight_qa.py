@@ -19256,6 +19256,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "list_context_recovers_from_page_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings list"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the list.",
+                "target_id": "page_save",
+                "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "page_save", "text": "Save", "control_type": "button", "rect": [230, 160, 60, 30]},
+                {"id": "settings_list", "text": "Settings", "control_type": "list", "rect": [420, 80, 300, 120]},
+                {"id": "list_save", "text": "Save", "control_type": "button", "rect": [630, 160, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "list_save",
+                "rect": [630, 160, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_pane_context_with_duplicate_actions_stays_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

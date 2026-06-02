@@ -23067,6 +23067,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (630, 160, 60, 30))
 
+    def test_list_context_recovers_from_page_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("page_save", "Save", "button", (230, 160, 60, 30)),
+            ControlCandidate("settings_list", "Settings", "list", (420, 80, 300, 120)),
+            ControlCandidate("list_save", "Save", "button", (630, 160, 60, 30)),
+        ]
+        instruction = "Click Save in the list."
+
+        wrong_target = resolve_candidate_target(
+            target_id="page_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_save",
+                    "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "page_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(wrong_snap)
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "list_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (630, 160, 60, 30))
+
     def test_generic_pane_context_with_duplicate_actions_stays_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -25392,6 +25441,94 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertEqual(target.target_id, "expected")
                     self.assertFalse(target.rejected_reason)
                     self.assertEqual(target.rect, (20, 70, 160, 32))
+
+    def test_fresh_snap_recovers_same_label_requested_role(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Open the Country dropdown.",
+                "Country",
+                "ComboBox",
+                (10, 10, 180, 32),
+                "MenuItem",
+                (10, 60, 180, 28),
+            ),
+            (
+                "Select Canada picker option.",
+                "Canada",
+                "MenuItem",
+                (20, 70, 160, 32),
+                "ListItem",
+                (20, 20, 160, 32),
+            ),
+            (
+                "Select the Billing tab.",
+                "Billing",
+                "TabItem",
+                (20, 70, 160, 32),
+                "ListItem",
+                (20, 20, 160, 32),
+            ),
+            (
+                "Select the Remember me toggle.",
+                "Remember me",
+                "CheckBox",
+                (20, 70, 160, 32),
+                "ListItem",
+                (20, 20, 160, 32),
+            ),
+        )
+        for instruction, label, expected_type, expected_rect, wrong_type, wrong_rect in cases:
+            with self.subTest(instruction=instruction):
+                expected = _make_button(
+                    label,
+                    *expected_rect,
+                    control_type=expected_type,
+                )
+                wrong = _make_button(
+                    label,
+                    *wrong_rect,
+                    control_type=wrong_type,
+                )
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [wrong, expected])])
+
+                snap = snap_to_control(
+                    wrong_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {
+                                "x": wrong_rect[0],
+                                "y": wrong_rect[1],
+                                "width": wrong_rect[2],
+                                "height": wrong_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=lambda rect, text: snap_to_control(
+                        rect,
+                        text,
+                        desktop_factory=lambda: desktop,
+                        timeout_ms=2000,
+                    ),
+                )
+
+                self.assertEqual(snap.source, "uia")
+                self.assertEqual(snap.rect, expected_rect)
+                self.assertFalse(snap.rejected_reason)
+                self.assertEqual(help_target.source, "snap")
+                self.assertEqual(help_target.rect, expected_rect)
+                self.assertFalse(help_target.rejected_reason)
 
     def test_explicit_role_wrong_only_rejects_overlay(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
