@@ -1200,9 +1200,9 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
-    if raw_tokens & _OPTION_INTENT_WORDS:
+    if raw_tokens & _OPTION_INTENT_WORDS and not (checkbox_requested or radio_requested):
         intents.update(_OPTION_INTENT_TYPES)
-    if selection_action_requested:
+    if selection_action_requested and not (checkbox_requested or radio_requested):
         intents.update(_SELECTION_ACTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")

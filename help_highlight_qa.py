@@ -2101,6 +2101,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_radio_rejects_same_label_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 160, 32], "label": "Weekly"},
+                {"rect": [100, 150, 160, 32], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Weekly radio.",
+                "target_id": "combo",
+                "target": {"x": 100, "y": 150, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "radio", "text": "Weekly", "control_type": "radiobutton", "rect": [100, 100, 160, 32]},
+                {"id": "combo", "text": "Weekly", "control_type": "combobox", "rect": [100, 150, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "radio",
+                "rect": [100, 100, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "state_action_model_rect_prefers_matching_button_over_noun_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -8427,6 +8451,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "numeric_taskbar_clock_status_accepts_clock_request",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 960, 90, 40], "label": "11:32 AM"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open clock.",
+                "target_id": "clock",
+                "target": {"x": 900, "y": 960, "width": 90, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "clock",
+                    "text": "11:32 AM\n6/1/2026",
+                    "control_type": "button",
+                    "rect": [900, 960, 90, 40],
+                    "automation_id": "SystemTrayIcon",
+                    "window_title": "Taskbar",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "clock",
+                "rect": [900, 960, 90, 40],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "home_action_target_id_accepts_house_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -12290,6 +12343,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "chrome_profile_menu_rejects_page_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 180, 110, 32], "label": "Profile"},
+                {"rect": [936, 20, 32, 32], "label": "A"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Chrome profile menu.",
+                "target_id": "page_profile",
+                "target": {"x": 420, "y": 180, "width": 110, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_profile",
+                    "text": "Profile",
+                    "control_type": "button",
+                    "rect": [420, 180, 110, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "chrome_profile",
+                    "text": "Abel (All)",
+                    "control_type": "button",
+                    "rect": [936, 20, 32, 32],
+                    "automation_id": "view_1018",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "chrome_profile",
+                "rect": [936, 20, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "user_menu_target_id_accepts_people_icon_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14658,6 +14748,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "row_acme", "text": "Acme record", "control_type": "listitem", "rect": [20, 90, 560, 48]},
                 {"id": "refund_acme", "text": "Refund", "control_type": "button", "rect": [610, 99, 80, 30]},
                 {"id": "row_globex", "text": "Globex record", "control_type": "listitem", "rect": [20, 150, 560, 48]},
+                {"id": "refund_globex", "text": "Refund", "control_type": "button", "rect": [610, 159, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "refund_globex",
+                "rect": [610, 159, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_refund_action_uses_named_row_label_without_row_noun",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 560, 48], "label": "Acme"},
+                {"rect": [610, 99, 80, 30], "label": "Refund"},
+                {"rect": [20, 150, 560, 48], "label": "Globex"},
+                {"rect": [610, 159, 80, 30], "label": "Refund"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Refund for Globex.",
+                "target_id": "refund_acme",
+                "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "row_acme", "text": "Acme", "control_type": "listitem", "rect": [20, 90, 560, 48]},
+                {"id": "refund_acme", "text": "Refund", "control_type": "button", "rect": [610, 99, 80, 30]},
+                {"id": "row_globex", "text": "Globex", "control_type": "listitem", "rect": [20, 150, 560, 48]},
                 {"id": "refund_globex", "text": "Refund", "control_type": "button", "rect": [610, 159, 80, 30]},
             ],
             "expected": {

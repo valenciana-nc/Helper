@@ -980,6 +980,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertIn("radiobutton", select_yes_intents)
         self.assertNotIn("button", select_yes_intents)
 
+    def test_explicit_radio_and_checkbox_intents_do_not_broaden_to_generic_options(self) -> None:
+        from help_intents import instruction_control_intents
+
+        radio_intents = instruction_control_intents("Select Weekly radio.")
+        radio_option_intents = instruction_control_intents("Select Weekly radio option.")
+        checkbox_option_intents = instruction_control_intents("Select Weekly checkbox option.")
+
+        self.assertEqual(radio_intents, {"radiobutton"})
+        self.assertEqual(radio_option_intents, {"radiobutton"})
+        self.assertEqual(checkbox_option_intents, {"checkbox"})
+
     def test_iconic_disclosure_and_menu_launcher_intents(self) -> None:
         from help_intents import instruction_control_intents, menu_segment_intent
 
@@ -8475,6 +8486,68 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 34, 34))
 
+    def test_chrome_profile_menu_rejects_page_profile_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "page_profile",
+                "Profile",
+                "button",
+                (420, 180, 110, 32),
+                window_title="Dashboard - Google Chrome",
+            ),
+            ControlCandidate(
+                "chrome_profile",
+                "Abel (All)",
+                "button",
+                (936, 20, 32, 32),
+                automation_id="view_1018",
+                window_title="Dashboard - Google Chrome",
+            ),
+        ]
+        instruction = "Open Chrome profile menu."
+
+        wrong_target = resolve_candidate_target(
+            target_id="page_profile",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 110, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 110, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 110, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_profile",
+                    "target": {"x": 420, "y": 180, "width": 110, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "page_profile")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "chrome_profile")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (936, 20, 32, 32))
+        if snap_target is not None:
+            self.assertTrue(snap_target.rejected_reason)
+
     def test_plain_chrome_and_edit_profile_targets_still_work(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -10833,6 +10906,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
 
+    def test_numeric_taskbar_clock_status_accepts_clock_request(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "clock",
+                "11:32 AM\n6/1/2026",
+                "button",
+                (900, 960, 90, 40),
+                automation_id="SystemTrayIcon",
+                window_title="Taskbar",
+            )
+        ]
+        instruction = "Open clock."
+
+        target_id = resolve_candidate_target(
+            target_id="clock",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 960, 90, 40),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 960, 90, 40),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(900, 960, 90, 40),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "clock",
+                    "target": {"x": 900, "y": 960, "width": 90, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (target_id, text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "clock")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (900, 960, 90, 40))
+
     def test_generic_taskbar_tray_status_words_reject_model_rect_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -12026,6 +12150,73 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "check")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (100, 100, 160, 32))
+
+    def test_explicit_radio_rejects_same_label_non_radio_targets(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        wrong_cases = (
+            ("combo", "combobox", (100, 150, 160, 32)),
+            ("menu", "menuitem", (100, 150, 160, 32)),
+        )
+        for wrong_id, wrong_type, wrong_rect in wrong_cases:
+            with self.subTest(wrong_type=wrong_type):
+                candidates = [
+                    ControlCandidate("radio", "Weekly", "radiobutton", (100, 100, 160, 32)),
+                    ControlCandidate(wrong_id, "Weekly", wrong_type, wrong_rect),
+                ]
+                instruction = "Select Weekly radio."
+
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {
+                                "x": wrong_rect[0],
+                                "y": wrong_rect[1],
+                                "width": wrong_rect[2],
+                                "height": wrong_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.source, "target_id")
+                self.assertEqual(wrong_target.target_id, wrong_id)
+                self.assertEqual(
+                    wrong_target.rejected_reason,
+                    "target_id control type mismatch",
+                )
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "radio")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.target_id, "radio")
+                self.assertFalse(snap_target.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "radio")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (100, 100, 160, 32))
 
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
@@ -17845,6 +18036,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertEqual(resolved.target_id, "refund_globex")
                     self.assertFalse(resolved.rejected_reason)
                     self.assertEqual(resolved.rect, (610, 159, 80, 30))
+
+    def test_row_scoped_action_uses_named_row_label_without_row_noun(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Acme", "listitem", (20, 90, 560, 48)),
+            ControlCandidate("refund1", "Refund", "button", (610, 99, 80, 30)),
+            ControlCandidate("r2", "Globex", "listitem", (20, 150, 560, 48)),
+            ControlCandidate("refund2", "Refund", "button", (610, 159, 80, 30)),
+        ]
+        instruction = "Click Refund for Globex."
+
+        wrong_target = resolve_candidate_target(
+            target_id="refund1",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(610, 99, 80, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(610, 99, 80, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(610, 99, 80, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "refund1",
+                    "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "refund1")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "refund2")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (610, 159, 80, 30))
 
     def test_row_scoped_action_wrong_target_id_recovers_to_filtered_action_word(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

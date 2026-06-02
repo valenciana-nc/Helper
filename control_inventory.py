@@ -686,7 +686,7 @@ TASKBAR_VOLUME_STATUS_IDENTITY_WORDS = frozenset(
 )
 TASKBAR_STATUS_SETTINGS_REQUEST_WORDS = frozenset({"options", "preferences", "settings"})
 TASKBAR_POWER_STATUS_IDENTITY_WORDS = frozenset({"battery", "power"})
-TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "time"})
+TASKBAR_CLOCK_STATUS_IDENTITY_WORDS = frozenset({"clock", "date", "time"})
 TASKBAR_SEARCH_STATUS_IDENTITY_WORDS = frozenset({"find", "search"})
 TASKBAR_SEARCH_STATUS_SEPARATOR_ALIAS_WORDS = frozenset(
     {"minimize", "minus", "zoom_out"}
@@ -1591,12 +1591,24 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            rejected_reason = (
+                "candidate semantic mismatch"
+                if _candidate_snap_semantic_mismatch(
+                    candidate=contained,
+                    candidates=candidates,
+                    instruction=instruction,
+                    instruction_tokens=instruction_tokens,
+                    model_rect=model_rect,
+                )
+                else ""
+            )
             return TargetResolution(
                 rect=contained.rect,
                 confidence=confidence_floor,
                 source="candidate_snap",
                 matched_text=contained.descriptor,
                 target_id=contained.id,
+                rejected_reason=rejected_reason,
             )
         return None
     ranked.sort(key=lambda item: item[0], reverse=True)
@@ -1630,12 +1642,24 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            rejected_reason = (
+                "candidate semantic mismatch"
+                if _candidate_snap_semantic_mismatch(
+                    candidate=contained,
+                    candidates=candidates,
+                    instruction=instruction,
+                    instruction_tokens=instruction_tokens,
+                    model_rect=model_rect,
+                )
+                else ""
+            )
             return TargetResolution(
                 rect=contained.rect,
                 confidence=confidence_floor,
                 source="candidate_snap",
                 matched_text=contained.descriptor,
                 target_id=contained.id,
+                rejected_reason=rejected_reason,
             )
         if _candidate_snap_semantic_mismatch(
             candidate=candidate,
@@ -3093,6 +3117,8 @@ def _candidate_inferred_semantic_tokens(candidate: ControlCandidate) -> set[str]
         return set(BROWSER_MENU_BUTTON_TOKENS)
     if _looks_like_taskbar_search_button(candidate):
         return set(TASKBAR_WINDOWS_SEARCH_TOKENS)
+    if _looks_like_taskbar_clock_status(candidate):
+        return set(TASKBAR_CLOCK_STATUS_IDENTITY_WORDS)
     return set()
 
 
@@ -3154,6 +3180,8 @@ def _browser_profile_identity_action_mismatch(
         return False
     if instruction_tokens & BROWSER_PROFILE_ACTION_CONTEXT_WORDS:
         return False
+    if instruction_tokens & BROWSER_PROFILE_WINDOW_WORDS:
+        return not _looks_like_browser_profile_chrome_button(candidate)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if candidate_tokens & BROWSER_PROFILE_TOKENS:
         return False
@@ -4887,24 +4915,38 @@ def _contained_row_action_context_mismatch(
         if instruction_objects & row_objects:
             return False
         return True
-    if (
-        _instruction_requests_contained_row_action(instruction)
-        and _contained_row_action_candidate_matches(
-            candidate,
-            _tokenize_instruction(instruction),
-            instruction,
-        )
+    if _contained_row_action_candidate_matches(
+        candidate,
+        _tokenize_instruction(instruction),
+        instruction,
     ):
         row_objects = _contained_row_context_objects(candidate, candidates)
         if not row_objects:
             return False
-        instruction_objects = _instruction_contained_row_context_objects(instruction, candidate)
+        instruction_objects = _instruction_row_context_objects(
+            instruction,
+            candidate,
+            candidates,
+        )
         if not instruction_objects:
             return False
         if instruction_objects & row_objects:
             return False
         return True
     return False
+
+
+def _instruction_row_context_objects(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    explicit_objects = _instruction_contained_row_context_objects(instruction, candidate)
+    if explicit_objects:
+        return explicit_objects
+    if not _has_duplicate_contained_row_action(candidate, candidates):
+        return set()
+    return _instruction_prepositional_row_context_objects(instruction, candidate)
 
 
 def _instruction_contained_row_context_objects(
@@ -4983,6 +5025,87 @@ def _instruction_contained_row_context_objects(
             continue
         context_words.update(filtered)
     return _object_token_variants(context_words)
+
+
+def _instruction_prepositional_row_context_objects(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    if not words:
+        return set()
+    candidate_words = (
+        _literal_words_from_text(candidate.descriptor)
+        | _candidate_visible_text_tokens(candidate)
+    )
+    ignored_words = (
+        candidate_words
+        | CONTEXTUAL_DUPLICATE_STOPWORDS
+        | ROW_CONTEXT_GENERIC_WORDS
+        | REVERSIBLE_ACTION_POLARITY_WORDS
+        | CLEAR_CONTEXT_WORDS
+    )
+    boundary_words = frozenset(
+        {
+            "a",
+            "an",
+            "by",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "of",
+            "on",
+            "the",
+            "this",
+            "that",
+            "to",
+            "with",
+            "within",
+        }
+    )
+    context_words: set[str] = set()
+    for index, word in enumerate(words):
+        if word not in {"for", "from", "in", "inside", "on", "with", "within"}:
+            continue
+        span_words: list[str] = []
+        cursor = index + 1
+        while cursor < len(words):
+            token = words[cursor]
+            if token in boundary_words or token in ROW_ACTION_CONTAINER_WORDS:
+                break
+            span_words.append(token)
+            cursor += 1
+        filtered = {token for token in span_words if token not in ignored_words}
+        if filtered:
+            context_words.update(filtered)
+    return _object_token_variants(context_words)
+
+
+def _has_duplicate_contained_row_action(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    candidate_tokens = _candidate_visible_text_tokens(candidate) or _candidate_automation_tokens(candidate)
+    candidate_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    if not candidate_tokens:
+        return False
+    if not _contained_row_context_objects(candidate, candidates):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        other_tokens = _candidate_visible_text_tokens(other) or _candidate_automation_tokens(other)
+        other_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+        if not (candidate_tokens & other_tokens):
+            continue
+        if _contained_row_context_objects(other, candidates):
+            return True
+    return False
 
 
 def _contained_row_context_objects(
@@ -5912,13 +6035,24 @@ def _taskbar_status_identity_tokens(
         return TASKBAR_VOLUME_STATUS_IDENTITY_WORDS
     if text_tokens & {"battery", "power"}:
         return TASKBAR_POWER_STATUS_IDENTITY_WORDS
-    if "clock" in text_tokens:
+    if "clock" in text_tokens or _looks_like_taskbar_clock_status(candidate):
         return TASKBAR_CLOCK_STATUS_IDENTITY_WORDS
     if automation_id == "searchgleambutton":
         return TASKBAR_SEARCH_STATUS_IDENTITY_WORDS
     if "onedrive" in text_tokens:
         return TASKBAR_ONEDRIVE_STATUS_IDENTITY_WORDS
     return frozenset()
+
+
+def _looks_like_taskbar_clock_status(candidate: ControlCandidate) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    if (candidate.automation_id or "").strip().lower() != "systemtrayicon":
+        return False
+    if not (_tokens_from_text(candidate.window_title) & TASKBAR_WINDOW_WORDS):
+        return False
+    text = candidate.text or ""
+    return bool(re.search(r"\b\d{1,2}:\d{2}(?::\d{2})?\b", text))
 
 
 def _target_id_ambiguity(
