@@ -237,15 +237,6 @@ def evaluate_target_quality(
                 boundary_activity=boundary_activity,
                 target_area_fraction=target_area_fraction,
             )
-        if _has_compound_control_separators(capture.png_bytes, clipped):
-            return TargetQuality(
-                accepted=False,
-                reason="target appears to contain multiple controls",
-                visible_fraction=visible_fraction,
-                visual_activity=visual_activity,
-                boundary_activity=boundary_activity,
-                target_area_fraction=target_area_fraction,
-            )
         if (
             visual_activity > MODEL_NOISY_VISUAL_CEILING
             and boundary_activity > MODEL_NOISY_BOUNDARY_FLOOR
@@ -262,6 +253,15 @@ def evaluate_target_quality(
             return TargetQuality(
                 accepted=False,
                 reason="target boundary misaligned",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
+        if _has_compound_control_separators(capture.png_bytes, clipped, min_groups=1):
+            return TargetQuality(
+                accepted=False,
+                reason="target appears to contain multiple controls",
                 visible_fraction=visible_fraction,
                 visual_activity=visual_activity,
                 boundary_activity=boundary_activity,
@@ -480,6 +480,8 @@ def _average_boundary_difference(
 def _has_compound_control_separators(
     png_bytes: bytes,
     rect: tuple[int, int, int, int],
+    *,
+    min_groups: int = MODEL_COMPOUND_MIN_SEPARATOR_GROUPS,
 ) -> bool:
     try:
         with Image.open(io.BytesIO(png_bytes)) as img:
@@ -490,9 +492,9 @@ def _has_compound_control_separators(
             edges = crop.filter(ImageFilter.FIND_EDGES)
             return (
                 _strong_internal_separator_groups(edges, vertical=True)
-                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+                >= min_groups
                 or _strong_internal_separator_groups(edges, vertical=False)
-                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+                >= min_groups
             )
     except Exception:
         return False
