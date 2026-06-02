@@ -13747,6 +13747,136 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_name_acme_profile_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme profile.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_acme_dashboard_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme dashboard.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_acme_overview_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme overview.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_acme_workspace_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme workspace.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_acme_summary_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme summary.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "left_rail_item_rejects_browser_tabitem",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

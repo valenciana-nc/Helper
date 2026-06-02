@@ -26545,6 +26545,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 "tab",
                 (20, 20, 80, 32),
             ),
+            (
+                "Open Acme profile.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
+            (
+                "Open Acme dashboard.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
+            (
+                "Open Acme overview.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
+            (
+                "Open Acme workspace.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
+            (
+                "Open Acme summary.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
         ]
 
         for instruction, candidates, stale_target_id, stale_rect in cases:
@@ -26597,6 +26647,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertIsNone(snap_target)
                 self.assertEqual(help_target.source, "text_match")
                 self.assertEqual(help_target.target_id, "content")
+                self.assertFalse(help_target.rejected_reason)
+
+    def test_label_required_surface_words_do_not_steal_bare_buttons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Open dashboard.",
+                ControlCandidate("button", "Dashboard", "button", (20, 80, 120, 32)),
+            ),
+            (
+                "Open profile.",
+                ControlCandidate("button", "Profile", "button", (20, 80, 120, 32)),
+            ),
+        )
+
+        for instruction, button in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    button,
+                    ControlCandidate("pane", "Main content", "pane", (0, 60, 700, 500)),
+                ]
+                target_id = resolve_candidate_target(
+                    target_id="button",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=button.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=button.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=button.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "button",
+                            "target": {
+                                "x": button.rect[0],
+                                "y": button.rect[1],
+                                "width": button.rect[2],
+                                "height": button.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertEqual(target_id.target_id, "button")
+                self.assertFalse(target_id.rejected_reason)
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "button")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNotNone(snap_target)
+                assert snap_target is not None
+                self.assertEqual(snap_target.target_id, "button")
+                self.assertFalse(snap_target.rejected_reason)
+                self.assertEqual(help_target.target_id, "button")
                 self.assertFalse(help_target.rejected_reason)
 
     def test_left_rail_item_rejects_browser_tabitem_collision(self) -> None:

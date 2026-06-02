@@ -1392,22 +1392,27 @@ DIRECT_SURFACE_CONTAINER_ALIASES = {
     "pane": frozenset(
         {
             "card",
+            "dashboard",
             "details",
             "drawer",
             "footer",
             "form",
             "nav",
             "navigation",
+            "overview",
             "page",
             "pane",
             "panel",
+            "profile",
             "rail",
             "route",
             "section",
             "sidebar",
             "screen",
+            "summary",
             "tile",
             "view",
+            "workspace",
         }
     ),
     "toolbar": frozenset({"toolbar"}),
@@ -11737,16 +11742,26 @@ def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str],
         ("cards", {"card"}),
         ("tile", {"tile"}),
         ("tiles", {"tile"}),
+        ("dashboard", {"dashboard"}),
+        ("dashboards", {"dashboard"}),
         ("details", {"details"}),
         ("detail", {"details"}),
+        ("overview", {"overview"}),
+        ("overviews", {"overview"}),
         ("page", {"page"}),
         ("pages", {"page"}),
+        ("profile", {"profile"}),
+        ("profiles", {"profile"}),
         ("route", {"route"}),
         ("routes", {"route"}),
         ("screen", {"screen"}),
         ("screens", {"screen"}),
+        ("summary", {"summary"}),
+        ("summaries", {"summary"}),
         ("view", {"view"}),
         ("views", {"view"}),
+        ("workspace", {"workspace"}),
+        ("workspaces", {"workspace"}),
         ("section", {"section"}),
         ("drawer", {"drawer"}),
         ("panel", {"panel"}),
@@ -11782,8 +11797,24 @@ def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str],
         ("header", {"header"}),
         ("heading", {"heading"}),
     )
+    label_required_phrases = frozenset(
+        {
+            "dashboard",
+            "dashboards",
+            "overview",
+            "overviews",
+            "profile",
+            "profiles",
+            "summary",
+            "summaries",
+            "workspace",
+            "workspaces",
+        }
+    )
     for phrase, surface_tokens in surface_phrases:
         if requested_object == phrase:
+            if phrase in label_required_phrases:
+                return set(), set()
             return _object_token_variants(surface_tokens), set()
         suffix = f" {phrase}"
         if not requested_object.endswith(suffix):
@@ -11792,6 +11823,8 @@ def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str],
         label_tokens = _object_token_variants(
             _tokens_from_text(label) - ACTION_OBJECT_STOPWORDS - {"the"}
         )
+        if phrase in label_required_phrases and not label_tokens:
+            return set(), set()
         return _object_token_variants(surface_tokens), label_tokens
     return set(), set()
 
