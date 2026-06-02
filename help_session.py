@@ -90,6 +90,26 @@ ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS = ROW_REVALIDATION_GENERIC_WORDS | fro
         "users",
     }
 )
+ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
+    {
+        "action",
+        "actions",
+        "button",
+        "buttons",
+        "control",
+        "controls",
+        "hyperlink",
+        "item",
+        "link",
+        "links",
+        "menu",
+        "menuitem",
+        "split",
+        "splitbutton",
+        "tab",
+        "tabitem",
+    }
+)
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -534,6 +554,13 @@ def _guard_revalidated_target(
         return target
     if _revalidated_row_identity_changed(previous_target, target, candidates):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_action_identity_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_action_context_changed(
         previous_target,
         target,
@@ -595,22 +622,88 @@ def _row_identity_tokens(text: str) -> set[str]:
     return _tokenize_control(text or "") - ROW_REVALIDATION_GENERIC_WORDS
 
 
+def _revalidated_action_identity_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    previous_tokens = _action_identity_revalidation_tokens(
+        previous,
+        previous_target.matched_text,
+    )
+    current_tokens = _action_identity_revalidation_tokens(
+        current,
+        target.matched_text,
+    )
+    if not previous_tokens:
+        return False
+    if not current_tokens:
+        return True
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.5
+
+
+def _revalidation_candidate_for_target(
+    target: TargetResolution,
+    candidates: list[ControlCandidate],
+) -> ControlCandidate | None:
+    if target.target_id:
+        candidate = next((item for item in candidates if item.id == target.target_id), None)
+        if candidate is not None:
+            return candidate
+    geometry_matches = [
+        candidate
+        for candidate in candidates
+        if _rect_iou(candidate.rect, target.rect) >= 0.80
+    ]
+    if len(geometry_matches) == 1:
+        return geometry_matches[0]
+    return None
+
+
+def _action_identity_revalidation_tokens(
+    candidate: ControlCandidate | None,
+    matched_text: str,
+) -> set[str]:
+    parts = [matched_text or ""]
+    if candidate is not None:
+        parts.extend([candidate.text or "", candidate.automation_id or ""])
+    text = " ".join(part for part in parts if part)
+    if not text:
+        return set()
+    return (
+        _tokenize_control(text)
+        | _tokens_from_text(text)
+    ) - ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS
+
+
 def _revalidated_action_context_changed(
     previous_target: TargetResolution,
     target: TargetResolution,
     previous_candidates: list[ControlCandidate],
     candidates: list[ControlCandidate],
 ) -> bool:
-    if not previous_target.target_id or previous_target.target_id != target.target_id:
+    if not previous_target.target_id and not target.target_id:
         return False
-    previous = next(
-        (candidate for candidate in previous_candidates if candidate.id == previous_target.target_id),
-        None,
-    )
-    current = next((candidate for candidate in candidates if candidate.id == target.target_id), None)
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
     if previous is None or current is None:
         return False
     if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
         return False
     previous_tokens = _action_context_revalidation_tokens(previous, previous_candidates)
     current_tokens = _action_context_revalidation_tokens(current, candidates)
@@ -658,6 +751,8 @@ def _same_revalidation_geometry(
 ) -> bool:
     if _rect_iou(a, b) >= 0.80:
         return True
+    if _intersection_rect(a, b) is None:
+        return False
     ax, ay = _rect_center(a)
     bx, by = _rect_center(b)
     max_drift = max(8.0, min(a[2], a[3], b[2], b[3]) * 0.35)
