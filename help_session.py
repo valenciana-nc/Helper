@@ -60,6 +60,10 @@ UIA_BACKED_TARGET_SOURCES = frozenset(
     {"target_id", "text_match", "candidate_snap", "snap"}
 )
 MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
+ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+ROW_REVALIDATION_GENERIC_WORDS = frozenset(
+    {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
+)
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
@@ -499,6 +503,8 @@ def _guard_revalidated_target(
     """Reject rechecks that no longer point near the originally resolved target."""
     if target.rejected_reason:
         return target
+    if _revalidated_row_identity_changed(previous_target, target, candidates):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     if (
@@ -528,6 +534,29 @@ def _guard_revalidated_target(
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     return replace(target, rejected_reason="current screen recheck target changed")
+
+
+def _revalidated_row_identity_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id or previous_target.target_id != target.target_id:
+        return False
+    current = next((candidate for candidate in candidates if candidate.id == target.target_id), None)
+    if current is None or current.control_type not in ROW_REVALIDATION_CONTROL_TYPES:
+        return False
+    previous_tokens = _row_identity_tokens(previous_target.matched_text)
+    current_tokens = _row_identity_tokens(target.matched_text or current.text)
+    if not previous_tokens or not current_tokens:
+        return False
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.5
+
+
+def _row_identity_tokens(text: str) -> set[str]:
+    return _tokenize_control(text or "") - ROW_REVALIDATION_GENERIC_WORDS
 
 
 def _same_revalidated_target(a: TargetResolution, b: TargetResolution) -> bool:

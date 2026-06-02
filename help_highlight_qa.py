@@ -1073,6 +1073,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_row_request_with_multiple_actions_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 600, 80], "label": "Account row"},
+                {"rect": [470, 100, 60, 32], "label": "Edit"},
+                {"rect": [540, 100, 80, 32], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this row.",
+                "target_id": "row",
+                "target": {"x": 20, "y": 80, "width": 600, "height": 80},
+            },
+            "candidates": [
+                {"id": "row", "text": "Account row", "control_type": "listitem", "rect": [20, 80, 600, 80]},
+                {"id": "edit", "text": "Edit", "control_type": "button", "rect": [470, 100, 60, 32]},
+                {"id": "delete", "text": "Delete", "control_type": "button", "rect": [540, 100, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

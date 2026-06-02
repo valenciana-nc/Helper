@@ -4356,6 +4356,77 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id ambiguous")
 
+    def test_generic_row_target_rejects_multiple_tight_child_actions(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("row", "Account row", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("edit", "Edit", "button", (450, 20, 60, 30)),
+            ControlCandidate("delete", "Delete", "button", (520, 20, 70, 30)),
+        ]
+        instruction = "Click this row."
+
+        target_id = resolve_candidate_target(
+            target_id="row",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertIsNotNone(snap_target)
+        assert snap_target is not None
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+
+    def test_named_row_target_allows_multiple_tight_child_actions(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("row", "Account row", "listitem", (10, 10, 600, 80)),
+            ControlCandidate("edit", "Edit", "button", (450, 20, 60, 30)),
+            ControlCandidate("delete", "Delete", "button", (520, 20, 70, 30)),
+        ]
+        instruction = "Click Account row."
+
+        target_id = resolve_candidate_target(
+            target_id="row",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 600, 80),
+        )
+
+        for resolved in (target_id, text_target, snap_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertEqual(resolved.target_id, "row")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (10, 10, 600, 80))
+
     def test_menu_target_id_rejects_broad_splitbutton_with_menu_segment(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -9212,6 +9283,42 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.rejected_reason, "unknown target_id")
+
+    def test_revalidation_rejects_recycled_row_identity_at_same_rect(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click this row.",
+                "target_id": "row",
+                "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+            }
+        )
+        previous_target = TargetResolution(
+            rect=(10, 10, 600, 80),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Alpha row",
+            target_id="row",
+        )
+        candidates = [ControlCandidate("row", "Beta row", "listitem", (10, 10, 600, 80))]
+        target = resolve_help_target(decision, self._capture(), candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=candidates,
+            previous_target=previous_target,
+            target=target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(target.target_id, "row")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_model_rect_snaps_to_candidate_snapshot_without_fresh_uia(self) -> None:
         from control_inventory import ControlCandidate

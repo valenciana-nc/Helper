@@ -305,6 +305,13 @@ ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
 )
 ROW_ACTION_REQUEST_WORDS = frozenset({"action", "actions"})
 ROW_ACTION_LAUNCHER_WORDS = frozenset({"menu", "more", "options", "overflow"})
+ROW_CONTAINER_IDENTITY_STOPWORDS = (
+    ACTION_OBJECT_STOPWORDS
+    | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
+    | OPEN_VIEW_REQUEST_WORDS
+    | frozenset({"a", "an", "current", "that", "the", "this"})
+)
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
         "by",
@@ -2225,6 +2232,21 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            if _contains_multiple_tight_row_action_candidates(
+                selected=contained,
+                candidates=candidates,
+                instruction=instruction,
+                instruction_tokens=instruction_tokens,
+                control_intents=control_intents,
+            ):
+                return TargetResolution(
+                    rect=contained.rect,
+                    confidence=confidence_floor,
+                    source="candidate_snap",
+                    matched_text=contained.descriptor,
+                    target_id=contained.id,
+                    rejected_reason="ambiguous candidate snap",
+                )
             rejected_reason = (
                 "candidate semantic mismatch"
                 if _candidate_snap_semantic_mismatch(
@@ -2290,6 +2312,21 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            if _contains_multiple_tight_row_action_candidates(
+                selected=contained,
+                candidates=candidates,
+                instruction=instruction,
+                instruction_tokens=instruction_tokens,
+                control_intents=control_intents,
+            ):
+                return TargetResolution(
+                    rect=contained.rect,
+                    confidence=confidence_floor,
+                    source="candidate_snap",
+                    matched_text=contained.descriptor,
+                    target_id=contained.id,
+                    rejected_reason="ambiguous candidate snap",
+                )
             rejected_reason = (
                 "candidate semantic mismatch"
                 if _candidate_snap_semantic_mismatch(
@@ -2350,6 +2387,21 @@ def snap_candidate_target(
                 target_id=candidate.id,
                 rejected_reason="ambiguous candidate snap",
             )
+    if _contains_multiple_tight_row_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=best_score,
+            source="candidate_snap",
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason="ambiguous candidate snap",
+        )
     return TargetResolution(
         rect=candidate.rect,
         confidence=best_score,
@@ -2768,6 +2820,14 @@ def _text_match_score(
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
     if _contains_tighter_row_action_candidate(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
+    if _contains_multiple_tight_row_action_candidates(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -4388,6 +4448,18 @@ def _target_id_plausibility(
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return (
+            False,
+            max(text_score, geometry_score),
+            "target_id ambiguous",
+        )
+    if _contains_multiple_tight_row_action_candidates(
         selected=candidate,
         candidates=candidates,
         instruction=instruction,
@@ -12472,6 +12544,14 @@ def _candidate_snap_score(
         control_intents=control_intents,
     ):
         return CONTAINING_ROW_SNAP_CAP
+    if _contains_multiple_tight_row_action_candidates(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return 0.0
     if exact_visible_label_match:
         return min(
             1.0,
@@ -12802,6 +12882,46 @@ def _contains_tighter_row_action_candidate(
         if not _row_action_context_rect_matches(selected, candidate):
             continue
         if _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction):
+            return True
+    return False
+
+
+def _contains_multiple_tight_row_action_candidates(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    if selected.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if _instruction_requests_contained_row_action(instruction):
+        return False
+    if not _explicit_container_target_request(
+        instruction,
+        control_intents,
+        selected.control_type,
+    ):
+        return False
+    selected_identity = _candidate_semantic_tokens(selected) - ROW_CONTAINER_IDENTITY_STOPWORDS
+    requested_identity = instruction_tokens - ROW_CONTAINER_IDENTITY_STOPWORDS
+    if selected_identity and requested_identity and selected_identity & requested_identity:
+        return False
+    selected_area = max(1, selected.rect[2] * selected.rect[3])
+    action_rects: set[tuple[int, int, int, int]] = set()
+    for candidate in candidates:
+        if candidate.id == selected.id or _same_visual_candidate(candidate, selected):
+            continue
+        if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        candidate_area = max(1, candidate.rect[2] * candidate.rect[3])
+        if selected_area < candidate_area * 1.8:
+            continue
+        if not _row_action_context_rect_matches(selected, candidate):
+            continue
+        action_rects.add(candidate.rect)
+        if len(action_rects) >= 2:
             return True
     return False
 
