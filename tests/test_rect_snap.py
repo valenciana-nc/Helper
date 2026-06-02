@@ -19208,36 +19208,47 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
-        candidates = [
-            ControlCandidate("settings", "Project settings", "button", (100, 100, 120, 32)),
-        ]
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction="Delete project.",
-            candidates=candidates,
-            model_rect=(100, 100, 120, 32),
+        labels = (
+            "Project settings",
+            "Project options",
+            "Project dashboard",
+            "Project page",
+            "Project profile",
+            "Project properties",
+            "Project summary",
         )
-        snap_target = snap_candidate_target(
-            instruction="Delete project.",
-            candidates=candidates,
-            model_rect=(100, 100, 120, 32),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": "Delete project.",
-                    "target": {"x": 100, "y": 100, "width": 120, "height": 32},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+        for label in labels:
+            with self.subTest(label=label):
+                candidates = [
+                    ControlCandidate("neutral", label, "button", (100, 100, 160, 32)),
+                ]
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction="Delete project.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction="Delete project.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": "Delete project.",
+                            "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        self.assertIsNone(text_target)
-        self.assertIsNone(snap_target)
-        self.assertEqual(help_target.source, "candidate_snap")
-        self.assertEqual(help_target.rejected_reason, "candidate snapshot no match")
+                self.assertIsNone(text_target)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "candidate snapshot no match")
 
     def test_open_neutral_destination_button_still_matches(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

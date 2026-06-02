@@ -487,6 +487,26 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "destructive_action_rejects_neutral_options_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 140, 32], "label": "Project options"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete project.",
+                "target": {"x": 100, "y": 100, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "options", "text": "Project options", "control_type": "button", "rect": [100, 100, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "loose_row_model_rect_snaps_to_tight_child_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

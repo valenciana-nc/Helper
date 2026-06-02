@@ -172,12 +172,30 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
 NEUTRAL_ACTION_DESTINATION_WORDS = frozenset(
     {
         "about",
+        "dashboard",
+        "dashboards",
+        "detail",
         "details",
         "info",
         "information",
+        "menu",
+        "menus",
+        "option",
+        "options",
         "overview",
+        "overviews",
+        "page",
+        "pages",
+        "panel",
+        "panels",
         "preferences",
+        "profile",
+        "profiles",
+        "properties",
+        "property",
         "settings",
+        "summaries",
+        "summary",
     }
 )
 GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"for", "on", "to"})
