@@ -3017,6 +3017,24 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (100, 200, 240, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_accepts_dataitem_record_row(self) -> None:
+        from rect_snap import snap_to_control
+
+        row = _make_button("Acme", 100, 200, 260, 44, control_type="DataItem")
+        window = _make_window("App", 0, 0, 800, 600, [row])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (120, 204, 240, 38),
+            "Open the Acme record.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 260, 44))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_accepts_contextual_control_container_wording(self) -> None:
         from rect_snap import snap_to_control
 

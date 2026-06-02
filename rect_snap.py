@@ -662,6 +662,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "tabitem",
         "hyperlink",
         "listitem",
+        "dataitem",
         "treeitem",
         "edit",
         "combobox",
