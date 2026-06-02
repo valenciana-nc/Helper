@@ -4501,6 +4501,34 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 120, 32))
 
+    def test_spinner_stepper_target_id_accepts_adjacent_arrow_buttons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate("spin", "Quantity", "spinner", (100, 100, 120, 32)),
+            ControlCandidate("up", "Increase", "button", (224, 100, 24, 16)),
+            ControlCandidate("down", "Decrease", "button", (224, 116, 24, 16)),
+        ]
+        cases = (
+            ("Increase the Quantity spinner.", "up", (224, 100, 24, 16)),
+            ("Decrease the Quantity spinner.", "down", (224, 116, 24, 16)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id=target_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "target_id")
+                self.assertEqual(result.target_id, target_id)
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
+
     def test_text_field_wording_rejects_spinner_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -6444,6 +6472,33 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "c001")
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 160, 32))
+
+    def test_snap_candidate_target_accepts_adjacent_spinner_stepper_button(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("spin", "Quantity", "spinner", (100, 100, 120, 32)),
+            ControlCandidate("up", "Increase", "button", (224, 100, 24, 16)),
+            ControlCandidate("down", "Decrease", "button", (224, 116, 24, 16)),
+        ]
+        cases = (
+            ("Increase the Quantity spinner.", "up", (224, 100, 24, 16)),
+            ("Decrease the Quantity spinner.", "down", (224, 116, 24, 16)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, target_id)
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
 
     def test_snap_candidate_target_rejects_broad_spinner_group(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
@@ -9342,6 +9397,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "text_match")
                 self.assertEqual(target.target_id, app_control.id)
                 self.assertFalse(target.rejected_reason)
+
+    def test_downloads_folder_wording_rejects_browser_toolbar_downloads_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        toolbar = ControlCandidate(
+            "browser_downloads",
+            "Downloads",
+            "button",
+            (900, 8, 42, 34),
+            automation_id="downloads",
+            window_title="Report - Google Chrome",
+        )
+        folder = ControlCandidate(
+            "downloads_folder",
+            "Downloads",
+            "listitem",
+            (100, 200, 200, 32),
+            window_title="File Explorer",
+        )
+        candidates = [toolbar, folder]
+
+        target_id = resolve_candidate_target(
+            target_id="browser_downloads",
+            instruction="Open downloads folder.",
+            candidates=candidates,
+            model_rect=toolbar.rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Open downloads folder.",
+            candidates=candidates,
+            model_rect=toolbar.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open downloads folder.",
+                    "target_id": "browser_downloads",
+                    "target": {
+                        "x": toolbar.rect[0],
+                        "y": toolbar.rect[1],
+                        "width": toolbar.rect[2],
+                        "height": toolbar.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.target_id, "browser_downloads")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(snap_target.target_id, "browser_downloads")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.target_id, "browser_downloads")
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
     def test_os_chrome_controls_do_not_steal_app_local_targets(self) -> None:
         from control_inventory import ControlCandidate
@@ -17961,6 +18073,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Cancel dialog.", "close", "Close", "cancel", "Cancel"),
             ("Sign out.", "logout_all", "Logout all sessions", "signout", "Sign out"),
             ("Lock account.", "unlock", "Unlock", "lock", "Lock"),
+            ("Open cart.", "basket", "Basket", "cart", "Cart"),
             ("Download report.", "export", "Export", "download", "Download"),
             ("Refresh page.", "reload", "Reload", "refresh", "Refresh"),
             ("Edit profile.", "pencil", "Pencil", "edit", "Edit"),
@@ -20779,6 +20892,39 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (10, 10, 160, 32))
+
+    def test_spinner_stepper_model_rect_highlights_adjacent_arrow_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("spin", "Quantity", "spinner", (100, 100, 120, 32)),
+            ControlCandidate("up", "Increase", "button", (224, 100, 24, 16)),
+            ControlCandidate("down", "Decrease", "button", (224, 116, 24, 16)),
+        ]
+        cases = (
+            ("Increase the Quantity spinner.", "up", (224, 100, 24, 16)),
+            ("Decrease the Quantity spinner.", "down", (224, 116, 24, 16)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": target_id,
+                            "target": {"x": rect[0], "y": rect[1], "width": rect[2], "height": rect[3]},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, target_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
 
     def test_generic_hyperlink_model_rect_highlights_hyperlink(self) -> None:
         from control_inventory import ControlCandidate

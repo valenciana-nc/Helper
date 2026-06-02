@@ -84,6 +84,8 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+SPINNER_INCREMENT_WORDS = frozenset({"increase", "increment", "raise", "up"})
+SPINNER_DECREMENT_WORDS = frozenset({"decrease", "decrement", "down", "lower"})
 CARDINAL_DIRECTION_ACTION_PAIRS = (
     (frozenset({"up"}), frozenset({"down"})),
     (frozenset({"left"}), frozenset({"right"})),
@@ -128,6 +130,7 @@ CONFIRM_CANCEL_ACTION_WORDS = CONFIRM_ACTION_WORDS | CANCEL_ACTION_WORDS
 ADD_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
 REMOVE_ACTION_WORDS = frozenset({"bin", "delete", "remove", "trash", "wastebasket"})
 PAY_ACTION_WORDS = frozenset({"checkout", "pay"})
+CART_ACTION_WORDS = frozenset({"bag", "basket", "cart"})
 CONFIRM_OBJECT_STOPWORDS = frozenset(
     {
         "a",
@@ -294,6 +297,7 @@ CONTEXTUAL_DUPLICATE_ORDINAL_WORDS = (
     frozenset({"10", "10th", "tenth"}),
 )
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
+FOLDER_IDENTITY_WORDS = frozenset({"directories", "directory", "folder", "folders"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
 FILE_EXPORT_ACTION_WORDS = frozenset({"download", "export"})
@@ -1944,6 +1948,7 @@ def _text_match_score(
             control_intents,
             instruction=instruction,
         )
+        and not _spinner_stepper_button_match(instruction, candidate, candidates)
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
     ):
         return 0.0
@@ -2981,10 +2986,13 @@ def _target_id_plausibility(
         )
     if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
-    if not _candidate_matches_control_intent(
-        candidate,
-        control_intents,
-        instruction=instruction,
+    if (
+        not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        )
+        and not _spinner_stepper_button_match(instruction, candidate, candidates)
     ):
         return (
             False,
@@ -3481,6 +3489,8 @@ def _instruction_requests_app_local_surface(
 ) -> bool:
     if raw_tokens & BROWSER_CHROME_APP_CONTEXT_WORDS:
         return True
+    if raw_tokens & FOLDER_IDENTITY_WORDS:
+        return True
     if raw_tokens & ACTION_OBJECT_ALIAS_CONTEXT_WORDS:
         return True
     text = (instruction or "").lower()
@@ -3957,6 +3967,44 @@ def _explicit_text_field_control_type_mismatch(
         return False
     if raw_tokens & {"spinner", "stepper"}:
         return False
+    return False
+
+
+def _spinner_stepper_button_match(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in {"button", "splitbutton"}:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"spinner", "spinbox", "stepper"}):
+        return False
+    requested_up = bool(raw_tokens & SPINNER_INCREMENT_WORDS)
+    requested_down = bool(raw_tokens & SPINNER_DECREMENT_WORDS)
+    if requested_up == requested_down:
+        return False
+    control_tokens = _tokens_from_text(candidate.descriptor)
+    control_up = bool(control_tokens & SPINNER_INCREMENT_WORDS)
+    control_down = bool(control_tokens & SPINNER_DECREMENT_WORDS)
+    if control_up == control_down:
+        return False
+    if requested_up != control_up:
+        return False
+    return _has_adjacent_spinner(candidate, candidates)
+
+
+def _has_adjacent_spinner(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    for context in candidates:
+        if context.id == candidate.id or context.control_type != "spinner":
+            continue
+        if _contains_rect(_expand_rect(context.rect, 6), candidate.rect):
+            return True
+        if _intersects(_expand_rect(context.rect, 8), candidate.rect):
+            return True
     return False
 
 
@@ -6086,6 +6134,7 @@ def _ambiguous_exact_literal_alias_alternative(
         ADD_ACTION_WORDS,
         BROWSER_SIGN_IN_ACTION_WORDS,
         BROWSER_SIGN_OUT_ACTION_WORDS,
+        CART_ACTION_WORDS,
         CLEAR_CLOSE_WORDS,
         CONFIRM_ACTION_WORDS,
         LOCK_ACTION_WORDS,
@@ -7225,6 +7274,7 @@ def _candidate_snap_score(
             control_intents,
             instruction=instruction,
         )
+        and not _spinner_stepper_button_match(instruction, candidate, candidates)
         and not _contextual_action_candidate_matches_surface_request(
             instruction,
             instruction_tokens,

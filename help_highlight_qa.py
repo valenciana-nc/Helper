@@ -918,6 +918,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "spinner_increment_target_id_accepts_adjacent_stepper_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 120, 32], "label": "Quantity"},
+                {"rect": [224, 100, 24, 16], "label": "+"},
+                {"rect": [224, 116, 24, 16], "label": "-"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Increase the Quantity spinner.",
+                "target_id": "up",
+                "target": {"x": 224, "y": 100, "width": 24, "height": 16},
+            },
+            "candidates": [
+                {"id": "spin", "text": "Quantity", "control_type": "spinner", "rect": [100, 100, 120, 32]},
+                {"id": "up", "text": "Increase", "control_type": "button", "rect": [224, 100, 24, 16]},
+                {"id": "down", "text": "Decrease", "control_type": "button", "rect": [224, 116, 24, 16]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "up",
+                "rect": [224, 100, 24, 16],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "text_field_wording_rejects_spinner_target",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -8076,6 +8102,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "kind": "step",
                 "instruction": "Open cart.",
                 "target_id": "c001",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
             },
             "candidates": [
                 {"id": "c001", "text": "Basket", "control_type": "button", "rect": [20, 80, 100, 32]},
@@ -9056,6 +9083,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "downloads_folder_rejects_browser_toolbar_downloads_button",
+            "capture": {"width": 1200, "height": 800},
+            "draw": [
+                {"rect": [900, 8, 42, 34], "label": "Downloads"},
+                {"rect": [100, 200, 200, 32], "label": "Downloads"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open downloads folder.",
+                "target_id": "browser_downloads",
+                "target": {"x": 900, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [900, 8, 42, 34],
+                    "automation_id": "downloads",
+                    "window_title": "Report - Google Chrome",
+                },
+                {
+                    "id": "downloads_folder",
+                    "text": "Downloads",
+                    "control_type": "listitem",
+                    "rect": [100, 200, 200, 32],
+                    "window_title": "File Explorer",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "browser_downloads",
+                "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
             },
         },
