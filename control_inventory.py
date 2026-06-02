@@ -2370,6 +2370,7 @@ def snap_candidate_target(
         return None
     if _foreground_snap_conflict(
         ranked=ranked,
+        instruction=instruction,
         instruction_tokens=instruction_tokens,
         confidence_floor=confidence_floor,
     ):
@@ -13891,6 +13892,7 @@ def _state_action_button_matches_checkbox_intent(
 def _foreground_snap_conflict(
     *,
     ranked: list[tuple[float, ControlCandidate]],
+    instruction: str,
     instruction_tokens: set[str],
     confidence_floor: float,
 ) -> bool:
@@ -13907,7 +13909,7 @@ def _foreground_snap_conflict(
             continue
         if score < confidence_floor:
             continue
-        if not _same_snap_intent(best, candidate, instruction_tokens):
+        if not _same_snap_intent(best, candidate, instruction, instruction_tokens):
             continue
         if foreground is None or score > foreground[0]:
             foreground = (score, candidate)
@@ -13919,6 +13921,7 @@ def _foreground_snap_conflict(
 def _same_snap_intent(
     first: ControlCandidate,
     second: ControlCandidate,
+    instruction: str,
     instruction_tokens: set[str],
 ) -> bool:
     if not instruction_tokens:

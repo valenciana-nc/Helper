@@ -8003,6 +8003,30 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.target_id, "fg_save")
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_specific_background_label_with_foreground_partial_label_does_not_crash(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Apply changes.",
+            candidates=[
+                ControlCandidate("fg_apply", "Apply", "button", (120, 100, 80, 32), window_rank=0),
+                ControlCandidate(
+                    "bg_apply_changes",
+                    "Apply changes",
+                    "button",
+                    (120, 136, 120, 32),
+                    window_rank=1,
+                ),
+            ],
+            model_rect=(120, 136, 120, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "bg_apply_changes")
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_candidate_target_rejects_exact_background_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -9484,6 +9508,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.target_id, "row")
         self.assertFalse(target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_action_moved_to_background_window(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            }
+        )
+        previous_target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="save",
+        )
+        current_target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="save",
+        )
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=[
+                ControlCandidate(
+                    "save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Background Editor",
+                    window_rank=2,
+                ),
+            ],
+            previous_target=previous_target,
+            previous_candidates=[
+                ControlCandidate(
+                    "save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Active Editor",
+                    window_rank=0,
+                ),
+            ],
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_model_rect_snaps_to_candidate_snapshot_without_fresh_uia(self) -> None:
@@ -28404,6 +28485,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
             assert target is not None
             self.assertEqual(target.target_id, "billing")
             self.assertEqual(target.rect, (150, 132, 320, 36))
+
+    def test_revalidation_rejects_context_drift_after_stale_target_id_text_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        instruction = "Type into Billing search."
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": instruction,
+                "target_id": "shipping",
+                "target": {"x": 150, "y": 72, "width": 320, "height": 36},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate("shipping_label", "Shipping search", "text", (20, 80, 120, 24)),
+            ControlCandidate("shipping", "", "edit", (150, 72, 320, 36)),
+            ControlCandidate("billing_label", "Billing search", "text", (20, 140, 120, 24)),
+            ControlCandidate("billing", "", "edit", (150, 132, 320, 36)),
+        ]
+        current_candidates = [
+            ControlCandidate("other_label", "Search", "text", (20, 140, 120, 24)),
+            ControlCandidate("other", "", "edit", (150, 132, 320, 36)),
+        ]
+
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(previous_target.source, "text_match")
+        self.assertEqual(previous_target.target_id, "billing")
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertEqual(current_target.source, "text_match")
+        self.assertEqual(current_target.target_id, "other")
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_app_local_address_recovers_from_browser_address_bar(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

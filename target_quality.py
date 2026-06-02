@@ -200,7 +200,15 @@ def evaluate_target_quality(
     if (
         _candidate_boundary_alignment_target(source, target_control_type)
         and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped)
+        and not _model_boundary_aligned(
+            capture.png_bytes,
+            clipped,
+            require_all_sides=not _candidate_allows_edge_flush_boundary(
+                source,
+                target_control_type,
+                instruction,
+            ),
+        )
     ):
         return TargetQuality(
             accepted=False,
@@ -295,6 +303,19 @@ def _candidate_boundary_alignment_target(source: str, target_control_type: str) 
     if source == "model":
         return False
     return target_control_type.lower() in CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES
+
+
+def _candidate_allows_edge_flush_boundary(
+    source: str,
+    target_control_type: str,
+    instruction: str,
+) -> bool:
+    if source == "model":
+        return False
+    if target_control_type.lower() != "button":
+        return False
+    words = set(re.findall(r"[a-z0-9]+", (instruction or "").lower()))
+    return bool(words & {"clock", "date", "time"})
 
 
 def _screen_to_image_rect(

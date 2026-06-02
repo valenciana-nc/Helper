@@ -14941,6 +14941,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "edge_flush_candidate_rect_over_field_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [24, 80, 160, 32], "label": "Search"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Search field.",
+                "target_id": "search",
+            },
+            "candidates": [
+                {"id": "search", "text": "Search", "control_type": "edit", "rect": [0, 80, 184, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "search",
+                "quality_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "compound_model_rect_over_multiple_buttons_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

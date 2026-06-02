@@ -146,6 +146,46 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target boundary misaligned")
 
+    def test_rejects_edge_flush_candidate_rect_with_unproven_boundary(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (240, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((24, 80, 184, 112), outline="black", fill="#f3f4f6")
+        draw.text((44, 90), "Search", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(0, 80, 184, 32),
+            source="target_id",
+            confidence=1.0,
+            target_control_type="button",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
+    def test_accepts_edge_flush_taskbar_clock_candidate(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (1000, 1000), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((900, 960, 990, 999), outline="black", fill="#f3f4f6")
+        draw.text((912, 972), "11:32 AM", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(900, 960, 90, 40),
+            source="target_id",
+            confidence=1.0,
+            instruction="Open clock.",
+            target_control_type="button",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_rejects_model_rect_containing_multiple_button_boundaries(self) -> None:
         from target_quality import evaluate_target_quality
 

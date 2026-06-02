@@ -142,6 +142,13 @@ CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS = ACTION_IDENTITY_REVALIDATION_GENER
         "value",
     }
 )
+CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS | frozenset(
+    {
+        "find",
+        "search",
+    }
+)
+CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
 GENERIC_ACTION_REVALIDATION_WORDS = (
     CONFIRM_ACTION_WORDS
     | CLEAR_CLOSE_WORDS
@@ -658,6 +665,20 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_action_window_context_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_control_context_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_control_identity_changed(
         previous_target,
         target,
@@ -841,6 +862,37 @@ def _revalidated_control_identity_changed(
     return similarity < 0.5
 
 
+def _revalidated_control_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    previous_type = previous.control_type.lower()
+    current_type = current.control_type.lower()
+    if previous_type not in CONTROL_IDENTITY_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current_type not in CONTROL_IDENTITY_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous_type != current_type:
+        return False
+    previous_tokens = _control_context_revalidation_tokens(previous, previous_candidates)
+    current_tokens = _control_context_revalidation_tokens(current, candidates)
+    if not previous_tokens:
+        return False
+    if not current_tokens:
+        return True
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.75
+
+
 def _control_identity_revalidation_tokens(
     candidate: ControlCandidate | None,
     matched_text: str,
@@ -855,6 +907,70 @@ def _control_identity_revalidation_tokens(
         _tokenize_control(text)
         | _tokens_from_text(text)
     ) - CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS
+
+
+def _control_context_revalidation_tokens(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    best: tuple[float, ControlCandidate] | None = None
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type.lower() not in CONTROL_CONTEXT_LABEL_TYPES:
+            continue
+        tokens = _control_label_context_tokens(candidate)
+        if not tokens:
+            continue
+        score = _control_context_label_score(target.rect, candidate.rect)
+        if score <= 0:
+            continue
+        if best is None or score > best[0]:
+            best = (score, candidate)
+    if best is None:
+        return set()
+    return _control_label_context_tokens(best[1])
+
+
+def _control_label_context_tokens(candidate: ControlCandidate) -> set[str]:
+    return (
+        _tokens_from_text(candidate.text)
+        | _tokenize_control(candidate.text)
+    ) - CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS
+
+
+def _control_context_label_score(
+    control_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    control_x, control_y, control_width, control_height = control_rect
+    label_x, label_y, label_width, label_height = label_rect
+    if min(control_width, control_height, label_width, label_height) <= 0:
+        return 0.0
+    control_right = control_x + control_width
+    control_bottom = control_y + control_height
+    label_right = label_x + label_width
+    label_bottom = label_y + label_height
+    control_center_y = control_y + control_height / 2
+    label_center_y = label_y + label_height / 2
+    vertical_overlap = min(control_bottom, label_bottom) - max(control_y, label_y)
+    if vertical_overlap >= min(control_height, label_height) * 0.45:
+        horizontal_gap = max(control_x - label_right, label_x - control_right, 0)
+        if horizontal_gap <= max(48, min(220, max(control_height, label_height) * 6)):
+            y_penalty = abs(control_center_y - label_center_y) / max(1.0, control_height)
+            return 2.0 - min(1.0, y_penalty)
+    if label_bottom <= control_y:
+        vertical_gap = control_y - label_bottom
+        horizontal_overlap = min(control_right, label_right) - max(control_x, label_x)
+        left_aligned = abs(label_x - control_x) <= max(16, min(control_width, label_width) * 0.30)
+        center_aligned = abs(
+            (label_x + label_right) / 2 - (control_x + control_right) / 2
+        ) <= max(32, min(control_width, label_width) * 0.45)
+        if vertical_gap <= max(36, control_height * 1.2) and (
+            horizontal_overlap > 0 or left_aligned or center_aligned
+        ):
+            return 1.0 - min(0.9, vertical_gap / max(1.0, control_height * 2))
+    return 0.0
 
 
 def _revalidated_action_context_changed(
@@ -880,6 +996,25 @@ def _revalidated_action_context_changed(
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
+
+
+def _revalidated_action_window_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    return previous.window_rank != current.window_rank
 
 
 def _contextless_generic_action_visual_context_changed(
