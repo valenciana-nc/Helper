@@ -3709,6 +3709,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "combobox_labeled_dropdown_arrow_recovers_from_full_combo_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 220, 32], "label": "Country"},
+                {"rect": [292, 100, 28, 32], "label": "v"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Country dropdown arrow.",
+                "target_id": "combo1",
+                "target": {"x": 100, "y": 100, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo1", "text": "Country", "control_type": "combobox", "rect": [100, 100, 220, 32]},
+                {"id": "arrow1", "text": "Open", "control_type": "button", "rect": [292, 100, 28, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "arrow1",
+                "rect": [292, 100, 28, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_dropdown_broad_rect_with_multiple_comboboxes_stays_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7146,6 +7170,37 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rect": [20, 80, 55, 40],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "bare_menu_rejects_taskbar_start_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [0, 940, 55, 40], "label": "Start"},
+                {"rect": [500, 120, 80, 32], "label": "Menu"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open menu.",
+                "target_id": "start",
+                "target": {"x": 0, "y": 940, "width": 55, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "start",
+                    "text": "Start",
+                    "control_type": "button",
+                    "rect": [0, 940, 55, 40],
+                    "automation_id": "StartButton",
+                    "window_title": "Taskbar",
+                },
+                {"id": "app_menu", "text": "Menu", "control_type": "button", "rect": [500, 120, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "start",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
             },
         },
         {

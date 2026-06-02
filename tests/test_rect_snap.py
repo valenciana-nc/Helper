@@ -7149,6 +7149,23 @@ class ControlInventoryTests(unittest.TestCase):
             candidates=candidates,
             model_rect=(292, 100, 28, 32),
         )
+        labeled_combo_with_arrow = resolve_candidate_target(
+            target_id="combo1",
+            instruction="Click the Country dropdown arrow.",
+            candidates=candidates,
+            model_rect=(100, 100, 220, 32),
+        )
+        labeled_text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click the Country dropdown arrow.",
+            candidates=candidates,
+            model_rect=(100, 100, 220, 32),
+        )
+        labeled_snap_target = snap_candidate_target(
+            instruction="Click the Country dropdown arrow.",
+            candidates=candidates,
+            model_rect=(100, 100, 220, 32),
+        )
 
         self.assertEqual(arrow_target.target_id, "arrow1")
         self.assertFalse(arrow_target.rejected_reason)
@@ -7157,6 +7174,14 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(combo_only.rejected_reason)
         self.assertEqual(snap_target.target_id, "arrow1")
         self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(
+            labeled_combo_with_arrow.rejected_reason,
+            "target_id control type mismatch",
+        )
+        self.assertEqual(labeled_text_target.target_id, "arrow1")
+        self.assertFalse(labeled_text_target.rejected_reason)
+        self.assertEqual(labeled_snap_target.target_id, "arrow1")
+        self.assertFalse(labeled_snap_target.rejected_reason)
 
 
 class HelpTargetHarnessTests(unittest.TestCase):
@@ -16561,6 +16586,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Click Start.", ""),
             ("Open Start button.", ""),
             ("Open Start menu.", ""),
+            ("Open menu.", "target_id semantic mismatch"),
         )
         for instruction, reason in cases:
             with self.subTest(instruction=instruction):

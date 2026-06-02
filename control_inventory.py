@@ -1951,6 +1951,8 @@ def _text_match_score(
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+        return 0.0
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
     if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
@@ -2089,6 +2091,8 @@ def _text_match_score(
         return 0.0
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
+    if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
@@ -2178,6 +2182,8 @@ def _context_text_match_score(
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
         return 0.0
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return 0.0
@@ -2507,6 +2513,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -2873,6 +2885,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
         )
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return (
@@ -3758,6 +3776,19 @@ def _combobox_dropdown_arrow_match(
     return _has_adjacent_combobox(candidate, candidates)
 
 
+def _combobox_dropdown_arrow_control_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "combobox":
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"arrow", "caret", "chevron"}):
+        return False
+    return _has_combobox_dropdown_arrow_button(candidate, candidates)
+
+
 def _dropdown_option_launcher_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -4058,6 +4089,18 @@ def _taskbar_start_button_action_mismatch(
     if "start" not in instruction_tokens:
         return False
     return bool(instruction_tokens - TASKBAR_START_BUTTON_ALLOWED_TOKENS)
+
+
+def _taskbar_start_button_generic_menu_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if not _looks_like_taskbar_start_button(candidate):
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if "menu" not in raw_tokens:
+        return False
+    return not (raw_tokens & {"start", "taskbar", "windows"})
 
 
 def _taskbar_task_view_action_mismatch(
@@ -6326,6 +6369,8 @@ def _target_id_ambiguity(
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_surface_context_mismatch(instruction, candidate):
@@ -6630,6 +6675,8 @@ def _has_semantic_alternative(
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+            continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
         if _taskbar_surface_context_mismatch(instruction, candidate):
@@ -6754,6 +6801,8 @@ def _has_visible_semantic_alternative(
         ):
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
             continue
         if _taskbar_app_state_action_mismatch(instruction_tokens, candidate):
             continue
@@ -6881,6 +6930,8 @@ def _candidate_snap_score(
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -7030,6 +7081,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
@@ -7184,6 +7237,8 @@ def _contains_tighter_same_intent_action(
         ):
             if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
                 continue
+            if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+                continue
             if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
                 continue
             if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
@@ -7204,6 +7259,8 @@ def _contains_tighter_same_intent_action(
             if _text_evidence_score(instruction_tokens, candidate_tokens) >= TARGET_ID_TEXT_FLOOR:
                 return True
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+            continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
             continue
         if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
             continue
@@ -7433,6 +7490,8 @@ def _single_contained_control_intent_candidate(
             continue
         if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
             continue
+        if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
+            continue
         if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
             continue
         if _taskbar_hidden_icons_action_mismatch(instruction_tokens, candidate):
@@ -7474,6 +7533,8 @@ def _single_contained_control_intent_candidate(
         if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
             continue
         if _mail_tab_account_reference_mismatch(instruction_tokens, candidate):
+            continue
+        if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
             continue
         if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
             continue
@@ -7675,6 +7736,10 @@ def _same_snap_intent(
         return False
     if _taskbar_start_button_action_mismatch(instruction_tokens, second):
         return False
+    if _taskbar_start_button_generic_menu_mismatch(instruction, first):
+        return False
+    if _taskbar_start_button_generic_menu_mismatch(instruction, second):
+        return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, first):
         return False
     if _taskbar_app_state_action_mismatch(instruction_tokens, second):
@@ -7721,6 +7786,8 @@ def _candidate_snap_semantic_mismatch(
     if not instruction_tokens or not semantic_tokens:
         return False
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
         return True
     if _taskbar_task_view_action_mismatch(instruction, instruction_tokens, candidate):
         return True
