@@ -16884,6 +16884,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "column_context_action_recovers_same_label_action_not_header",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 50, 150, 28], "label": "Name"},
+                {"rect": [190, 50, 150, 28], "label": "Status"},
+                {"rect": [75, 90, 70, 28], "label": "Edit"},
+                {"rect": [245, 90, 70, 28], "label": "Edit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Edit in the Status column.",
+                "target_id": "edit_name",
+                "target": {"x": 75, "y": 90, "width": 70, "height": 28},
+            },
+            "candidates": [
+                {"id": "h_name", "text": "Name", "control_type": "headeritem", "rect": [20, 50, 150, 28]},
+                {"id": "h_status", "text": "Status", "control_type": "headeritem", "rect": [190, 50, 150, 28]},
+                {"id": "edit_name", "text": "Edit", "control_type": "button", "rect": [75, 90, 70, 28]},
+                {"id": "edit_status", "text": "Edit", "control_type": "button", "rect": [245, 90, 70, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit_status",
+                "rect": [245, 90, 70, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_rect_page_context_recovers_copied_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Customers"},
+                {"rect": [140, 20, 120, 32], "label": "Settings"},
+                {"rect": [600, 120, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save on the Settings page.",
+                "target_id": "cust_save",
+                "target": {"x": 600, "y": 120, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "customers_tab",
+                    "text": "Customers",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 120, 32],
+                    "window_title": "CRM",
+                },
+                {
+                    "id": "settings_tab",
+                    "text": "Settings",
+                    "control_type": "tabitem",
+                    "rect": [140, 20, 120, 32],
+                    "window_title": "CRM",
+                },
+                {
+                    "id": "cust_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [600, 120, 80, 32],
+                    "automation_id": "primary-action",
+                    "window_title": "Customers",
+                },
+                {
+                    "id": "settings_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [600, 120, 80, 32],
+                    "automation_id": "primary-action",
+                    "window_title": "Settings",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_save",
+                "rect": [600, 120, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "shorthand_row_context_recovers_requested_review_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

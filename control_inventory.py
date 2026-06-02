@@ -1662,6 +1662,11 @@ def resolve_candidate_target(
             and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
             and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
         )
+        matches_named_contextual_duplicate = _candidate_satisfies_named_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        )
         matches_control_intent = _candidate_matches_control_intent(
             candidate,
             control_intents,
@@ -1671,7 +1676,7 @@ def resolve_candidate_target(
             instruction_tokens,
             candidate,
             candidates,
-        ) or matches_row_action
+        ) or matches_row_action or matches_named_contextual_duplicate
         if control_intents and not matches_control_intent:
             score = _context_text_match_score(
                 instruction,
@@ -2064,6 +2069,16 @@ def _same_visual_candidate(first: ControlCandidate, second: ControlCandidate) ->
     return _candidate_visual_key(first) == _candidate_visual_key(second)
 
 
+def _same_visual_and_context_candidate(first: ControlCandidate, second: ControlCandidate) -> bool:
+    if not _same_visual_candidate(first, second):
+        return False
+    return _candidate_context_identity_key(first) == _candidate_context_identity_key(second)
+
+
+def _candidate_context_identity_key(candidate: ControlCandidate) -> tuple[str, int]:
+    return ((candidate.window_title or "").strip().lower(), candidate.window_rank)
+
+
 def _first_distinct_ranked_candidate(
     ranked: list[tuple[float, ControlCandidate]],
     selected: ControlCandidate,
@@ -2141,8 +2156,14 @@ def _text_match_score(
         and bool(control_intents & ROW_CONTEXT_CONTROL_TYPES)
         and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
     )
+    matches_named_contextual_duplicate = _candidate_satisfies_named_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    )
     if (
         not matches_row_action
+        and not matches_named_contextual_duplicate
         and not _candidate_matches_control_intent(
             candidate,
             control_intents,
@@ -2379,6 +2400,13 @@ def _text_match_score(
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
     if not candidate_tokens:
         return 0.0
+    if matches_named_contextual_duplicate:
+        score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     if _candidate_satisfies_positional_action_duplicate_request(
         instruction,
         instruction_tokens,
@@ -6408,7 +6436,7 @@ def _has_duplicate_tight_action(
     if duplicate_key:
         return any(
             other.id != candidate.id
-            and not _same_visual_candidate(other, candidate)
+            and not _same_visual_and_context_candidate(other, candidate)
             and other.control_type == candidate.control_type
             and _contextual_duplicate_key(other) == duplicate_key
             for other in candidates
@@ -6477,7 +6505,7 @@ def _implicit_container_context_duplicate_mismatch(
         for item in candidates
         if item.control_type == candidate.control_type
         and _contextual_duplicate_key(item) == duplicate_key
-        and not (item.id != candidate.id and _same_visual_candidate(item, candidate))
+        and not (item.id != candidate.id and _same_visual_and_context_candidate(item, candidate))
     ]
     if len(duplicates) < 2:
         return False
@@ -6601,7 +6629,7 @@ def _unresolved_contextual_duplicate_mismatch(
         return False
     has_duplicate = any(
         other.id != candidate.id
-        and not _same_visual_candidate(other, candidate)
+        and not _same_visual_and_context_candidate(other, candidate)
         and other.control_type == candidate.control_type
         and _contextual_duplicate_key(other) == duplicate_key
         for other in candidates
@@ -6645,7 +6673,7 @@ def _generic_pane_context_duplicate_ambiguous(
         return False
     return any(
         other.id != candidate.id
-        and not _same_visual_candidate(other, candidate)
+        and not _same_visual_and_context_candidate(other, candidate)
         and other.control_type == candidate.control_type
         and _contextual_duplicate_key(other) == duplicate_key
         and _contextual_duplicate_request_matches_evidence(
@@ -6720,6 +6748,44 @@ def _candidate_satisfies_contextual_duplicate_request(
     return _contextual_duplicate_request_matches_evidence(
         requested_context,
         evidence_tokens,
+    )
+
+
+def _candidate_satisfies_named_contextual_duplicate_request(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    has_duplicate = any(
+        other.id != candidate.id
+        and not _same_visual_and_context_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _contextual_duplicate_key(other) == duplicate_key
+        for other in candidates
+    )
+    if not has_duplicate:
+        return False
+    identity_tokens = _candidate_visible_text_tokens(candidate) or _candidate_automation_tokens(
+        candidate
+    )
+    action_family_tokens = set().union(*EXCLUSIVE_ACTION_FAMILIES)
+    identity_tokens -= CONTAINED_CONTROL_REQUEST_WORDS - action_family_tokens
+    if not identity_tokens:
+        return False
+    requested_tokens = _object_token_variants(
+        _tokens_from_text(instruction) | _tokenize_instruction(instruction)
+    )
+    if not (requested_tokens & identity_tokens):
+        return False
+    return _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
     )
 
 
@@ -6808,7 +6874,7 @@ def _explicit_transient_surface_alternative_mismatch(
         return False
     return any(
         other.id != candidate.id
-        and not _same_visual_candidate(other, candidate)
+        and not _same_visual_and_context_candidate(other, candidate)
         and other.control_type == candidate.control_type
         and _contextual_duplicate_key(other) == duplicate_key
         and _candidate_has_foreground_unnamed_transient_surface_evidence(other, candidates)
@@ -6890,6 +6956,10 @@ def _contextual_duplicate_request_tokens(
     instruction_tokens = _tokenize_instruction(instruction)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     surface_tokens = raw_token_variants & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    matched_action_tokens = (instruction_tokens | raw_tokens) & candidate_tokens
+    named_page_context = _named_page_context_request_tokens(instruction)
+    if named_page_context and matched_action_tokens:
+        return named_page_context
     variant_only_surfaces = surface_tokens - (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     if variant_only_surfaces and not _candidate_pool_has_contextual_surface_evidence(
         variant_only_surfaces,
@@ -6911,7 +6981,6 @@ def _contextual_duplicate_request_tokens(
         - candidate_tokens
         - (CONTEXTUAL_DUPLICATE_STOPWORDS - CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     )
-    matched_action_tokens = (instruction_tokens | raw_tokens) & candidate_tokens
     if matched_action_tokens & CLEAR_CLOSE_WORDS and raw_tokens & {
         "modal",
         "notification",
@@ -6924,6 +6993,22 @@ def _contextual_duplicate_request_tokens(
         if matched_action_tokens & family:
             request_tokens -= family
     return request_tokens
+
+
+def _named_page_context_request_tokens(instruction: str) -> set[str]:
+    text = instruction.lower()
+    match = re.search(
+        r"\b(?:in|inside|on|within)\s+(?:the\s+)?([a-z0-9][a-z0-9 _/&.-]{0,80}?)\s+"
+        r"(?:page|pages|route|routes|webpage|webpages)\b",
+        text,
+    )
+    if not match:
+        return set()
+    name_tokens = _tokens_from_text(match.group(1))
+    name_tokens -= ACTION_OBJECT_STOPWORDS
+    name_tokens -= BROWSER_PAGE_TARGET_WORDS
+    name_tokens -= {"the"}
+    return _object_token_variants(name_tokens)
 
 
 def _implicit_contextual_duplicate_request_tokens(
@@ -6955,7 +7040,7 @@ def _implicit_contextual_duplicate_request_tokens(
         return set()
     positional_request = bool(request_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
     for other in candidates:
-        if other.id != candidate.id and _same_visual_candidate(other, candidate):
+        if other.id != candidate.id and _same_visual_and_context_candidate(other, candidate):
             continue
         if other.control_type != candidate.control_type:
             continue
@@ -8759,6 +8844,11 @@ def _candidate_snap_score(
         candidate,
         candidates,
     )
+    named_contextual_duplicate_satisfied = _candidate_satisfies_named_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    )
     if _contextual_surface_action_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -8820,6 +8910,7 @@ def _candidate_snap_score(
         )
         and not _spinner_stepper_button_match(instruction, candidate, candidates)
         and not _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
+        and not named_contextual_duplicate_satisfied
         and not _contextual_action_candidate_matches_surface_request(
             instruction,
             instruction_tokens,
@@ -8843,6 +8934,7 @@ def _candidate_snap_score(
         and semantic_tokens
         and text_score <= 0
         and not positional_duplicate_satisfied
+        and not named_contextual_duplicate_satisfied
     ):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     area_score = _area_fit_score(candidate.rect, model_rect)
@@ -8863,6 +8955,8 @@ def _candidate_snap_score(
     if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if positional_duplicate_satisfied:
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
+    if named_contextual_duplicate_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(

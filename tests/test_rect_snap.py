@@ -20746,6 +20746,126 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (320, 86, 70, 28))
 
+    def test_column_context_action_recovers_same_label_action_not_header(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("h_name", "Name", "headeritem", (20, 50, 150, 28)),
+            ControlCandidate("h_status", "Status", "headeritem", (190, 50, 150, 28)),
+            ControlCandidate("edit_name", "Edit", "button", (75, 90, 70, 28)),
+            ControlCandidate("edit_status", "Edit", "button", (245, 90, 70, 28)),
+        ]
+        instruction = "Click Edit in the Status column."
+
+        wrong_target = resolve_candidate_target(
+            target_id="edit_name",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(75, 90, 70, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(75, 90, 70, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(75, 90, 70, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "edit_name",
+                    "target": {"x": 75, "y": 90, "width": 70, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "edit_name")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "edit_status")
+        self.assertFalse(text_target.rejected_reason)
+        if snap_target is not None:
+            self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "edit_status")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (245, 90, 70, 28))
+
+    def test_same_rect_page_context_recovers_copied_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("customers_tab", "Customers", "tabitem", (20, 20, 120, 32), window_title="CRM"),
+            ControlCandidate("settings_tab", "Settings", "tabitem", (140, 20, 120, 32), window_title="CRM"),
+            ControlCandidate(
+                "cust_save",
+                "Save",
+                "button",
+                (600, 120, 80, 32),
+                automation_id="primary-action",
+                window_title="Customers",
+            ),
+            ControlCandidate(
+                "settings_save",
+                "Save",
+                "button",
+                (600, 120, 80, 32),
+                automation_id="primary-action",
+                window_title="Settings",
+            ),
+        ]
+        instruction = "Click Save on the Settings page."
+
+        wrong_target = resolve_candidate_target(
+            target_id="cust_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(600, 120, 80, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(600, 120, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(600, 120, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "cust_save",
+                    "target": {"x": 600, "y": 120, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "cust_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "settings_save")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "settings_save")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "settings_save")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (600, 120, 80, 32))
+
     def test_shorthand_container_context_recovers_requested_duplicate_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
