@@ -2817,7 +2817,10 @@ def _text_match_score(
         return 0.0
     if _browser_navigation_chrome_action_mismatch(instruction, candidate):
         return 0.0
-    if _browser_toolbar_chrome_action_mismatch(instruction, candidate):
+    if (
+        not matches_contextual_surface_action
+        and _browser_toolbar_chrome_action_mismatch(instruction, candidate)
+    ):
         return 0.0
     if _browser_address_bar_content_mismatch(
         instruction,
@@ -4684,6 +4687,17 @@ def _nearby_field_section_label_tokens(
         tokens = _candidate_visible_text_tokens(label)
         if not tokens or len(tokens) > 8:
             continue
+        if (
+            candidate.control_type in LABELLED_STATE_CONTROL_TYPES
+            and direct_label is not None
+            and any(
+                other.id != candidate.id
+                and other.control_type == candidate.control_type
+                and _same_row_option_label_rect_matches(other.rect, label.rect)
+                for other in candidates
+            )
+        ):
+            continue
         label_center_x = label_left + label_width / 2
         left_aligned = abs(label_left - field_left) <= max(120, field_width * 0.6)
         center_aligned = abs(label_center_x - field_center_x) <= max(140, field_width * 0.6)
@@ -4698,6 +4712,24 @@ def _nearby_field_section_label_tokens(
     if best_score < 0.35:
         return set()
     return best_tokens
+
+
+def _same_row_option_label_rect_matches(
+    option_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> bool:
+    option_left, option_top, option_width, option_height = option_rect
+    option_right = option_left + option_width
+    option_bottom = option_top + option_height
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+    if min(option_width, option_height, label_width, label_height) <= 0:
+        return False
+    y_overlap = max(0, min(option_bottom, label_bottom) - max(option_top, label_top))
+    y_ratio = y_overlap / max(1, min(option_height, label_height))
+    right_gap = label_left - option_right
+    return y_ratio >= 0.45 and -4 <= right_gap <= 240 and label_right >= option_right
 
 
 def _nearby_field_label_score(
@@ -6006,6 +6038,32 @@ def _named_control_matches_label_context(
     return bool(requested_label & evidence) and requested_context <= evidence
 
 
+def _named_control_label_context_matches_request(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    if not requested_label:
+        return False
+    if not _named_control_requested_literal_context_tokens(instruction, requested_label):
+        return False
+    requested_context = _named_control_requested_context_tokens(
+        instruction,
+        requested_label,
+    )
+    if not requested_context:
+        return False
+    return _named_control_matches_label_context(
+        candidate,
+        candidates,
+        requested_label,
+        requested_context,
+    )
+
+
 def _named_control_label_request_matches_candidate(
     instruction: str,
     candidate: ControlCandidate,
@@ -6018,6 +6076,37 @@ def _named_control_label_request_matches_candidate(
         return False
     evidence = _named_control_candidate_label_tokens(candidate, candidates)
     return bool(requested_label & evidence)
+
+
+def _named_control_requested_literal_context_tokens(
+    instruction: str,
+    requested_label: set[str],
+) -> set[str]:
+    context_tokens = _tokens_from_text(instruction)
+    context_tokens -= requested_label
+    context_tokens -= NAMED_CONTROL_LABEL_STOPWORDS
+    context_tokens -= OPEN_VIEW_REQUEST_WORDS
+    context_tokens -= GENERIC_OBJECT_REQUEST_WORDS
+    context_tokens -= FIELD_ENTRY_ACTION_WORDS
+    context_tokens -= CHECKBOX_ON_ACTION_WORDS
+    context_tokens -= CHECKBOX_OFF_ACTION_WORDS
+    context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    context_tokens -= ROW_CONTEXT_GENERIC_WORDS
+    context_tokens -= {
+        "a",
+        "an",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "of",
+        "on",
+        "the",
+        "to",
+        "within",
+    }
+    return context_tokens
 
 
 def _named_control_requested_context_tokens(
@@ -6034,6 +6123,7 @@ def _named_control_requested_context_tokens(
     context_tokens -= CHECKBOX_ON_ACTION_WORDS
     context_tokens -= CHECKBOX_OFF_ACTION_WORDS
     context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    context_tokens -= ROW_CONTEXT_GENERIC_WORDS
     context_tokens -= {
         "a",
         "an",
@@ -6633,6 +6723,7 @@ def _field_alternative_label_tokens(
         _candidate_visible_text_tokens(candidate)
         | _tokens_from_text(candidate.automation_id)
         | _nearby_field_label_tokens(candidate, candidates)
+        | _tabular_field_label_tokens(candidate, candidates)
     )
     return _object_token_variants(tokens) - {
         "box",
@@ -6654,6 +6745,17 @@ def _field_alternative_label_tokens(
         "spinner",
         "treeitem",
     }
+
+
+def _tabular_field_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+        return set()
+    header_tokens = _contextual_duplicate_aligned_header_tokens(candidate, candidates)
+    row_tokens = _contained_row_context_objects(candidate, candidates)
+    return _object_token_variants(header_tokens | row_tokens)
 
 
 def _subtype_alternative_label_tokens(
@@ -9058,6 +9160,8 @@ def _unresolved_contextual_duplicate_mismatch(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
+    if _named_control_label_context_matches_request(instruction, candidate, candidates):
+        return False
     requested_context = _contextual_duplicate_request_tokens(
         instruction,
         candidate,
@@ -9987,7 +10091,10 @@ def _contextual_duplicate_evidence_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
-        if not context.descriptor:
+        context_semantic_tokens = _candidate_semantic_tokens(context)
+        context_descriptor_tokens = _tokens_from_text(context.descriptor)
+        context_surface_tokens = _surface_context_type_tokens(context.control_type)
+        if not (context_semantic_tokens or context_descriptor_tokens or context_surface_tokens):
             continue
         if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
             context,
@@ -10001,10 +10108,10 @@ def _contextual_duplicate_evidence_tokens(
             or _same_containing_row_line_label_rect_matches(context, candidate, candidates)
         ):
             continue
-        tokens.update(_candidate_semantic_tokens(context))
-        tokens.update(_tokens_from_text(context.descriptor))
+        tokens.update(context_semantic_tokens)
+        tokens.update(context_descriptor_tokens)
         tokens.update(_tokens_from_text(context.control_type))
-        tokens.update(_surface_context_type_tokens(context.control_type))
+        tokens.update(context_surface_tokens)
         if context.control_type == "menu":
             tokens.add("context")
         if context.control_type in ROW_CONTEXT_CONTROL_TYPES:

@@ -22230,6 +22230,114 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_current_value_dropdown_uses_column_and_row_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [200, 50, 120, 28], "label": "Status"},
+                {"rect": [20, 100, 620, 42], "label": "Acme"},
+                {"rect": [260, 106, 120, 30], "label": "Active"},
+                {"rect": [20, 160, 620, 42], "label": "Globex"},
+                {"rect": [260, 166, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Status dropdown in the Acme row.",
+                "target_id": "globex_status",
+                "target": {"x": 260, "y": 166, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "status_header", "text": "Status", "control_type": "headeritem", "rect": [200, 50, 120, 28]},
+                {"id": "row_acme", "text": "Acme", "control_type": "dataitem", "rect": [20, 100, 620, 42]},
+                {"id": "acme_status", "text": "Active", "control_type": "combobox", "rect": [260, 106, 120, 30]},
+                {"id": "row_globex", "text": "Globex", "control_type": "dataitem", "rect": [20, 160, 620, 42]},
+                {"id": "globex_status", "text": "Active", "control_type": "combobox", "rect": [260, 166, 120, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "acme_status",
+                "rect": [260, 106, 120, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "unknown_target_id_with_rect_recovers_obvious_candidate",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 100, 80, 32], "label": "Save"},
+                {"rect": [220, 100, 80, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "old_save",
+                "target": {"x": 120, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "save", "text": "Save", "control_type": "button", "rect": [120, 100, 80, 32]},
+                {"id": "cancel", "text": "Cancel", "control_type": "button", "rect": [220, 100, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "save",
+                "rect": [120, 100, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "descriptorless_toolbar_context_recovers_duplicate_button",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [230, 160, 70, 30], "label": "Refresh"},
+                {"rect": [420, 80, 300, 60], "label": ""},
+                {"rect": [630, 96, 70, 30], "label": "Refresh"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Refresh in the toolbar.",
+                "target_id": "page_refresh",
+                "target": {"x": 230, "y": 160, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "page_refresh", "text": "Refresh", "control_type": "button", "rect": [230, 160, 70, 30]},
+                {"id": "toolbar", "text": "", "control_type": "toolbar", "rect": [420, 80, 300, 60]},
+                {"id": "toolbar_refresh", "text": "Refresh", "control_type": "button", "rect": [630, 96, 70, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "toolbar_refresh",
+                "rect": [630, 96, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_unlabeled_checkbox_recovers_direct_label_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [70, 100, 80, 24], "label": "Admin"},
+                {"rect": [40, 100, 24, 24], "label": ""},
+                {"rect": [70, 150, 80, 24], "label": "Viewer"},
+                {"rect": [40, 150, 24, 24], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Admin checkbox.",
+                "target_id": "viewer",
+                "target": {"x": 40, "y": 150, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "admin_label", "text": "Admin", "control_type": "text", "rect": [70, 100, 80, 24]},
+                {"id": "admin", "text": "", "control_type": "checkbox", "rect": [40, 100, 24, 24]},
+                {"id": "viewer_label", "text": "Viewer", "control_type": "text", "rect": [70, 150, 80, 24]},
+                {"id": "viewer", "text": "", "control_type": "checkbox", "rect": [40, 150, 24, 24]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "admin",
+                "rect": [40, 100, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "repeated_checkbox_uses_section_heading_context",
             "capture": {"width": 1000, "height": 500},
             "draw": [

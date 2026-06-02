@@ -9102,6 +9102,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.rejected_reason, "unknown target_id")
 
+    def test_unknown_target_id_with_rect_recovers_obvious_candidate(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target_id": "old_save",
+                    "target": {"x": 120, "y": 100, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("save", "Save", "button", (120, 100, 80, 32)),
+                ControlCandidate("cancel", "Cancel", "button", (220, 100, 80, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "save")
+        self.assertFalse(target.rejected_reason)
+
     def test_unknown_target_id_with_rect_does_not_fall_back_to_raw_model_rect(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -28593,6 +28617,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (200, 96, 220, 32))
 
+    def test_descriptorless_toolbar_context_recovers_duplicate_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("page_refresh", "Refresh", "button", (230, 160, 70, 30)),
+            ControlCandidate("toolbar", "", "toolbar", (420, 80, 300, 60)),
+            ControlCandidate("toolbar_refresh", "Refresh", "button", (630, 96, 70, 30)),
+        ]
+        instruction = "Click Refresh in the toolbar."
+
+        stale_target = resolve_candidate_target(
+            target_id="page_refresh",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_refresh",
+                    "target": {"x": 230, "y": 160, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(stale_target)
+        assert stale_target is not None
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "toolbar_refresh")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "toolbar_refresh")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (630, 96, 70, 30))
+
     def test_generic_spinner_broad_group_rejects_multiple_spinners(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -30270,6 +30347,114 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "bill_country")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_row_current_value_dropdown_uses_column_and_row_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (200, 50, 120, 28)),
+            ControlCandidate("row_acme", "Acme", "dataitem", (20, 100, 620, 42)),
+            ControlCandidate("acme_status", "Active", "combobox", (260, 106, 120, 30)),
+            ControlCandidate("row_globex", "Globex", "dataitem", (20, 160, 620, 42)),
+            ControlCandidate("globex_status", "Active", "combobox", (260, 166, 120, 30)),
+        ]
+        instruction = "Open Status dropdown in the Acme row."
+
+        wrong_target = resolve_candidate_target(
+            target_id="globex_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 166, 120, 30),
+        )
+        exact_target = resolve_candidate_target(
+            target_id="acme_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 166, 120, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 166, 120, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "globex_status",
+                    "target": {"x": 260, "y": 166, "width": 120, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "globex_status")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(snap_target)
+        for resolved in (exact_target, text_target, help_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertEqual(resolved.target_id, "acme_status")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (260, 106, 120, 30))
+
+    def test_repeated_unlabeled_checkbox_recovers_direct_label_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("admin_label", "Admin", "text", (70, 100, 80, 24)),
+            ControlCandidate("admin", "", "checkbox", (40, 100, 24, 24)),
+            ControlCandidate("viewer_label", "Viewer", "text", (70, 150, 80, 24)),
+            ControlCandidate("viewer", "", "checkbox", (40, 150, 24, 24)),
+        ]
+        instruction = "Select Admin checkbox."
+
+        stale_target = resolve_candidate_target(
+            target_id="viewer",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(40, 150, 24, 24),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(40, 150, 24, 24),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "viewer",
+                    "target": {"x": 40, "y": 150, "width": 24, "height": 24},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(stale_target)
+        assert stale_target is not None
+        self.assertTrue(stale_target.rejected_reason)
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "admin")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "admin")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (40, 100, 24, 24))
 
     def test_repeated_option_controls_use_section_heading_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
