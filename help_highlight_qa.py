@@ -2151,6 +2151,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_option_rejects_same_label_combobox_launcher",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 160, 32], "label": "State dropdown"},
+                {"rect": [100, 150, 160, 32], "label": "State option"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the State option.",
+                "target_id": "combo",
+                "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "State", "control_type": "combobox", "rect": [100, 100, 160, 32]},
+                {"id": "radio", "text": "State", "control_type": "radiobutton", "rect": [100, 150, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "radio",
+                "rect": [100, 150, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "state_action_model_rect_prefers_matching_button_over_noun_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -9918,6 +9942,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_print_button_rejects_in_app_print_report_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [760, 8, 42, 34], "label": "Browser Print"},
+                {"rect": [420, 180, 110, 32], "label": "Print report"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Print report in the app.",
+                "target_id": "browser_print",
+                "target": {"x": 760, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_print",
+                    "text": "Print",
+                    "control_type": "button",
+                    "rect": [760, 8, 42, 34],
+                    "window_title": "Report - Google Chrome",
+                },
+                {
+                    "id": "app_print",
+                    "text": "Print report",
+                    "control_type": "button",
+                    "rect": [420, 180, 110, 32],
+                    "window_title": "Report - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_print",
+                "rect": [420, 180, 110, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15715,6 +15775,52 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "modal_context_uses_explicit_surface_with_foreground_rank_zero",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 80, 300, 120], "label": "Confirm changes modal"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the modal.",
+                "target_id": "page_save",
+                "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "modal_window",
+                    "text": "Confirm changes modal",
+                    "control_type": "window",
+                    "rect": [420, 80, 300, 120],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "modal_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [630, 160, 60, 30],
+                    "window_title": "Confirm changes",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [230, 160, 60, 30],
+                    "window_title": "Editor",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "modal_save",
+                "rect": [630, 160, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "dialog_context_uses_foreground_modal_evidence",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16194,6 +16300,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "combo",
                 "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_launcher_rejects_same_label_button_menuitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Account"},
+                {"rect": [200, 80, 160, 28], "label": "Account"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the account dropdown.",
+                "target_id": "stale",
+                "target": {"x": 200, "y": 80, "width": 160, "height": 28},
+            },
+            "candidates": [
+                {"id": "launcher", "text": "Account", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "stale", "text": "Account", "control_type": "menuitem", "rect": [200, 80, 160, 28], "window_title": "Account menu"},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "launcher",
+                "rect": [20, 20, 120, 32],
                 "overlay_emitted": True,
             },
         },

@@ -9406,6 +9406,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     window_title="Onboarding - Google Chrome",
                 ),
             ),
+            (
+                "Print report in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Print",
+                    "button",
+                    (760, 8, 42, 34),
+                    window_title="Report - Google Chrome",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Print report",
+                    "button",
+                    (420, 180, 110, 32),
+                    window_title="Report - Google Chrome",
+                ),
+            ),
         )
         for instruction, chrome_control, app_control in cases:
             with self.subTest(instruction=instruction):
@@ -12737,6 +12754,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, "radio")
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (100, 100, 160, 32))
+
+    def test_explicit_option_rejects_same_label_combobox_launcher(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("radio", "radiobutton", (100, 150, 160, 32)),
+            ("menu", "menuitem", (100, 150, 160, 32)),
+        )
+        for expected_id, expected_type, expected_rect in cases:
+            with self.subTest(expected_type=expected_type):
+                candidates = [
+                    ControlCandidate("combo", "State", "combobox", (100, 100, 160, 32)),
+                    ControlCandidate(expected_id, "State", expected_type, expected_rect),
+                ]
+                instruction = "Select the State option."
+
+                wrong_target = resolve_candidate_target(
+                    target_id="combo",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "combo",
+                            "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.source, "target_id")
+                self.assertEqual(wrong_target.target_id, "combo")
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, expected_id)
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.target_id, expected_id)
+                self.assertFalse(snap_target.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, expected_id)
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, expected_rect)
 
     def test_text_box_wording_rejects_same_label_non_input_target(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -19247,6 +19323,30 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
             ),
             (
+                "Click Save in the modal.",
+                "page_save",
+                "modal_save",
+                [
+                    ControlCandidate("modal_window", "Confirm changes modal", "window", (420, 80, 300, 120), window_rank=0),
+                    ControlCandidate(
+                        "modal_save",
+                        "Save",
+                        "button",
+                        (630, 160, 60, 30),
+                        window_title="Confirm changes",
+                        window_rank=0,
+                    ),
+                    ControlCandidate(
+                        "page_save",
+                        "Save",
+                        "button",
+                        (230, 160, 60, 30),
+                        window_title="Editor",
+                        window_rank=1,
+                    ),
+                ],
+            ),
+            (
                 "Click Save in the panel.",
                 "section_save",
                 "panel_save",
@@ -20245,6 +20345,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "combo")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (10, 10, 180, 32))
+
+    def test_dropdown_launcher_rejects_same_label_button_menuitem(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("launcher", "Account", "button", (20, 20, 120, 32)),
+            ControlCandidate(
+                "stale",
+                "Account",
+                "menuitem",
+                (200, 80, 160, 28),
+                window_title="Account menu",
+            ),
+        ]
+        instruction = "Open the account dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="stale",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 80, 160, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 80, 160, 28),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 80, 160, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "stale",
+                    "target": {"x": 200, "y": 80, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "stale")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.target_id, "launcher")
+        self.assertFalse(text_target.rejected_reason)
+        if wrong_snap is not None:
+            self.assertNotEqual(wrong_snap.target_id, "stale")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "launcher")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (20, 20, 120, 32))
 
     def test_textbox_wrong_target_id_rejects_same_label_combobox(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

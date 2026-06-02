@@ -391,6 +391,7 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
         "bookmarks",
+        "copy",
         "download",
         "downloads",
         "extensions",
@@ -399,8 +400,10 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "history",
         "home",
         "house",
+        "print",
         "reload",
         "refresh",
+        "save",
         "share",
     }
 )
@@ -2132,6 +2135,8 @@ def _text_match_score(
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2364,6 +2369,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2552,6 +2559,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -3451,6 +3464,8 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
         return False
     if "find" in toolbar_words and candidate.rect[1] > 72:
         return False
+    if toolbar_words & BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS and candidate.rect[1] > 72:
+        return False
     return bool(
         toolbar_words
         and (compact_toolbar_shape or compact_text_toolbar_shape)
@@ -3481,6 +3496,14 @@ def _browser_toolbar_chrome_action_mismatch(
         return False
     toolbar_words = raw_tokens & BROWSER_CHROME_TOOLBAR_WORDS
     if not toolbar_words:
+        return False
+    explicit_browser_context = bool(
+        raw_tokens & (BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS - {"toolbar"})
+    )
+    if (
+        not explicit_browser_context
+        and toolbar_words <= BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS
+    ):
         return False
     candidate_tokens = _candidate_semantic_tokens(candidate)
     if not (candidate_tokens & BROWSER_CHROME_TOOLBAR_WORDS):
@@ -3863,6 +3886,8 @@ def _dropdown_option_launcher_mismatch(
         return False
     if candidate.control_type != "menuitem":
         return False
+    if _menuitem_is_splitbutton_dropdown_segment(candidate, candidates):
+        return False
     return _has_dropdown_launcher_candidate(candidate, candidates)
 
 
@@ -3938,16 +3963,17 @@ def _has_dropdown_launcher_candidate(
     for launcher in candidates:
         if launcher.id == candidate.id or _same_visual_candidate(launcher, candidate):
             continue
-        if launcher.control_type not in {"combobox", "edit"}:
+        if launcher.control_type not in {"button", "combobox", "edit", "splitbutton"}:
             continue
-        if _menuitem_is_below_aligned_launcher(candidate, launcher):
-            return True
         launcher_tokens = _candidate_visible_text_tokens(launcher)
-        if (
+        same_label_launcher = (
             candidate_tokens
             and launcher_tokens
             and _text_evidence_score(candidate_tokens, launcher_tokens) >= TARGET_ID_TEXT_FLOOR
-        ):
+        )
+        if same_label_launcher:
+            return True
+        if launcher.control_type in {"combobox", "edit"} and _menuitem_is_below_aligned_launcher(candidate, launcher):
             return True
     return False
 
@@ -3964,6 +3990,40 @@ def _menuitem_is_below_aligned_launcher(
     overlap_ratio = horizontal_overlap / max(1, min(item_width, launcher_width))
     vertical_gap = item_top - (launcher_top + launcher_height)
     return overlap_ratio >= 0.55 and -8 <= vertical_gap <= 320
+
+
+def _menuitem_is_splitbutton_dropdown_segment(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "menuitem":
+        return False
+    candidate_tokens = _candidate_visible_text_tokens(candidate)
+    item_left, item_top, item_width, item_height = candidate.rect
+    item_right = item_left + item_width
+    for launcher in candidates:
+        if launcher.id == candidate.id or _same_visual_candidate(launcher, candidate):
+            continue
+        if launcher.control_type != "splitbutton":
+            continue
+        launcher_tokens = _candidate_visible_text_tokens(launcher)
+        if (
+            candidate_tokens
+            and launcher_tokens
+            and _text_evidence_score(candidate_tokens, launcher_tokens) < TARGET_ID_TEXT_FLOOR
+        ):
+            continue
+        launcher_left, launcher_top, launcher_width, launcher_height = launcher.rect
+        launcher_right = launcher_left + launcher_width
+        same_row = abs(item_top - launcher_top) <= 4 and abs(item_height - launcher_height) <= 8
+        right_segment = (
+            item_left >= launcher_left + launcher_width * 0.52
+            and item_right <= launcher_right + 4
+            and item_width <= max(56, launcher_width * 0.36)
+        )
+        if same_row and right_segment:
+            return True
+    return False
 
 
 def _explicit_text_field_control_type_mismatch(
@@ -4040,6 +4100,30 @@ def _field_alternative_label_tokens(
         "spinner",
         "treeitem",
     }
+
+
+def _explicit_option_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"choice", "choices", "option"}):
+        return False
+    if candidate.control_type != "combobox":
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in {"listitem", "menuitem", "radiobutton", "treeitem"}:
+            continue
+        option_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if option_label_tokens and candidate_label_tokens & option_label_tokens:
+            return True
+    return False
 
 
 def _spinner_stepper_button_match(
@@ -5858,7 +5942,7 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_tokenize_control(candidate.window_title))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
-    if any(candidate.window_rank > other.window_rank for other in candidates):
+    if _candidate_has_rank_modal_evidence(candidate, candidates):
         tokens.add("modal")
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
@@ -5878,6 +5962,29 @@ def _contextual_duplicate_evidence_tokens(
             tokens.add("card")
         tokens.update(_tokenize_control(context.window_title))
     return _object_token_variants(tokens)
+
+
+def _candidate_has_rank_modal_evidence(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if _has_explicit_modal_surface_candidate(candidates):
+        return False
+    return any(candidate.window_rank > other.window_rank for other in candidates)
+
+
+def _has_explicit_modal_surface_candidate(candidates: list[ControlCandidate]) -> bool:
+    for candidate in candidates:
+        tokens = (
+            _candidate_semantic_tokens(candidate)
+            | _tokens_from_text(candidate.descriptor)
+            | _tokens_from_text(candidate.control_type)
+            | _surface_context_type_tokens(candidate.control_type)
+            | _tokenize_control(candidate.window_title)
+        )
+        if tokens & {"dialog", "modal"}:
+            return True
+    return False
 
 
 def _surface_context_type_tokens(control_type: str) -> set[str]:
@@ -7197,6 +7304,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
@@ -8055,6 +8164,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
         return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True
