@@ -2226,6 +2226,8 @@ def _text_match_score(
         return 0.0
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_dialog_modal_surface_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _positional_action_duplicate_mismatch(
@@ -2482,6 +2484,8 @@ def _context_text_match_score(
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_dialog_modal_surface_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3052,6 +3056,12 @@ def _target_id_plausibility(
             "target_id ambiguous",
         )
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _explicit_dialog_modal_surface_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -6629,6 +6639,36 @@ def _contextual_surface_action_alternative_mismatch(
     return False
 
 
+def _explicit_dialog_modal_surface_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"dialog", "modal"}):
+        return False
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    candidate_action_tokens = (
+        raw_tokens | _tokenize_instruction(instruction)
+    ) & _candidate_semantic_tokens(candidate)
+    if not candidate_action_tokens:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    if _candidate_has_foreground_unnamed_modal_surface_evidence(candidate, candidates):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _contextual_duplicate_key(other) == duplicate_key
+        and _candidate_has_foreground_unnamed_modal_surface_evidence(other, candidates)
+        for other in candidates
+    )
+
+
 def _contextual_action_tokens(
     instruction_tokens: set[str],
     candidate: ControlCandidate,
@@ -6811,6 +6851,8 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_nearby_label_tokens(candidate, candidates))
+    if _candidate_has_foreground_unnamed_modal_surface_evidence(candidate, candidates):
+        tokens.update({"dialog", "modal"})
     if _candidate_has_rank_modal_evidence(candidate, candidates):
         tokens.add("modal")
     if _candidate_has_foreground_rank_evidence(candidate, candidates):
@@ -6843,6 +6885,47 @@ def _candidate_has_rank_modal_evidence(
     if _has_explicit_modal_surface_candidate(candidates):
         return False
     return any(candidate.window_rank > other.window_rank for other in candidates)
+
+
+def _candidate_has_foreground_unnamed_modal_surface_evidence(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    ranks = {item.window_rank for item in candidates}
+    if len(ranks) <= 1 or candidate.window_rank != min(ranks):
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    has_duplicate_elsewhere = any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _contextual_duplicate_key(other) == duplicate_key
+        for other in candidates
+    )
+    if not has_duplicate_elsewhere:
+        return False
+    for surface in candidates:
+        if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
+            continue
+        if surface.control_type != "window":
+            continue
+        if surface.window_rank != candidate.window_rank:
+            continue
+        if not _contains_rect(_expand_rect(surface.rect, 4), candidate.rect):
+            continue
+        identity_tokens = (
+            _candidate_semantic_tokens(surface)
+            | _tokens_from_text(surface.descriptor)
+            | _tokenize_control(surface.window_title)
+        )
+        if identity_tokens - {"dialog", "modal", "popup", "unnamed", "untitled", "window"}:
+            continue
+        return True
+    return False
 
 
 def _candidate_has_foreground_rank_evidence(
@@ -8400,6 +8483,8 @@ def _candidate_snap_score(
         return 0.0
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_dialog_modal_surface_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
         return 0.0
     if _positional_action_duplicate_mismatch(
@@ -9390,6 +9475,8 @@ def _candidate_snap_semantic_mismatch(
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_dialog_modal_surface_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True

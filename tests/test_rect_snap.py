@@ -20913,6 +20913,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (500, 300, 70, 30))
 
+    def test_dialog_context_uses_unnamed_foreground_window_surface(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("dialog_window", "", "window", (360, 200, 300, 180), window_rank=0),
+            ControlCandidate("dialog_save", "Save", "button", (500, 310, 70, 30), window_rank=0),
+            ControlCandidate(
+                "page_save",
+                "Save",
+                "button",
+                (100, 100, 70, 30),
+                window_title="Editor",
+                window_rank=1,
+            ),
+        ]
+        instruction = "Click Save in the dialog."
+
+        wrong_target = resolve_candidate_target(
+            target_id="page_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        dialog_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 310, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_save",
+                    "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "page_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(wrong_snap)
+        for resolved in (text_target, dialog_snap, help_target):
+            self.assertEqual(resolved.target_id, "dialog_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 310, 70, 30))
+
     def test_settings_popup_rejects_settings_panel_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
