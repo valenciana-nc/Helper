@@ -1497,11 +1497,11 @@ COMPOUND_SURFACE_CONTROL_TYPES = SURFACE_CONTEXT_CONTROL_TYPES | frozenset(
 SURFACE_ROW_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane"})
 FIELD_SECTION_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "pane"})
 SURFACE_CONTEXT_TYPE_WORDS = {
-    "group": frozenset({"group"}),
+    "group": frozenset({"card", "group"}),
     "headeritem": frozenset({"column", "header", "heading"}),
     "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),
-    "pane": frozenset({"pane"}),
+    "pane": frozenset({"card", "pane"}),
     "toolbar": frozenset({"toolbar"}),
     "window": frozenset({"window"}),
 }

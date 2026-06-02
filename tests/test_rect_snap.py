@@ -26535,6 +26535,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(target.rejected_reason)
             self.assertEqual(target.rect, (540, 148, 70, 32))
 
+    def test_action_label_on_group_or_pane_card_resolves_duplicate_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        for control_type in ("group", "pane"):
+            with self.subTest(control_type=control_type):
+                candidates = [
+                    ControlCandidate("acme_card", "Acme invoice", control_type, (20, 80, 500, 48)),
+                    ControlCandidate("acme_delete", "Delete", "button", (540, 88, 80, 32)),
+                    ControlCandidate("globex_card", "Globex invoice", control_type, (20, 140, 500, 48)),
+                    ControlCandidate("globex_delete", "Delete", "button", (540, 148, 80, 32)),
+                ]
+                instruction = "Click Delete on Globex invoice card."
+
+                wrong_target = resolve_candidate_target(
+                    target_id="acme_delete",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(540, 88, 80, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(540, 88, 80, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(540, 88, 80, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "acme_delete",
+                            "target": {"x": 540, "y": 88, "width": 80, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.source, "target_id")
+                self.assertTrue(wrong_target.rejected_reason)
+                for target in (text_target, snap_target, help_target):
+                    self.assertIsNotNone(target)
+                    assert target is not None
+                    self.assertEqual(target.target_id, "globex_delete")
+                    self.assertFalse(target.rejected_reason)
+                    self.assertEqual(target.rect, (540, 148, 80, 32))
+
     def test_far_action_column_uses_row_context_before_stale_row_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
