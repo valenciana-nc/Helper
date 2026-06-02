@@ -3102,6 +3102,104 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (10, 10, 600, 80))
         self.assertFalse(result.rejected_reason)
 
+    def test_snap_broad_container_prefers_tight_child_action(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = [
+            (
+                "listitem",
+                _make_button("Settings", 20, 80, 600, 80, control_type="ListItem"),
+                _make_button("Settings", 540, 104, 70, 28, control_type="Button"),
+            ),
+            (
+                "button",
+                _make_button("Settings", 20, 80, 600, 80, control_type="Button"),
+                _make_button("Settings", 540, 104, 70, 28, control_type="Button"),
+            ),
+        ]
+
+        for name, broad, tight in cases:
+            with self.subTest(name=name):
+                window = _make_window("App", 0, 0, 1000, 800, [broad, tight])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (20, 80, 600, 80),
+                    "Click Settings.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (540, 104, 70, 28))
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_broad_context_container_prefers_contained_action(self) -> None:
+        from rect_snap import snap_to_control
+
+        for control_type in ("ListItem", "DataItem", "Button"):
+            with self.subTest(control_type=control_type):
+                child = _make_button("Open", 600, 194, 70, 30)
+                parent = _FakeControl(
+                    text="Acme project",
+                    control_type=control_type,
+                    rect=_FakeRect(260, 170, 680, 242),
+                    children=[child],
+                )
+                desktop = _FakeDesktop(
+                    [_make_window("Projects", 0, 0, 1000, 800, [parent])]
+                )
+
+                result = snap_to_control(
+                    (260, 170, 420, 72),
+                    "Click Open for Acme project.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (600, 194, 70, 30))
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_explicit_row_request_keeps_container_over_tight_child_action(self) -> None:
+        from rect_snap import snap_to_control
+
+        row = _make_button("Settings", 20, 80, 600, 80, control_type="ListItem")
+        button = _make_button("Settings", 540, 104, 70, 28, control_type="Button")
+        window = _make_window("App", 0, 0, 1000, 800, [row, button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (20, 80, 600, 80),
+            "Click the Settings table row.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (20, 80, 600, 80))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_broad_container_rejects_multiple_matching_child_actions(self) -> None:
+        from rect_snap import snap_to_control
+
+        row = _make_button("Settings", 20, 80, 600, 80, control_type="ListItem")
+        first = _make_button("Settings", 420, 104, 70, 28, control_type="Button")
+        second = _make_button("Settings", 540, 104, 70, 28, control_type="Button")
+        window = _make_window("App", 0, 0, 1000, 800, [row, first, second])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (20, 80, 600, 80),
+            "Click Settings.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (20, 80, 600, 80))
+        self.assertEqual(result.rejected_reason, "contained control ambiguous")
+
     def test_snap_button_wording_prefers_tight_search_button_over_field(self) -> None:
         from rect_snap import snap_to_control
 

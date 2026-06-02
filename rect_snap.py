@@ -1196,6 +1196,20 @@ def snap_to_control(
         if card_result is not None:
             return card_result
 
+    if best_result is not None and best_score >= confidence_floor:
+        contained_best = _tighter_contained_snap_result(
+            ranked,
+            best_result=best_result,
+            best_semantic_text=best_semantic_text,
+            best_ctype=best_ctype,
+            instruction=instruction,
+            instruction_tokens=instruction_tokens,
+            control_intents=control_intents,
+            confidence_floor=confidence_floor,
+        )
+        if contained_best is not None:
+            return contained_best
+
     if best_result is None or best_score < confidence_floor:
         contained_result = _single_contained_control_intent_result(
             contained_control_intent_results,
@@ -3714,6 +3728,117 @@ def _direct_card_target_result(
         confidence=max(confidence_floor, score),
         source=result.source,
         matched_text=result.matched_text,
+    )
+
+
+def _tighter_contained_snap_result(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    *,
+    best_result: SnapResult,
+    best_semantic_text: str,
+    best_ctype: str,
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+    confidence_floor: float,
+) -> SnapResult | None:
+    if _explicit_container_snap_request(instruction, best_ctype, control_intents):
+        return None
+    best_area = max(1, best_result.rect[2] * best_result.rect[3])
+    matches: list[tuple[float, SnapResult]] = []
+    for score, result, semantic_text, ctype, _window_rank in ranked:
+        if result.rect == best_result.rect:
+            continue
+        candidate_area = max(1, result.rect[2] * result.rect[3])
+        if best_area < candidate_area * 1.8:
+            continue
+        if not _contains_rect(_expand_rect(best_result.rect, 4), result.rect):
+            continue
+        if not _contained_snap_candidate_matches_request(
+            best_semantic_text,
+            best_ctype,
+            semantic_text,
+            ctype,
+            instruction,
+            instruction_tokens,
+            control_intents,
+        ):
+            continue
+        if not any(existing.rect == result.rect for _score, existing in matches):
+            matches.append((score, result))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        return SnapResult(
+            rect=best_result.rect,
+            confidence=0.0,
+            source=best_result.source,
+            matched_text=best_result.matched_text,
+            rejected_reason="contained control ambiguous",
+        )
+    score, result = matches[0]
+    return SnapResult(
+        rect=result.rect,
+        confidence=max(confidence_floor, score),
+        source=result.source,
+        matched_text=result.matched_text,
+    )
+
+
+def _explicit_container_snap_request(
+    instruction: str,
+    ctype: str,
+    control_intents: set[str],
+) -> bool:
+    if ctype not in {"dataitem", "listitem", "treeitem", "cell", "datagridcell", "gridcell"}:
+        return False
+    if ctype in control_intents:
+        return True
+    raw_tokens = _tokens_from_text(instruction)
+    if ctype in {"dataitem", "listitem", "treeitem"}:
+        return bool(raw_tokens & {"card", "dataitem", "item", "listitem", "record", "row", "table", "treeitem"})
+    return bool(raw_tokens & {"cell", "column", "gridcell"})
+
+
+def _contained_snap_candidate_matches_request(
+    best_semantic_text: str,
+    best_ctype: str,
+    semantic_text: str,
+    ctype: str,
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    request_tokens = instruction_tokens | _tokens_from_text(instruction)
+    if control_intents and _control_matches_effective_intent(
+        ctype,
+        semantic_text,
+        "",
+        "",
+        control_intents,
+    ) and not _control_matches_effective_intent(
+        best_ctype,
+        best_semantic_text,
+        "",
+        "",
+        control_intents,
+    ):
+        return True
+    candidate_tokens = _tokenize_control(_semantic_text(semantic_text))
+    context_tokens = _tokenize_control(_semantic_text(best_semantic_text))
+    if (
+        candidate_tokens
+        and context_tokens
+        and request_tokens & candidate_tokens
+        and request_tokens & context_tokens
+    ):
+        return True
+    return _same_snap_intent(
+        best_semantic_text,
+        best_ctype,
+        semantic_text,
+        ctype,
+        instruction_tokens,
     )
 
 
