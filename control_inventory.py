@@ -14324,6 +14324,37 @@ def _generic_shared_prefix_duplicate_ambiguous(
     return False
 
 
+def _exact_visible_label_duplicate_ambiguous(
+    instruction: str,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not _exact_visible_label_matches_request(instruction, selected):
+        return False
+    requested_words = _exact_visible_label_request_words(instruction)
+    if not requested_words:
+        return False
+    control_intents = _instruction_control_intents(instruction)
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if _same_visual_and_context_candidate(candidate, selected):
+            continue
+        if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        if control_intents and not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        if _literal_words_from_text(candidate.text) != requested_words:
+            continue
+        if candidate.window_rank < selected.window_rank:
+            return True
+    return False
+
+
 def _candidate_snap_global_ambiguity(
     instruction: str,
     instruction_tokens: set[str],
@@ -14341,6 +14372,10 @@ def _candidate_snap_global_ambiguity(
         selected,
         candidates,
         instruction_tokens,
+    ) or _exact_visible_label_duplicate_ambiguous(
+        instruction,
+        selected,
+        candidates,
     ) or _generic_shared_prefix_duplicate_ambiguous(
         instruction_tokens,
         selected,

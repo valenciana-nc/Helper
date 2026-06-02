@@ -7954,6 +7954,55 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "candidate_snap")
         self.assertEqual(result.target_id, "c002")
 
+    def test_snap_candidate_target_rejects_background_exact_label_outside_search(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("fg_save", "Save", "button", (20, 20, 80, 32), window_rank=0),
+            ControlCandidate("bg_save", "Save", "button", (300, 20, 80, 32), window_rank=2),
+            ControlCandidate("cancel", "Cancel", "button", (420, 20, 80, 32), window_rank=0),
+        ]
+
+        text_result = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(300, 20, 80, 32),
+        )
+        snap_result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(300, 20, 80, 32),
+        )
+
+        self.assertIsNotNone(text_result)
+        assert text_result is not None
+        self.assertEqual(text_result.target_id, "bg_save")
+        self.assertEqual(text_result.rejected_reason, "ambiguous text match")
+        self.assertIsNotNone(snap_result)
+        assert snap_result is not None
+        self.assertEqual(snap_result.source, "candidate_snap")
+        self.assertEqual(snap_result.target_id, "bg_save")
+        self.assertEqual(snap_result.rejected_reason, "ambiguous candidate snap")
+
+    def test_snap_candidate_target_accepts_foreground_exact_label_outside_search(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=[
+                ControlCandidate("fg_save", "Save", "button", (20, 20, 80, 32), window_rank=0),
+                ControlCandidate("bg_save", "Save", "button", (300, 20, 80, 32), window_rank=2),
+            ],
+            model_rect=(20, 20, 80, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "fg_save")
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_candidate_target_rejects_exact_background_duplicate(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 

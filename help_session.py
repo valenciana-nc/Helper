@@ -378,6 +378,16 @@ def resolve_help_target(
                     )
                 return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
             if candidate_snap is not None:
+                if (
+                    target is not None
+                    and target.rejected_reason == "target_id ambiguous"
+                    and target.target_id
+                    and candidate_snap.target_id == target.target_id
+                    and candidate_snap.rejected_reason == "ambiguous candidate snap"
+                    and _target_id_has_foreground_exact_text_duplicate(target.target_id, candidates)
+                    and not _instruction_has_dialog_resolution_context(decision.instruction)
+                ):
+                    return target
                 return candidate_snap
 
         if target is not None and target.rejected_reason:
@@ -572,6 +582,28 @@ def _target_id_is_surface_candidate(
         candidate.id == target_id and candidate.control_type in SURFACE_PROMOTION_CONTROL_TYPES
         for candidate in candidates
     )
+
+
+def _target_id_has_foreground_exact_text_duplicate(
+    target_id: str,
+    candidates: list[ControlCandidate],
+) -> bool:
+    selected = next((candidate for candidate in candidates if candidate.id == target_id), None)
+    if selected is None or selected.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    selected_words = _tokens_from_text(selected.text)
+    if not selected_words:
+        return False
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type != selected.control_type:
+            continue
+        if candidate.window_rank >= selected.window_rank:
+            continue
+        if _tokens_from_text(candidate.text) == selected_words:
+            return True
+    return False
 
 
 def _maybe_clip_resolution_to_capture(

@@ -688,6 +688,53 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_background_duplicate_wrong_target_id_blocks_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Save"},
+                {"rect": [300, 20, 80, 32], "label": "Save"},
+                {"rect": [420, 20, 80, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "cancel",
+                "target": {"x": 600, "y": 63, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "fg_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [20, 20, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "bg_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [300, 20, 80, 32],
+                    "window_title": "Background Editor",
+                    "window_rank": 2,
+                },
+                {
+                    "id": "cancel",
+                    "text": "Cancel",
+                    "control_type": "button",
+                    "rect": [420, 20, 80, 32],
+                    "window_title": "Active Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bg_save",
+                "rejected_reason": "ambiguous text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "semantic_mismatch_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
