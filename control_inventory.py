@@ -1704,7 +1704,9 @@ def resolve_candidate_target(
             instruction_tokens,
             candidate,
             candidates,
-        ) or matches_row_action or matches_named_contextual_duplicate
+        ) or matches_row_action or matches_named_contextual_duplicate or (
+            _spinner_stepper_button_match(instruction, candidate, candidates)
+        )
         if control_intents and not matches_control_intent:
             score = _context_text_match_score(
                 instruction,
@@ -2173,6 +2175,11 @@ def _text_match_score(
         candidate,
         candidates,
     )
+    matches_spinner_stepper_button = _spinner_stepper_button_match(
+        instruction,
+        candidate,
+        candidates,
+    )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate):
@@ -2197,7 +2204,7 @@ def _text_match_score(
             control_intents,
             instruction=instruction,
         )
-        and not _spinner_stepper_button_match(instruction, candidate, candidates)
+        and not matches_spinner_stepper_button
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
         and not literal_match_tokens
         and not matches_dropdown_item
@@ -2217,6 +2224,13 @@ def _text_match_score(
         return score
     if matches_dropdown_item:
         score = TEXT_MATCH_FLOOR + 0.08
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if matches_spinner_stepper_button:
+        score = TEXT_MATCH_FLOOR + 0.10
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
@@ -2410,6 +2424,8 @@ def _text_match_score(
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _spinner_stepper_parent_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2709,6 +2725,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _spinner_stepper_parent_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
@@ -2958,6 +2976,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id control type mismatch",
+        )
+    if _spinner_stepper_parent_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
         )
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return (
@@ -4509,26 +4533,26 @@ def _named_dropdown_request_tokens(instruction: str) -> set[str]:
 
 def _dropdown_item_request_tokens(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
-    if not _dropdown_launcher_requested(instruction):
-        return set()
-    if not (raw_tokens & {"in", "inside", "within"}):
-        return set()
     launcher_context = _dropdown_item_launcher_context_tokens(instruction)
+    if not _dropdown_launcher_requested(instruction) and not ("menu" in raw_tokens and launcher_context):
+        return set()
+    if not (raw_tokens & {"from", "in", "inside", "within"}):
+        return set()
     return _object_token_variants(
         (_tokenize_instruction(instruction) | raw_tokens)
         - OPEN_VIEW_REQUEST_WORDS
         - GENERIC_OBJECT_REQUEST_WORDS
         - CONTAINED_CONTROL_REQUEST_WORDS
         - launcher_context
-        - {"a", "an", "in", "inside", "the", "within"}
+        - {"a", "an", "from", "in", "inside", "the", "within"}
     )
 
 
 def _dropdown_item_launcher_context_tokens(instruction: str) -> set[str]:
     text = (instruction or "").lower()
     matches = re.findall(
-        r"\b(?:in|inside|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
-        r"(?:drop\s+down|dropdown|combobox|combo|picker|selector)\b",
+        r"\b(?:from|in|inside|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
+        r"(?:drop\s+down|dropdown|combobox|combo|menu|picker|selector)\b",
         text,
     )
     if not matches:
@@ -4541,7 +4565,7 @@ def _dropdown_item_launcher_context_tokens(instruction: str) -> set[str]:
         - OPEN_VIEW_REQUEST_WORDS
         - GENERIC_OBJECT_REQUEST_WORDS
         - CONTAINED_CONTROL_REQUEST_WORDS
-        - {"a", "an", "inside", "in", "the", "within"}
+        - {"a", "an", "from", "inside", "in", "the", "within"}
     )
 
 
@@ -5294,6 +5318,28 @@ def _spinner_stepper_button_match(
     return _has_adjacent_spinner(candidate, candidates)
 
 
+def _spinner_stepper_parent_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "spinner":
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"spinner", "spinbox", "stepper"}):
+        return False
+    requested_up = bool(raw_tokens & SPINNER_INCREMENT_WORDS)
+    requested_down = bool(raw_tokens & SPINNER_DECREMENT_WORDS)
+    if requested_up == requested_down:
+        return False
+    return any(
+        other.id != candidate.id
+        and _spinner_stepper_button_match(instruction, other, candidates)
+        and _is_adjacent_spinner_button(other, candidate)
+        for other in candidates
+    )
+
+
 def _has_adjacent_spinner(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -5301,11 +5347,18 @@ def _has_adjacent_spinner(
     for context in candidates:
         if context.id == candidate.id or context.control_type != "spinner":
             continue
-        if _contains_rect(_expand_rect(context.rect, 6), candidate.rect):
-            return True
-        if _intersects(_expand_rect(context.rect, 8), candidate.rect):
+        if _is_adjacent_spinner_button(candidate, context):
             return True
     return False
+
+
+def _is_adjacent_spinner_button(
+    button: ControlCandidate,
+    spinner: ControlCandidate,
+) -> bool:
+    if _contains_rect(_expand_rect(spinner.rect, 6), button.rect):
+        return True
+    return _intersects(_expand_rect(spinner.rect, 8), button.rect)
 
 
 def _has_combobox_dropdown_arrow_button(
@@ -9125,6 +9178,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _spinner_stepper_parent_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
@@ -9393,6 +9448,8 @@ def _candidate_snap_score(
     if positional_duplicate_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if named_contextual_duplicate_satisfied:
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
+    if _spinner_stepper_button_match(instruction, candidate, candidates):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
@@ -10332,6 +10389,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _spinner_stepper_parent_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return True

@@ -6693,6 +6693,33 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertFalse(result.rejected_reason)
                 self.assertEqual(result.rect, rect)
 
+    def test_snap_candidate_target_recovers_stepper_button_from_spinner_rect(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("spin", "Quantity", "spinner", (100, 100, 120, 32)),
+            ControlCandidate("up", "Increase", "button", (224, 100, 24, 16)),
+            ControlCandidate("down", "Decrease", "button", (224, 116, 24, 16)),
+        ]
+        cases = (
+            ("Increase the Quantity spinner.", "up", (224, 100, 24, 16)),
+            ("Decrease the Quantity spinner.", "down", (224, 116, 24, 16)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 120, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "candidate_snap")
+                self.assertEqual(result.target_id, target_id)
+                self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.rect, rect)
+
     def test_snap_candidate_target_rejects_broad_spinner_group(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target
 
@@ -23301,6 +23328,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (10, 46, 180, 28))
 
+    def test_dropdown_item_from_wording_uses_named_launcher_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_combo", "Status", "combobox", (10, 10, 180, 32)),
+            ControlCandidate("status_active", "Active", "menuitem", (10, 46, 180, 28)),
+            ControlCandidate("priority_combo", "Priority", "combobox", (250, 10, 180, 32)),
+            ControlCandidate("priority_active", "Active", "menuitem", (250, 46, 180, 28)),
+        ]
+        for instruction in (
+            "Click Active from the Status dropdown.",
+            "Choose Active from the Status menu.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="priority_active",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(250, 46, 180, 28),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(250, 46, 180, 28),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(250, 46, 180, 28),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "priority_active",
+                            "target": {"x": 250, "y": 46, "width": 180, "height": 28},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "priority_active")
+                self.assertIn(
+                    wrong_target.rejected_reason,
+                    {"target_id ambiguous", "target_id semantic mismatch"},
+                )
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "status_active")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "status_active")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (10, 46, 180, 28))
+
     def test_dropdown_launcher_rejects_same_label_button_menuitem(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -24341,6 +24427,38 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 )
 
                 self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.target_id, target_id)
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, rect)
+
+    def test_spinner_stepper_without_target_id_recovers_arrow_from_spinner_rect(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("spin", "Quantity", "spinner", (100, 100, 120, 32)),
+            ControlCandidate("up", "Increase", "button", (224, 100, 24, 16)),
+            ControlCandidate("down", "Decrease", "button", (224, 116, 24, 16)),
+        ]
+        cases = (
+            ("Increase the Quantity spinner.", "up", (224, 100, 24, 16)),
+            ("Decrease the Quantity spinner.", "down", (224, 116, 24, 16)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 100, "y": 100, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "text_match")
                 self.assertEqual(target.target_id, target_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)

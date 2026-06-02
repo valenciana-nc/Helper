@@ -944,6 +944,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "spinner_increment_without_target_id_recovers_adjacent_stepper_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 120, 32], "label": "Quantity"},
+                {"rect": [224, 100, 24, 16], "label": "+"},
+                {"rect": [224, 116, 24, 16], "label": "-"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Increase the Quantity spinner.",
+                "target": {"x": 100, "y": 100, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "spin", "text": "Quantity", "control_type": "spinner", "rect": [100, 100, 120, 32]},
+                {"id": "up", "text": "Increase", "control_type": "button", "rect": [224, 100, 24, 16]},
+                {"id": "down", "text": "Decrease", "control_type": "button", "rect": [224, 116, 24, 16]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "up",
+                "rect": [224, 100, 24, 16],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "text_field_wording_rejects_spinner_target",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -18574,6 +18599,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "decision": {
                 "kind": "step",
                 "instruction": "Click Active in the Status dropdown.",
+                "target_id": "priority_active",
+                "target": {"x": 250, "y": 46, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "status_combo", "text": "Status", "control_type": "combobox", "rect": [10, 10, 180, 32]},
+                {"id": "status_active", "text": "Active", "control_type": "menuitem", "rect": [10, 46, 180, 28]},
+                {"id": "priority_combo", "text": "Priority", "control_type": "combobox", "rect": [250, 10, 180, 32]},
+                {"id": "priority_active", "text": "Active", "control_type": "menuitem", "rect": [250, 46, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_active",
+                "rect": [10, 46, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_item_from_dropdown_uses_named_launcher_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 180, 32], "label": "Status"},
+                {"rect": [10, 46, 180, 28], "label": "Active"},
+                {"rect": [250, 10, 180, 32], "label": "Priority"},
+                {"rect": [250, 46, 180, 28], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Active from the Status dropdown.",
+                "target_id": "priority_active",
+                "target": {"x": 250, "y": 46, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "status_combo", "text": "Status", "control_type": "combobox", "rect": [10, 10, 180, 32]},
+                {"id": "status_active", "text": "Active", "control_type": "menuitem", "rect": [10, 46, 180, 28]},
+                {"id": "priority_combo", "text": "Priority", "control_type": "combobox", "rect": [250, 10, 180, 32]},
+                {"id": "priority_active", "text": "Active", "control_type": "menuitem", "rect": [250, 46, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_active",
+                "rect": [10, 46, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_item_from_menu_uses_named_launcher_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 180, 32], "label": "Status"},
+                {"rect": [10, 46, 180, 28], "label": "Active"},
+                {"rect": [250, 10, 180, 32], "label": "Priority"},
+                {"rect": [250, 46, 180, 28], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Choose Active from the Status menu.",
                 "target_id": "priority_active",
                 "target": {"x": 250, "y": 46, "width": 180, "height": 28},
             },
