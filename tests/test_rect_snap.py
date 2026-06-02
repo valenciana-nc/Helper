@@ -23271,6 +23271,16 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (20, 80, 300, 180),
             ),
             (
+                "card_group",
+                "Click Details card.",
+                [
+                    ControlCandidate("container", "Details", "group", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
                 "panel_pane",
                 "Click the Settings panel.",
                 [
