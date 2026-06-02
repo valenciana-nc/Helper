@@ -5295,6 +5295,43 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.rect, (10, 10, 190, 32))
         self.assertFalse(result.rejected_reason)
 
+    def test_state_action_text_match_accepts_turn_on_off_action_buttons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("off", "Turn off notifications", "button", (10, 10, 190, 32)),
+            ControlCandidate("on", "Turn on notifications", "button", (10, 50, 190, 32)),
+            ControlCandidate("checkbox", "Notifications", "checkbox", (260, 10, 180, 32)),
+        ]
+        cases = (
+            ("Turn on notifications.", "on", (10, 50, 190, 32)),
+            ("Turn off notifications.", "off", (10, 10, 190, 32)),
+        )
+        for instruction, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                result = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 190, 32),
+                )
+                snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 190, 32),
+                )
+
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result.source, "text_match")
+                self.assertEqual(result.target_id, target_id)
+                self.assertEqual(result.rect, rect)
+                self.assertFalse(result.rejected_reason)
+                self.assertIsNotNone(snap)
+                assert snap is not None
+                self.assertEqual(snap.target_id, target_id)
+                self.assertFalse(snap.rejected_reason)
+
     def test_explicit_checkbox_wording_recovers_from_state_action_button(self) -> None:
         from control_inventory import ControlCandidate
         from agent import _parse_live_help_decision
@@ -8078,6 +8115,39 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rect, (120, 160, 190, 32))
         self.assertFalse(target.rejected_reason)
+
+    def test_turn_on_off_wrong_target_id_recovers_to_matching_action_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("off", "Turn off notifications", "button", (120, 160, 190, 32)),
+            ControlCandidate("on", "Turn on notifications", "button", (120, 204, 190, 32)),
+            ControlCandidate("checkbox", "Notifications", "checkbox", (360, 160, 180, 32)),
+        ]
+        cases = (
+            ("Turn on notifications.", "off", "on", (120, 204, 190, 32)),
+            ("Turn off notifications.", "on", "off", (120, 160, 190, 32)),
+        )
+        for instruction, wrong_id, target_id, rect in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {"x": 120, "y": 160, "width": 190, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, target_id)
+                self.assertEqual(target.rect, rect)
+                self.assertFalse(target.rejected_reason)
 
     def test_choice_wording_wrong_target_id_recovers_to_radio(self) -> None:
         from control_inventory import ControlCandidate

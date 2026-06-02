@@ -807,6 +807,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "turn_on_action_recovers_from_opposite_stale_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 190, 32], "label": "Turn off notifications"},
+                {"rect": [20, 124, 190, 32], "label": "Turn on notifications"},
+                {"rect": [260, 80, 180, 32], "label": "Notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Turn on notifications.",
+                "target_id": "off",
+                "target": {"x": 20, "y": 80, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "off", "text": "Turn off notifications", "control_type": "button", "rect": [20, 80, 190, 32]},
+                {"id": "on", "text": "Turn on notifications", "control_type": "button", "rect": [20, 124, 190, 32]},
+                {"id": "checkbox", "text": "Notifications", "control_type": "checkbox", "rect": [260, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "on",
+                "rect": [20, 124, 190, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_option_model_rect_snaps_to_radio",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

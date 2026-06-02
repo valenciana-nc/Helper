@@ -10278,22 +10278,28 @@ def _state_action_button_matches_checkbox_intent(
         or bool(instruction_tokens & {"switch", "toggle"})
     ):
         return False
-    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
-    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    turn_instruction = _turn_on_off_action_kind(instruction)
+    requested_on = turn_instruction == "on" or bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = turn_instruction == "off" or bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if requested_on == requested_off:
         return False
 
     control_tokens = _tokens_from_text(candidate.descriptor)
-    if requested_on and not (control_tokens & CHECKBOX_ON_ACTION_WORDS):
+    turn_control = _turn_on_off_action_kind(candidate.descriptor)
+    control_on = turn_control == "on" or bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
+    control_off = turn_control == "off" or bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    if control_on == control_off:
         return False
-    if requested_off and not (control_tokens & CHECKBOX_OFF_ACTION_WORDS):
+    if requested_on and not control_on:
+        return False
+    if requested_off and not control_off:
         return False
 
     instruction_semantic = _tokenize_instruction(instruction) - (
-        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS | {"off", "on", "turn"}
     )
     candidate_semantic = _candidate_semantic_tokens(candidate) - (
-        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS
+        CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS | {"off", "on", "turn"}
     )
     return bool(instruction_semantic & candidate_semantic)
 
