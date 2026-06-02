@@ -383,7 +383,27 @@ BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS = frozenset(
     {"browser", "brave", "chrome", "edge", "toolbar"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
-    {"bookmarks", "downloads", "extensions", "history", "home", "reload", "sidepanel"}
+    {
+        "apps",
+        "bookmarks",
+        "browseressentials",
+        "copilot",
+        "downloads",
+        "extensions",
+        "history",
+        "home",
+        "immersivereader",
+        "passwords",
+        "readaloud",
+        "readinglist",
+        "reload",
+        "sidebar",
+        "sidepanel",
+        "splitscreen",
+        "translate",
+        "wallet",
+        "workspaces",
+    }
 )
 BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS = frozenset(
     {"copy", "print", "save", "share"}
@@ -391,12 +411,16 @@ BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS = frozenset(
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
+        "aloud",
+        "apps",
         "bookmarks",
         "collection",
         "collections",
+        "copilot",
         "copy",
         "download",
         "downloads",
+        "essentials",
         "extensions",
         "favorite",
         "favorites",
@@ -405,12 +429,24 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "history",
         "home",
         "house",
+        "immersive",
+        "password",
+        "passwords",
         "print",
+        "read",
+        "reader",
+        "reading",
         "reload",
         "refresh",
         "save",
         "share",
+        "sidebar",
+        "split",
         "star",
+        "translate",
+        "wallet",
+        "workspace",
+        "workspaces",
     }
 )
 BROWSER_CHROME_FAVORITE_TOOLBAR_WORDS = frozenset({"favorite", "favorites", "star"})
@@ -3569,6 +3605,8 @@ def _browser_toolbar_chrome_action_mismatch(
     candidate: ControlCandidate,
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
+    if _instruction_has_explicit_app_local_context(instruction, raw_tokens):
+        return False
     if not (raw_tokens & BROWSER_CHROME_NAVIGATION_CONTEXT_WORDS):
         return False
     toolbar_words = raw_tokens & BROWSER_CHROME_TOOLBAR_WORDS
@@ -3593,11 +3631,27 @@ def _browser_chrome_app_context_mismatch(
     candidate: ControlCandidate,
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS:
+    explicit_app_local = _instruction_has_explicit_app_local_context(instruction, raw_tokens)
+    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS and not explicit_app_local:
         return False
-    if not _instruction_requests_app_local_surface(instruction, raw_tokens):
+    if not (explicit_app_local or _instruction_requests_app_local_surface(instruction, raw_tokens)):
         return False
     return _looks_like_browser_chrome_surface(candidate)
+
+
+def _instruction_has_explicit_app_local_context(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    surface_tokens = _object_token_variants(raw_tokens)
+    if surface_tokens & {"app", "application", "in_app", "in_page"}:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\bin\s+(?:the\s+)?app\b", text)
+        or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
 
 
 def _instruction_requests_app_local_surface(
@@ -4962,14 +5016,14 @@ def _checkbox_state_action_mismatch(
         return turn_instruction != turn_control
 
     instruction_tokens = _tokens_from_text(instruction)
-    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
-    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    requested_on = turn_instruction == "on" or bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = turn_instruction == "off" or bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if requested_on == requested_off:
         return False
 
     control_tokens = _tokens_from_text(candidate.descriptor)
-    control_on = bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
-    control_off = bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    control_on = turn_control == "on" or bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
+    control_off = turn_control == "off" or bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if control_on == control_off:
         return False
     return requested_on != control_on
@@ -5941,6 +5995,9 @@ def _implicit_container_context_evidence_tokens(
         elif context.control_type in SURFACE_CONTEXT_CONTROL_TYPES:
             if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
                 continue
+        elif context.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+            if not _nearby_row_label_rect_matches(context, candidate):
+                continue
         else:
             continue
         tokens.update(_candidate_semantic_tokens(context))
@@ -6340,6 +6397,7 @@ def _implicit_contextual_duplicate_request_tokens(
             if positional_request
             else _object_token_variants(
                 _contextual_duplicate_aligned_header_tokens(other, candidates)
+                | _contextual_duplicate_nearby_label_tokens(other, candidates)
             )
         )
         if _contextual_duplicate_request_matches_evidence(
@@ -6371,6 +6429,7 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_tokenize_control(candidate.window_title))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
+    tokens.update(_contextual_duplicate_nearby_label_tokens(candidate, candidates))
     if _candidate_has_rank_modal_evidence(candidate, candidates):
         tokens.add("modal")
     for context in candidates:
@@ -6381,6 +6440,7 @@ def _contextual_duplicate_evidence_tokens(
         if not (
             _contains_rect(_expand_rect(context.rect, 4), candidate.rect)
             or _row_action_context_rect_matches(context, candidate)
+            or _nearby_row_label_rect_matches(context, candidate)
         ):
             continue
         tokens.update(_candidate_semantic_tokens(context))
@@ -6441,6 +6501,53 @@ def _contextual_duplicate_aligned_header_tokens(
         tokens.update(_surface_context_type_tokens(header.control_type))
         tokens.update(_tokenize_control(header.window_title))
     return tokens
+
+
+def _contextual_duplicate_nearby_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return set()
+    tokens: set[str] = set()
+    for label in candidates:
+        if label.id == candidate.id or label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        if not _nearby_row_label_rect_matches(label, candidate):
+            continue
+        tokens.update(_candidate_semantic_tokens(label))
+        tokens.update(_tokens_from_text(label.descriptor))
+        tokens.update(_tokenize_control(label.window_title))
+    return tokens
+
+
+def _nearby_row_label_rect_matches(
+    label: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    label_x, label_y, label_width, label_height = label.rect
+    action_x, action_y, action_width, action_height = action.rect
+    if min(label_width, label_height, action_width, action_height) <= 0:
+        return False
+    label_right = label_x + label_width
+    action_right = action_x + action_width
+    if label_x >= action_right:
+        return False
+    label_center_y = label_y + label_height / 2
+    action_center_y = action_y + action_height / 2
+    if abs(label_center_y - action_center_y) > max(8.0, min(label_height, action_height) * 0.55):
+        return False
+    vertical_overlap = min(label_y + label_height, action_y + action_height) - max(
+        label_y,
+        action_y,
+    )
+    if vertical_overlap < min(label_height, action_height) * 0.45:
+        return False
+    horizontal_gap = max(action_x - label_right, label_x - action_right, 0)
+    max_gap = max(48, min(220, max(label_height, action_height) * 6))
+    return horizontal_gap <= max_gap
 
 
 def _contextual_duplicate_position_tokens(

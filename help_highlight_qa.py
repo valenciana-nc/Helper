@@ -2291,6 +2291,27 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "enable_notifications_target_id_rejects_turn_off_notifications_checkbox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 210, 32], "label": "Turn off notifications"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enable notifications.",
+                "target_id": "c001",
+            },
+            "candidates": [
+                {"id": "c001", "text": "Turn off notifications", "control_type": "checkbox", "rect": [20, 80, 210, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "enable_notifications_target_id_rejects_enabled_notifications_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10255,6 +10276,154 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "edge_reading_list_chrome_rejects_app_reading_list_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Edge Reading list"},
+                {"rect": [120, 160, 180, 32], "label": "Reading list"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Reading list in the app.",
+                "target_id": "edge_reading_list",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_reading_list",
+                    "text": "Reading list",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "ReadingList",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_reading_list",
+                    "text": "Reading list",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_reading_list",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edge_copilot_chrome_rejects_app_copilot_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Edge Copilot"},
+                {"rect": [120, 160, 180, 32], "label": "Copilot"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Copilot in the app.",
+                "target_id": "edge_copilot",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_copilot",
+                    "text": "Copilot",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "Copilot",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_copilot",
+                    "text": "Copilot",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_copilot",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edge_passwords_chrome_rejects_app_passwords_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 42, 34], "label": "Edge Passwords"},
+                {"rect": [120, 160, 180, 32], "label": "Passwords"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Passwords in the app.",
+                "target_id": "edge_passwords",
+                "target": {"x": 904, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_passwords",
+                    "text": "Passwords",
+                    "control_type": "button",
+                    "rect": [904, 8, 42, 34],
+                    "automation_id": "Passwords",
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_passwords",
+                    "text": "Passwords",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_passwords",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_essentials_chrome_rejects_app_sidebar_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 8, 80, 34], "label": "Browser essentials"},
+                {"rect": [120, 180, 180, 36], "label": "Browser essentials"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Browser essentials in the app sidebar.",
+                "target_id": "browser_essentials",
+                "target": {"x": 900, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_essentials",
+                    "text": "Browser essentials",
+                    "control_type": "button",
+                    "rect": [900, 8, 80, 34],
+                    "automation_id": "browseressentials",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "app_essentials",
+                    "text": "Browser essentials",
+                    "control_type": "listitem",
+                    "rect": [120, 180, 180, 36],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_essentials",
+                "rect": [120, 180, 180, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15714,6 +15883,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "refund_globex",
                 "rect": [610, 159, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "static_text_row_label_rejects_wrong_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 120, 30], "label": "Acme"},
+                {"rect": [180, 90, 90, 30], "label": "Approve"},
+                {"rect": [20, 140, 120, 30], "label": "Globex"},
+                {"rect": [180, 140, 90, 30], "label": "Approve"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve Acme.",
+                "target_id": "approve_globex",
+                "target": {"x": 180, "y": 140, "width": 90, "height": 30},
+            },
+            "candidates": [
+                {"id": "label_acme", "text": "Acme", "control_type": "text", "rect": [20, 90, 120, 30]},
+                {"id": "approve_acme", "text": "Approve", "control_type": "button", "rect": [180, 90, 90, 30]},
+                {"id": "label_globex", "text": "Globex", "control_type": "text", "rect": [20, 140, 120, 30]},
+                {"id": "approve_globex", "text": "Approve", "control_type": "button", "rect": [180, 140, 90, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "approve_acme",
+                "rect": [180, 90, 90, 30],
                 "overlay_emitted": True,
             },
         },

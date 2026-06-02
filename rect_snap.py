@@ -461,23 +461,59 @@ BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS = frozenset(
     {"address", "browser", "brave", "chrome", "edge", "omnibox", "url"}
 )
 BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
-    {"bookmarks", "downloads", "extensions", "history", "home", "reload", "sidepanel"}
+    {
+        "apps",
+        "bookmarks",
+        "browseressentials",
+        "copilot",
+        "downloads",
+        "extensions",
+        "history",
+        "home",
+        "immersivereader",
+        "passwords",
+        "readaloud",
+        "readinglist",
+        "reload",
+        "sidebar",
+        "sidepanel",
+        "splitscreen",
+        "translate",
+        "wallet",
+        "workspaces",
+    }
 )
 BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     {
         "back",
+        "aloud",
+        "apps",
         "bookmarks",
         "collection",
         "collections",
+        "copilot",
         "download",
         "downloads",
+        "essentials",
         "extensions",
         "forward",
         "history",
         "home",
         "house",
+        "immersive",
+        "password",
+        "passwords",
+        "read",
+        "reader",
+        "reading",
         "reload",
         "refresh",
+        "sidebar",
+        "split",
+        "translate",
+        "wallet",
+        "workspace",
+        "workspaces",
     }
 )
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
@@ -1622,11 +1658,27 @@ def _browser_chrome_app_context_mismatch(
     rect: tuple[int, int, int, int],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS:
+    explicit_app_local = _instruction_has_explicit_app_local_context(instruction, raw_tokens)
+    if raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS and not explicit_app_local:
         return False
-    if not _instruction_requests_app_local_surface(instruction, raw_tokens):
+    if not (explicit_app_local or _instruction_requests_app_local_surface(instruction, raw_tokens)):
         return False
     return _looks_like_browser_chrome_surface(visible_text, automation_id, ctype, window_title, rect)
+
+
+def _instruction_has_explicit_app_local_context(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    surface_tokens = _object_token_variants(raw_tokens)
+    if surface_tokens & {"app", "application", "in_app", "in_page"}:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\bin\s+(?:the\s+)?app\b", text)
+        or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
 
 
 def _instruction_requests_app_local_surface(
@@ -2098,14 +2150,14 @@ def _checkbox_state_action_mismatch(
         return turn_instruction != turn_control
 
     instruction_tokens = _tokens_from_text(instruction)
-    requested_on = bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
-    requested_off = bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    requested_on = turn_instruction == "on" or bool(instruction_tokens & CHECKBOX_ON_ACTION_WORDS)
+    requested_off = turn_instruction == "off" or bool(instruction_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if requested_on == requested_off:
         return False
 
     control_tokens = _tokens_from_text(control_text)
-    control_on = bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
-    control_off = bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
+    control_on = turn_control == "on" or bool(control_tokens & CHECKBOX_ON_ACTION_WORDS)
+    control_off = turn_control == "off" or bool(control_tokens & CHECKBOX_OFF_ACTION_WORDS)
     if control_on == control_off:
         return False
     return requested_on != control_on
