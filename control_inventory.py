@@ -403,6 +403,7 @@ BROWSER_CHROME_APP_CONTEXT_WORDS = frozenset(
         "pane",
         "panel",
         "report",
+        "route",
         "section",
         "sidebar",
         "table",
@@ -502,7 +503,9 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
     }
 )
 BROWSER_CHROME_FAVORITE_TOOLBAR_WORDS = frozenset({"favorite", "favorites", "star"})
-CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
+CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset(
+    {"drawer", "nav", "navigation", "rail", "rails", "sidebar"}
+)
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
@@ -868,7 +871,7 @@ BROWSER_APP_IDENTITY_WORDS = frozenset({"brave", "browser", "chrome", "edge", "g
 BROWSER_PROFILE_ACTION_CONTEXT_WORDS = frozenset({"edit", "pencil"})
 BROWSER_PROFILE_LABEL_HINT_WORDS = frozenset({"all"})
 BROWSER_PROFILE_TOKENS = frozenset({"account", "avatar", "person", "profile", "user"})
-BROWSER_PAGE_TARGET_WORDS = frozenset({"page", "webpage"})
+BROWSER_PAGE_TARGET_WORDS = frozenset({"page", "route", "webpage"})
 BROWSER_PROFILE_MAX_EDGE = 64
 BROWSER_PROFILE_MAX_ASPECT = 1.75
 BROWSER_ADDRESS_BAR_ROLE_WORDS = frozenset(
@@ -1655,6 +1658,18 @@ def resolve_candidate_target(
             ranked.append((score, candidate))
 
     if not ranked:
+        single_strict_text_entry = _single_strict_text_entry_candidate(
+            instruction,
+            candidates,
+        )
+        if single_strict_text_entry is not None:
+            return TargetResolution(
+                rect=single_strict_text_entry.rect,
+                confidence=TEXT_MATCH_FLOOR,
+                source="text_match",
+                matched_text=single_strict_text_entry.descriptor,
+                target_id=single_strict_text_entry.id,
+            )
         return None
 
     ranked.sort(key=lambda item: item[0], reverse=True)
@@ -2052,7 +2067,11 @@ def _text_match_score(
     control_intents = _instruction_control_intents(instruction)
     visible_tokens = _candidate_visible_text_tokens(candidate)
     literal_match_tokens = _literal_stopword_name_match_tokens(instruction, visible_tokens)
-    matches_dropdown_item = _dropdown_item_request_matches_candidate(instruction, candidate)
+    matches_dropdown_item = _dropdown_item_request_matches_candidate(
+        instruction,
+        candidate,
+        candidates,
+    )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     matches_row_action = (
@@ -2249,6 +2268,8 @@ def _text_match_score(
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
     if _dropdown_item_request_launcher_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
         return 0.0
     if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2502,6 +2523,8 @@ def _context_text_match_score(
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return 0.0
     if _dropdown_item_request_launcher_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3157,6 +3180,12 @@ def _target_id_plausibility(
             text_score,
             "target_id control type mismatch",
         )
+    if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -3249,7 +3278,7 @@ def _target_id_plausibility(
             instruction=instruction,
         )
         and not _spinner_stepper_button_match(instruction, candidate, candidates)
-        and not _dropdown_item_request_matches_candidate(instruction, candidate)
+        and not _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
         and not _literal_stopword_name_match_tokens(
             instruction,
             _candidate_visible_text_tokens(candidate),
@@ -4164,7 +4193,7 @@ def _dropdown_option_launcher_mismatch(
         return False
     if candidate.control_type != "menuitem":
         return False
-    if _dropdown_item_request_matches_candidate(instruction, candidate):
+    if _dropdown_item_request_matches_candidate(instruction, candidate, candidates):
         return False
     if _menuitem_is_splitbutton_dropdown_segment(candidate, candidates):
         return False
@@ -4176,6 +4205,8 @@ def _named_dropdown_request_matches_candidate(
     candidate: ControlCandidate,
 ) -> bool:
     if candidate.control_type != "combobox":
+        return False
+    if _dropdown_item_request_tokens(instruction):
         return False
     if _tokens_from_text(instruction) & {"arrow", "caret", "chevron"}:
         return False
@@ -4194,6 +4225,8 @@ def _named_dropdown_alternative_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     if candidate.control_type != "combobox":
+        return False
+    if _dropdown_item_request_tokens(instruction):
         return False
     if _tokens_from_text(instruction) & {"arrow", "caret", "chevron"}:
         return False
@@ -4229,18 +4262,42 @@ def _dropdown_item_request_tokens(instruction: str) -> set[str]:
         return set()
     if not (raw_tokens & {"in", "inside", "within"}):
         return set()
+    launcher_context = _dropdown_item_launcher_context_tokens(instruction)
     return _object_token_variants(
         (_tokenize_instruction(instruction) | raw_tokens)
         - OPEN_VIEW_REQUEST_WORDS
         - GENERIC_OBJECT_REQUEST_WORDS
         - CONTAINED_CONTROL_REQUEST_WORDS
+        - launcher_context
         - {"a", "an", "in", "inside", "the", "within"}
+    )
+
+
+def _dropdown_item_launcher_context_tokens(instruction: str) -> set[str]:
+    text = (instruction or "").lower()
+    matches = re.findall(
+        r"\b(?:in|inside|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
+        r"(?:drop\s+down|dropdown|combobox|combo|picker|selector)\b",
+        text,
+    )
+    if not matches:
+        return set()
+    tokens: set[str] = set()
+    for match in matches:
+        tokens.update(_tokens_from_text(match))
+    return _object_token_variants(
+        tokens
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - CONTAINED_CONTROL_REQUEST_WORDS
+        - {"a", "an", "inside", "in", "the", "within"}
     )
 
 
 def _dropdown_item_request_matches_candidate(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
 ) -> bool:
     if candidate.control_type != "menuitem":
         return False
@@ -4248,7 +4305,64 @@ def _dropdown_item_request_matches_candidate(
     if not requested:
         return False
     candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.text)
-    return bool(requested & candidate_tokens)
+    if not (requested & candidate_tokens):
+        return False
+    launcher_context = _dropdown_item_launcher_context_tokens(instruction)
+    if not launcher_context:
+        return True
+    return bool(
+        candidates
+        and _menuitem_matches_requested_dropdown_launcher(
+            candidate,
+            candidates,
+            launcher_context,
+        )
+    )
+
+
+def _menuitem_matches_requested_dropdown_launcher(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    launcher_context: set[str],
+) -> bool:
+    for launcher in candidates:
+        if launcher.id == candidate.id or _same_visual_candidate(launcher, candidate):
+            continue
+        if launcher.control_type not in {"button", "combobox", "edit", "splitbutton"}:
+            continue
+        launcher_tokens = (
+            _candidate_semantic_tokens(launcher)
+            | _tokens_from_text(launcher.text)
+            | _tokens_from_text(launcher.automation_id)
+        )
+        if not (launcher_context & launcher_tokens):
+            continue
+        if _menuitem_is_below_aligned_launcher(candidate, launcher):
+            return True
+    return False
+
+
+def _dropdown_item_request_menuitem_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type != "menuitem":
+        return False
+    requested = _dropdown_item_request_tokens(instruction)
+    if not requested:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.text)
+    if not (requested & candidate_tokens):
+        return False
+    if _dropdown_item_request_matches_candidate(instruction, candidate, candidates):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if _dropdown_item_request_matches_candidate(instruction, other, candidates):
+            return True
+    return False
 
 
 def _dropdown_item_request_launcher_mismatch(
@@ -4264,7 +4378,7 @@ def _dropdown_item_request_launcher_mismatch(
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
-        if not _dropdown_item_request_matches_candidate(instruction, other):
+        if not _dropdown_item_request_matches_candidate(instruction, other, candidates):
             continue
         if _has_dropdown_launcher_candidate(other, candidates):
             return True
@@ -4360,21 +4474,49 @@ def _explicit_text_field_control_type_mismatch(
     instruction: str,
     candidate: ControlCandidate,
 ) -> bool:
+    if _strict_text_entry_requested(instruction):
+        return candidate.control_type != "edit"
+    if candidate.control_type != "spinner":
+        return False
     raw_tokens = _tokens_from_text(instruction)
-    strict_text_entry = (
+    if raw_tokens & {"spinner", "stepper"}:
+        return False
+    return False
+
+
+def _strict_text_entry_requested(instruction: str) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    return (
         "textbox" in raw_tokens
         or "textarea" in raw_tokens
         or {"text", "box"} <= raw_tokens
         or {"text", "field"} <= raw_tokens
         or {"text", "input"} <= raw_tokens
     )
-    if strict_text_entry:
-        return candidate.control_type != "edit"
-    if candidate.control_type != "spinner":
-        return False
-    if raw_tokens & {"spinner", "stepper"}:
-        return False
-    return False
+
+
+def _single_strict_text_entry_candidate(
+    instruction: str,
+    candidates: list[ControlCandidate],
+) -> ControlCandidate | None:
+    if not _strict_text_entry_requested(instruction):
+        return None
+    selected: ControlCandidate | None = None
+    for candidate in candidates:
+        if candidate.control_type != "edit":
+            continue
+        if _browser_chrome_app_context_mismatch(instruction, candidate):
+            continue
+        if _browser_address_bar_content_mismatch(
+            instruction,
+            _tokenize_instruction(instruction),
+            candidate,
+        ):
+            continue
+        if selected is not None and not _same_visual_candidate(selected, candidate):
+            return None
+        selected = candidate
+    return selected
 
 
 def _explicit_field_alternative_mismatch(
@@ -8274,6 +8416,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _dropdown_item_request_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _combobox_dropdown_arrow_control_mismatch(instruction, candidate, candidates):
         return 0.0
     if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
@@ -8294,7 +8438,7 @@ def _candidate_snap_score(
             instruction=instruction,
         )
         and not _spinner_stepper_button_match(instruction, candidate, candidates)
-        and not _dropdown_item_request_matches_candidate(instruction, candidate)
+        and not _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
         and not _contextual_action_candidate_matches_surface_request(
             instruction,
             instruction_tokens,
@@ -9231,6 +9375,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_tab_contextual_item_mismatch(instruction, candidate):
         return True
     if _dropdown_item_request_launcher_mismatch(instruction, candidate, candidates):
+        return True
+    if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
         return True
     if _literal_stopword_name_alternative_mismatch(instruction, candidate, candidates):
         return True

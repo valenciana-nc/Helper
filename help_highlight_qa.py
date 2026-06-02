@@ -961,10 +961,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "spin", "text": "Retries", "control_type": "spinner", "rect": [20, 120, 160, 32]},
             ],
             "expected": {
-                "source": "target_id",
-                "target_id": "spin",
-                "rejected_reason": "target_id control type mismatch",
-                "overlay_emitted": False,
+                "source": "text_match",
+                "target_id": "edit",
+                "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
             },
         },
         {
@@ -12946,6 +12946,78 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_app_route_rejects_browser_tabitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 220, 32], "label": "Customers - MyApp - Google Chrome"},
+                {"rect": [20, 120, 180, 32], "label": "Customers"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Customers route.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Customers - MyApp - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 220, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {
+                    "id": "customers",
+                    "text": "Customers",
+                    "control_type": "listitem",
+                    "rect": [20, 120, 180, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "customers",
+                "rect": [20, 120, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "left_rail_item_rejects_browser_tabitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 220, 32], "label": "Settings - MyApp - Google Chrome"},
+                {"rect": [20, 120, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings left rail item.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Settings - MyApp - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [20, 20, 220, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+                {
+                    "id": "item",
+                    "text": "Settings",
+                    "control_type": "listitem",
+                    "rect": [20, 120, 180, 32],
+                    "window_title": "MyApp - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "item",
+                "rect": [20, 120, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "modal_button_model_rect_snaps_to_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16975,6 +17047,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "dialog_close_exact_target_id_returns_clean_text_resolution",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Close"},
+                {"rect": [500, 300, 80, 32], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target_id": "dialog_close",
+                "target": {"x": 500, "y": 300, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [500, 300, 80, 32],
+                    "window_title": "Preferences dialog",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "dialog_close",
+                "rect": [500, 300, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "settings_popup_recovers_from_settings_panel_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -17611,6 +17721,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "text_match",
                 "target_id": "active",
+                "rect": [10, 46, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_item_request_uses_named_launcher_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 180, 32], "label": "Status"},
+                {"rect": [10, 46, 180, 28], "label": "Active"},
+                {"rect": [250, 10, 180, 32], "label": "Priority"},
+                {"rect": [250, 46, 180, 28], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Active in the Status dropdown.",
+                "target_id": "priority_active",
+                "target": {"x": 250, "y": 46, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "status_combo", "text": "Status", "control_type": "combobox", "rect": [10, 10, 180, 32]},
+                {"id": "status_active", "text": "Active", "control_type": "menuitem", "rect": [10, 46, 180, 28]},
+                {"id": "priority_combo", "text": "Priority", "control_type": "combobox", "rect": [250, 10, 180, 32]},
+                {"id": "priority_active", "text": "Active", "control_type": "menuitem", "rect": [250, 46, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_active",
                 "rect": [10, 46, 180, 28],
                 "overlay_emitted": True,
             },

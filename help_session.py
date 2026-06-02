@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import re
 import subprocess
 import threading
 import time
@@ -185,6 +186,12 @@ def resolve_help_target(
                 and target.rejected_reason == "target_id ambiguous"
                 and text_target.target_id == target.target_id
             ):
+                if _instruction_has_dialog_resolution_context(decision.instruction):
+                    return _maybe_clip_resolution_to_capture(
+                        text_target,
+                        capture,
+                        clip_to_capture,
+                    )
                 return target
             return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
 
@@ -214,7 +221,13 @@ def resolve_help_target(
                     and target.target_id
                     and candidate_snap.target_id == target.target_id
                 ):
-                    return target
+                    if not _instruction_has_dialog_resolution_context(decision.instruction):
+                        return target
+                    return _maybe_clip_resolution_to_capture(
+                        candidate_snap,
+                        capture,
+                        clip_to_capture,
+                    )
                 return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
             if candidate_snap is not None:
                 return candidate_snap
@@ -296,6 +309,10 @@ def resolve_help_target(
         source="model",
         matched_text=snap.matched_text,
     ), capture, clip_to_capture)
+
+
+def _instruction_has_dialog_resolution_context(instruction: str) -> bool:
+    return bool(re.search(r"\b(?:dialog|modal|popup)\b", instruction or "", re.IGNORECASE))
 
 
 def _maybe_clip_resolution_to_capture(
