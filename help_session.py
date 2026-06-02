@@ -43,6 +43,7 @@ POST_ACTION_SETTLE_SEC = 0.6
 POST_CLICK_SETTLE_SEC = 0.35
 OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
+SURFACE_PROMOTION_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
 CANDIDATE_EMPTY_RETRIES = 2
 CANDIDATE_EMPTY_RETRY_SEC = 0.08
 UIA_BACKED_TARGET_SOURCES = frozenset(
@@ -180,6 +181,20 @@ def resolve_help_target(
             candidates=candidates,
             model_rect=model_rect,
         )
+        if (
+            target is not None
+            and target.rejected_reason
+            and model_rect is not None
+            and _target_id_is_surface_candidate(decision.target_id, candidates)
+            and _instruction_has_surface_promotion_context(decision.instruction)
+        ):
+            candidate_snap = snap_candidate_target(
+                instruction=decision.instruction,
+                candidates=candidates,
+                model_rect=model_rect,
+            )
+            if candidate_snap is not None and not candidate_snap.rejected_reason:
+                return _maybe_clip_resolution_to_capture(candidate_snap, capture, clip_to_capture)
         if text_target is not None and not text_target.rejected_reason:
             if (
                 target is not None
@@ -313,6 +328,29 @@ def resolve_help_target(
 
 def _instruction_has_dialog_resolution_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:dialog|modal|popup)\b", instruction or "", re.IGNORECASE))
+
+
+def _instruction_has_surface_promotion_context(instruction: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:in|inside|on|within)\s+(?:the\s+)?"
+            r"(?:group|header|menu|pane|panel|toolbar|window)\b",
+            instruction or "",
+            re.IGNORECASE,
+        )
+    )
+
+
+def _target_id_is_surface_candidate(
+    target_id: str,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not target_id:
+        return False
+    return any(
+        candidate.id == target_id and candidate.control_type in SURFACE_PROMOTION_CONTROL_TYPES
+        for candidate in candidates
+    )
 
 
 def _maybe_clip_resolution_to_capture(

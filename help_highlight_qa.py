@@ -20344,6 +20344,98 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "context_menu_action_recovers_from_toolbar_duplicate",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Delete"},
+                {"rect": [400, 100, 200, 160], "label": "Row actions menu"},
+                {"rect": [420, 120, 160, 28], "label": "Archive"},
+                {"rect": [420, 154, 160, 28], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Delete in the row context menu.",
+                "target_id": "toolbar_delete",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "toolbar_delete", "text": "Delete", "control_type": "button", "rect": [20, 20, 80, 32]},
+                {"id": "row_menu", "text": "Row actions menu", "control_type": "menu", "rect": [400, 100, 200, 160]},
+                {"id": "menu_archive", "text": "Archive", "control_type": "menuitem", "rect": [420, 120, 160, 28]},
+                {"id": "menu_delete", "text": "Delete", "control_type": "menuitem", "rect": [420, 154, 160, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "menu_delete",
+                "rect": [420, 154, 160, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "close_window_recovers_from_tab_close_button",
+            "capture": {"width": 1200, "height": 500},
+            "draw": [
+                {"rect": [120, 8, 24, 24], "label": "Close"},
+                {"rect": [1000, 8, 45, 30], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close window.",
+                "target_id": "tab_close",
+                "target": {"x": 120, "y": 8, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {
+                    "id": "tab_close",
+                    "text": "Close",
+                    "automation_id": "Close",
+                    "control_type": "button",
+                    "rect": [120, 8, 24, 24],
+                    "window_title": "Chrome",
+                },
+                {
+                    "id": "window_close",
+                    "text": "Close",
+                    "automation_id": "Close",
+                    "control_type": "button",
+                    "rect": [1000, 8, 45, 30],
+                    "window_title": "Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "window_close",
+                "rect": [1000, 8, 45, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "state_status_chip_recovers_to_requested_action",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 80, 760, 64], "label": "Morgan"},
+                {"rect": [220, 100, 130, 32], "label": "Password reset"},
+                {"rect": [680, 100, 120, 32], "label": "Reset password"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Reset password for Morgan.",
+                "target_id": "status",
+                "target": {"x": 220, "y": 100, "width": 130, "height": 32},
+            },
+            "candidates": [
+                {"id": "morgan", "text": "Morgan", "control_type": "dataitem", "rect": [20, 80, 760, 64]},
+                {"id": "status", "text": "Password reset", "control_type": "button", "rect": [220, 100, 130, 32]},
+                {"id": "reset", "text": "Reset password", "control_type": "button", "rect": [680, 100, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "reset",
+                "rect": [680, 100, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "panel_sized_candidate_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

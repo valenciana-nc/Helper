@@ -27082,6 +27082,152 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
         self.assertNotEqual(target.target_id, "cancel")
 
+    def test_context_menu_action_recovers_from_toolbar_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("toolbar_delete", "Delete", "button", (20, 20, 80, 32)),
+            ControlCandidate("row_menu", "Row actions menu", "menu", (400, 100, 200, 160)),
+            ControlCandidate("menu_archive", "Archive", "menuitem", (420, 120, 160, 28)),
+            ControlCandidate("menu_delete", "Delete", "menuitem", (420, 154, 160, 28)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="toolbar_delete",
+            instruction="Click Delete in the row context menu.",
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        snap = snap_candidate_target(
+            instruction="Click Delete in the row context menu.",
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Delete in the row context menu.",
+                    "target_id": "toolbar_delete",
+                    "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "menu_delete")
+        self.assertFalse(target.rejected_reason)
+
+    def test_close_window_recovers_from_tab_close_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "tab_close",
+                "Close",
+                "button",
+                (120, 8, 24, 24),
+                automation_id="Close",
+                window_title="Chrome",
+            ),
+            ControlCandidate(
+                "window_close",
+                "Close",
+                "button",
+                (900, 8, 45, 30),
+                automation_id="Close",
+                window_title="Chrome",
+            ),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="tab_close",
+            instruction="Close window.",
+            candidates=candidates,
+            model_rect=(120, 8, 24, 24),
+        )
+        snap = snap_candidate_target(
+            instruction="Close window.",
+            candidates=candidates,
+            model_rect=(120, 8, 24, 24),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close window.",
+                    "target_id": "tab_close",
+                    "target": {"x": 120, "y": 8, "width": 24, "height": 24},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "window_close")
+        self.assertFalse(target.rejected_reason)
+
+    def test_state_status_chip_recovers_to_requested_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("morgan", "Morgan", "dataitem", (20, 80, 760, 64)),
+            ControlCandidate("status", "Password reset", "button", (220, 100, 130, 32)),
+            ControlCandidate("reset", "Reset password", "button", (680, 100, 120, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="status",
+            instruction="Reset password for Morgan.",
+            candidates=candidates,
+            model_rect=(220, 100, 130, 32),
+        )
+        snap = snap_candidate_target(
+            instruction="Reset password for Morgan.",
+            candidates=candidates,
+            model_rect=(220, 100, 130, 32),
+        )
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Reset password for Morgan.",
+                    "target_id": "status",
+                    "target": {"x": 220, "y": 100, "width": 130, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "reset")
+        self.assertFalse(target.rejected_reason)
+
     def test_model_rect_on_mismatched_candidate_rejects_instead_of_raw_overlay(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target

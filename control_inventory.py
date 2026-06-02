@@ -679,6 +679,7 @@ STATE_LABEL_ACTION_GROUPS = (
     ),
     (frozenset({"mark", "read", "unread"}), frozenset({"read", "unread"})),
 )
+SAME_FORM_STATE_ACTION_WORDS = frozenset({"reset"})
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
 SEARCH_ACTION_WORDS = frozenset({"find", "search"})
@@ -1825,6 +1826,16 @@ def resolve_candidate_target(
 
     runner_up = _first_distinct_ranked_candidate(ranked[1:], candidate)
     if runner_up is not None and best_score - runner_up[0] < TEXT_MATCH_GAP:
+        if _exact_visible_label_matches_request(instruction, candidate) and not (
+            _exact_visible_label_matches_request(instruction, runner_up[1])
+        ):
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=best_score,
+                source="text_match",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
         if _contextual_control_intent_text_match_ambiguous(
             instruction=instruction,
             instruction_tokens=instruction_tokens,
@@ -2306,6 +2317,16 @@ def _text_match_score(
         candidate,
         candidates,
     )
+    matches_contextual_surface_action = _contextual_action_candidate_matches_surface_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ) and not _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    )
     matches_contextual_control_intent = bool(control_intents) and _candidate_matches_control_intent(
         candidate,
         control_intents,
@@ -2323,6 +2344,7 @@ def _text_match_score(
             control_intents,
             instruction=instruction,
         )
+        and not matches_contextual_surface_action
         and not matches_spinner_stepper_button
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
         and not literal_match_tokens
@@ -2446,6 +2468,8 @@ def _text_match_score(
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_context_action_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _window_close_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2679,6 +2703,13 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(max(score, 0.0), 1.0)
+    if matches_contextual_surface_action:
+        score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     if _candidate_satisfies_tab_context_action_request(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR + 0.04
         if visible_tokens:
@@ -2827,6 +2858,8 @@ def _context_text_match_score(
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_context_action_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _window_close_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3072,6 +3105,8 @@ def _single_dialog_dismiss_candidate(
             preferred.append(candidate)
     selected = preferred or dismiss_candidates
     if window_close_requested:
+        selected = _window_close_preferred_candidates(selected)
+    if window_close_requested:
         contextual_selected = []
     else:
         contextual_selected = [
@@ -3106,7 +3141,12 @@ def _single_dialog_dismiss_candidate(
                 target_id=candidate.id,
             )
         if window_close_requested:
-            candidate = sorted(selected, key=_candidate_sort_key)[0]
+            sort_key = (
+                _window_close_candidate_sort_key
+                if any(_looks_like_window_titlebar_button(candidate) for candidate in selected)
+                else _candidate_sort_key
+            )
+            candidate = sorted(selected, key=sort_key)[0]
             return TargetResolution(
                 rect=candidate.rect,
                 confidence=TEXT_MATCH_FLOOR,
@@ -3160,6 +3200,59 @@ def _single_dialog_dismiss_candidate(
         matched_text=candidate.descriptor,
         target_id=candidate.id,
     )
+
+
+def _window_close_preferred_candidates(
+    candidates: list[ControlCandidate],
+) -> list[ControlCandidate]:
+    if not candidates:
+        return []
+    titlebar = [candidate for candidate in candidates if _looks_like_window_titlebar_button(candidate)]
+    return titlebar or candidates
+
+
+def _window_close_candidate_sort_key(candidate: ControlCandidate) -> tuple[int, int, int, int, int, int, int]:
+    x, y, width, height = candidate.rect
+    return (
+        candidate.window_rank,
+        0 if _looks_like_window_titlebar_button(candidate) else 1,
+        -(x + width),
+        y,
+        -width,
+        height,
+        candidate.depth,
+    )
+
+
+def _window_close_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not ({"close", "window"} <= raw_tokens):
+        return False
+    if raw_tokens & {"browser", "page", "tab", "toolbar"}:
+        return False
+    if not _looks_like_close_or_x_button(candidate):
+        return False
+    close_candidates = [
+        item
+        for item in candidates
+        if item.id != candidate.id
+        and not _same_visual_candidate(item, candidate)
+        and _looks_like_close_or_x_button(item)
+    ]
+    if not close_candidates:
+        return False
+    candidates_with_selected = close_candidates + [candidate]
+    if not any(_looks_like_window_titlebar_button(item) for item in candidates_with_selected):
+        return False
+    selected = sorted(
+        _window_close_preferred_candidates(candidates_with_selected),
+        key=_window_close_candidate_sort_key,
+    )[0]
+    return selected.id != candidate.id
 
 
 def _target_id_plausibility(
@@ -3403,6 +3496,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _close_context_action_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _window_close_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -6546,6 +6645,8 @@ def _explicit_action_context_mismatch_without_contextual_evidence(
 ) -> bool:
     if not _explicit_action_context_mismatch(instruction, candidate):
         return False
+    if _state_label_action_mismatch(instruction, candidate.descriptor):
+        return True
     if _same_action_family_object_mismatch(instruction, candidate.text):
         return True
     return not _candidate_satisfies_contextual_duplicate_request(
@@ -8415,6 +8516,8 @@ def _contextual_duplicate_evidence_tokens(
         tokens.update(_tokens_from_text(context.descriptor))
         tokens.update(_tokens_from_text(context.control_type))
         tokens.update(_surface_context_type_tokens(context.control_type))
+        if context.control_type == "menu":
+            tokens.add("context")
         if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
             tokens.add("card")
     return _object_token_variants(tokens)
@@ -9369,6 +9472,8 @@ def _state_label_action_mismatch(
         return False
 
     instruction_tokens = _literal_words_from_text(instruction)
+    if _same_form_state_label_action_mismatch(instruction, candidate_text):
+        return True
     if control_tokens == _exact_visible_label_request_words(instruction):
         return False
     if _state_label_is_target_identity(instruction_tokens, control_tokens):
@@ -9382,6 +9487,20 @@ def _state_label_action_mismatch(
         if instruction_tokens & action_words and control_tokens & state_words:
             return True
     return False
+
+
+def _same_form_state_label_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_words = _literal_word_sequence(instruction)
+    control_words = _literal_word_sequence(candidate_text)
+    if len(instruction_words) < 2 or len(control_words) < 2:
+        return False
+    requested_action = instruction_words[0]
+    if requested_action not in SAME_FORM_STATE_ACTION_WORDS:
+        return False
+    return control_words[-1] == requested_action and control_words[0] != requested_action
 
 
 def _state_action_object_only_alternative_mismatch(
@@ -10485,6 +10604,8 @@ def _candidate_snap_score(
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_context_action_mismatch(instruction, candidate, candidates):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _window_close_alternative_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -11731,6 +11852,13 @@ def _candidate_snap_semantic_mismatch(
         candidates,
     ):
         return True
+    if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True
     if not instruction_tokens or not semantic_tokens:
@@ -11789,6 +11917,8 @@ def _candidate_snap_semantic_mismatch(
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return True
     if _close_context_action_mismatch(instruction, candidate, candidates):
+        return True
+    if _window_close_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True
