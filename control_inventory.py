@@ -1485,6 +1485,7 @@ ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", 
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
 SURFACE_ROW_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane"})
+FIELD_SECTION_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "pane"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "group": frozenset({"group"}),
     "headeritem": frozenset({"column", "header", "heading"}),
@@ -6724,6 +6725,7 @@ def _field_alternative_label_tokens(
         | _tokens_from_text(candidate.automation_id)
         | _nearby_field_label_tokens(candidate, candidates)
         | _tabular_field_label_tokens(candidate, candidates)
+        | _containing_field_section_label_tokens(candidate, candidates)
     )
     return _object_token_variants(tokens) - {
         "box",
@@ -6756,6 +6758,39 @@ def _tabular_field_label_tokens(
     header_tokens = _contextual_duplicate_aligned_header_tokens(candidate, candidates)
     row_tokens = _contained_row_context_objects(candidate, candidates)
     return _object_token_variants(header_tokens | row_tokens)
+
+
+def _containing_field_section_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+        return set()
+    candidate_area = max(1, candidate.rect[2] * candidate.rect[3])
+    best_area: int | None = None
+    best_tokens: set[str] = set()
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if context.control_type not in FIELD_SECTION_CONTEXT_CONTROL_TYPES:
+            continue
+        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        context_area = max(1, context.rect[2] * context.rect[3])
+        if context_area <= candidate_area:
+            continue
+        tokens = (
+            _candidate_semantic_tokens(context)
+            | _tokens_from_text(context.descriptor)
+            | _surface_context_type_tokens(context.control_type)
+        )
+        tokens = _object_token_variants(tokens)
+        if not tokens:
+            continue
+        if best_area is None or context_area < best_area:
+            best_area = context_area
+            best_tokens = tokens
+    return best_tokens
 
 
 def _subtype_alternative_label_tokens(

@@ -671,6 +671,9 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "spinner",
         "headeritem",
         "slider",
+        "cell",
+        "datagridcell",
+        "gridcell",
     }
 )
 
@@ -714,6 +717,7 @@ def snap_to_control(
 
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
+    direct_card_request = _direct_card_target_request(instruction)
     search_rect = _expand_rect(model_rect, margin_px)
     model_center = _center(model_rect)
     diagonal = max(1.0, _diagonal_of(search_rect))
@@ -1182,6 +1186,15 @@ def snap_to_control(
     if foreground_conflict is not None:
         return foreground_conflict
 
+    if direct_card_request:
+        card_result = _direct_card_target_result(
+            ranked,
+            instruction_tokens=instruction_tokens,
+            confidence_floor=confidence_floor,
+        )
+        if card_result is not None:
+            return card_result
+
     if best_result is None or best_score < confidence_floor:
         contained_result = _single_contained_control_intent_result(
             contained_control_intent_results,
@@ -1202,6 +1215,13 @@ def snap_to_control(
             )
         ):
             return control_type_mismatch_result
+        if len(contained_control_intent_results) > 1:
+            return SnapResult(
+                rect=model_rect,
+                confidence=0.0,
+                source="uia",
+                rejected_reason="contained control ambiguous",
+            )
         if (
             best_result is not None
             and _semantic_mismatch(
@@ -3609,6 +3629,54 @@ def _single_contained_control_intent_result(
     return SnapResult(
         rect=result.rect,
         confidence=max(confidence_floor, result.confidence),
+        source=result.source,
+        matched_text=result.matched_text,
+    )
+
+
+def _direct_card_target_request(instruction: str) -> bool:
+    text = (instruction or "").strip().lower()
+    text = re.sub(r"[.!?]+$", "", text).strip()
+    match = re.match(
+        r"^(?:click|focus|highlight|open|press|select|show|tap)\s+(?:the\s+)?(.+?)$",
+        text,
+    )
+    if not match:
+        return False
+    requested_object = match.group(1).strip()
+    if re.search(r"\b(?:for|from|in|inside|on|within|with)\b", requested_object):
+        return False
+    return bool(_tokens_from_text(requested_object) & {"card", "cards", "tile", "tiles"})
+
+
+def _direct_card_target_result(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    *,
+    instruction_tokens: set[str],
+    confidence_floor: float,
+) -> SnapResult | None:
+    matches: list[tuple[float, SnapResult]] = []
+    for score, result, semantic_text, ctype, _window_rank in ranked:
+        if ctype not in {"listitem", "treeitem"}:
+            continue
+        candidate_tokens = _tokenize_control(_semantic_text(semantic_text))
+        if not candidate_tokens or not (candidate_tokens & instruction_tokens):
+            continue
+        matches.append((score, result))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        return SnapResult(
+            rect=matches[0][1].rect,
+            confidence=0.0,
+            source=matches[0][1].source,
+            matched_text=matches[0][1].matched_text,
+            rejected_reason="card target ambiguous",
+        )
+    score, result = matches[0]
+    return SnapResult(
+        rect=result.rect,
+        confidence=max(confidence_floor, score),
         source=result.source,
         matched_text=result.matched_text,
     )

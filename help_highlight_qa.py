@@ -22056,6 +22056,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "repeated_field_label_uses_structural_section_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [10, 30, 430, 90], "label": "Shipping"},
+                {"rect": [120, 54, 260, 36], "label": ""},
+                {"rect": [10, 130, 430, 90], "label": "Billing"},
+                {"rect": [120, 154, 260, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Email text field in Billing.",
+                "target_id": "ship_email",
+                "target": {"x": 120, "y": 54, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "ship_group", "text": "Shipping", "control_type": "group", "rect": [10, 30, 430, 90]},
+                {"id": "ship_email", "text": "", "control_type": "edit", "automation_id": "email", "rect": [120, 54, 260, 36]},
+                {"id": "bill_group", "text": "Billing", "control_type": "group", "rect": [10, 130, 430, 90]},
+                {"id": "bill_email", "text": "", "control_type": "edit", "automation_id": "email", "rect": [120, 154, 260, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_email",
+                "rect": [120, 154, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "named_dropdown_rejects_unlabeled_combobox_without_label_evidence",
             "capture": {"width": 1000, "height": 500},
             "draw": [

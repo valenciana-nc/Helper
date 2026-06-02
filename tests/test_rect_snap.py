@@ -3065,6 +3065,25 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, rect)
                 self.assertFalse(result.rejected_reason)
 
+    def test_snap_direct_card_request_prefers_container_over_same_label_child(self) -> None:
+        from rect_snap import snap_to_control
+
+        card = _make_button("Settings", 10, 10, 600, 80, control_type="ListItem")
+        button = _make_button("Settings", 20, 20, 80, 32, control_type="Button")
+        window = _make_window("App", 0, 0, 1000, 800, [card, button])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (20, 20, 80, 32),
+            "Click the Settings card.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (10, 10, 600, 80))
+        self.assertFalse(result.rejected_reason)
+
     def test_snap_button_wording_prefers_tight_search_button_over_field(self) -> None:
         from rect_snap import snap_to_control
 
@@ -3180,6 +3199,52 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rect, (100, 50, 120, 28))
         self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_drifted_table_cell_intent_without_raw_fallback(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click this table cell.", "Cell"),
+            ("Click this grid cell.", "GridCell"),
+            ("Click this data grid cell.", "DataGridCell"),
+        )
+        for instruction, control_type in cases:
+            with self.subTest(instruction=instruction, control_type=control_type):
+                cell = _make_button("Active", 260, 112, 120, 30, control_type=control_type)
+                window = _make_window("Grid", 0, 0, 1000, 800, [cell])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (280, 112, 120, 30),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (260, 112, 120, 30))
+                self.assertFalse(result.rejected_reason)
+
+    def test_snap_rejects_broad_header_band_without_raw_fallback(self) -> None:
+        from rect_snap import snap_to_control
+
+        headers = [
+            _make_button("Name", 20, 50, 120, 28, control_type="HeaderItem"),
+            _make_button("Status", 140, 50, 120, 28, control_type="HeaderItem"),
+            _make_button("Owner", 260, 50, 120, 28, control_type="HeaderItem"),
+        ]
+        window = _make_window("Grid", 0, 0, 1000, 800, headers)
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (20, 50, 360, 28),
+            "Click this column header.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "contained control ambiguous")
 
     def test_snap_rejects_checkbox_intent_on_plain_button(self) -> None:
         from rect_snap import snap_to_control
@@ -30290,6 +30355,90 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "billing_email")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_repeated_field_label_uses_structural_section_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Email text field in Billing.",
+                [
+                    ControlCandidate("ship_pane", "Shipping", "pane", (10, 30, 430, 90)),
+                    ControlCandidate("ship_label", "Email", "text", (30, 60, 80, 24)),
+                    ControlCandidate("ship_email", "", "edit", (120, 54, 260, 36)),
+                    ControlCandidate("bill_pane", "Billing", "pane", (10, 130, 430, 90)),
+                    ControlCandidate("bill_label", "Email", "text", (30, 160, 80, 24)),
+                    ControlCandidate("bill_email", "", "edit", (120, 154, 260, 36)),
+                ],
+            ),
+            (
+                "Click Email text field in Billing.",
+                [
+                    ControlCandidate("ship_group", "Shipping", "group", (10, 30, 430, 90)),
+                    ControlCandidate("ship_email", "", "edit", (120, 54, 260, 36), automation_id="email"),
+                    ControlCandidate("bill_group", "Billing", "group", (10, 130, 430, 90)),
+                    ControlCandidate("bill_email", "", "edit", (120, 154, 260, 36), automation_id="email"),
+                ],
+            ),
+            (
+                "Click Email in the Billing form.",
+                [
+                    ControlCandidate("ship_group", "Shipping form", "group", (10, 30, 430, 90)),
+                    ControlCandidate("ship_label", "Email", "text", (30, 60, 80, 24)),
+                    ControlCandidate("ship_email", "", "edit", (120, 54, 260, 36)),
+                    ControlCandidate("bill_group", "Billing form", "group", (10, 130, 430, 90)),
+                    ControlCandidate("bill_label", "Email", "text", (30, 160, 80, 24)),
+                    ControlCandidate("bill_email", "", "edit", (120, 154, 260, 36)),
+                ],
+            ),
+        )
+
+        for instruction, candidates in cases:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="ship_email",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 54, 260, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 54, 260, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 54, 260, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "ship_email",
+                            "target": {"x": 120, "y": 54, "width": 260, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertTrue(wrong_target.rejected_reason)
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "bill_email")
+                self.assertFalse(text_target.rejected_reason)
+                if snap_target is not None:
+                    self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "bill_email")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (120, 154, 260, 36))
 
     def test_repeated_current_value_dropdown_uses_section_heading_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
