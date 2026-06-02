@@ -1471,6 +1471,7 @@ OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radi
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "menu", "pane", "toolbar", "window"})
+SURFACE_ROW_CONTEXT_CONTROL_TYPES = frozenset({"group", "pane"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "group": frozenset({"group"}),
     "headeritem": frozenset({"column", "header", "heading"}),
@@ -4534,6 +4535,14 @@ def _looks_like_browser_profile_button(candidate: ControlCandidate) -> bool:
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
     text_tokens = _tokens_from_text(candidate.text)
+    automation_id = (candidate.automation_id or "").strip().lower()
+    if (
+        automation_id.startswith("view_")
+        and candidate.rect[1] <= 72
+        and text_tokens
+        and not (text_tokens & (BROWSER_CHROME_TOOLBAR_WORDS | BROWSER_APP_IDENTITY_WORDS))
+    ):
+        return True
     return bool(text_tokens & BROWSER_PROFILE_LABEL_HINT_WORDS)
 
 
@@ -4552,6 +4561,8 @@ def _looks_like_browser_profile_chrome_button(candidate: ControlCandidate) -> bo
     window_tokens = _tokens_from_text(candidate.window_title)
     if not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
+    if _looks_like_browser_profile_button(candidate):
+        return True
     raw_tokens = _tokens_from_text(" ".join((candidate.text, candidate.automation_id)))
     return bool(raw_tokens & (BROWSER_PROFILE_TOKENS | BROWSER_PROFILE_LABEL_HINT_WORDS))
 
@@ -5627,7 +5638,7 @@ def _named_control_role_prefix_width(
             return 2
         return None
     if control_type == "combobox":
-        if word in {"combo", "combobox", "dropdown", "selector"}:
+        if word in {"combo", "combobox", "dropdown", "picker", "selector"}:
             return 1
         if word == "down" and previous == "drop":
             return 2
@@ -5758,6 +5769,8 @@ def _explicit_combobox_alternative_mismatch(
         "combobox" in raw_tokens
         or "combo" in raw_tokens
         or "dropdown" in raw_tokens
+        or "picker" in raw_tokens
+        or "selector" in raw_tokens
         or {"drop", "down"} <= raw_tokens
     )
     if not explicit_combobox:
@@ -6131,8 +6144,10 @@ def _field_alternative_label_tokens(
         "item",
         "menuitem",
         "option",
+        "picker",
         "radio",
         "radiobutton",
+        "selector",
         "spinner",
         "treeitem",
     }
@@ -6286,7 +6301,12 @@ def _explicit_dropdown_option_role_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    dropdown_requested = "dropdown" in raw_tokens or {"drop", "down"} <= raw_tokens
+    dropdown_requested = (
+        "dropdown" in raw_tokens
+        or "picker" in raw_tokens
+        or "selector" in raw_tokens
+        or {"drop", "down"} <= raw_tokens
+    )
     option_requested = bool(raw_tokens & {"choice", "choices", "option", "options"})
     if not (dropdown_requested and option_requested):
         return False
@@ -8208,9 +8228,17 @@ def _contained_row_context_objects(
         item
         for item in candidates
         if item.id != candidate.id
-        and item.control_type in ROW_CONTEXT_CONTROL_TYPES
-        and item.descriptor
-        and _row_action_context_rect_matches(item, candidate)
+        and (
+            (
+                item.control_type in ROW_CONTEXT_CONTROL_TYPES
+                and item.descriptor
+                and _row_action_context_rect_matches(item, candidate)
+            )
+            or (
+                item.control_type in SURFACE_ROW_CONTEXT_CONTROL_TYPES
+                and _surface_row_action_rect_matches(item, candidate)
+            )
+        )
     ]
     containers.sort(
         key=lambda item: (
@@ -8219,13 +8247,17 @@ def _contained_row_context_objects(
         )
     )
     for container in containers:
-        container_tokens = (
-            _candidate_semantic_tokens(container)
-            | _tokens_from_text(container.descriptor)
-        )
-        container_tokens.update(
-            _contained_row_line_label_tokens(candidate, candidates, container)
-        )
+        line_label_tokens = _contained_row_line_label_tokens(candidate, candidates, container)
+        if container.control_type in SURFACE_ROW_CONTEXT_CONTROL_TYPES:
+            if not line_label_tokens:
+                continue
+            container_tokens = set(line_label_tokens)
+        else:
+            container_tokens = (
+                _candidate_semantic_tokens(container)
+                | _tokens_from_text(container.descriptor)
+            )
+            container_tokens.update(line_label_tokens)
         objects = _object_token_variants(
             {
                 token
@@ -8273,11 +8305,14 @@ def _row_line_label_rect_matches(
 ) -> bool:
     if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
-    if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
-        return False
-    if not _contains_rect(_expand_rect(row.rect, 2), action.rect):
+    if row.control_type not in ROW_CONTEXT_CONTROL_TYPES and row.control_type not in SURFACE_ROW_CONTEXT_CONTROL_TYPES:
         return False
     if not _contains_rect(_expand_rect(row.rect, 2), label.rect):
+        return False
+    if row.control_type in ROW_CONTEXT_CONTROL_TYPES:
+        if not _contains_rect(_expand_rect(row.rect, 2), action.rect):
+            return False
+    elif not _surface_row_action_rect_matches(row, action):
         return False
     _label_x, label_y, label_width, label_height = label.rect
     _action_x, action_y, action_width, action_height = action.rect
@@ -8302,7 +8337,10 @@ def _same_containing_row_line_label_rect_matches(
     return any(
         row.id != label.id
         and row.id != action.id
-        and row.control_type in ROW_CONTEXT_CONTROL_TYPES
+        and (
+            row.control_type in ROW_CONTEXT_CONTROL_TYPES
+            or row.control_type in SURFACE_ROW_CONTEXT_CONTROL_TYPES
+        )
         and _row_line_label_rect_matches(label, action, row)
         for row in candidates
     )
@@ -8409,6 +8447,8 @@ def _row_action_context_rect_matches(
 ) -> bool:
     if _contains_rect(_expand_rect(row.rect, 2), action.rect):
         return True
+    if _surface_row_action_rect_matches(row, action):
+        return True
     if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
         return False
     if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
@@ -8433,6 +8473,36 @@ def _row_action_context_rect_matches(
     action_right = action_x + action_width
     horizontal_gap = max(row_left - action_right, action_left - row_right, 0)
     max_gap = max(24, min(360, max(row_height * 6, row_width * 0.50)))
+    return horizontal_gap <= max_gap
+
+
+def _surface_row_action_rect_matches(
+    row: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    if row.control_type not in SURFACE_ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if _contains_rect(_expand_rect(row.rect, 2), action.rect):
+        return True
+    row_x, row_y, row_width, row_height = row.rect
+    action_x, action_y, action_width, action_height = action.rect
+    if min(row_width, row_height, action_width, action_height) <= 0:
+        return False
+    _action_center_x, action_center_y = _center(action.rect)
+    if not (row_y - 4 <= action_center_y <= row_y + row_height + 4):
+        return False
+    vertical_overlap = min(row_y + row_height, action_y + action_height) - max(row_y, action_y)
+    if vertical_overlap < min(row_height, action_height) * 0.45:
+        return False
+    row_left = row_x
+    row_right = row_x + row_width
+    action_left = action_x
+    if action_left < row_right - 2:
+        return False
+    horizontal_gap = action_left - row_right
+    max_gap = max(24, min(96, row_height * 2))
     return horizontal_gap <= max_gap
 
 

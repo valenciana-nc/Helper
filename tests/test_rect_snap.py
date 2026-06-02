@@ -9320,6 +9320,73 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 34, 34))
 
+    def test_profile_menu_accepts_compact_chrome_profile_name_without_hint(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "profile",
+                "Abel",
+                "button",
+                (936, 20, 34, 34),
+                automation_id="view_1018",
+                window_title="Dashboard - Google Chrome",
+            ),
+            ControlCandidate(
+                "extensions",
+                "Extensions",
+                "button",
+                (880, 20, 42, 34),
+                automation_id="extensions",
+                window_title="Dashboard - Google Chrome",
+            ),
+        ]
+        instruction = "Open profile menu."
+
+        target_id = resolve_candidate_target(
+            target_id="profile",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(936, 20, 34, 34),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(880, 20, 42, 34),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(936, 20, 34, 34),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "profile",
+                    "target": {"x": 936, "y": 20, "width": 34, "height": 34},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "profile")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "profile")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "profile")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "profile")
+        self.assertFalse(help_target.rejected_reason)
+
     def test_profile_page_prefers_page_link_over_browser_profile_button_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -23625,7 +23692,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 150, 180, 32))
 
-    def test_explicit_dropdown_rejects_same_label_listitem_for_labelled_combobox(self) -> None:
+    def test_explicit_picker_rejects_same_label_listitem_for_labelled_combobox(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
@@ -23634,49 +23701,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ControlCandidate("row", "Country", "listitem", (180, 70, 260, 32)),
             ControlCandidate("label", "Country", "text", (100, 24, 70, 20)),
         ]
-        instruction = "Select the Country dropdown."
+        for instruction in (
+            "Select the Country dropdown.",
+            "Select the Country selector.",
+            "Select the Country picker.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="row",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 70, 260, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 70, 260, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(180, 70, 260, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "row",
+                            "target": {"x": 180, "y": 70, "width": 260, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        wrong_target = resolve_candidate_target(
-            target_id="row",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(180, 70, 260, 32),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(180, 70, 260, 32),
-        )
-        snap_target = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(180, 70, 260, 32),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "row",
-                    "target": {"x": 180, "y": 70, "width": 260, "height": 32},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
-
-        self.assertEqual(wrong_target.target_id, "row")
-        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
-        self.assertEqual(text_target.source, "text_match")
-        self.assertEqual(text_target.target_id, "combo")
-        self.assertFalse(text_target.rejected_reason)
-        self.assertEqual(snap_target.target_id, "row")
-        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
-        self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "combo")
-        self.assertFalse(help_target.rejected_reason)
-        self.assertEqual(help_target.rect, (180, 20, 260, 32))
+                self.assertEqual(wrong_target.target_id, "row")
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "combo")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNotNone(snap_target)
+                assert snap_target is not None
+                if snap_target.target_id == "row":
+                    self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                else:
+                    self.assertEqual(snap_target.target_id, "combo")
+                    self.assertFalse(snap_target.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "combo")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (180, 20, 260, 32))
 
     def test_explicit_spin_box_rejects_same_label_edit_field(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -25060,6 +25136,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(target.target_id, "bob_open")
             self.assertFalse(target.rejected_reason)
             self.assertEqual(target.rect, (240, 130, 80, 32))
+
+    def test_action_label_for_adjacent_pane_card_row_resolves_duplicate_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("alpha_card", "", "pane", (20, 80, 500, 48)),
+            ControlCandidate("alpha_label", "Alpha", "text", (40, 90, 100, 20)),
+            ControlCandidate("alpha_save", "Save", "button", (540, 88, 70, 32)),
+            ControlCandidate("beta_card", "", "pane", (20, 140, 500, 48)),
+            ControlCandidate("beta_label", "Beta", "text", (40, 150, 100, 20)),
+            ControlCandidate("beta_save", "Save", "button", (540, 148, 70, 32)),
+        ]
+        instruction = "Click the Save button for Beta."
+
+        stale_target = resolve_candidate_target(
+            target_id="alpha_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(540, 88, 70, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "alpha_save",
+                    "target": {"x": 540, "y": 88, "width": 70, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.source, "target_id")
+        self.assertTrue(stale_target.rejected_reason)
+        for target in (text_target, snap_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "beta_save")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (540, 148, 70, 32))
 
     def test_far_action_column_uses_row_context_before_stale_row_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

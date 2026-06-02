@@ -14559,6 +14559,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "compact_chrome_profile_name_target_id_accepts_profile_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [936, 20, 34, 34], "label": "A"},
+                {"rect": [880, 20, 42, 34], "label": "Ext"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open profile menu.",
+                "target_id": "profile",
+                "target": {"x": 936, "y": 20, "width": 34, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "profile",
+                    "text": "Abel",
+                    "control_type": "button",
+                    "rect": [936, 20, 34, 34],
+                    "automation_id": "view_1018",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "extensions",
+                    "text": "Extensions",
+                    "control_type": "button",
+                    "rect": [880, 20, 42, 34],
+                    "automation_id": "extensions",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "profile",
+                "rect": [936, 20, 34, 34],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "profile_page_prefers_page_link_over_chrome_profile_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -20784,6 +20822,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_selector_rejects_same_label_listitem_and_uses_labelled_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 24, 70, 20], "label": "Country"},
+                {"rect": [180, 20, 260, 32], "label": ""},
+                {"rect": [180, 70, 260, 32], "label": "Country"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Country selector.",
+                "target_id": "row",
+                "target": {"x": 180, "y": 70, "width": 260, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [180, 20, 260, 32]},
+                {"id": "row", "text": "Country", "control_type": "listitem", "rect": [180, 70, 260, 32]},
+                {"id": "label", "text": "Country", "control_type": "text", "rect": [100, 24, 70, 20]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "combo",
+                "rect": [180, 20, 260, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "same_rect_foreground_snap_prefers_active_window",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -20846,6 +20910,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "archive_bob",
                 "rect": [600, 112, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "adjacent_pane_card_row_action_recovers_duplicate_save",
+            "capture": {"width": 760, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 500, 48], "label": ""},
+                {"rect": [40, 90, 100, 20], "label": "Alpha"},
+                {"rect": [540, 88, 70, 32], "label": "Save"},
+                {"rect": [20, 140, 500, 48], "label": ""},
+                {"rect": [40, 150, 100, 20], "label": "Beta"},
+                {"rect": [540, 148, 70, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Save button for Beta.",
+                "target_id": "alpha_save",
+                "target": {"x": 540, "y": 88, "width": 70, "height": 32},
+            },
+            "candidates": [
+                {"id": "alpha_card", "text": "", "control_type": "pane", "rect": [20, 80, 500, 48]},
+                {"id": "alpha_label", "text": "Alpha", "control_type": "text", "rect": [40, 90, 100, 20]},
+                {"id": "alpha_save", "text": "Save", "control_type": "button", "rect": [540, 88, 70, 32]},
+                {"id": "beta_card", "text": "", "control_type": "pane", "rect": [20, 140, 500, 48]},
+                {"id": "beta_label", "text": "Beta", "control_type": "text", "rect": [40, 150, 100, 20]},
+                {"id": "beta_save", "text": "Save", "control_type": "button", "rect": [540, 148, 70, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "beta_save",
+                "rect": [540, 148, 70, 32],
                 "overlay_emitted": True,
             },
         },
