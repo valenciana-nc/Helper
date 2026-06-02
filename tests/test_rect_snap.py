@@ -12760,6 +12760,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 100, 32))
 
+    def test_dialog_dismiss_uses_exact_model_rect_among_duplicate_close_buttons(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "page_close",
+                "Close",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Editor",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "dialog_close",
+                "Close",
+                "button",
+                (500, 300, 80, 32),
+                window_title="Preferences dialog",
+                window_rank=1,
+            ),
+        ]
+        target = resolve_candidate_target(
+            target_id="",
+            instruction="Close the dialog.",
+            candidates=candidates,
+            model_rect=(500, 300, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Close the dialog.",
+                    "target": {"x": 500, "y": 300, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Close the dialog.",
+            candidates=candidates,
+            model_rect=(500, 300, 80, 32),
+        )
+
+        for resolved in (target, help_target):
+            self.assertEqual(resolved.source, "text_match")
+            self.assertEqual(resolved.target_id, "dialog_close")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 300, 80, 32))
+        self.assertIsNone(snap_target)
+
     def test_dialog_dismiss_prefers_exact_action_when_cancel_and_close_exist(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -17458,6 +17510,87 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, rect)
 
+    def test_row_scoped_action_matches_adjacent_action_column(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Alpha", "listitem", (10, 10, 600, 40)),
+            ControlCandidate("pay1", "Pay", "button", (620, 14, 60, 30)),
+            ControlCandidate("r2", "Beta", "listitem", (10, 60, 600, 40)),
+            ControlCandidate("pay2", "Pay", "button", (620, 64, 60, 30)),
+        ]
+        instruction = "Click Pay for Beta row."
+        target_id = resolve_candidate_target(
+            target_id="pay2",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(620, 64, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 60, 600, 40),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 10, "y": 60, "width": 600, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "pay2")
+        self.assertFalse(target_id.rejected_reason)
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.source, "text_match")
+            self.assertEqual(resolved.target_id, "pay2")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (620, 64, 60, 30))
+
+    def test_row_scoped_action_matches_automation_only_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("r1", "Alpha", "listitem", (10, 10, 800, 40)),
+            ControlCandidate("pay1", "", "button", (720, 14, 32, 30), automation_id="payButton"),
+            ControlCandidate("r2", "Beta", "listitem", (10, 60, 800, 40)),
+            ControlCandidate("pay2", "", "button", (720, 64, 32, 30), automation_id="payButton"),
+        ]
+        instruction = "Click Pay for Beta row."
+        target_id = resolve_candidate_target(
+            target_id="pay2",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(720, 64, 32, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 10, "y": 60, "width": 800, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "pay2")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "pay2")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (720, 64, 32, 30))
+
     def test_row_scoped_action_wrong_target_id_recovers_to_filtered_action_word(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
@@ -17980,6 +18113,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(correct_target.target_id, "popup_save")
         self.assertFalse(correct_target.rejected_reason)
         self.assertEqual(correct_target.rect, (630, 160, 32, 32))
+
+    def test_settings_popup_rejects_settings_panel_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("settings_panel", "Settings panel", "pane", (20, 80, 300, 120)),
+            ControlCandidate("panel_save", "Save", "button", (230, 160, 60, 30)),
+            ControlCandidate("settings_popup", "Settings popup", "window", (420, 80, 300, 120)),
+            ControlCandidate("popup_save", "Save", "button", (630, 160, 60, 30)),
+        ]
+        wrong_target = resolve_candidate_target(
+            target_id="panel_save",
+            instruction="Click Save in the Settings popup.",
+            candidates=candidates,
+            model_rect=(630, 160, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save in the Settings popup.",
+                    "target_id": "panel_save",
+                    "target": {"x": 630, "y": 160, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Save in the Settings popup.",
+            candidates=candidates,
+            model_rect=(630, 160, 60, 30),
+        )
+
+        self.assertEqual(wrong_target.target_id, "panel_save")
+        self.assertIn(
+            wrong_target.rejected_reason,
+            {"target_id ambiguous", "target_id semantic mismatch"},
+        )
+        for resolved in (help_target, snap_target):
+            self.assertEqual(resolved.target_id, "popup_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (630, 160, 60, 30))
 
     def test_positional_duplicate_action_recovers_requested_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

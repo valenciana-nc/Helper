@@ -14360,6 +14360,72 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_pay_action_promotes_adjacent_action_column",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 600, 40], "label": "Alpha"},
+                {"rect": [620, 14, 60, 30], "label": "Pay"},
+                {"rect": [10, 60, 600, 40], "label": "Beta"},
+                {"rect": [620, 64, 60, 30], "label": "Pay"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Beta row.",
+                "target": {"x": 10, "y": 60, "width": 600, "height": 40},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Alpha", "control_type": "listitem", "rect": [10, 10, 600, 40]},
+                {"id": "pay1", "text": "Pay", "control_type": "button", "rect": [620, 14, 60, 30]},
+                {"id": "r2", "text": "Beta", "control_type": "listitem", "rect": [10, 60, 600, 40]},
+                {"id": "pay2", "text": "Pay", "control_type": "button", "rect": [620, 64, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "pay2",
+                "rect": [620, 64, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_pay_action_promotes_automation_only_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 800, 40], "label": "Alpha"},
+                {"rect": [720, 14, 32, 30], "label": ""},
+                {"rect": [10, 60, 800, 40], "label": "Beta"},
+                {"rect": [720, 64, 32, 30], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Beta row.",
+                "target": {"x": 10, "y": 60, "width": 800, "height": 40},
+            },
+            "candidates": [
+                {"id": "r1", "text": "Alpha", "control_type": "listitem", "rect": [10, 10, 800, 40]},
+                {
+                    "id": "pay1",
+                    "text": "",
+                    "automation_id": "payButton",
+                    "control_type": "button",
+                    "rect": [720, 14, 32, 30],
+                },
+                {"id": "r2", "text": "Beta", "control_type": "listitem", "rect": [10, 60, 800, 40]},
+                {
+                    "id": "pay2",
+                    "text": "",
+                    "automation_id": "payButton",
+                    "control_type": "button",
+                    "rect": [720, 64, 32, 30],
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "pay2",
+                "rect": [720, 64, 32, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_clear_email_uses_requested_row_over_wrong_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14619,6 +14685,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "dialog_close_exact_rect_picks_dialog_duplicate",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Close"},
+                {"rect": [500, 300, 80, 32], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target": {"x": 500, "y": 300, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [500, 300, 80, 32],
+                    "window_title": "Preferences dialog",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "dialog_close",
+                "rect": [500, 300, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "modal_context_recovers_from_page_duplicate_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14653,6 +14756,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "modal_save",
                 "rect": [500, 300, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "settings_popup_recovers_from_settings_panel_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Settings panel"},
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings popup"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the Settings popup.",
+                "target_id": "panel_save",
+                "target": {"x": 630, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "settings_panel", "text": "Settings panel", "control_type": "pane", "rect": [20, 80, 300, 120]},
+                {"id": "panel_save", "text": "Save", "control_type": "button", "rect": [230, 160, 60, 30]},
+                {"id": "settings_popup", "text": "Settings popup", "control_type": "window", "rect": [420, 80, 300, 120]},
+                {"id": "popup_save", "text": "Save", "control_type": "button", "rect": [630, 160, 60, 30]},
+            ],
+            "expected": {
+                "target_id": "popup_save",
+                "rect": [630, 160, 60, 30],
                 "overlay_emitted": True,
             },
         },

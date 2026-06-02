@@ -2357,6 +2357,32 @@ def _single_dialog_dismiss_candidate(
     if len(selected) != 1:
         if not selected:
             return None
+        if model_rect is not None:
+            ranked_by_geometry = sorted(
+                (
+                    (_geometry_agreement(candidate.rect, model_rect), candidate)
+                    for candidate in selected
+                ),
+                key=lambda item: (-item[0], _candidate_sort_key(item[1])),
+            )
+            best_score, best_candidate = ranked_by_geometry[0]
+            runner_up_score = 0.0
+            for score, other in ranked_by_geometry[1:]:
+                if _same_visual_candidate(other, best_candidate):
+                    continue
+                runner_up_score = score
+                break
+            if (
+                best_score >= TARGET_ID_GEOMETRY_FLOOR
+                and best_score - runner_up_score >= TEXT_MATCH_GAP
+            ):
+                return TargetResolution(
+                    rect=best_candidate.rect,
+                    confidence=min(1.0, TEXT_MATCH_FLOOR + 0.05 * best_score),
+                    source="text_match",
+                    matched_text=best_candidate.descriptor,
+                    target_id=best_candidate.id,
+                )
         candidate = sorted(selected, key=_candidate_sort_key)[0]
         return TargetResolution(
             rect=candidate.rect,
@@ -4885,7 +4911,7 @@ def _contained_row_context_objects(
         if item.id != candidate.id
         and item.control_type in ROW_CONTEXT_CONTROL_TYPES
         and item.descriptor
-        and _contains_rect(_expand_rect(item.rect, 2), candidate.rect)
+        and _row_action_context_rect_matches(item, candidate)
     ]
     containers.sort(key=lambda item: item.rect[2] * item.rect[3])
     for container in containers:
@@ -4903,6 +4929,37 @@ def _contained_row_context_objects(
         if objects:
             return objects
     return set()
+
+
+def _row_action_context_rect_matches(
+    row: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    if _contains_rect(_expand_rect(row.rect, 2), action.rect):
+        return True
+    if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    row_x, row_y, row_width, row_height = row.rect
+    action_x, action_y, action_width, action_height = action.rect
+    if min(row_width, row_height, action_width, action_height) <= 0:
+        return False
+    _action_center_x, action_center_y = _center(action.rect)
+    row_top = row_y - 4
+    row_bottom = row_y + row_height + 4
+    if not (row_top <= action_center_y <= row_bottom):
+        return False
+    vertical_overlap = min(row_y + row_height, action_y + action_height) - max(row_y, action_y)
+    if vertical_overlap < min(row_height, action_height) * 0.45:
+        return False
+    row_left = row_x
+    row_right = row_x + row_width
+    action_left = action_x
+    action_right = action_x + action_width
+    horizontal_gap = max(row_left - action_right, action_left - row_right, 0)
+    max_gap = max(24, min(120, row_height * 2))
+    return horizontal_gap <= max_gap
 
 
 def _unresolved_contextual_duplicate_mismatch(
@@ -5022,11 +5079,23 @@ def _contextual_duplicate_request_matches_evidence(
     requested_positions = requested_context & CONTEXTUAL_DUPLICATE_POSITION_WORDS
     if requested_positions and not (requested_positions <= evidence_tokens):
         return False
+    requested_surfaces = _contextual_surface_token_variants(requested_context)
+    if requested_surfaces and not requested_positions:
+        evidence_surfaces = _contextual_surface_token_variants(evidence_tokens)
+        if not (requested_surfaces & evidence_surfaces):
+            return False
     required_identity = requested_context - requested_positions - CONTEXTUAL_DUPLICATE_SURFACE_WORDS
     required_identity -= CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS
     if required_identity:
         return required_identity <= evidence_tokens
     return bool(requested_context & evidence_tokens)
+
+
+def _contextual_surface_token_variants(tokens: set[str]) -> set[str]:
+    surfaces = _object_token_variants(tokens) & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    if surfaces & {"pane", "panel"}:
+        surfaces.update({"pane", "panel"})
+    return surfaces
 
 
 def _contextual_duplicate_request_tokens(
@@ -5061,6 +5130,8 @@ def _contextual_duplicate_evidence_tokens(
     candidates: list[ControlCandidate],
 ) -> set[str]:
     tokens = set(_candidate_semantic_tokens(candidate))
+    if _looks_like_browser_toolbar_button(candidate):
+        tokens.add("toolbar")
     tokens.update(_surface_context_type_tokens(candidate.control_type))
     tokens.update(_tokenize_control(candidate.window_title))
     tokens.update(_contextual_duplicate_position_tokens(candidate, candidates))
@@ -5072,12 +5143,17 @@ def _contextual_duplicate_evidence_tokens(
             continue
         if not context.descriptor:
             continue
-        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+        if not (
+            _contains_rect(_expand_rect(context.rect, 4), candidate.rect)
+            or _row_action_context_rect_matches(context, candidate)
+        ):
             continue
         tokens.update(_candidate_semantic_tokens(context))
         tokens.update(_tokens_from_text(context.descriptor))
         tokens.update(_tokens_from_text(context.control_type))
         tokens.update(_surface_context_type_tokens(context.control_type))
+        if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
+            tokens.add("card")
         tokens.update(_tokenize_control(context.window_title))
     return _object_token_variants(tokens)
 
@@ -6686,7 +6762,7 @@ def _contains_tighter_row_action_candidate(
         candidate_area = candidate.rect[2] * candidate.rect[3]
         if selected_area < candidate_area * 1.8:
             continue
-        if not _contains_rect(_expand_rect(selected.rect, 2), candidate.rect):
+        if not _row_action_context_rect_matches(selected, candidate):
             continue
         if _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction):
             return True
@@ -6701,12 +6777,16 @@ def _contained_row_action_candidate_matches(
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     visible_tokens = _candidate_visible_text_tokens(candidate)
-    if not visible_tokens:
+    candidate_tokens = set(visible_tokens)
+    if not candidate_tokens:
+        candidate_tokens = _candidate_automation_tokens(candidate)
+        candidate_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    if not candidate_tokens:
         return False
     action_tokens = set(instruction_tokens)
     if instruction:
-        action_tokens.update(_tokens_from_text(instruction) & visible_tokens)
-    return bool(action_tokens & visible_tokens)
+        action_tokens.update(_tokens_from_text(instruction) & candidate_tokens)
+    return bool(action_tokens & candidate_tokens)
 
 
 def _candidate_match_instruction_tokens(
