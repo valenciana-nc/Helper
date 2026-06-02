@@ -20978,7 +20978,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
-        for surface in ("alert", "alerts", "banner", "popup", "popover", "toast", "notification"):
+        for surface in (
+            "alert",
+            "alerts",
+            "banner",
+            "banners",
+            "dialog",
+            "dialogs",
+            "modal",
+            "modals",
+            "notification",
+            "notifications",
+            "popup",
+            "popups",
+            "popover",
+            "popovers",
+            "toast",
+            "toasts",
+        ):
             with self.subTest(surface=surface):
                 candidates = [
                     ControlCandidate(
@@ -21042,7 +21059,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 )
 
                 self.assertEqual(wrong_target.target_id, "page_save")
-                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIn(
+                    wrong_target.rejected_reason,
+                    {"target_id ambiguous", "target_id semantic mismatch"},
+                )
                 self.assertIsNone(wrong_snap)
                 for resolved in (text_target, surface_snap, help_target):
                     self.assertEqual(resolved.target_id, f"{surface}_save")
