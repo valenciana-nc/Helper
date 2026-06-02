@@ -7836,6 +7836,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "wrong")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_reversible_action_fresh_snap_rejects_opposite_label(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Follow project", "Unfollow project"),
+            ("Like comment", "Unlike comment"),
+            ("Block user", "Unblock user"),
+            ("Join channel", "Leave channel"),
+            ("Restore file", "Delete file"),
+        )
+        for instruction, wrong_label in cases:
+            with self.subTest(instruction=instruction, wrong_label=wrong_label):
+                wrong = _make_button(wrong_label, 20, 80, 200, 32)
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [wrong])])
+                model_rect = (20, 80, 200, 32)
+
+                snap = snap_to_control(
+                    model_rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target": {"x": 20, "y": 80, "width": 200, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [],
+                    snapper=lambda rect, text: snap_to_control(
+                        rect,
+                        text,
+                        desktop_factory=lambda: desktop,
+                        timeout_ms=2000,
+                    ),
+                )
+
+                for target in (snap, help_target):
+                    self.assertEqual(target.source, "uia" if target is snap else "snap")
+                    self.assertEqual(target.rect, model_rect)
+                    self.assertEqual(target.matched_text, wrong_label)
+                    self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
     def test_open_wrong_target_id_recovers_from_publish_action(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -22648,6 +22695,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(correct_target.rejected_reason)
         self.assertEqual(correct_target.rect, (630, 160, 32, 32))
 
+    def test_direct_surface_context_recovers_to_automation_only_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("page_save", "Save", "button", (320, 520, 80, 32)),
+            ControlCandidate("settings_drawer", "Settings drawer", "pane", (560, 0, 340, 600)),
+            ControlCandidate("drawer_save", "", "button", (700, 520, 32, 32), automation_id="save"),
+        ]
+        instruction = "Click the settings drawer Save button."
+
+        stale_target = resolve_candidate_target(
+            target_id="page_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(320, 520, 80, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(320, 520, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(320, 520, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_save",
+                    "target": {"x": 320, "y": 520, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.target_id, "page_save")
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(snap_target.target_id, "page_save")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        for target in (text_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.source, "text_match")
+            self.assertEqual(target.target_id, "drawer_save")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (700, 520, 32, 32))
+
     def test_dialog_context_uses_foreground_modal_evidence(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -25245,6 +25345,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Select the Remember me toggle.", "Remember me", "listitem", "checkbox"),
             ("Select the Docs link.", "Docs", "menuitem", "hyperlink"),
             ("Select Canada dropdown option.", "Canada", "listitem", "menuitem"),
+            ("Select Canada picker option.", "Canada", "listitem", "menuitem"),
+            ("Select Canada selector option.", "Canada", "listitem", "menuitem"),
         )
         for instruction, label, wrong_type, expected_type in cases:
             with self.subTest(instruction=instruction, wrong_type=wrong_type):
@@ -25297,6 +25399,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
         cases = (
             ("Select the Volume slider.", "Volume", "listitem"),
             ("Select Canada dropdown option.", "Canada", "combobox"),
+            ("Select Canada picker option.", "Canada", "combobox"),
+            ("Select Canada selector option.", "Canada", "combobox"),
         )
         for instruction, label, wrong_type in cases:
             with self.subTest(instruction=instruction, wrong_type=wrong_type):

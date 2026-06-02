@@ -2613,10 +2613,6 @@ def _text_match_score(
         instruction_tokens,
         candidate,
         candidates,
-    ) and not _candidate_matches_control_intent(
-        candidate,
-        control_intents,
-        instruction=instruction,
     )
     matches_contextual_control_intent = bool(control_intents) and _candidate_matches_control_intent(
         candidate,
@@ -2970,12 +2966,15 @@ def _text_match_score(
         control_intents=_instruction_control_intents(instruction),
     ):
         return 0.0
-    if _has_visible_semantic_alternative(
-        instruction=instruction,
-        instruction_tokens=instruction_tokens,
-        selected=candidate,
-        candidates=candidates,
-        control_intents=control_intents,
+    if (
+        not matches_contextual_surface_action
+        and _has_visible_semantic_alternative(
+            instruction=instruction,
+            instruction_tokens=instruction_tokens,
+            selected=candidate,
+            candidates=candidates,
+            control_intents=control_intents,
+        )
     ):
         return 0.0
     if exact_visible_label_match:
@@ -6388,8 +6387,10 @@ def _explicit_bare_option_role_alternative_mismatch(
         "listitem",
         "menu",
         "menuitem",
+        "picker",
         "radio",
         "radiobutton",
+        "selector",
         "tree",
         "treeitem",
     }:
@@ -8709,8 +8710,6 @@ def _contextual_surface_action_alternative_mismatch(
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & {"in", "inside", "on", "within"}):
-        return False
     if not (_object_token_variants(raw_tokens) & CONTEXTUAL_DUPLICATE_SURFACE_WORDS):
         return False
     requested_context = _contextual_duplicate_request_tokens(

@@ -18354,6 +18354,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "direct_drawer_context_recovers_automation_only_save_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [320, 520, 80, 32], "label": "Save"},
+                {"rect": [560, 0, 340, 600], "label": "Settings drawer"},
+                {"rect": [700, 520, 32, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the settings drawer Save button.",
+                "target_id": "page_save",
+                "target": {"x": 320, "y": 520, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "page_save", "text": "Save", "control_type": "button", "rect": [320, 520, 80, 32]},
+                {"id": "settings_drawer", "text": "Settings drawer", "control_type": "pane", "rect": [560, 0, 340, 600]},
+                {
+                    "id": "drawer_save",
+                    "text": "",
+                    "control_type": "button",
+                    "rect": [700, 520, 32, 32],
+                    "automation_id": "save",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "drawer_save",
+                "rect": [700, 520, 32, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_numeric_action_target_id_uses_context_over_wrong_model_rect",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -19676,6 +19708,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "combo",
                 "rect": [20, 80, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "picker_option_recovers_from_same_label_listitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 160, 32], "label": "Canada"},
+                {"rect": [20, 70, 160, 32], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Canada picker option.",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 20, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Canada", "control_type": "listitem", "rect": [20, 20, 160, 32]},
+                {"id": "expected", "text": "Canada", "control_type": "menuitem", "rect": [20, 70, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "expected",
+                "rect": [20, 70, 160, 32],
                 "overlay_emitted": True,
             },
         },
