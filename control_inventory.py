@@ -4225,7 +4225,7 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
-    if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
+    if _generic_surface_context_duplicate_ambiguous(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -9407,7 +9407,7 @@ def _unresolved_contextual_duplicate_mismatch(
     )
 
 
-def _generic_pane_context_duplicate_ambiguous(
+def _generic_surface_context_duplicate_ambiguous(
     instruction: str,
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -9415,8 +9415,6 @@ def _generic_pane_context_duplicate_ambiguous(
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     raw_tokens = _tokens_from_text(instruction)
-    if "pane" not in raw_tokens or "panel" in raw_tokens:
-        return False
     if not (raw_tokens & {"in", "inside", "on", "within"}):
         return False
     requested_context = _contextual_duplicate_request_tokens(
@@ -9424,7 +9422,8 @@ def _generic_pane_context_duplicate_ambiguous(
         candidate,
         candidates,
     )
-    if requested_context != {"pane"}:
+    requested_surfaces = requested_context & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    if not requested_surfaces or requested_context != requested_surfaces:
         return False
     duplicate_key = _contextual_duplicate_key(candidate)
     if not duplicate_key:
@@ -9434,6 +9433,10 @@ def _generic_pane_context_duplicate_ambiguous(
         candidate,
         candidates,
     ):
+        return False
+    if _candidate_has_foreground_unnamed_transient_surface_evidence(candidate, candidates):
+        return False
+    if _candidate_has_rank_modal_evidence(candidate, candidates):
         return False
     return any(
         other.id != candidate.id
@@ -12605,7 +12608,7 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_transient_surface_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
-    if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
+    if _generic_surface_context_duplicate_ambiguous(instruction, candidate, candidates):
         return 0.0
     if _positional_action_duplicate_mismatch(
         instruction,

@@ -24342,6 +24342,85 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "main_save")
         self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 
+    def test_generic_surface_context_with_duplicate_actions_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = [
+            (
+                "toolbar",
+                "Click Save in the toolbar.",
+                "top_save",
+                (20, 8, 60, 30),
+                [
+                    ControlCandidate("top_toolbar", "", "toolbar", (0, 0, 800, 48)),
+                    ControlCandidate("top_save", "Save", "button", (20, 8, 60, 30)),
+                    ControlCandidate("bottom_toolbar", "", "toolbar", (0, 500, 800, 48)),
+                    ControlCandidate("bottom_save", "Save", "button", (20, 508, 60, 30)),
+                ],
+            ),
+            (
+                "card",
+                "Click Save in the card.",
+                "save_a",
+                (240, 140, 60, 30),
+                [
+                    ControlCandidate("card_a", "", "group", (20, 80, 300, 100)),
+                    ControlCandidate("save_a", "Save", "button", (240, 140, 60, 30)),
+                    ControlCandidate("card_b", "", "group", (360, 80, 300, 100)),
+                    ControlCandidate("save_b", "Save", "button", (580, 140, 60, 30)),
+                ],
+            ),
+        ]
+
+        for name, instruction, target_id, rect, candidates in cases:
+            with self.subTest(name=name):
+                wrong_target = resolve_candidate_target(
+                    target_id=target_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": target_id,
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertEqual(wrong_target.target_id, target_id)
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+                self.assertIsNone(wrong_snap)
+                self.assertEqual(help_target.target_id, target_id)
+                self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
+
     def test_notification_dismiss_recovers_from_page_dismiss_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
