@@ -726,7 +726,7 @@ _EXTERNAL_LINK_ACTION_INTENT_TYPES = frozenset(
     {"button", "splitbutton", "hyperlink", "menuitem"}
 )
 _CONFIRM_ACTION_INTENT_TYPES = frozenset({"button", "splitbutton", "menuitem"})
-_ICON_INTENT_TYPES = TIGHT_ACTION_CONTROL_TYPES
+_ICON_INTENT_TYPES = _BUTTON_INTENT_TYPES
 _MENU_INTENT_TYPES = frozenset({"menuitem", "splitbutton"})
 _MENU_LAUNCHER_INTENT_TYPES = frozenset({"button", "splitbutton"})
 _MENU_LAUNCHER_WORDS = frozenset(

@@ -1057,6 +1057,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertTrue(menu_segment_intent(menu_item_intents))
         self.assertTrue(menu_segment_intent(explicit_item_intents))
 
+    def test_generic_icon_intent_stays_button_like(self) -> None:
+        from help_intents import instruction_control_intents
+
+        intents = instruction_control_intents("Click the Settings icon.")
+
+        self.assertEqual(intents, {"button", "splitbutton"})
+        self.assertNotIn("checkbox", intents)
+        self.assertNotIn("radiobutton", intents)
+        self.assertNotIn("menuitem", intents)
+
 
 class SnapToControlTests(unittest.TestCase):
     def test_snaps_to_nearby_button_with_matching_text(self) -> None:
@@ -7646,6 +7656,107 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, wanted_id)
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, wanted_rect)
+
+    def test_context_action_recovers_from_context_label_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click Cancel in the Settings dialog.",
+                [
+                    ControlCandidate("context", "Settings dialog", "window", (10, 10, 400, 120)),
+                    ControlCandidate("action", "Cancel", "button", (30, 40, 100, 32)),
+                    ControlCandidate("wrong", "Settings", "button", (30, 80, 100, 32)),
+                ],
+            ),
+            (
+                "Click Search in the Settings row.",
+                [
+                    ControlCandidate("context", "Settings row", "listitem", (10, 10, 400, 120)),
+                    ControlCandidate("action", "Search", "button", (30, 40, 100, 32)),
+                    ControlCandidate("wrong", "Settings", "button", (30, 80, 100, 32)),
+                ],
+            ),
+            (
+                "Click Cancel in the Settings toolbar.",
+                [
+                    ControlCandidate("context", "Settings toolbar", "toolbar", (10, 10, 400, 120)),
+                    ControlCandidate("action", "Cancel", "button", (30, 40, 100, 32)),
+                    ControlCandidate("wrong", "Settings", "button", (30, 80, 100, 32)),
+                ],
+            ),
+        )
+        for instruction, candidates in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "wrong",
+                            "target": {"x": 30, "y": 80, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "action")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (30, 40, 100, 32))
+
+    def test_context_action_keeps_prepositional_target_button(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings in the Search toolbar.",
+                    "target_id": "settings",
+                    "target": {"x": 30, "y": 40, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("context", "Search toolbar", "toolbar", (10, 10, 400, 120)),
+                ControlCandidate("settings", "Settings", "button", (30, 40, 100, 32)),
+                ControlCandidate("search", "Search", "button", (30, 80, 100, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.target_id, "settings")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (30, 40, 100, 32))
+
+    def test_icon_wording_recovers_from_same_label_checkbox(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click the Settings icon.",
+                    "target_id": "check",
+                    "target": {"x": 10, "y": 10, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("check", "Settings", "checkbox", (10, 10, 140, 32)),
+                ControlCandidate("icon", "Settings", "button", (10, 60, 40, 32)),
+            ],
+        )
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "icon")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (10, 60, 40, 32))
 
     def test_text_entry_action_wrong_target_id_recovers_to_edit(self) -> None:
         from control_inventory import ControlCandidate

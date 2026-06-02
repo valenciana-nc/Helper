@@ -2363,6 +2363,13 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_context_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
     if _explicit_action_context_mismatch_without_contextual_evidence(
         instruction,
         candidate,
@@ -2650,6 +2657,13 @@ def _context_text_match_score(
     ):
         return 0.0
     if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
+    if _prepositional_context_action_alternative_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -3295,6 +3309,17 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _contextual_surface_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _prepositional_context_action_alternative_mismatch(
         instruction,
         instruction_tokens,
         candidate,
@@ -7140,6 +7165,95 @@ def _contextual_surface_action_alternative_mismatch(
     return False
 
 
+def _prepositional_context_action_alternative_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    target_tokens, context_tokens = _prepositional_context_action_tokens(instruction)
+    if not target_tokens or not context_tokens:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(
+        candidate.descriptor
+    )
+    if candidate_tokens & target_tokens:
+        return False
+    if not (candidate_tokens & context_tokens):
+        if _text_evidence_score(instruction_tokens, candidate_tokens) < TARGET_ID_TEXT_FLOOR:
+            return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        other_tokens = _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+        if not (other_tokens & target_tokens):
+            continue
+        if _prepositional_context_tokens_match_candidate(context_tokens, other, candidates):
+            return True
+    return False
+
+
+def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    words = _literal_word_sequence(instruction)
+    if not words:
+        return set(), set()
+    for index, word in enumerate(words):
+        if word not in {"in", "inside", "on", "within"}:
+            continue
+        target_words = list(words[:index])
+        context_words = list(words[index + 1 :])
+        while context_words and context_words[0] in {"a", "an", "the", "this", "that"}:
+            context_words.pop(0)
+        if not context_words:
+            continue
+        while len(target_words) > 1 and target_words[0] in {
+            "activate",
+            "choose",
+            "click",
+            "focus",
+            "hit",
+            "open",
+            "press",
+            "select",
+            "tap",
+            "use",
+        }:
+            target_words.pop(0)
+        while target_words and target_words[0] in {"a", "an", "the", "this", "that"}:
+            target_words.pop(0)
+        target_tokens = _object_token_variants(set(target_words)) - (
+            CONTAINED_CONTROL_REQUEST_WORDS
+            | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+            | CONTEXTUAL_DUPLICATE_STOPWORDS
+        )
+        context_tokens = _object_token_variants(set(context_words)) - {
+            "a",
+            "an",
+            "the",
+            "this",
+            "that",
+        }
+        context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+        if target_tokens and context_tokens:
+            return target_tokens, context_tokens
+    return set(), set()
+
+
+def _prepositional_context_tokens_match_candidate(
+    context_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    evidence_tokens = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    if _contextual_duplicate_request_matches_evidence(context_tokens, evidence_tokens):
+        return True
+    return bool(context_tokens <= evidence_tokens)
+
+
 def _explicit_transient_surface_alternative_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -9167,6 +9281,13 @@ def _candidate_snap_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_context_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates, control_intents):
@@ -10341,6 +10462,13 @@ def _candidate_snap_semantic_mismatch(
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_transient_surface_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _prepositional_context_action_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
         return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True

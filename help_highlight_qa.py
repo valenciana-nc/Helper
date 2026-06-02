@@ -19353,6 +19353,56 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "context_action_recovers_from_context_label_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 40, 400, 140], "label": "Settings dialog", "fill": "#eef2ff"},
+                {"rect": [40, 80, 100, 32], "label": "Cancel"},
+                {"rect": [40, 130, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Cancel in the Settings dialog.",
+                "target_id": "settings_button",
+                "target": {"x": 40, "y": 130, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "dialog", "text": "Settings dialog", "control_type": "window", "rect": [20, 40, 400, 140]},
+                {"id": "cancel", "text": "Cancel", "control_type": "button", "rect": [40, 80, 100, 32]},
+                {"id": "settings_button", "text": "Settings", "control_type": "button", "rect": [40, 130, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "cancel",
+                "rect": [40, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_icon_recovers_from_same_label_checkbox",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 140, 32], "label": "Settings"},
+                {"rect": [20, 130, 40, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings icon.",
+                "target_id": "check",
+                "target": {"x": 20, "y": 80, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "check", "text": "Settings", "control_type": "checkbox", "rect": [20, 80, 140, 32]},
+                {"id": "icon", "text": "Settings", "control_type": "button", "rect": [20, 130, 40, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "icon",
+                "rect": [20, 130, 40, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "blank_candidate_rect_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "decision": {
