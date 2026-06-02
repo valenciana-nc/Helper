@@ -2745,6 +2745,12 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
     if _positional_action_duplicate_mismatch(
         instruction,
         instruction_tokens,
@@ -2788,6 +2794,17 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _ambiguous_exact_literal_alias_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
         )
     if _action_object_alias_context_requested(
         instruction
@@ -4934,9 +4951,6 @@ def _contained_row_action_context_mismatch(
         _tokenize_instruction(instruction),
         instruction,
     ):
-        row_objects = _contained_row_context_objects(candidate, candidates)
-        if not row_objects:
-            return False
         instruction_objects = _instruction_row_context_objects(
             instruction,
             candidate,
@@ -4944,6 +4958,26 @@ def _contained_row_action_context_mismatch(
         )
         if not instruction_objects:
             return False
+        row_objects = _contained_row_context_objects(candidate, candidates)
+        if not row_objects:
+            missing_row_context_requested = instruction_raw_tokens & {
+                "entries",
+                "entry",
+                "item",
+                "items",
+                "listitem",
+                "record",
+                "records",
+                "result",
+                "results",
+                "row",
+                "rows",
+                "treeitem",
+            }
+            return bool(missing_row_context_requested) and _has_duplicate_tight_action(
+                candidate,
+                candidates,
+            )
         if instruction_objects & row_objects:
             return False
         return True
@@ -5122,6 +5156,37 @@ def _has_duplicate_contained_row_action(
     return False
 
 
+def _has_duplicate_tight_action(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if duplicate_key:
+        return any(
+            other.id != candidate.id
+            and not _same_visual_candidate(other, candidate)
+            and other.control_type == candidate.control_type
+            and _contextual_duplicate_key(other) == duplicate_key
+            for other in candidates
+        )
+    candidate_tokens = _candidate_visible_text_tokens(candidate) or _candidate_automation_tokens(candidate)
+    candidate_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    if not candidate_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+            continue
+        other_tokens = _candidate_visible_text_tokens(other) or _candidate_automation_tokens(other)
+        other_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+        if candidate_tokens & other_tokens:
+            return True
+    return False
+
+
 def _contained_row_context_objects(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -5207,6 +5272,43 @@ def _unresolved_contextual_duplicate_mismatch(
     return not _contextual_duplicate_request_matches_evidence(
         requested_context,
         evidence_tokens,
+    )
+
+
+def _generic_pane_context_duplicate_ambiguous(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if "pane" not in raw_tokens or "panel" in raw_tokens:
+        return False
+    if not (raw_tokens & {"in", "inside", "on", "within"}):
+        return False
+    requested_context = _contextual_duplicate_request_tokens(instruction, candidate)
+    if requested_context != {"pane"}:
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    if not _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _contextual_duplicate_key(other) == duplicate_key
+        and _contextual_duplicate_request_matches_evidence(
+            requested_context,
+            _contextual_duplicate_evidence_tokens(other, candidates),
+        )
+        for other in candidates
     )
 
 
@@ -5326,8 +5428,6 @@ def _contextual_surface_tokens_match(
     if requested & evidence:
         return True
     if requested & {"dialog", "modal"} and evidence & {"dialog", "modal"}:
-        return True
-    if requested & {"pane", "panel"} and evidence <= {"pane"}:
         return True
     return False
 
@@ -5726,6 +5826,39 @@ def _ambiguous_exact_action_alias_alternative(
                 control_intents,
                 instruction=instruction,
             ):
+                continue
+            if _literal_words_from_text(other.descriptor) & exact_words:
+                return True
+    return False
+
+
+def _ambiguous_exact_literal_alias_alternative(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if not instruction_words:
+        return False
+    candidate_semantic = _candidate_semantic_tokens(candidate)
+    candidate_words = _literal_words_from_text(candidate.descriptor)
+    for family in (BROWSER_BOOKMARK_ACTION_WORDS,):
+        exact_words = instruction_words & family
+        if not exact_words or not (candidate_semantic & family):
+            continue
+        if candidate_words & exact_words:
+            return False
+        for other in candidates:
+            if other.id == candidate.id or _same_visual_candidate(other, candidate):
+                continue
+            if control_intents is not None and not _candidate_matches_control_intent(
+                other,
+                control_intents,
+                instruction=instruction,
+            ):
+                continue
+            if not (_candidate_semantic_tokens(other) & family):
                 continue
             if _literal_words_from_text(other.descriptor) & exact_words:
                 return True
@@ -6311,7 +6444,12 @@ def _browser_tab_generic_section_mismatch(
         return False
     if _instruction_mentions_tab_context(instruction):
         return False
-    return instruction_tokens <= BROWSER_TAB_GENERIC_SECTION_WORDS
+    allowed_context = (
+        BROWSER_TAB_GENERIC_SECTION_WORDS
+        | BROWSER_APP_IDENTITY_WORDS
+        | OPEN_VIEW_REQUEST_WORDS
+    )
+    return instruction_tokens <= allowed_context
 
 
 def _browser_tab_contextual_item_mismatch(
@@ -6763,6 +6901,8 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
+        return 0.0
     if _positional_action_duplicate_mismatch(
         instruction,
         instruction_tokens,
@@ -6794,6 +6934,13 @@ def _candidate_snap_score(
     ):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _object_only_action_context_mismatch(instruction, candidate):
+        return 0.0
+    if _ambiguous_exact_literal_alias_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
         return 0.0
     if _exclusive_action_family_mismatch(instruction, candidate.descriptor):
         return min(0.41, 0.45 * iou + 0.30 * proximity)

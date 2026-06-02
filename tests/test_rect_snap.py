@@ -11537,7 +11537,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ],
                 )
 
-                self.assertIsNone(result)
+        self.assertIsNone(result)
+
+    def test_browser_tab_generic_section_with_chrome_context_does_not_steal_text_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "tab",
+                "Settings - Google Chrome",
+                "tabitem",
+                (80, 0, 220, 40),
+                window_title="Settings - Google Chrome",
+            ),
+            ControlCandidate(
+                "settings",
+                "Settings",
+                "button",
+                (500, 120, 100, 32),
+                window_title="Settings - Google Chrome",
+            ),
+        ]
+        instruction = "Open Chrome settings."
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 120, 100, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 120, 100, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 500, "y": 120, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "settings")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 120, 100, 32))
 
     def test_browser_tab_login_title_does_not_match_generic_auth_action(self) -> None:
         from control_inventory import ControlCandidate
@@ -17662,6 +17712,54 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
+    def test_favorite_alias_with_exact_neighbor_stays_ambiguous_despite_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("star", "Star", "button", (120, 160, 100, 32)),
+            ControlCandidate("favorite", "Favorite", "button", (280, 160, 140, 32)),
+        ]
+        instruction = "Favorite this item."
+
+        wrong_target = resolve_candidate_target(
+            target_id="star",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 100, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 100, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 160, 100, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "star",
+                    "target": {"x": 120, "y": 160, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "star")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "star")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "star")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
+
     def test_notification_action_alias_target_id_accepts_bell_button(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -18206,6 +18304,54 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     self.assertEqual(resolved.target_id, "refund_globex")
                     self.assertFalse(resolved.rejected_reason)
                     self.assertEqual(resolved.rect, (610, 159, 80, 30))
+
+    def test_row_scoped_action_without_row_evidence_rejects_duplicate_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("email_save", "Save", "button", (220, 80, 70, 30)),
+            ControlCandidate("phone_save", "Save", "button", (220, 130, 70, 30)),
+        ]
+        instruction = "Click Save for Phone record."
+
+        wrong_target = resolve_candidate_target(
+            target_id="email_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 80, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 80, 70, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 80, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "email_save",
+                    "target": {"x": 220, "y": 80, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "email_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.target_id, "email_save")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.target_id, "email_save")
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
     def test_row_scoped_action_uses_named_row_label_without_row_noun(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -18882,6 +19028,106 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "popup_save")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (630, 160, 60, 30))
+
+    def test_panel_context_recovers_from_main_pane_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+            ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+            ControlCandidate("settings_panel", "Settings panel", "pane", (420, 80, 300, 120)),
+            ControlCandidate("panel_save", "Save", "button", (630, 160, 60, 30)),
+        ]
+        instruction = "Click Save in the panel."
+
+        wrong_target = resolve_candidate_target(
+            target_id="main_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "main_save",
+                    "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "main_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(wrong_snap)
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "panel_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (630, 160, 60, 30))
+
+    def test_generic_pane_context_with_duplicate_actions_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+            ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+            ControlCandidate("settings_pane", "Settings pane", "pane", (420, 80, 300, 120)),
+            ControlCandidate("pane_save", "Save", "button", (630, 160, 60, 30)),
+        ]
+        instruction = "Click Save in the pane."
+
+        wrong_target = resolve_candidate_target(
+            target_id="main_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "main_save",
+                    "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "main_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "main_save")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertIsNone(wrong_snap)
+        self.assertEqual(help_target.target_id, "main_save")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 
     def test_notification_dismiss_recovers_from_page_dismiss_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

@@ -3716,6 +3716,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "chrome_settings_text_match_prefers_button_over_tab_title",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 20, 220, 40], "label": "Settings - Google Chrome"},
+                {"rect": [500, 120, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Chrome settings.",
+                "target": {"x": 500, "y": 120, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Settings - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [80, 20, 220, 40],
+                    "window_title": "Settings - Google Chrome",
+                },
+                {
+                    "id": "settings",
+                    "text": "Settings",
+                    "control_type": "button",
+                    "rect": [500, 120, 100, 32],
+                    "window_title": "Settings - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings",
+                "rect": [500, 120, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_history_rejects_browser_tab_title_for_history_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10976,6 +11011,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "favorite_action_alias_with_exact_neighbor_rejects_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Star"},
+                {"rect": [180, 80, 140, 32], "label": "Favorite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Favorite this item.",
+                "target_id": "star",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "star", "text": "Star", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "favorite", "text": "Favorite", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "favorite",
+                "rect": [180, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "bell_action_target_id_accepts_notifications_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14795,6 +14854,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_action_without_row_evidence_rejects_duplicate_save",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [220, 80, 70, 30], "label": "Save"},
+                {"rect": [220, 130, 70, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save for Phone record.",
+                "target_id": "email_save",
+                "target": {"x": 220, "y": 80, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "email_save", "text": "Save", "control_type": "button", "rect": [220, 80, 70, 30]},
+                {"id": "phone_save", "text": "Save", "control_type": "button", "rect": [220, 130, 70, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "email_save",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "row_scoped_refund_action_uses_named_row_label_without_row_noun",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15453,6 +15536,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "sidebar_save",
                 "rect": [630, 160, 60, 30],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "panel_context_recovers_from_main_pane_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Main content"},
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings panel"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the panel.",
+                "target_id": "main_save",
+                "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "main", "text": "Main content", "control_type": "pane", "rect": [20, 80, 300, 120]},
+                {"id": "main_save", "text": "Save", "control_type": "button", "rect": [230, 160, 60, 30]},
+                {"id": "settings_panel", "text": "Settings panel", "control_type": "pane", "rect": [420, 80, 300, 120]},
+                {"id": "panel_save", "text": "Save", "control_type": "button", "rect": [630, 160, 60, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "panel_save",
+                "rect": [630, 160, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_pane_context_with_duplicate_actions_stays_ambiguous",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Main content"},
+                {"rect": [230, 160, 60, 30], "label": "Save"},
+                {"rect": [420, 80, 300, 120], "label": "Settings pane"},
+                {"rect": [630, 160, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the pane.",
+                "target_id": "main_save",
+                "target": {"x": 230, "y": 160, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "main", "text": "Main content", "control_type": "pane", "rect": [20, 80, 300, 120]},
+                {"id": "main_save", "text": "Save", "control_type": "button", "rect": [230, 160, 60, 30]},
+                {"id": "settings_pane", "text": "Settings pane", "control_type": "pane", "rect": [420, 80, 300, 120]},
+                {"id": "pane_save", "text": "Save", "control_type": "button", "rect": [630, 160, 60, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "main_save",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
             },
         },
         {
