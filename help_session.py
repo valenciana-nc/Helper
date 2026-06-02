@@ -20,6 +20,11 @@ from control_inventory import (
     resolve_candidate_target,
     snap_candidate_target,
 )
+from help_intents import (
+    tokenize_control as _tokenize_control,
+    tokenize_instruction as _tokenize_instruction,
+    tokens_from_text as _tokens_from_text,
+)
 from history import HistoryManager
 from rect_snap import SnapResult, snap_to_control
 from screen import capture_active_monitor
@@ -53,6 +58,17 @@ MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
 
 OVERSIZED_AREA_THRESHOLD = 100_000
 OVERSIZED_EDGE_THRESHOLD = 400
+RAW_SNAP_EXCLUSIVE_ACTION_FAMILIES = (
+    frozenset({"apply", "checkmark", "confirm", "ok", "okay"}),
+    frozenset({"cancel", "dismiss"}),
+    frozenset({"add", "create", "new", "plus"}),
+    frozenset({"bin", "delete", "remove", "trash", "wastebasket"}),
+    frozenset({"disk", "floppy", "save"}),
+    frozenset({"download", "export"}),
+    frozenset({"import", "upload"}),
+    frozenset({"clone", "copy", "duplicate"}),
+    frozenset({"edit", "pencil"}),
+)
 
 
 def looks_oversized(decision: "LiveHelpDecision") -> bool:
@@ -297,6 +313,14 @@ def resolve_help_target(
         )
 
     if snap.source == "uia":
+        if _raw_snap_action_mismatch(decision.instruction, snap.matched_text):
+            return TargetResolution(
+                rect=snap.rect,
+                confidence=snap.confidence,
+                source="snap",
+                matched_text=snap.matched_text,
+                rejected_reason="candidate semantic mismatch",
+            )
         if candidates:
             return TargetResolution(
                 rect=snap.rect,
@@ -327,6 +351,28 @@ def resolve_help_target(
         source="model",
         matched_text=snap.matched_text,
     ), capture, clip_to_capture)
+
+
+def _raw_snap_action_mismatch(instruction: str, matched_text: str) -> bool:
+    instruction_tokens = _tokens_from_text(instruction) | _tokenize_instruction(instruction)
+    control_tokens = _tokens_from_text(matched_text) | _tokenize_control(matched_text)
+    if not instruction_tokens or not control_tokens:
+        return False
+    requested_indexes = [
+        index
+        for index, family in enumerate(RAW_SNAP_EXCLUSIVE_ACTION_FAMILIES)
+        if instruction_tokens & family
+    ]
+    if not requested_indexes:
+        return False
+    matched_indexes = [
+        index
+        for index, family in enumerate(RAW_SNAP_EXCLUSIVE_ACTION_FAMILIES)
+        if control_tokens & family
+    ]
+    if not matched_indexes:
+        return False
+    return not bool(set(requested_indexes) & set(matched_indexes))
 
 
 def _instruction_has_dialog_resolution_context(instruction: str) -> bool:

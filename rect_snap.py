@@ -200,7 +200,7 @@ ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
 )
 BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
 BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
-CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
+CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "rail", "rails", "sidebar"})
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
 GENERIC_VISIBILITY_ACTION_WORDS = GENERIC_VISIBILITY_SHOW_WORDS | GENERIC_VISIBILITY_HIDE_WORDS
@@ -3026,8 +3026,6 @@ def _browser_tab_contextual_item_mismatch(
         return False
     raw_tokens = _tokens_from_text(instruction)
     if raw_tokens & BROWSER_TAB_WORDS:
-        return False
-    if "item" not in raw_tokens:
         return False
     if not (raw_tokens & CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS):
         return False

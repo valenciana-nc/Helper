@@ -2633,7 +2633,7 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (360, 160, 180, 32))
                 self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
-    def test_sidebar_item_does_not_snap_browser_tabitem(self) -> None:
+    def test_app_nav_context_does_not_snap_browser_tabitem(self) -> None:
         from rect_snap import snap_to_control
 
         tab = _make_button(
@@ -2647,16 +2647,33 @@ class SnapToControlTests(unittest.TestCase):
         window = _make_window("MyApp - Google Chrome", 0, 0, 800, 600, [tab])
         desktop = _FakeDesktop([window])
 
-        result = snap_to_control(
-            (20, 10, 220, 32),
+        for instruction in (
             "Click the Settings sidebar item.",
+            "Open Settings in the left rail.",
+            "Open Settings in the rail.",
+        ):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    (20, 10, 220, 32),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (20, 10, 220, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+        tab_result = snap_to_control(
+            (20, 10, 220, 32),
+            "Open Settings tab.",
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
 
-        self.assertEqual(result.source, "uia")
-        self.assertEqual(result.rect, (20, 10, 220, 32))
-        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(tab_result.source, "uia")
+        self.assertEqual(tab_result.rect, (20, 10, 220, 32))
+        self.assertFalse(tab_result.rejected_reason)
 
     def test_remove_formatting_does_not_snap_delete_family_button(self) -> None:
         from rect_snap import snap_to_control
@@ -26305,6 +26322,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.rect, expected_rect)
                 self.assertFalse(help_target.rejected_reason)
 
+    def test_fresh_snap_rejects_browser_tab_for_app_rail_context(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        tab = _make_button(
+            "Settings - MyApp - Google Chrome",
+            20,
+            10,
+            220,
+            32,
+            control_type="TabItem",
+        )
+        rail_item = _make_button(
+            "Settings",
+            20,
+            120,
+            180,
+            32,
+            control_type="ListItem",
+        )
+        desktop = _FakeDesktop([_make_window("MyApp - Google Chrome", 0, 0, 1000, 800, [tab, rail_item])])
+
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Settings in the left rail.",
+                    "target": {"x": 20, "y": 10, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, text: snap_to_control(
+                rect,
+                text,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(help_target.source, "snap")
+        self.assertEqual(help_target.rect, (20, 10, 220, 32))
+        self.assertEqual(help_target.rejected_reason, "candidate semantic mismatch")
+
     def test_explicit_role_wrong_only_rejects_overlay(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
@@ -28268,6 +28329,66 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
+    def test_contextual_duplicate_slider_recovers_requested_row(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("acme_label", "Acme", "text", (20, 100, 80, 24)),
+            ControlCandidate("acme", "Volume", "slider", (200, 96, 220, 32)),
+            ControlCandidate("globex_label", "Globex", "text", (20, 150, 80, 24)),
+            ControlCandidate("globex", "Volume", "slider", (200, 146, 220, 32)),
+        ]
+        instruction = "Decrease Acme volume slider."
+
+        stale_target = resolve_candidate_target(
+            target_id="globex",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 146, 220, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 146, 220, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 146, 220, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "globex",
+                    "target": {"x": 200, "y": 146, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(stale_target)
+        assert stale_target is not None
+        self.assertIn(
+            stale_target.rejected_reason,
+            {"target_id ambiguous", "target_id semantic mismatch"},
+        )
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "acme")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNotNone(snap_target)
+        assert snap_target is not None
+        self.assertEqual(snap_target.target_id, "acme")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.target_id, "acme")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (200, 96, 220, 32))
+
     def test_generic_spinner_broad_group_rejects_multiple_spinners(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -29769,6 +29890,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "snap")
         self.assertEqual(target.rect, model_rect)
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_empty_inventory_fresh_snap_rejects_action_word_conflict(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        model_rect = (100, 100, 80, 32)
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=model_rect,
+                confidence=0.90,
+                source="uia",
+                matched_text="Delete",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, model_rect)
+        self.assertEqual(target.matched_text, "Delete")
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_fresh_snap_control_type_mismatch_does_not_fall_back_to_raw_model_rect(self) -> None:

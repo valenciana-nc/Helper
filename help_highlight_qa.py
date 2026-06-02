@@ -1410,6 +1410,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "contextual_duplicate_slider_recovers_requested_row",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 100, 80, 24], "label": "Acme"},
+                {"rect": [200, 96, 220, 32], "label": "Volume"},
+                {"rect": [20, 150, 80, 24], "label": "Globex"},
+                {"rect": [200, 146, 220, 32], "label": "Volume"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Decrease Acme volume slider.",
+                "target_id": "globex",
+                "target": {"x": 200, "y": 146, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "acme_label", "text": "Acme", "control_type": "text", "rect": [20, 100, 80, 24]},
+                {"id": "acme", "text": "Volume", "control_type": "slider", "rect": [200, 96, 220, 32]},
+                {"id": "globex_label", "text": "Globex", "control_type": "text", "rect": [20, 150, 80, 24]},
+                {"id": "globex", "text": "Volume", "control_type": "slider", "rect": [200, 146, 220, 32]},
+            ],
+            "expected": {
+                "target_id": "acme",
+                "rect": [200, 96, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_spinner_model_rect_snaps_to_spinner",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

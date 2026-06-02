@@ -59,6 +59,9 @@ FILTER_RESET_ALLOWED_CONTROL_WORDS = frozenset(
 FILTER_RESET_OBJECT_ONLY_WORDS = frozenset(
     {"apply", "filter", "filters", "funnel", "query", "result", "results", "search"}
 )
+CONTEXTUAL_DUPLICATE_NEARBY_LABEL_CONTROL_TYPES = TIGHT_ACTION_CONTROL_TYPES | frozenset(
+    {"slider"}
+)
 CLOSE_CONTEXT_TARGET_WORDS = frozenset(
     {
         "banner",
@@ -87,6 +90,9 @@ AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
 AUDIO_OUTPUT_MUTE_WORDS = frozenset({"mute"})
 AUDIO_OUTPUT_UNMUTE_WORDS = frozenset({"unmute"})
+ADJUSTABLE_CONTROL_ACTION_WORDS = frozenset(
+    {"adjust", "decrease", "down", "increase", "lower", "raise", "set", "up"}
+)
 SPINNER_INCREMENT_WORDS = frozenset({"increase", "increment", "raise", "up"})
 SPINNER_DECREMENT_WORDS = frozenset({"decrease", "decrement", "down", "lower"})
 CARDINAL_DIRECTION_ACTION_PAIRS = (
@@ -9614,6 +9620,9 @@ def _implicit_contextual_duplicate_request_tokens(
         - candidate_tokens
         - CONTEXTUAL_DUPLICATE_STOPWORDS
     )
+    request_tokens -= _positional_duplicate_control_tokens(candidate)
+    if candidate.control_type == "slider":
+        request_tokens -= ADJUSTABLE_CONTROL_ACTION_WORDS
     spatial_context = _spatial_contextual_duplicate_request_tokens(instruction)
     if spatial_context:
         request_tokens = (
@@ -9856,7 +9865,7 @@ def _contextual_duplicate_nearby_label_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
-    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+    if candidate.control_type not in CONTEXTUAL_DUPLICATE_NEARBY_LABEL_CONTROL_TYPES:
         return set()
     tokens: set[str] = set()
     for label in candidates:
@@ -9905,7 +9914,7 @@ def _nearby_row_label_rect_matches(
     label: ControlCandidate,
     action: ControlCandidate,
 ) -> bool:
-    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+    if action.control_type not in CONTEXTUAL_DUPLICATE_NEARBY_LABEL_CONTROL_TYPES:
         return False
     label_x, label_y, label_width, label_height = label.rect
     action_x, action_y, action_width, action_height = action.rect
