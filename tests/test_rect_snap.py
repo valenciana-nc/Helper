@@ -9567,6 +9567,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_control_moved_to_background_window(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Type into Email.",
+                "target_id": "email",
+                "target": {"x": 100, "y": 100, "width": 240, "height": 32},
+            }
+        )
+        previous_target = TargetResolution(
+            rect=(100, 100, 240, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Email",
+            target_id="email",
+        )
+        current_target = TargetResolution(
+            rect=(100, 100, 240, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Email",
+            target_id="email",
+        )
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=[
+                ControlCandidate(
+                    "email",
+                    "Email",
+                    "edit",
+                    (100, 100, 240, 32),
+                    window_title="Background Editor",
+                    window_rank=2,
+                ),
+            ],
+            previous_target=previous_target,
+            previous_candidates=[
+                ControlCandidate(
+                    "email",
+                    "Email",
+                    "edit",
+                    (100, 100, 240, 32),
+                    window_title="Active Editor",
+                    window_rank=0,
+                ),
+            ],
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
     def test_model_rect_snaps_to_candidate_snapshot_without_fresh_uia(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
