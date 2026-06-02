@@ -337,6 +337,7 @@ CLIPBOARD_TEXT_ENTRY_TARGET_WORDS = frozenset(
         "url",
     }
 )
+FIELD_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "input", "type"})
 ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
     {
         "content",
@@ -392,17 +393,25 @@ BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
         "copilot",
         "downloads",
         "extensions",
+        "games",
         "history",
         "home",
         "immersivereader",
+        "mathsolver",
         "passwords",
+        "performance",
         "readaloud",
         "readinglist",
         "reload",
+        "searchtabs",
         "sidebar",
         "sidepanel",
         "splitscreen",
+        "shopping",
+        "tabactionsmenu",
+        "tabsearchbutton",
         "translate",
+        "verticaltabs",
         "wallet",
         "workspaces",
     }
@@ -428,24 +437,33 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "favorites",
         "find",
         "forward",
+        "games",
         "history",
         "home",
         "house",
         "immersive",
+        "math",
         "password",
         "passwords",
+        "performance",
         "print",
         "read",
         "reader",
         "reading",
         "reload",
         "refresh",
+        "search",
         "save",
         "share",
+        "shopping",
         "sidebar",
         "split",
+        "solver",
         "star",
+        "tab_search",
+        "tabs",
         "translate",
+        "vertical",
         "wallet",
         "workspace",
         "workspaces",
@@ -1111,7 +1129,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
 )
 NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
-    {"cell", "gridcell"}
+    {"cell", "datagridcell", "gridcell", "rowheader"}
 )
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
@@ -3580,6 +3598,9 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     ):
         return True
     toolbar_words = text_tokens & BROWSER_CHROME_TOOLBAR_WORDS
+    compact_topbar = (compact_toolbar_shape or compact_text_toolbar_shape) and candidate.rect[1] <= 72
+    if compact_topbar and ({"tab", "actions", "menu"} <= text_tokens or {"vertical", "tabs"} <= text_tokens):
+        return True
     if toolbar_words and candidate.rect[1] > 144:
         return False
     if "find" in toolbar_words and candidate.rect[1] > 72:
@@ -5131,6 +5152,7 @@ def _explicit_action_context_mismatch(
         or _same_action_family_object_mismatch(instruction, candidate.descriptor)
         or _same_action_family_window_context_mismatch(instruction, candidate)
         or _generic_visibility_polarity_action_mismatch(instruction, candidate.descriptor)
+        or _check_in_out_action_mismatch(instruction, candidate.descriptor)
         or _reversible_action_polarity_mismatch(instruction, candidate.descriptor)
         or _state_label_action_mismatch(instruction, candidate.descriptor)
         or _search_results_label_action_mismatch(instruction, candidate.descriptor)
@@ -5989,6 +6011,8 @@ def _implicit_container_context_request_tokens(
     for family in EXCLUSIVE_ACTION_FAMILIES:
         if matched_action_tokens & family:
             request_tokens -= family
+    if candidate.control_type in LABELLED_FIELD_CONTROL_TYPES:
+        request_tokens -= FIELD_ENTRY_ACTION_WORDS
     return request_tokens
 
 
@@ -6393,6 +6417,8 @@ def _implicit_contextual_duplicate_request_tokens(
     for family in EXCLUSIVE_ACTION_FAMILIES:
         if matched_action_tokens & family:
             request_tokens -= family
+    if candidate.control_type in LABELLED_FIELD_CONTROL_TYPES:
+        request_tokens -= FIELD_ENTRY_ACTION_WORDS
     if not request_tokens:
         return set()
     positional_request = bool(request_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
@@ -6403,14 +6429,13 @@ def _implicit_contextual_duplicate_request_tokens(
             continue
         if _contextual_duplicate_key(other) != duplicate_key:
             continue
-        evidence_tokens = (
-            _contextual_duplicate_evidence_tokens(other, candidates)
-            if positional_request
-            else _object_token_variants(
+        if positional_request or other.control_type in LABELLED_FIELD_CONTROL_TYPES:
+            evidence_tokens = _contextual_duplicate_evidence_tokens(other, candidates)
+        else:
+            evidence_tokens = _object_token_variants(
                 _contextual_duplicate_aligned_header_tokens(other, candidates)
                 | _contextual_duplicate_nearby_label_tokens(other, candidates)
             )
-        )
         if _contextual_duplicate_request_matches_evidence(
             request_tokens,
             evidence_tokens,
@@ -7037,6 +7062,25 @@ def _reversible_action_polarity_mismatch(
     if instruction_objects and control_objects:
         return True
     return not instruction_objects and not control_objects
+
+
+def _check_in_out_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_kind = _check_in_out_action_kind(instruction)
+    if not instruction_kind:
+        return False
+    control_kind = _check_in_out_action_kind(candidate_text)
+    return bool(control_kind and control_kind != instruction_kind)
+
+
+def _check_in_out_action_kind(text: str) -> str:
+    words = _literal_word_sequence(text)
+    for first, second in zip(words, words[1:]):
+        if first == "check" and second in {"in", "out"}:
+            return second
+    return ""
 
 
 def _reversible_action_polarity_kind(tokens: set[str]) -> str:

@@ -2569,6 +2569,8 @@ class SnapToControlTests(unittest.TestCase):
             ("Disconnect account.", "Connect account", "App"),
             ("Activate notifications.", "Deactivate notifications", "App"),
             ("Deactivate notifications.", "Activate notifications", "App"),
+            ("Check in guest.", "Check out guest", "Hotel PMS"),
+            ("Check out guest.", "Check in guest", "Hotel PMS"),
             ("Start recording.", "Stop recording", "App"),
             ("Stop recording.", "Start recording", "App"),
         )
@@ -2822,6 +2824,12 @@ class SnapToControlTests(unittest.TestCase):
                 _make_button("New tab", 904, 8, 42, 34),
                 "CRM - Microsoft Edge",
                 (904, 8, 42, 34),
+            ),
+            (
+                "Open Search tabs in the app.",
+                _make_button("Search tabs", 904, 8, 82, 34),
+                "CRM - Microsoft Edge",
+                (904, 8, 82, 34),
             ),
         )
         for instruction, button, window_title, rect in cases:
@@ -9525,6 +9533,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Open Search tabs in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Search tabs",
+                    "button",
+                    (904, 8, 82, 34),
+                    window_title="CRM - Microsoft Edge",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Search tabs",
+                    "listitem",
+                    (120, 160, 180, 32),
+                    window_title="CRM - Microsoft Edge",
+                ),
+            ),
+            (
                 "Open Home in the sidebar.",
                 ControlCandidate(
                     "c001",
@@ -13772,54 +13797,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
-        candidates = [
-            ControlCandidate("cell_nimbus", "Nimbus", "cell", (20, 90, 140, 30)),
-            ControlCandidate("approve_nimbus", "Approve", "button", (200, 90, 90, 30)),
-            ControlCandidate("cell_orion", "Orion", "cell", (20, 140, 140, 30)),
-            ControlCandidate("approve_orion", "Approve", "button", (200, 140, 90, 30)),
-        ]
         instruction = "Approve Nimbus."
 
-        wrong_target = resolve_candidate_target(
-            target_id="approve_orion",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(200, 140, 90, 30),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(200, 140, 90, 30),
-        )
-        wrong_snap = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(200, 140, 90, 30),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "approve_orion",
-                    "target": {"x": 200, "y": 140, "width": 90, "height": 30},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+        for label_type in ("cell", "datagridcell", "rowheader"):
+            with self.subTest(label_type=label_type):
+                candidates = [
+                    ControlCandidate("cell_nimbus", "Nimbus", label_type, (20, 90, 140, 30)),
+                    ControlCandidate("approve_nimbus", "Approve", "button", (200, 90, 90, 30)),
+                    ControlCandidate("cell_orion", "Orion", label_type, (20, 140, 140, 30)),
+                    ControlCandidate("approve_orion", "Approve", "button", (200, 140, 90, 30)),
+                ]
 
-        self.assertEqual(wrong_target.target_id, "approve_orion")
-        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
-        self.assertEqual(text_target.target_id, "approve_nimbus")
-        self.assertFalse(text_target.rejected_reason)
-        self.assertEqual(wrong_snap.target_id, "approve_nimbus")
-        self.assertFalse(wrong_snap.rejected_reason)
-        self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "approve_nimbus")
-        self.assertFalse(help_target.rejected_reason)
-        self.assertEqual(help_target.rect, (200, 90, 90, 30))
+                wrong_target = resolve_candidate_target(
+                    target_id="approve_orion",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(200, 140, 90, 30),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(200, 140, 90, 30),
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(200, 140, 90, 30),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "approve_orion",
+                            "target": {"x": 200, "y": 140, "width": 90, "height": 30},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "approve_orion")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(text_target.target_id, "approve_nimbus")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(wrong_snap.target_id, "approve_nimbus")
+                self.assertFalse(wrong_snap.rejected_reason)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "approve_nimbus")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (200, 90, 90, 30))
 
     def test_row_scoped_clear_field_rejects_wrong_row_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -14642,6 +14670,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Turn on notifications.", "Disable notifications", "checkbox", (120, 160, 190, 32)),
             ("Activate notifications.", "Deactivate notifications", "button", (120, 160, 210, 32)),
             ("Deactivate notifications.", "Activate notifications", "button", (120, 160, 200, 32)),
+            ("Check in guest.", "Check out guest", "button", (120, 160, 190, 32)),
+            ("Check out guest.", "Check in guest", "button", (120, 160, 180, 32)),
             ("Check Remember me.", "Uncheck Remember me", "checkbox", (120, 160, 190, 32)),
             ("Uncheck Remember me.", "Check Remember me", "checkbox", (120, 160, 190, 32)),
         )
@@ -20097,6 +20127,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, expected_id)
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, expected.rect)
+
+    def test_shorthand_group_context_recovers_requested_duplicate_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_group", "Billing", "group", (20, 60, 420, 70)),
+            ControlCandidate("billing_email", "Email", "edit", (150, 80, 220, 32)),
+            ControlCandidate("shipping_group", "Shipping", "group", (20, 120, 420, 70)),
+            ControlCandidate("shipping_email", "Email", "edit", (150, 130, 220, 32)),
+        ]
+        instruction = "Enter Billing email."
+
+        wrong_target = resolve_candidate_target(
+            target_id="shipping_email",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(150, 130, 220, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(150, 130, 220, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "shipping_email",
+                    "target": {"x": 150, "y": 130, "width": 220, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "shipping_email")
+        self.assertIn(
+            wrong_target.rejected_reason,
+            {"target_id ambiguous", "target_id semantic mismatch"},
+        )
+        self.assertEqual(text_target.target_id, "billing_email")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "billing_email")
+        self.assertEqual(help_target.rect, (150, 80, 220, 32))
+        self.assertFalse(help_target.rejected_reason)
 
     def test_container_only_menu_request_does_not_recover_arbitrary_child(self) -> None:
         from control_inventory import ControlCandidate

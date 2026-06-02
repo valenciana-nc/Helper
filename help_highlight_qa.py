@@ -2336,6 +2336,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "check_in_guest_recovers_from_check_out_guest_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Check in guest"},
+                {"rect": [20, 130, 190, 32], "label": "Check out guest"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check in guest.",
+                "target_id": "check_out_guest",
+                "target": {"x": 20, "y": 130, "width": 190, "height": 32},
+            },
+            "candidates": [
+                {"id": "check_in_guest", "text": "Check in guest", "control_type": "button", "rect": [20, 80, 180, 32]},
+                {"id": "check_out_guest", "text": "Check out guest", "control_type": "button", "rect": [20, 130, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "check_in_guest",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "enable_notifications_target_id_rejects_enabled_notifications_status",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -10484,6 +10508,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_search_tabs_chrome_rejects_app_search_tabs_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [904, 8, 82, 34], "label": "Browser Search tabs"},
+                {"rect": [120, 160, 180, 32], "label": "Search tabs"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Search tabs in the app.",
+                "target_id": "browser_search_tabs",
+                "target": {"x": 904, "y": 8, "width": 82, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "browser_search_tabs",
+                    "text": "Search tabs",
+                    "control_type": "button",
+                    "rect": [904, 8, 82, 34],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+                {
+                    "id": "app_search_tabs",
+                    "text": "Search tabs",
+                    "control_type": "listitem",
+                    "rect": [120, 160, 180, 32],
+                    "window_title": "CRM - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_search_tabs",
+                "rect": [120, 160, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16027,6 +16087,62 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "approve_nimbus",
                 "rect": [200, 90, 90, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "rowheader_label_rejects_wrong_duplicate_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 140, 30], "label": "Vega"},
+                {"rect": [200, 90, 90, 30], "label": "Approve"},
+                {"rect": [20, 140, 140, 30], "label": "Lyra"},
+                {"rect": [200, 140, 90, 30], "label": "Approve"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Approve Vega.",
+                "target_id": "approve_lyra",
+                "target": {"x": 200, "y": 140, "width": 90, "height": 30},
+            },
+            "candidates": [
+                {"id": "label_vega", "text": "Vega", "control_type": "rowheader", "rect": [20, 90, 140, 30]},
+                {"id": "approve_vega", "text": "Approve", "control_type": "button", "rect": [200, 90, 90, 30]},
+                {"id": "label_lyra", "text": "Lyra", "control_type": "rowheader", "rect": [20, 140, 140, 30]},
+                {"id": "approve_lyra", "text": "Approve", "control_type": "button", "rect": [200, 140, 90, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "approve_vega",
+                "rect": [200, 90, 90, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "group_scoped_billing_email_recovers_from_shipping_email_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 60, 420, 70], "label": "Billing"},
+                {"rect": [150, 80, 220, 32], "label": "Email"},
+                {"rect": [20, 120, 420, 70], "label": "Shipping"},
+                {"rect": [150, 130, 220, 32], "label": "Email"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Enter Billing email.",
+                "target_id": "shipping_email",
+                "target": {"x": 150, "y": 130, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "billing_group", "text": "Billing", "control_type": "group", "rect": [20, 60, 420, 70]},
+                {"id": "billing_email", "text": "Email", "control_type": "edit", "rect": [150, 80, 220, 32]},
+                {"id": "shipping_group", "text": "Shipping", "control_type": "group", "rect": [20, 120, 420, 70]},
+                {"id": "shipping_email", "text": "Email", "control_type": "edit", "rect": [150, 130, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "billing_email",
+                "rect": [150, 80, 220, 32],
                 "overlay_emitted": True,
             },
         },

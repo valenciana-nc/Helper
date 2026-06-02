@@ -472,17 +472,25 @@ BROWSER_CHROME_TOOLBAR_AUTOMATION_IDS = frozenset(
         "copilot",
         "downloads",
         "extensions",
+        "games",
         "history",
         "home",
         "immersivereader",
+        "mathsolver",
         "passwords",
+        "performance",
         "readaloud",
         "readinglist",
         "reload",
+        "searchtabs",
         "sidebar",
         "sidepanel",
         "splitscreen",
+        "shopping",
+        "tabactionsmenu",
+        "tabsearchbutton",
         "translate",
+        "verticaltabs",
         "wallet",
         "workspaces",
     }
@@ -501,20 +509,29 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "essentials",
         "extensions",
         "forward",
+        "games",
         "history",
         "home",
         "house",
         "immersive",
+        "math",
         "password",
         "passwords",
+        "performance",
         "read",
         "reader",
         "reading",
         "reload",
         "refresh",
+        "search",
         "sidebar",
         "split",
+        "shopping",
+        "solver",
+        "tabs",
+        "tab_search",
         "translate",
+        "vertical",
         "wallet",
         "workspace",
         "workspaces",
@@ -1855,7 +1872,15 @@ def _looks_like_browser_toolbar_button(
         return True
     text_tokens = _tokens_from_text(visible_text or "")
     compact_toolbar_shape = max(rect[2], rect[3]) <= 56
-    return bool(text_tokens & BROWSER_CHROME_TOOLBAR_WORDS and compact_toolbar_shape)
+    compact_text_toolbar_shape = rect[2] <= 96 and rect[3] <= 44 and rect[1] <= 72
+    toolbar_words = text_tokens & BROWSER_CHROME_TOOLBAR_WORDS
+    if compact_text_toolbar_shape and (
+        {"tab", "actions", "menu"} <= text_tokens or {"vertical", "tabs"} <= text_tokens
+    ):
+        return True
+    if toolbar_words and rect[1] > 144:
+        return False
+    return bool(toolbar_words and (compact_toolbar_shape or compact_text_toolbar_shape))
 
 
 def _browser_address_bar_content_mismatch(
@@ -2276,6 +2301,10 @@ def _explicit_action_context_mismatch(
             window_title,
         )
         or _generic_visibility_polarity_action_mismatch(
+            instruction,
+            " ".join((visible_text or "", automation_id or "")),
+        )
+        or _check_in_out_action_mismatch(
             instruction,
             " ".join((visible_text or "", automation_id or "")),
         )
@@ -2773,6 +2802,25 @@ def _reversible_action_polarity_mismatch(
     return not instruction_objects and not control_objects
 
 
+def _check_in_out_action_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    instruction_kind = _check_in_out_action_kind(instruction)
+    if not instruction_kind:
+        return False
+    control_kind = _check_in_out_action_kind(candidate_text)
+    return bool(control_kind and control_kind != instruction_kind)
+
+
+def _check_in_out_action_kind(text: str) -> str:
+    words = _literal_word_sequence(text)
+    for first, second in zip(words, words[1:]):
+        if first == "check" and second in {"in", "out"}:
+            return second
+    return ""
+
+
 def _reversible_action_polarity_kind(tokens: set[str]) -> str:
     for index, (positive_words, negative_words) in enumerate(REVERSIBLE_ACTION_POLARITY_PAIRS):
         requested_positive = bool(tokens & positive_words)
@@ -3015,9 +3063,13 @@ def _close_context_action_mismatch(
 
 
 def _literal_words_from_text(text: str) -> set[str]:
+    return set(_literal_word_sequence(text))
+
+
+def _literal_word_sequence(text: str) -> list[str]:
     spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
     spaced = re.sub(r"[_\-.]+", " ", spaced)
-    return set(re.findall(r"[a-z0-9]+", spaced.lower()))
+    return re.findall(r"[a-z0-9]+", spaced.lower())
 
 
 def _is_x_symbol_text(text: str) -> bool:
