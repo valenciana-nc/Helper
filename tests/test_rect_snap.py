@@ -7794,6 +7794,60 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(snap_target.target_id, "menu1")
         self.assertFalse(snap_target.rejected_reason)
 
+    def test_row_actions_phrase_recovers_repeated_more_options_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("row_acme", "Acme invoice", "dataitem", (20, 100, 620, 48)),
+            ControlCandidate(
+                "more_acme",
+                "",
+                "button",
+                (590, 112, 28, 28),
+                automation_id="More options",
+            ),
+            ControlCandidate("row_globex", "Globex invoice", "dataitem", (20, 160, 620, 48)),
+            ControlCandidate(
+                "more_globex",
+                "",
+                "button",
+                (590, 172, 28, 28),
+                automation_id="More options",
+            ),
+        ]
+        instruction = "Open row actions for Globex invoice."
+
+        stale_target = resolve_candidate_target(
+            target_id="more_acme",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(590, 112, 28, 28),
+        )
+        correct_target = resolve_candidate_target(
+            target_id="more_globex",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(590, 112, 28, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(590, 112, 28, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(590, 112, 28, 28),
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
+        for target in (correct_target, text_target, snap_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "more_globex")
+            self.assertEqual(target.rect, (590, 172, 28, 28))
+
     def test_snap_candidate_target_accepts_combobox_dropdown_arrow_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
@@ -23380,6 +23434,177 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "list_save")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (630, 160, 60, 30))
+
+    def test_segmented_control_recovers_from_nav_card_and_wrong_segment(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("nav_billing", "Billing", "listitem", (20, 80, 160, 36)),
+            ControlCandidate("plan_card", "Annual plan", "pane", (260, 150, 260, 90)),
+            ControlCandidate("segment_group", "Billing cycle", "group", (260, 80, 240, 36)),
+            ControlCandidate("monthly", "Monthly", "button", (260, 80, 120, 36)),
+            ControlCandidate("annual", "Annual", "button", (380, 80, 120, 36)),
+        ]
+        instruction = "Select Annual billing."
+
+        stale_nav = resolve_candidate_target(
+            target_id="nav_billing",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 80, 160, 36),
+        )
+        stale_card = resolve_candidate_target(
+            target_id="plan_card",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 150, 260, 90),
+        )
+        stale_segment = resolve_candidate_target(
+            target_id="monthly",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 80, 120, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 80, 160, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 80, 120, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "nav_billing",
+                    "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for target in (stale_nav, stale_card, stale_segment):
+            self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
+        for target in (text_target, snap_target, help_target):
+            self.assertEqual(target.target_id, "annual")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (380, 80, 120, 36))
+
+    def test_segmented_control_short_label_recovers_button_without_stealing_plan(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("plan_card", "Annual plan", "pane", (260, 150, 260, 90)),
+            ControlCandidate("segment_group", "Billing cycle", "group", (260, 80, 240, 36)),
+            ControlCandidate("monthly", "Monthly", "button", (260, 80, 120, 36)),
+            ControlCandidate("annual", "Annual", "button", (380, 80, 120, 36)),
+        ]
+        segment_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Select Annual.",
+                    "target_id": "plan_card",
+                    "target": {"x": 260, "y": 150, "width": 260, "height": 90},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        plan_target = resolve_candidate_target(
+            target_id="",
+            instruction="Select Annual plan.",
+            candidates=candidates,
+            model_rect=(260, 150, 260, 90),
+        )
+
+        self.assertEqual(segment_target.source, "text_match")
+        self.assertEqual(segment_target.target_id, "annual")
+        self.assertFalse(segment_target.rejected_reason)
+        self.assertEqual(segment_target.rect, (380, 80, 120, 36))
+        self.assertIsNone(plan_target)
+
+    def test_automation_only_segmented_control_recovers_wrong_segment(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("group", "Density", "group", (100, 180, 144, 32)),
+            ControlCandidate(
+                "compact",
+                "",
+                "button",
+                (100, 180, 48, 32),
+                automation_id="DensityCompact",
+            ),
+            ControlCandidate(
+                "cozy",
+                "",
+                "button",
+                (148, 180, 48, 32),
+                automation_id="DensityCozy",
+            ),
+            ControlCandidate(
+                "spacious",
+                "",
+                "button",
+                (196, 180, 48, 32),
+                automation_id="DensitySpacious",
+            ),
+        ]
+        instruction = "Select cozy density."
+
+        stale_target = resolve_candidate_target(
+            target_id="compact",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 180, 48, 32),
+        )
+        correct_target = resolve_candidate_target(
+            target_id="cozy",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 180, 144, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 180, 144, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 180, 144, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "compact",
+                    "target": {"x": 100, "y": 180, "width": 144, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertFalse(correct_target.rejected_reason)
+        for target in (correct_target, text_target, snap_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "cozy")
+            self.assertEqual(target.rect, (148, 180, 48, 32))
 
     def test_generic_pane_context_with_duplicate_actions_stays_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

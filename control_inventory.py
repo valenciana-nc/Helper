@@ -297,6 +297,8 @@ ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
         "users",
     }
 )
+ROW_ACTION_REQUEST_WORDS = frozenset({"action", "actions"})
+ROW_ACTION_LAUNCHER_WORDS = frozenset({"menu", "more", "options", "overflow"})
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
         "by",
@@ -1997,6 +1999,11 @@ def resolve_candidate_target(
             instruction_tokens,
             candidate,
             candidates,
+        ) or _segmented_control_button_matches_request(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
         ) or matches_row_action or matches_named_contextual_duplicate or (
             _spinner_stepper_button_match(instruction, candidate, candidates)
         )
@@ -2605,6 +2612,13 @@ def _text_match_score(
         return 0.0
     if _access_permission_action_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _segmented_control_button_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return 0.0
     if model_rect is not None and _container_only_request_blocks_contained_candidate(
         instruction=instruction,
         instruction_tokens=instruction_tokens,
@@ -2630,6 +2644,12 @@ def _text_match_score(
         candidate,
         candidates,
     )
+    matches_segmented_control = _segmented_control_button_matches_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
     matches_contextual_control_intent = bool(control_intents) and _candidate_matches_control_intent(
         candidate,
         control_intents,
@@ -2648,6 +2668,7 @@ def _text_match_score(
             instruction=instruction,
         )
         and not matches_contextual_surface_action
+        and not matches_segmented_control
         and not matches_spinner_stepper_button
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
         and not literal_match_tokens
@@ -2684,6 +2705,28 @@ def _text_match_score(
         return min(1.0, score)
     if matches_direct_surface_container:
         score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if (
+        matches_row_action
+        and _instruction_requests_row_actions(instruction)
+        and _row_scoped_action_target_matches_context(
+            instruction,
+            candidate,
+            candidates,
+        )
+    ):
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if matches_segmented_control:
+        score = TEXT_MATCH_FLOOR + 0.10
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
@@ -3967,7 +4010,18 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+    row_scoped_action_satisfied = _row_scoped_action_target_matches_context(
+        instruction,
+        candidate,
+        candidates,
+    )
+    if (
+        _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates)
+        and not (
+            _instruction_requests_row_actions(instruction)
+            and row_scoped_action_satisfied
+        )
+    ):
         return (
             False,
             text_score,
@@ -4213,6 +4267,13 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _segmented_control_button_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False, max(text_score, geometry_score), "target_id semantic mismatch"
     if _contextual_action_candidate_matches_surface_request(
         instruction,
         instruction_tokens,
@@ -4269,7 +4330,7 @@ def _target_id_plausibility(
             max(text_score, geometry_score),
             "target_id ambiguous",
         )
-    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
+    if row_scoped_action_satisfied:
         return True, max(0.86, text_score, geometry_score), ""
     if (
         not _candidate_matches_control_intent(
@@ -4279,6 +4340,12 @@ def _target_id_plausibility(
         )
         and not _spinner_stepper_button_match(instruction, candidate, candidates)
         and not _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
+        and not _segmented_control_button_matches_request(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+        )
         and not _literal_stopword_name_match_tokens(
             instruction,
             _candidate_visible_text_tokens(candidate),
@@ -8649,6 +8716,160 @@ def _generic_control_group_target_ambiguous(
     return candidate.id in distinct_ids
 
 
+def _segmented_control_button_alternative_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if _segmented_control_button_matches_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and _segmented_control_button_matches_request(
+            instruction,
+            instruction_tokens,
+            other,
+            candidates,
+        )
+        for other in candidates
+    )
+
+
+def _segmented_control_button_matches_request(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in {"button", "radiobutton"}:
+        return False
+    if not _segmented_control_has_sibling(candidate, candidates):
+        return False
+    label_tokens = _segmented_control_button_label_tokens(candidate, candidates)
+    if not label_tokens:
+        return False
+    requested = _object_token_variants(
+        instruction_tokens | _tokens_from_text(instruction)
+    ) - ACTION_OBJECT_STOPWORDS - CONTAINED_CONTROL_REQUEST_WORDS
+    if not (requested & label_tokens):
+        return False
+    requested_context = requested - label_tokens
+    requested_context -= {
+        "button",
+        "buttons",
+        "choice",
+        "choices",
+        "control",
+        "controls",
+        "option",
+        "options",
+        "segment",
+        "segmented",
+        "select",
+    }
+    if not requested_context:
+        return True
+    context_tokens = _segmented_control_context_tokens(candidate, candidates)
+    return bool(_object_token_variants(requested_context) & context_tokens)
+
+
+def _segmented_control_has_sibling(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    return any(
+        other.id != candidate.id
+        and other.control_type in {"button", "radiobutton"}
+        and _segmented_control_raw_button_tokens(other)
+        and _segment_button_rects_match(candidate.rect, other.rect)
+        for other in candidates
+    )
+
+
+def _segmented_control_button_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    visible_tokens = _candidate_visible_text_tokens(candidate)
+    if visible_tokens:
+        return _object_token_variants(visible_tokens)
+    automation_tokens = _candidate_automation_tokens(candidate)
+    if not automation_tokens:
+        return set()
+    sibling_common_tokens: set[str] = set()
+    for other in candidates:
+        if other.id == candidate.id or other.control_type not in {"button", "radiobutton"}:
+            continue
+        if not _segment_button_rects_match(candidate.rect, other.rect):
+            continue
+        sibling_common_tokens.update(
+            automation_tokens & _segmented_control_raw_button_tokens(other)
+        )
+    label_tokens = (
+        automation_tokens
+        - sibling_common_tokens
+        - _segmented_control_context_tokens(candidate, candidates)
+        - CONTAINED_CONTROL_REQUEST_WORDS
+    )
+    return _object_token_variants(label_tokens)
+
+
+def _segmented_control_raw_button_tokens(candidate: ControlCandidate) -> set[str]:
+    return _candidate_visible_text_tokens(candidate) or _candidate_automation_tokens(candidate)
+
+
+def _segment_button_rects_match(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> bool:
+    first_x, first_y, first_width, first_height = first
+    second_x, second_y, second_width, second_height = second
+    if min(first_width, first_height, second_width, second_height) <= 0:
+        return False
+    _first_center_x, first_center_y = _center(first)
+    _second_center_x, second_center_y = _center(second)
+    if abs(first_center_y - second_center_y) > max(4.0, min(first_height, second_height) * 0.35):
+        return False
+    vertical_overlap = min(first_y + first_height, second_y + second_height) - max(
+        first_y,
+        second_y,
+    )
+    if vertical_overlap < min(first_height, second_height) * 0.70:
+        return False
+    horizontal_gap = max(
+        first_x - (second_x + second_width),
+        second_x - (first_x + first_width),
+        0,
+    )
+    return horizontal_gap <= max(12, min(first_height, second_height) * 0.5)
+
+
+def _segmented_control_context_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens: set[str] = set()
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if context.control_type not in {"group", "pane", "toolbar"}:
+            continue
+        if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        tokens.update(_candidate_semantic_tokens(context))
+        tokens.update(_tokens_from_text(context.descriptor))
+        tokens.update(_surface_context_type_tokens(context.control_type))
+        tokens.update(_tokenize_control(context.window_title))
+    return _object_token_variants(tokens)
+
+
 def _candidate_satisfies_contextual_duplicate_request(
     instruction: str,
     candidate: ControlCandidate,
@@ -11467,7 +11688,18 @@ def _candidate_snap_score(
         return 0.0
     if _navigation_backup_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
-    if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
+    row_scoped_action_satisfied = _row_scoped_action_target_matches_context(
+        instruction,
+        candidate,
+        candidates,
+    )
+    if (
+        _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates)
+        and not (
+            _instruction_requests_row_actions(instruction)
+            and row_scoped_action_satisfied
+        )
+    ):
         return 0.0
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -11493,6 +11725,19 @@ def _candidate_snap_score(
         candidate,
         candidates,
     )
+    segmented_control_satisfied = _segmented_control_button_matches_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
+    if _segmented_control_button_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _contextual_surface_action_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -11613,6 +11858,8 @@ def _candidate_snap_score(
         and not _spinner_stepper_button_match(instruction, candidate, candidates)
         and not _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
         and not named_contextual_duplicate_satisfied
+        and not row_scoped_action_satisfied
+        and not segmented_control_satisfied
         and not _contextual_action_candidate_matches_surface_request(
             instruction,
             instruction_tokens,
@@ -11637,6 +11884,7 @@ def _candidate_snap_score(
         and text_score <= 0
         and not positional_duplicate_satisfied
         and not named_contextual_duplicate_satisfied
+        and not row_scoped_action_satisfied
     ):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     area_score = _area_fit_score(candidate.rect, model_rect)
@@ -11654,11 +11902,13 @@ def _candidate_snap_score(
         model_rect=model_rect,
         suppress_for_stronger_geometry=False,
     )
-    if _row_scoped_action_target_matches_context(instruction, candidate, candidates):
+    if row_scoped_action_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if positional_duplicate_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if named_contextual_duplicate_satisfied:
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
+    if segmented_control_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _spinner_stepper_button_match(instruction, candidate, candidates):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
@@ -11930,6 +12180,11 @@ def _contained_row_action_candidate_matches(
         candidate_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
     if not candidate_tokens:
         return False
+    if (
+        _instruction_requests_row_actions(instruction)
+        and candidate_tokens & ROW_ACTION_LAUNCHER_WORDS
+    ):
+        return True
     action_tokens = set(instruction_tokens)
     if instruction:
         action_tokens.update(_tokens_from_text(instruction) & candidate_tokens)
@@ -12035,6 +12290,12 @@ def _row_scoped_action_target_matches_context(
     if not _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction):
         return False
     return not _contained_row_action_context_mismatch(instruction, candidate, candidates)
+
+
+def _instruction_requests_row_actions(instruction: str) -> bool:
+    return _instruction_requests_contained_row_action(instruction) and bool(
+        _tokens_from_text(instruction) & ROW_ACTION_REQUEST_WORDS
+    )
 
 
 def _instruction_requests_contained_row_action(instruction: str) -> bool:
@@ -12830,6 +13091,11 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _navigation_backup_action_mismatch(instruction, candidate):
         return True
+    if (
+        _instruction_requests_row_actions(instruction)
+        and _row_scoped_action_target_matches_context(instruction, candidate, candidates)
+    ):
+        return False
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return True
     if _implicit_container_context_duplicate_mismatch(instruction, candidate, candidates):
