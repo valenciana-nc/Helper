@@ -119,6 +119,31 @@ class _DoneAgent:
         return LiveHelpDecision(kind="done", message="Done.")
 
 
+class _ModelRectAgent:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def plan_next_step(
+        self,
+        history: Any,
+        *,
+        control_candidates: list[ControlCandidate] | None = None,
+        capture: Capture | None = None,
+    ) -> LiveHelpDecision:
+        self.calls += 1
+        if self.calls == 1:
+            return LiveHelpDecision(
+                kind="step",
+                instruction="Click this button.",
+                expected_change="A saved confirmation appears.",
+                target_norm_x=167,
+                target_norm_y=313,
+                target_norm_width=333,
+                target_norm_height=200,
+            )
+        return LiveHelpDecision(kind="done", message="Done.")
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
     def test_click_hit_margin_scales_with_target_size(self) -> None:
         from help_session import click_hit_margin
@@ -930,6 +955,159 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             target.rejected_reason,
             "current screen recheck candidates unavailable",
         )
+
+    def test_current_screen_recheck_rejects_model_only_target_without_fresh_evidence(self) -> None:
+        from rect_snap import SnapResult
+
+        app = _qt_app()
+        rect = (40, 50, 80, 32)
+        capture = _button_capture(button_rect=rect)
+
+        def snapper(_rect: tuple[int, int, int, int], _instruction: str):
+            return SnapResult(rect=rect, confidence=0.0, source="model")
+
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [],
+            snapper=snapper,
+        )
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.0,
+            source="model",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click this button.",
+            target_norm_x=167,
+            target_norm_y=313,
+            target_norm_width=333,
+            target_norm_height=200,
+        )
+
+        try:
+            _capture, candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(target.source, "model")
+        self.assertEqual(target.rejected_reason, "current screen recheck target changed")
+
+    def test_help_session_downgrades_model_only_recheck_without_fresh_evidence(self) -> None:
+        from rect_snap import SnapResult
+
+        app = _qt_app()
+        rect = (40, 50, 80, 32)
+        capture = _button_capture(button_rect=rect)
+        agent = _ModelRectAgent()
+
+        def snapper(_rect: tuple[int, int, int, int], _instruction: str):
+            return SnapResult(rect=rect, confidence=0.0, source="model")
+
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [],
+            snapper=snapper,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Done."])
+        self.assertEqual(highlights, [])
+        self.assertGreaterEqual(len(diagnostics), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["resolution"]["source"], "model")
+        self.assertEqual(
+            diagnostics[0]["resolution"]["rejected_reason"],
+            "current screen recheck target changed",
+        )
+
+    def test_current_screen_recheck_allows_model_origin_when_fresh_uia_snap_confirms(self) -> None:
+        from rect_snap import SnapResult
+
+        app = _qt_app()
+        rect = (40, 50, 80, 32)
+        capture = _button_capture(button_rect=rect)
+
+        def snapper(_rect: tuple[int, int, int, int], _instruction: str):
+            return SnapResult(
+                rect=rect,
+                confidence=0.9,
+                source="uia",
+                matched_text="Save changes",
+            )
+
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [],
+            snapper=snapper,
+        )
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.0,
+            source="model",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Save changes.",
+            target_norm_x=167,
+            target_norm_y=313,
+            target_norm_width=333,
+            target_norm_height=200,
+        )
+
+        try:
+            _capture, candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(target.source, "snap")
+        self.assertFalse(target.rejected_reason)
 
     def test_help_session_recovers_wrong_target_id_before_emitting_highlight(self) -> None:
         app = _qt_app()

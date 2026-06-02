@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import re
 import subprocess
 import threading
@@ -586,6 +586,8 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _model_only_revalidation_lacks_fresh_evidence(previous_target, target):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     if (
@@ -634,6 +636,13 @@ def _revalidated_row_identity_changed(
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
+
+
+def _model_only_revalidation_lacks_fresh_evidence(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+) -> bool:
+    return previous_target.source == "model" and target.source == "model"
 
 
 def _row_identity_tokens(text: str) -> set[str]:
