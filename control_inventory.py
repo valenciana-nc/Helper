@@ -4566,8 +4566,6 @@ def _nearby_field_label_tokens(
 ) -> set[str]:
     if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
         return set()
-    if _candidate_visible_text_tokens(candidate) or candidate.automation_id.strip():
-        return set()
     return _nearby_field_context_label_tokens(candidate, candidates)
 
 
@@ -4579,6 +4577,7 @@ def _nearby_field_context_label_tokens(
         return set()
     best_score = 0.0
     best_tokens: set[str] = set()
+    best_label: ControlCandidate | None = None
     field_area = max(1, candidate.rect[2] * candidate.rect[3])
     for label in candidates:
         if label.id == candidate.id:
@@ -4595,7 +4594,52 @@ def _nearby_field_context_label_tokens(
         if score > best_score:
             best_score = score
             best_tokens = tokens
+            best_label = label
     if best_score < 0.5:
+        return set()
+    return best_tokens | _nearby_field_section_label_tokens(candidate, candidates, best_label)
+
+
+def _nearby_field_section_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    direct_label: ControlCandidate | None,
+) -> set[str]:
+    field_left, field_top, field_width, _field_height = candidate.rect
+    field_center_x = field_left + field_width / 2
+    best_score = 0.0
+    best_tokens: set[str] = set()
+    for label in candidates:
+        if label.id == candidate.id:
+            continue
+        if direct_label is not None and (
+            label.id == direct_label.id or _same_visual_candidate(label, direct_label)
+        ):
+            continue
+        if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        label_left, label_top, label_width, label_height = label.rect
+        label_bottom = label_top + label_height
+        if label_bottom > field_top:
+            continue
+        above_gap = field_top - label_bottom
+        if above_gap > 140:
+            continue
+        tokens = _candidate_visible_text_tokens(label)
+        if not tokens or len(tokens) > 8:
+            continue
+        label_center_x = label_left + label_width / 2
+        left_aligned = abs(label_left - field_left) <= max(120, field_width * 0.6)
+        center_aligned = abs(label_center_x - field_center_x) <= max(140, field_width * 0.6)
+        if not (left_aligned or center_aligned or label_left <= field_left):
+            continue
+        score = 1.0 - min(1.0, above_gap / 140.0)
+        if direct_label is not None and label_bottom <= direct_label.rect[1]:
+            score += 0.15
+        if score > best_score:
+            best_score = score
+            best_tokens = tokens
+    if best_score < 0.35:
         return set()
     return best_tokens
 
@@ -5604,6 +5648,7 @@ def _menuitem_matches_requested_dropdown_launcher(
             | _tokens_from_text(launcher.text)
             | _tokens_from_text(launcher.automation_id)
             | _field_alternative_label_tokens(launcher, candidates)
+            | _contained_row_context_objects(launcher, candidates)
         )
         if not (launcher_context & launcher_tokens):
             continue
@@ -9962,7 +10007,8 @@ def _same_row_cell_label_rect_matches(
     label_right = label_x + label_width
     action_right = action_x + action_width
     horizontal_gap = max(action_x - label_right, label_x - action_right, 0)
-    return horizontal_gap <= max(260, max(label_width, action_width) * 4)
+    max_gap = max(260, max(label_width, action_width) * 6, min(960, action_width * 10))
+    return horizontal_gap <= max_gap
 
 
 def _nearby_context_label_rect_matches(

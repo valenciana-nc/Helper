@@ -17987,6 +17987,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "wide_grid_cell_context_recovers_far_action_column",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 120, 30], "label": "Nimbus"},
+                {"rect": [760, 90, 80, 30], "label": "Refund"},
+                {"rect": [20, 140, 120, 30], "label": "Orion"},
+                {"rect": [760, 140, 80, 30], "label": "Refund"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Refund for Nimbus.",
+                "target_id": "refund_orion",
+                "target": {"x": 760, "y": 140, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "nimbus_cell", "text": "Nimbus", "control_type": "gridcell", "rect": [20, 90, 120, 30]},
+                {"id": "refund_nimbus", "text": "Refund", "control_type": "button", "rect": [760, 90, 80, 30]},
+                {"id": "orion_cell", "text": "Orion", "control_type": "gridcell", "rect": [20, 140, 120, 30]},
+                {"id": "refund_orion", "text": "Refund", "control_type": "button", "rect": [760, 140, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "refund_nimbus",
+                "rect": [760, 90, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "rowheader_label_rejects_wrong_duplicate_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -21734,6 +21762,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "visible_row_actions_menuitem_beats_launcher",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 660, 110], "label": "Alice"},
+                {"rect": [560, 86, 64, 30], "label": "More"},
+                {"rect": [560, 124, 160, 28], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Delete in the Alice row actions menu.",
+                "target_id": "alice_more",
+                "target": {"x": 560, "y": 86, "width": 64, "height": 30},
+            },
+            "candidates": [
+                {"id": "alice_row", "text": "Alice", "control_type": "dataitem", "rect": [20, 80, 660, 110]},
+                {"id": "alice_more", "text": "More", "control_type": "button", "rect": [560, 86, 64, 30]},
+                {"id": "alice_delete", "text": "Delete", "control_type": "menuitem", "rect": [560, 124, 160, 28]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "alice_delete",
+                "rect": [560, 124, 160, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "close_window_recovers_from_tab_close_button",
             "capture": {"width": 1200, "height": 500},
             "draw": [
@@ -21896,6 +21950,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "repeated_field_label_uses_section_heading_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 30, 120, 24], "label": "Shipping"},
+                {"rect": [20, 82, 80, 24], "label": "Email"},
+                {"rect": [120, 76, 260, 36], "label": ""},
+                {"rect": [20, 150, 120, 24], "label": "Billing"},
+                {"rect": [20, 202, 80, 24], "label": "Email"},
+                {"rect": [120, 196, 260, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Email text field in Billing.",
+                "target_id": "shipping_email",
+                "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "shipping_header", "text": "Shipping", "control_type": "text", "rect": [20, 30, 120, 24]},
+                {"id": "shipping_label", "text": "Email", "control_type": "text", "rect": [20, 82, 80, 24]},
+                {"id": "shipping_email", "text": "", "control_type": "edit", "rect": [120, 76, 260, 36]},
+                {"id": "billing_header", "text": "Billing", "control_type": "text", "rect": [20, 150, 120, 24]},
+                {"id": "billing_label", "text": "Email", "control_type": "text", "rect": [20, 202, 80, 24]},
+                {"id": "billing_email", "text": "", "control_type": "edit", "rect": [120, 196, 260, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "billing_email",
+                "rect": [120, 196, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "named_dropdown_rejects_unlabeled_combobox_without_label_evidence",
             "capture": {"width": 1000, "height": 500},
             "draw": [
@@ -21938,6 +22024,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "combo",
                 "rect": [220, 100, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "current_value_dropdown_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 80, 24], "label": "Country"},
+                {"rect": [120, 96, 260, 36], "label": "United States"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country dropdown.",
+                "target_id": "country",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "country_label", "text": "Country", "control_type": "text", "rect": [20, 102, 80, 24]},
+                {"id": "country", "text": "United States", "control_type": "combobox", "rect": [120, 96, 260, 36]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "country",
+                "rect": [120, 96, 260, 36],
                 "overlay_emitted": True,
             },
         },
