@@ -133,6 +133,20 @@ ADD_ACTION_WORDS = frozenset({"add", "create", "new", "plus"})
 REMOVE_ACTION_WORDS = frozenset({"bin", "delete", "remove", "trash", "wastebasket"})
 PAY_ACTION_WORDS = frozenset({"checkout", "pay"})
 CART_ACTION_WORDS = frozenset({"bag", "basket", "cart"})
+SIDE_EFFECT_ACTION_FAMILIES = (
+    frozenset({"activate", "deactivate"}),
+    frozenset({"connect", "disconnect"}),
+    frozenset({"deploy", "publish", "release"}),
+    frozenset({"disable", "enable"}),
+    frozenset({"escalate", "resolve"}),
+    frozenset({"install", "uninstall", "update"}),
+    frozenset({"lock", "unlock"}),
+    frozenset({"move", "rename"}),
+    frozenset({"refresh", "reload", "sync"}),
+    frozenset({"restore"}),
+    frozenset({"start", "stop"}),
+    frozenset({"subscribe", "unsubscribe"}),
+)
 CONFIRM_OBJECT_STOPWORDS = frozenset(
     {
         "a",
@@ -830,7 +844,7 @@ OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     frozenset({"plane", "send", "submit"}),
     frozenset({"print", "printer"}),
     frozenset({"decline", "deny", "reject"}),
-    frozenset({"publish", "release"}),
+    *SIDE_EFFECT_ACTION_FAMILIES,
     frozenset({"share"}),
 )
 GENERIC_OBJECT_CANDIDATE_ACTION_FAMILIES = OPEN_VIEW_CANDIDATE_ACTION_FAMILIES
@@ -2425,6 +2439,14 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_context_only_target_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
     if _explicit_action_context_mismatch_without_contextual_evidence(
         instruction,
         candidate,
@@ -2461,6 +2483,13 @@ def _text_match_score(
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
     if _literal_stopword_name_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _exact_visible_label_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
         return 0.0
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3395,6 +3424,18 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _prepositional_context_only_target_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -3418,6 +3459,17 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _ambiguous_exact_literal_alias_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
+    if _exact_visible_label_alternative_mismatch(
         instruction,
         candidate,
         candidates,
@@ -6240,6 +6292,8 @@ def _candidate_action_for_open_view_mismatch(instruction: str, candidate_text: s
     candidate_raw_tokens = _tokens_from_text(candidate_text)
     if not candidate_raw_tokens:
         return False
+    if "site_info_lock" in instruction_raw_tokens and "site_info_lock" in candidate_raw_tokens:
+        return False
     instruction_objects = _object_token_variants(
         _action_object_tokens(
             instruction_tokens,
@@ -6272,6 +6326,8 @@ def _candidate_action_for_generic_object_request_mismatch(
     instruction_tokens = _tokenize_instruction(instruction) | instruction_raw_tokens
     candidate_raw_tokens = _tokens_from_text(candidate_text)
     if not candidate_raw_tokens:
+        return False
+    if "site_info_lock" in instruction_raw_tokens and "site_info_lock" in candidate_raw_tokens:
         return False
     instruction_objects = _object_token_variants(
         _action_object_tokens(
@@ -7420,6 +7476,46 @@ def _prepositional_context_action_alternative_mismatch(
     return False
 
 
+def _prepositional_context_only_target_alternative_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
+        return False
+    target_tokens, context_tokens = _prepositional_context_action_tokens(instruction)
+    if not target_tokens or not context_tokens:
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(
+        candidate.descriptor
+    )
+    candidate_variants = _object_token_variants(candidate_tokens)
+    if candidate_variants & target_tokens:
+        return False
+    if not (candidate_variants & context_tokens):
+        return False
+    non_context_instruction = _object_token_variants(instruction_tokens) - context_tokens
+    if candidate_variants & non_context_instruction:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        other_tokens = _object_token_variants(
+            _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+        )
+        if other_tokens & target_tokens:
+            return True
+    return False
+
+
 def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
     words = _literal_word_sequence(instruction)
     if not words:
@@ -8222,6 +8318,67 @@ def _exact_action_word_alternative_mismatch(
             if _literal_words_from_text(other.descriptor) & exact_words:
                 return True
     return False
+
+
+def _exact_visible_label_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if candidate.control_type not in {"button", "hyperlink", "menuitem", "splitbutton"}:
+        return False
+    requested_words = _exact_visible_label_request_words(instruction)
+    if not requested_words:
+        return False
+    candidate_words = _literal_words_from_text(candidate.text)
+    if not requested_words or not candidate_words:
+        return False
+    if candidate_words == requested_words:
+        return False
+    if not requested_words < candidate_words:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        if _literal_words_from_text(other.text) == requested_words:
+            return True
+    return False
+
+
+def _exact_visible_label_request_words(instruction: str) -> set[str]:
+    return _literal_words_from_text(instruction) - (
+        OPEN_VIEW_REQUEST_WORDS
+        | GENERIC_OBJECT_REQUEST_WORDS
+        | frozenset(
+            {
+                "a",
+                "an",
+                "at",
+                "button",
+                "by",
+                "control",
+                "for",
+                "from",
+                "in",
+                "inside",
+                "of",
+                "on",
+                "the",
+                "this",
+                "that",
+                "to",
+                "with",
+                "within",
+            }
+        )
+    )
 
 
 def _ambiguous_exact_action_alias_alternative(
@@ -9546,6 +9703,14 @@ def _candidate_snap_score(
         candidates,
     ):
         return 0.0
+    if _prepositional_context_only_target_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates, control_intents):
@@ -9559,6 +9724,13 @@ def _candidate_snap_score(
     if _object_only_action_context_mismatch(instruction, candidate):
         return 0.0
     if _ambiguous_exact_literal_alias_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return 0.0
+    if _exact_visible_label_alternative_mismatch(
         instruction,
         candidate,
         candidates,
@@ -10740,6 +10912,14 @@ def _candidate_snap_semantic_mismatch(
         candidates,
     ):
         return True
+    if _prepositional_context_only_target_alternative_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        _instruction_control_intents(instruction),
+    ):
+        return True
     if _contained_row_action_context_mismatch(instruction, candidate, candidates):
         return True
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates):
@@ -10767,6 +10947,13 @@ def _candidate_snap_semantic_mismatch(
     if _dropdown_item_request_menuitem_mismatch(instruction, candidate, candidates):
         return True
     if _literal_stopword_name_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _exact_visible_label_alternative_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        _instruction_control_intents(instruction),
+    ):
         return True
     if _text_evidence_score(instruction_tokens, semantic_tokens) > 0:
         return False

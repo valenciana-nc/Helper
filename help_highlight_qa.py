@@ -107,6 +107,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "stale_save_as_target_id_recovers_to_exact_save",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 100, 32], "label": "Save as"},
+                {"rect": [10, 60, 100, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "stale",
+                "target": {"x": 10, "y": 10, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Save as", "control_type": "button", "rect": [10, 10, 100, 32]},
+                {"id": "exact", "text": "Save", "control_type": "button", "rect": [10, 60, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [10, 60, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "open_wrong_target_id_recovers_from_publish_action",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -122,6 +146,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "candidates": [
                 {"id": "publish", "text": "Publish project", "control_type": "button", "rect": [20, 20, 120, 32]},
                 {"id": "open", "text": "Open project", "control_type": "button", "rect": [180, 20, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "open",
+                "rect": [180, 20, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "open_wrong_target_id_recovers_from_deploy_action",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 140, 32], "label": "Deploy report"},
+                {"rect": [180, 20, 120, 32], "label": "Open report"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open report.",
+                "target_id": "deploy",
+                "target": {"x": 20, "y": 20, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "deploy", "text": "Deploy report", "control_type": "button", "rect": [20, 20, 140, 32]},
+                {"id": "open", "text": "Open report", "control_type": "button", "rect": [180, 20, 120, 32]},
             ],
             "expected": {
                 "source": "text_match",
@@ -567,6 +615,48 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "candidate_snap",
                 "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "open_report_rejects_side_effect_action_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 140, 32], "label": "Deploy report"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open report.",
+                "target": {"x": 100, "y": 100, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "deploy", "text": "Deploy report", "control_type": "button", "rect": [100, 100, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "context_text_exact_geometry_rejects_wrong_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Advanced"},
+                {"rect": [20, 90, 100, 32], "label": "Filters"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Filters button in Advanced search.",
+                "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "context", "text": "Advanced", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "target", "text": "Filters", "control_type": "button", "rect": [20, 90, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
                 "overlay_emitted": False,
             },
         },

@@ -3833,6 +3833,33 @@ class ControlInventoryTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_stale_target_id_longer_action_label_recovers_to_exact_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate("stale", "Save as", "button", (10, 10, 100, 32)),
+            ControlCandidate("exact", "Save", "button", (10, 60, 100, 32)),
+        ]
+        wrong_target = resolve_candidate_target(
+            target_id="stale",
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(10, 10, 100, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(10, 10, 100, 32),
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "exact")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(text_target.rect, (10, 60, 100, 32))
+
     def test_text_match_prefers_visible_label_over_automation_only_geometry(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -7613,6 +7640,39 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "open")
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (180, 20, 120, 32))
+
+    def test_open_wrong_target_id_recovers_from_side_effect_actions(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Open report.", "Deploy report", "Open report"),
+            ("Open project.", "Start project", "Open project"),
+            ("Open account.", "Enable account", "Open account"),
+            ("Open workspace.", "Refresh workspace", "Open workspace"),
+        )
+        for instruction, wrong_label, correct_label in cases:
+            with self.subTest(instruction=instruction, wrong_label=wrong_label):
+                target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "wrong",
+                            "target": {"x": 20, "y": 20, "width": 160, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    [
+                        ControlCandidate("wrong", wrong_label, "button", (20, 20, 160, 32)),
+                        ControlCandidate("correct", correct_label, "button", (220, 20, 160, 32)),
+                    ],
+                )
+
+                self.assertEqual(target.source, "text_match")
+                self.assertEqual(target.target_id, "correct")
+                self.assertFalse(target.rejected_reason)
+                self.assertEqual(target.rect, (220, 20, 160, 32))
 
     def test_button_wording_recovers_to_plain_button_from_splitbutton(self) -> None:
         from control_inventory import ControlCandidate
@@ -14261,8 +14321,13 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Read invoice.", "Pay invoice", "App"),
             ("Review project.", "Share project", "App"),
             ("See message.", "Send message", "App"),
+            ("Open report.", "Deploy report", "App"),
+            ("Open project.", "Start project", "App"),
+            ("Open account.", "Enable account", "App"),
+            ("Open workspace.", "Refresh workspace", "App"),
             ("Click account.", "Delete account", "App"),
             ("Tap account.", "Archive account", "App"),
+            ("Click account.", "Disable account", "App"),
             ("Go to report.", "Download report", "App"),
             ("Click message.", "Send message", "App"),
             ("Click invoice.", "Pay invoice", "App"),
@@ -24490,6 +24555,46 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_context_text_exact_geometry_does_not_highlight_wrong_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("context", "Advanced", "button", (20, 20, 120, 32)),
+            ControlCandidate("target", "Filters", "button", (20, 90, 100, 32)),
+        ]
+        instruction = "Click the Filters button in Advanced search."
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 120, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNone(text_target)
+        for target in (snap_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.source, "candidate_snap")
+            self.assertEqual(target.target_id, "context")
+            self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
     def test_generic_field_model_rect_with_clear_action_highlights_field(self) -> None:
         from control_inventory import ControlCandidate
