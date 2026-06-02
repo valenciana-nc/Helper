@@ -127,6 +127,25 @@ class TargetQualityTests(unittest.TestCase):
         self.assertEqual(quality.reason, "target boundary misaligned")
         self.assertGreaterEqual(quality.boundary_activity, 0.10)
 
+    def test_rejects_edge_flush_model_rect_with_unproven_boundary(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (240, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((24, 80, 184, 112), outline="black", fill="#f3f4f6")
+        draw.text((44, 90), "Search", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(0, 80, 184, 32),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
     def test_rejects_model_rect_containing_multiple_button_boundaries(self) -> None:
         from target_quality import evaluate_target_quality
 

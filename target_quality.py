@@ -250,7 +250,7 @@ def evaluate_target_quality(
                 boundary_activity=boundary_activity,
                 target_area_fraction=target_area_fraction,
             )
-        if not _model_boundary_aligned(capture.png_bytes, clipped):
+        if not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True):
             return TargetQuality(
                 accepted=False,
                 reason="target boundary misaligned",
@@ -366,13 +366,15 @@ def _boundary_activity(crop: Image.Image) -> float:
 def _model_boundary_aligned(
     png_bytes: bytes,
     rect: tuple[int, int, int, int],
+    *,
+    require_all_sides: bool = False,
 ) -> bool:
     try:
         with Image.open(io.BytesIO(png_bytes)) as img:
             image = img.convert("L")
             scores = _boundary_crossing_scores(image, rect)
             if len(scores) < 4:
-                return True
+                return not require_all_sides
             return all(score >= MODEL_BOUNDARY_ALIGNMENT_FLOOR for score in scores)
     except Exception:
         return True
