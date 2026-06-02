@@ -4152,6 +4152,74 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(result.rect, (10, 10, 220, 32))
                 self.assertFalse(result.rejected_reason)
 
+    def test_generic_dropdown_broad_rect_with_multiple_comboboxes_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from agent import _parse_live_help_decision
+        from help_session import resolve_help_target
+
+        class Capture:
+            width = 1000
+            height = 1000
+            scale = 1.0
+            monitor_left = 0
+            monitor_top = 0
+            image = None
+
+            def to_screen_coords(self, x: int, y: int) -> tuple[int, int]:
+                return (x, y)
+
+        candidates = [
+            ControlCandidate("country", "Country", "combobox", (10, 10, 200, 32)),
+            ControlCandidate("state", "State", "combobox", (10, 50, 200, 32)),
+        ]
+        instruction = "Open this dropdown."
+        broad_rect = (10, 10, 200, 72)
+
+        wrong_target = resolve_candidate_target(
+            target_id="state",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=broad_rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=broad_rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=broad_rect,
+        )
+        help_target = resolve_help_target(
+            _parse_live_help_decision(
+                json.dumps({
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "state",
+                    "target": {"x": 10, "y": 10, "width": 200, "height": 72},
+                })
+            ),
+            Capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "state")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
+        named_target = resolve_candidate_target(
+            target_id="state",
+            instruction="Open State dropdown.",
+            candidates=candidates,
+            model_rect=broad_rect,
+        )
+        self.assertEqual(named_target.target_id, "state")
+        self.assertFalse(named_target.rejected_reason)
+
     def test_selector_wording_keeps_explicit_picker_button_target_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -8930,6 +8998,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(text_target.target_id, "settings")
         self.assertFalse(text_target.rejected_reason)
         self.assertEqual(help_target.target_id, "settings")
+        self.assertFalse(help_target.rejected_reason)
+
+    def test_generic_settings_prefers_visible_settings_over_edge_menu(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        menu = ControlCandidate(
+            "edge_menu",
+            "Settings and more",
+            "button",
+            (930, 8, 42, 34),
+            window_title="Dashboard - Microsoft Edge",
+        )
+        settings = ControlCandidate(
+            "page_settings",
+            "Settings",
+            "button",
+            (100, 200, 100, 32),
+            window_title="Dashboard - Microsoft Edge",
+        )
+        candidates = [menu, settings]
+        instruction = "Open settings."
+
+        target_id = resolve_candidate_target(
+            target_id="edge_menu",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=menu.rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=menu.rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=menu.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "edge_menu",
+                    "target": {
+                        "x": menu.rect[0],
+                        "y": menu.rect[1],
+                        "width": menu.rect[2],
+                        "height": menu.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "page_settings")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "edge_menu")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.target_id, "page_settings")
         self.assertFalse(help_target.rejected_reason)
 
     def test_browser_chrome_controls_do_not_steal_app_local_targets(self) -> None:
@@ -17759,6 +17891,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertIsNone(snap_target)
         self.assertEqual(help_target.target_id, "star")
         self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
+
+    def test_exact_action_neighbor_keeps_alias_geometry_from_clean_highlight(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Download report.", "export", "Export", "download", "Download"),
+            ("Refresh page.", "reload", "Reload", "refresh", "Refresh"),
+            ("Edit profile.", "pencil", "Pencil", "edit", "Edit"),
+            ("Submit form.", "send", "Send", "submit", "Submit"),
+            ("Click Done.", "finish", "Finish", "done", "Done"),
+        )
+        for instruction, wrong_id, wrong_label, right_id, right_label in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    ControlCandidate(wrong_id, wrong_label, "button", (120, 160, 120, 32)),
+                    ControlCandidate(right_id, right_label, "button", (300, 160, 120, 32)),
+                ]
+
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 160, 120, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 160, 120, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {"x": 120, "y": 160, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, wrong_id)
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                if snap_target is not None:
+                    self.assertIn(snap_target.target_id, {wrong_id, right_id})
+                    if snap_target.target_id == wrong_id:
+                        self.assertTrue(snap_target.rejected_reason)
+                    else:
+                        self.assertFalse(snap_target.rejected_reason)
+                self.assertIn(help_target.target_id, {wrong_id, right_id})
+                if help_target.target_id == wrong_id:
+                    self.assertTrue(help_target.rejected_reason)
+                else:
+                    self.assertFalse(help_target.rejected_reason)
 
     def test_notification_action_alias_target_id_accepts_bell_button(self) -> None:
         from control_inventory import ControlCandidate

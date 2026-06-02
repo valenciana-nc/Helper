@@ -2745,6 +2745,19 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _generic_control_group_target_ambiguous(
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        candidate=candidate,
+        candidates=candidates,
+        model_rect=model_rect,
+        control_intents=control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
     if _generic_pane_context_duplicate_ambiguous(instruction, candidate, candidates):
         return (
             False,
@@ -3330,7 +3343,15 @@ def _looks_like_browser_menu_button(candidate: ControlCandidate) -> bool:
     window_tokens = _tokens_from_text(candidate.window_title)
     if window_tokens and not (window_tokens & BROWSER_PROFILE_WINDOW_WORDS):
         return False
-    return _tokens_from_text(candidate.text) == {"chrome"}
+    text_tokens = _tokens_from_text(candidate.text)
+    if text_tokens == {"chrome"}:
+        return True
+    compact_topbar_shape = candidate.rect[2] <= 96 and candidate.rect[3] <= 48
+    return bool(
+        compact_topbar_shape
+        and candidate.rect[1] <= 72
+        and {"settings", "more"} <= text_tokens
+    )
 
 
 def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
@@ -5312,6 +5333,54 @@ def _generic_pane_context_duplicate_ambiguous(
     )
 
 
+def _generic_control_group_target_ambiguous(
+    *,
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    model_rect: tuple[int, int, int, int] | None,
+    control_intents: set[str],
+) -> bool:
+    if model_rect is None or not control_intents:
+        return False
+    if not _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    ):
+        return False
+    candidate_identity = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _tokens_from_text(candidate.automation_id)
+    )
+    candidate_identity -= CONTAINED_CONTROL_REQUEST_WORDS
+    candidate_identity -= control_intents
+    if candidate_identity and instruction_tokens & candidate_identity:
+        return False
+    bounds = _expand_rect(model_rect, 4)
+    matches: list[ControlCandidate] = []
+    for other in candidates:
+        if not _contains_rect(bounds, other.rect):
+            continue
+        if not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        if other.id != candidate.id and _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        matches.append(other)
+    if len(matches) < 2:
+        return False
+    distinct_ids = {item.id for item in matches}
+    return candidate.id in distinct_ids
+
+
 def _candidate_satisfies_contextual_duplicate_request(
     instruction: str,
     candidate: ControlCandidate,
@@ -5843,7 +5912,10 @@ def _ambiguous_exact_literal_alias_alternative(
         return False
     candidate_semantic = _candidate_semantic_tokens(candidate)
     candidate_words = _literal_words_from_text(candidate.descriptor)
-    for family in (BROWSER_BOOKMARK_ACTION_WORDS,):
+    for family in EXCLUSIVE_ACTION_FAMILIES + (
+        BROWSER_BOOKMARK_ACTION_WORDS,
+        CONFIRM_ACTION_WORDS,
+    ):
         exact_words = instruction_words & family
         if not exact_words or not (candidate_semantic & family):
             continue

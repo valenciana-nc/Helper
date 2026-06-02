@@ -3656,6 +3656,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_dropdown_broad_rect_with_multiple_comboboxes_stays_ambiguous",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 200, 32], "label": "Country"},
+                {"rect": [10, 50, 200, 32], "label": "State"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open this dropdown.",
+                "target_id": "state",
+                "target": {"x": 10, "y": 10, "width": 200, "height": 72},
+            },
+            "candidates": [
+                {"id": "country", "text": "Country", "control_type": "combobox", "rect": [10, 10, 200, 32]},
+                {"id": "state", "text": "State", "control_type": "combobox", "rect": [10, 50, 200, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "country",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "textbox_wording_rejects_same_label_combobox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -5819,6 +5843,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "download_exact_neighbor_rejects_export_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Export"},
+                {"rect": [180, 80, 140, 32], "label": "Download"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Download report.",
+                "target_id": "export",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "export", "text": "Export", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "download", "text": "Download", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "export",
+                "rejected_reason": "candidate semantic mismatch",
                 "overlay_emitted": False,
             },
         },
@@ -9147,6 +9195,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c002",
                 "rect": [160, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_settings_prefers_visible_settings_over_edge_menu",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [930, 8, 42, 34], "label": "Settings and more"},
+                {"rect": [100, 200, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open settings.",
+                "target_id": "edge_menu",
+                "target": {"x": 930, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_menu",
+                    "text": "Settings and more",
+                    "control_type": "button",
+                    "rect": [930, 8, 42, 34],
+                    "window_title": "Dashboard - Microsoft Edge",
+                },
+                {
+                    "id": "page_settings",
+                    "text": "Settings",
+                    "control_type": "button",
+                    "rect": [100, 200, 100, 32],
+                    "window_title": "Dashboard - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "page_settings",
+                "rect": [100, 200, 100, 32],
                 "overlay_emitted": True,
             },
         },
