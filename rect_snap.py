@@ -1192,6 +1192,17 @@ def snap_to_control(
         if contained_result is not None:
             return contained_result
         if (
+            control_type_mismatch_result is not None
+            and (
+                best_result is None
+                or _contains_rect(
+                    _expand_rect(control_type_mismatch_result.rect, 4),
+                    best_result.rect,
+                )
+            )
+        ):
+            return control_type_mismatch_result
+        if (
             best_result is not None
             and _semantic_mismatch(
                 best_semantic_text,
@@ -3405,7 +3416,9 @@ def _semantic_mismatch_targets_model_rect(
 ) -> bool:
     if _iou(candidate_rect, model_rect) >= SEMANTIC_MISMATCH_IOU_FLOOR:
         return True
-    return _center_inside(model_rect, candidate_rect)
+    if _center_inside(model_rect, candidate_rect):
+        return True
+    return _substantial_overlap_fraction(candidate_rect, model_rect) >= 0.35
 
 
 def _score(
@@ -3650,6 +3663,25 @@ def _intersects(
         and ay1 < by1 + bh
         and ay1 + ah > by1
     )
+
+
+def _substantial_overlap_fraction(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> float:
+    ax1, ay1, aw, ah = a
+    bx1, by1, bw, bh = b
+    ax2, ay2 = ax1 + aw, ay1 + ah
+    bx2, by2 = bx1 + bw, by1 + bh
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw = max(0, ix2 - ix1)
+    ih = max(0, iy2 - iy1)
+    intersection = iw * ih
+    if intersection <= 0:
+        return 0.0
+    smallest_area = max(1, min(abs(aw * ah), abs(bw * bh)))
+    return intersection / smallest_area
 
 
 def _center_inside(

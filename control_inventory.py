@@ -1478,6 +1478,8 @@ NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
     {"cell", "datagridcell", "gridcell", "rowheader"}
 )
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
+LABELLED_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
+NEARBY_LABELLED_CONTROL_TYPES = LABELLED_FIELD_CONTROL_TYPES | LABELLED_STATE_CONTROL_TYPES
 OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
@@ -2611,11 +2613,13 @@ def _text_match_score(
     )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
-    if _cell_target_request_mismatch(instruction, candidate):
+    if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _named_control_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _named_control_label_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3176,11 +3180,13 @@ def _context_text_match_score(
         return 0.0
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
-    if _cell_target_request_mismatch(instruction, candidate):
+    if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _named_control_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _named_control_label_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3613,7 +3619,11 @@ def _dismiss_candidate_has_requested_dialog_surface(
             continue
         if surface.window_rank != candidate.window_rank:
             continue
-        if not _contains_rect(_expand_rect(surface.rect, 4), candidate.rect):
+        surface_bounds = _expand_rect(surface.rect, 4)
+        if not (
+            _contains_rect(surface_bounds, candidate.rect)
+            or _center_inside(candidate.rect, surface_bounds)
+        ):
             continue
         evidence_tokens = (
             _candidate_semantic_tokens(surface)
@@ -3696,7 +3706,7 @@ def _target_id_plausibility(
             text_score,
             "target_id control type mismatch",
         )
-    if _cell_target_request_mismatch(instruction, candidate):
+    if _cell_target_request_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -3719,6 +3729,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _named_control_label_context_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
         )
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return (
@@ -4326,6 +4342,8 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _implicit_cell_target_request_matches(instruction, candidate, candidates):
+        return True, max(0.86, text_score, geometry_score), ""
     if _segmented_control_button_alternative_mismatch(
         instruction,
         instruction_tokens,
@@ -4564,16 +4582,50 @@ def _nearby_field_label_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
-    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+        return set()
+    if (
+        candidate.control_type in LABELLED_STATE_CONTROL_TYPES
+        and _candidate_visible_text_tokens(candidate)
+        and not _state_control_visible_value_needs_nearby_label(candidate)
+    ):
         return set()
     return _nearby_field_context_label_tokens(candidate, candidates)
+
+
+def _state_control_visible_value_needs_nearby_label(candidate: ControlCandidate) -> bool:
+    tokens = _tokens_from_text(candidate.text)
+    if not tokens:
+        return True
+    if candidate.control_type == "slider":
+        return not any(token.isalpha() for token in tokens)
+    state_value_words = {
+        "checked",
+        "deselected",
+        "disabled",
+        "enabled",
+        "off",
+        "on",
+        "selected",
+        "unchecked",
+        "unselected",
+    }
+    if candidate.control_type in {"checkbox", "radiobutton"}:
+        return bool(tokens & state_value_words) and not bool(tokens - state_value_words)
+    return False
 
 
 def _nearby_field_context_label_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
-    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+        return set()
+    if (
+        candidate.control_type in LABELLED_STATE_CONTROL_TYPES
+        and _candidate_visible_text_tokens(candidate)
+        and not _state_control_visible_value_needs_nearby_label(candidate)
+    ):
         return set()
     best_score = 0.0
     best_tokens: set[str] = set()
@@ -4590,7 +4642,11 @@ def _nearby_field_context_label_tokens(
         label_area = max(1, label.rect[2] * label.rect[3])
         if label_area > field_area * 4:
             continue
-        score = _nearby_field_label_score(candidate.rect, label.rect)
+        score = (
+            _nearby_option_label_score(candidate.rect, label.rect)
+            if candidate.control_type in {"checkbox", "radiobutton"}
+            else _nearby_field_label_score(candidate.rect, label.rect)
+        )
         if score > best_score:
             best_score = score
             best_tokens = tokens
@@ -5239,8 +5295,63 @@ def _close_context_action_mismatch(
         candidates,
     ):
         return False
+    if candidates is not None and _close_candidate_has_requested_surface_context(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        return False
     control_words = _literal_words_from_text(candidate.descriptor)
     return not bool(control_words & requested_context)
+
+
+def _close_candidate_has_requested_surface_context(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_context = (
+        _object_token_variants(_literal_words_from_text(instruction))
+        & CLOSE_CONTEXT_TARGET_WORDS
+    )
+    if not requested_context:
+        return False
+    for surface in candidates:
+        if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
+            continue
+        if surface.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+            continue
+        if surface.window_rank != candidate.window_rank:
+            continue
+        surface_bounds = _expand_rect(surface.rect, 4)
+        if not (
+            _contains_rect(surface_bounds, candidate.rect)
+            or _center_inside(candidate.rect, surface_bounds)
+        ):
+            continue
+        evidence_tokens = (
+            _candidate_semantic_tokens(surface)
+            | _tokens_from_text(surface.descriptor)
+            | _tokenize_control(surface.window_title)
+            | _surface_context_type_tokens(surface.control_type)
+        )
+        if _contextual_surface_tokens_match(requested_context, evidence_tokens):
+            return True
+        if not (requested_context & UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS):
+            continue
+        identity_tokens = _object_token_variants(
+            _candidate_semantic_tokens(surface)
+            | _tokens_from_text(surface.descriptor)
+            | _tokenize_control(surface.window_title)
+        )
+        allowed_identity = UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS | {
+            "unnamed",
+            "untitled",
+            "window",
+        }
+        if surface.control_type == "window" and not (identity_tokens - allowed_identity):
+            return True
+    return False
 
 
 def _looks_like_close_or_x_button(candidate: ControlCandidate) -> bool:
@@ -5830,6 +5941,8 @@ def _single_strict_text_entry_candidate(
             continue
         if _named_control_label_missing(instruction, candidate, candidates):
             continue
+        if _named_control_label_context_mismatch(instruction, candidate, candidates):
+            continue
         if selected is not None and not _same_visual_candidate(selected, candidate):
             return None
         selected = candidate
@@ -5848,6 +5961,95 @@ def _named_control_label_missing(
         return False
     evidence = _named_control_candidate_label_tokens(candidate, candidates)
     return not bool(requested_label & evidence)
+
+
+def _named_control_label_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
+        return False
+    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    if not requested_label:
+        return False
+    requested_context = _named_control_requested_context_tokens(
+        instruction,
+        requested_label,
+    )
+    if not requested_context:
+        return False
+    candidate_evidence = _named_control_candidate_label_tokens(candidate, candidates)
+    if requested_label & candidate_evidence and requested_context <= candidate_evidence:
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and _named_control_matches_label_context(
+            other,
+            candidates,
+            requested_label,
+            requested_context,
+        )
+        for other in candidates
+    )
+
+
+def _named_control_matches_label_context(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    requested_label: set[str],
+    requested_context: set[str],
+) -> bool:
+    evidence = _named_control_candidate_label_tokens(candidate, candidates)
+    return bool(requested_label & evidence) and requested_context <= evidence
+
+
+def _named_control_label_request_matches_candidate(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in NAMED_CONTROL_LABEL_TYPES:
+        return False
+    requested_label = _named_control_requested_label_tokens(instruction, candidate.control_type)
+    if not requested_label:
+        return False
+    evidence = _named_control_candidate_label_tokens(candidate, candidates)
+    return bool(requested_label & evidence)
+
+
+def _named_control_requested_context_tokens(
+    instruction: str,
+    requested_label: set[str],
+) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    context_tokens = _object_token_variants(raw_tokens | _tokenize_instruction(instruction))
+    context_tokens -= requested_label
+    context_tokens -= NAMED_CONTROL_LABEL_STOPWORDS
+    context_tokens -= OPEN_VIEW_REQUEST_WORDS
+    context_tokens -= GENERIC_OBJECT_REQUEST_WORDS
+    context_tokens -= FIELD_ENTRY_ACTION_WORDS
+    context_tokens -= CHECKBOX_ON_ACTION_WORDS
+    context_tokens -= CHECKBOX_OFF_ACTION_WORDS
+    context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    context_tokens -= {
+        "a",
+        "an",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "of",
+        "on",
+        "the",
+        "to",
+        "within",
+        "with",
+    }
+    return context_tokens
 
 
 def _strict_text_entry_requested_label_tokens(instruction: str) -> set[str]:
@@ -5961,6 +6163,7 @@ def _nearby_unlabeled_control_label_tokens(
         return set()
     best_score = 0.0
     best_tokens: set[str] = set()
+    best_label: ControlCandidate | None = None
     control_area = max(1, candidate.rect[2] * candidate.rect[3])
     for label in candidates:
         if label.id == candidate.id:
@@ -5981,9 +6184,10 @@ def _nearby_unlabeled_control_label_tokens(
         if score > best_score:
             best_score = score
             best_tokens = tokens
+            best_label = label
     if best_score < 0.5:
         return set()
-    return best_tokens
+    return best_tokens | _nearby_field_section_label_tokens(candidate, candidates, best_label)
 
 
 def _nearby_option_label_score(
@@ -6387,11 +6591,38 @@ def _access_permission_action_mismatch(
     )
 
 
-def _cell_target_request_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
+def _cell_target_request_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
+) -> bool:
     if candidate.control_type not in CELL_CONTROL_TYPES:
         return False
     raw_tokens = _tokens_from_text(instruction)
-    return not bool(raw_tokens & {"cell", "datagridcell", "gridcell"})
+    if raw_tokens & {"cell", "datagridcell", "gridcell"}:
+        return False
+    return not _implicit_cell_target_request_matches(instruction, candidate, candidates)
+
+
+def _implicit_cell_target_request_matches(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None,
+) -> bool:
+    if not candidates:
+        return False
+    instruction_tokens = _tokenize_instruction(instruction) | _tokens_from_text(instruction)
+    cell_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    cell_tokens -= _positional_duplicate_control_tokens(candidate)
+    if not cell_tokens or not (instruction_tokens & cell_tokens):
+        return False
+    requested_context = _instruction_row_context_objects(instruction, candidate, candidates)
+    if not requested_context:
+        return False
+    row_context = _contained_row_context_objects(candidate, candidates)
+    if not row_context:
+        return False
+    return _contextual_duplicate_request_matches_evidence(requested_context, row_context)
 
 
 def _field_alternative_label_tokens(
@@ -7625,6 +7856,8 @@ def _explicit_action_context_mismatch_without_contextual_evidence(
     if not _explicit_action_context_mismatch(instruction, candidate):
         return False
     if _state_label_action_mismatch(instruction, candidate.descriptor):
+        if _named_control_label_request_matches_candidate(instruction, candidate, candidates):
+            return False
         return True
     if _instruction_requests_browser_address_bar(instruction) and _looks_like_strong_browser_address_bar(candidate):
         return False
@@ -10503,6 +10736,8 @@ def _ambiguous_exact_literal_alias_alternative(
     instruction_words = _literal_words_from_text(instruction)
     if not instruction_words:
         return False
+    if _close_candidate_has_requested_surface_context(instruction, candidate, candidates):
+        return False
     candidate_semantic = _candidate_semantic_tokens(candidate)
     candidate_words = _literal_words_from_text(candidate.descriptor)
     for family in EXCLUSIVE_ACTION_FAMILIES + (
@@ -11798,13 +12033,15 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
-    if _cell_target_request_mismatch(instruction, candidate):
+    if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
     if _named_control_label_missing(instruction, candidate, candidates):
+        return 0.0
+    if _named_control_label_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -13195,13 +13432,15 @@ def _candidate_snap_semantic_mismatch(
     )
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
-    if _cell_target_request_mismatch(instruction, candidate):
+    if _cell_target_request_mismatch(instruction, candidate, candidates):
         return True
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return True
     if _named_control_label_missing(instruction, candidate, candidates):
+        return True
+    if _named_control_label_context_mismatch(instruction, candidate, candidates):
         return True
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return True

@@ -14522,6 +14522,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_table_cell_accepts_row_context_without_cell_word",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 100, 620, 42], "label": "Acme"},
+                {"rect": [260, 112, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Active in the Acme row.",
+                "target_id": "status_acme",
+                "target": {"x": 260, "y": 112, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "row_acme", "text": "Acme", "control_type": "dataitem", "rect": [20, 100, 620, 42]},
+                {"id": "status_acme", "text": "Active", "control_type": "cell", "rect": [260, 112, 120, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "status_acme",
+                "rect": [260, 112, 120, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_table_cell_broad_row_rejects_multiple_cells",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -19076,6 +19100,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "close_button_accepts_containing_drawer_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 80, 300, 120], "label": "Settings drawer"},
+                {"rect": [690, 90, 60, 30], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the drawer.",
+                "target_id": "close",
+                "target": {"x": 690, "y": 90, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "drawer", "text": "Settings drawer", "control_type": "pane", "rect": [420, 80, 300, 120]},
+                {"id": "close", "text": "Close", "control_type": "button", "rect": [690, 90, 60, 30]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "close",
+                "rect": [690, 90, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "modal_context_recovers_from_page_duplicate_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -19552,6 +19600,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "target_id": "notification_dismiss",
                 "rect": [630, 160, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "x_button_accepts_unnamed_toast_dismiss_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 80, 300, 120], "label": ""},
+                {"rect": [690, 90, 24, 24], "label": "X"},
+                {"rect": [100, 100, 80, 30], "label": "Dismiss"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Dismiss the toast.",
+                "target_id": "x",
+                "target": {"x": 690, "y": 90, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "toast", "text": "", "control_type": "window", "rect": [420, 80, 300, 120], "window_rank": 0},
+                {"id": "x", "text": "X", "control_type": "button", "rect": [690, 90, 24, 24], "window_rank": 0},
+                {"id": "page_dismiss", "text": "Dismiss", "control_type": "button", "rect": [100, 100, 80, 30], "window_rank": 1},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "x",
+                "rect": [690, 90, 24, 24],
                 "overlay_emitted": True,
             },
         },
@@ -22048,6 +22122,174 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "country",
                 "rect": [120, 96, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "current_value_slider_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 80, 24], "label": "Volume"},
+                {"rect": [120, 96, 260, 36], "label": "50"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Volume slider.",
+                "target_id": "volume",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "volume_label", "text": "Volume", "control_type": "text", "rect": [20, 102, 80, 24]},
+                {"id": "volume", "text": "50", "control_type": "slider", "rect": [120, 96, 260, 36]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "volume",
+                "rect": [120, 96, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "current_value_checkbox_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 24, 24], "label": "Checked"},
+                {"rect": [150, 96, 80, 24], "label": "Terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Terms checkbox.",
+                "target_id": "terms",
+                "target": {"x": 120, "y": 96, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "terms", "text": "Checked", "control_type": "checkbox", "rect": [120, 96, 24, 24]},
+                {"id": "terms_label", "text": "Terms", "control_type": "text", "rect": [150, 96, 80, 24]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "terms",
+                "rect": [120, 96, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "current_value_radio_accepts_nearby_label_evidence",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 24, 24], "label": "Selected"},
+                {"rect": [150, 96, 80, 24], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Weekly radio.",
+                "target_id": "weekly",
+                "target": {"x": 120, "y": 96, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "weekly", "text": "Selected", "control_type": "radiobutton", "rect": [120, 96, 24, 24]},
+                {"id": "weekly_label", "text": "Weekly", "control_type": "text", "rect": [150, 96, 80, 24]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "weekly",
+                "rect": [120, 96, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_current_value_dropdown_uses_section_heading_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 30, 120, 24], "label": "Shipping"},
+                {"rect": [20, 82, 80, 24], "label": "Country"},
+                {"rect": [120, 76, 260, 36], "label": "United States"},
+                {"rect": [20, 150, 120, 24], "label": "Billing"},
+                {"rect": [20, 202, 80, 24], "label": "Country"},
+                {"rect": [120, 196, 260, 36], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Country dropdown in Billing.",
+                "target_id": "ship_country",
+                "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "shipping_header", "text": "Shipping", "control_type": "text", "rect": [20, 30, 120, 24]},
+                {"id": "ship_country_label", "text": "Country", "control_type": "text", "rect": [20, 82, 80, 24]},
+                {"id": "ship_country", "text": "United States", "control_type": "combobox", "rect": [120, 76, 260, 36]},
+                {"id": "billing_header", "text": "Billing", "control_type": "text", "rect": [20, 150, 120, 24]},
+                {"id": "bill_country_label", "text": "Country", "control_type": "text", "rect": [20, 202, 80, 24]},
+                {"id": "bill_country", "text": "Canada", "control_type": "combobox", "rect": [120, 196, 260, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_country",
+                "rect": [120, 196, 260, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_checkbox_uses_section_heading_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 30, 120, 24], "label": "Shipping"},
+                {"rect": [40, 82, 24, 24], "label": ""},
+                {"rect": [70, 82, 80, 24], "label": "Terms"},
+                {"rect": [20, 150, 120, 24], "label": "Billing"},
+                {"rect": [40, 202, 24, 24], "label": ""},
+                {"rect": [70, 202, 80, 24], "label": "Terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Terms checkbox in Billing.",
+                "target_id": "ship_terms",
+                "target": {"x": 40, "y": 82, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "shipping_header", "text": "Shipping", "control_type": "text", "rect": [20, 30, 120, 24]},
+                {"id": "ship_terms_label", "text": "Terms", "control_type": "text", "rect": [70, 82, 80, 24]},
+                {"id": "ship_terms", "text": "", "control_type": "checkbox", "rect": [40, 82, 24, 24]},
+                {"id": "billing_header", "text": "Billing", "control_type": "text", "rect": [20, 150, 120, 24]},
+                {"id": "bill_terms_label", "text": "Terms", "control_type": "text", "rect": [70, 202, 80, 24]},
+                {"id": "bill_terms", "text": "", "control_type": "checkbox", "rect": [40, 202, 24, 24]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_terms",
+                "rect": [40, 202, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_radio_uses_section_heading_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 30, 120, 24], "label": "Shipping"},
+                {"rect": [40, 82, 24, 24], "label": ""},
+                {"rect": [70, 82, 80, 24], "label": "Yes"},
+                {"rect": [20, 150, 120, 24], "label": "Billing"},
+                {"rect": [40, 202, 24, 24], "label": ""},
+                {"rect": [70, 202, 80, 24], "label": "Yes"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Yes radio in Billing.",
+                "target_id": "ship_yes",
+                "target": {"x": 40, "y": 82, "width": 24, "height": 24},
+            },
+            "candidates": [
+                {"id": "shipping_header", "text": "Shipping", "control_type": "text", "rect": [20, 30, 120, 24]},
+                {"id": "ship_yes_label", "text": "Yes", "control_type": "text", "rect": [70, 82, 80, 24]},
+                {"id": "ship_yes", "text": "", "control_type": "radiobutton", "rect": [40, 82, 24, 24]},
+                {"id": "billing_header", "text": "Billing", "control_type": "text", "rect": [20, 150, 120, 24]},
+                {"id": "bill_yes_label", "text": "Yes", "control_type": "text", "rect": [70, 202, 80, 24]},
+                {"id": "bill_yes", "text": "", "control_type": "radiobutton", "rect": [40, 202, 24, 24]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_yes",
+                "rect": [40, 202, 24, 24],
                 "overlay_emitted": True,
             },
         },

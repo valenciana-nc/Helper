@@ -16057,6 +16057,75 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 100, 32))
 
+    def test_close_button_accepts_containing_surface_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("drawer", "Settings drawer", "pane", (420, 80, 300, 120)),
+            ControlCandidate("close", "Close", "button", (690, 90, 60, 30)),
+        ]
+        instruction = "Close the drawer."
+
+        target_id = resolve_candidate_target(
+            target_id="close",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(690, 90, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "close",
+                    "target": {"x": 690, "y": 90, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (target_id, help_target):
+            self.assertEqual(resolved.target_id, "close")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (690, 90, 60, 30))
+
+    def test_x_button_accepts_unnamed_transient_surface_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("toast", "", "window", (420, 80, 300, 120), window_rank=0),
+            ControlCandidate("x", "X", "button", (690, 90, 24, 24), window_rank=0),
+            ControlCandidate("page_dismiss", "Dismiss", "button", (100, 100, 80, 30), window_rank=1),
+        ]
+        instruction = "Dismiss the toast."
+
+        target_id = resolve_candidate_target(
+            target_id="x",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(690, 90, 24, 24),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "x",
+                    "target": {"x": 690, "y": 90, "width": 24, "height": 24},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (target_id, help_target):
+            self.assertEqual(resolved.target_id, "x")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (690, 90, 24, 24))
+
     def test_dialog_dismiss_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -28647,6 +28716,43 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (260, 112, 120, 30))
 
+    def test_named_table_cell_uses_row_context_without_literal_cell_role(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row_acme", "Acme", "dataitem", (20, 100, 620, 42)),
+            ControlCandidate("status_acme", "Active", "cell", (260, 112, 120, 30)),
+        ]
+        instruction = "Click Active in the Acme row."
+        rect = (260, 112, 120, 30)
+
+        target_id = resolve_candidate_target(
+            target_id="status_acme",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "status_acme",
+                    "target": {"x": 260, "y": 112, "width": 120, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (target_id, help_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertEqual(resolved.target_id, "status_acme")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, rect)
+
     def test_generic_table_cell_broad_row_rejects_multiple_cells(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -29973,6 +30079,84 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(target.rejected_reason)
             self.assertEqual(target.rect, (120, 96, 260, 36))
 
+    def test_current_value_state_controls_use_nearby_label_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "Click the Volume slider.",
+                "volume",
+                (120, 96, 260, 36),
+                [
+                    ControlCandidate("volume_label", "Volume", "text", (20, 102, 80, 24)),
+                    ControlCandidate("volume", "50", "slider", (120, 96, 260, 36)),
+                ],
+            ),
+            (
+                "Click the Terms checkbox.",
+                "terms",
+                (120, 96, 24, 24),
+                [
+                    ControlCandidate("terms", "Checked", "checkbox", (120, 96, 24, 24)),
+                    ControlCandidate("terms_label", "Terms", "text", (150, 96, 80, 24)),
+                ],
+            ),
+            (
+                "Select the Weekly radio.",
+                "weekly",
+                (120, 96, 24, 24),
+                [
+                    ControlCandidate("weekly", "Selected", "radiobutton", (120, 96, 24, 24)),
+                    ControlCandidate("weekly_label", "Weekly", "text", (150, 96, 80, 24)),
+                ],
+            ),
+        )
+
+        for instruction, target_id, rect, candidates in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_candidate_target(
+                    target_id=target_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": target_id,
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                for resolved in (target, text_target, snap_target, help_target):
+                    self.assertIsNotNone(resolved)
+                    assert resolved is not None
+                    self.assertEqual(resolved.target_id, target_id)
+                    self.assertFalse(resolved.rejected_reason)
+                    self.assertEqual(resolved.rect, rect)
+
     def test_repeated_field_label_uses_section_heading_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -30029,6 +30213,150 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "billing_email")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_repeated_current_value_dropdown_uses_section_heading_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("shipping_header", "Shipping", "text", (20, 30, 120, 24)),
+            ControlCandidate("ship_country_label", "Country", "text", (20, 82, 80, 24)),
+            ControlCandidate("ship_country", "United States", "combobox", (120, 76, 260, 36)),
+            ControlCandidate("billing_header", "Billing", "text", (20, 150, 120, 24)),
+            ControlCandidate("bill_country_label", "Country", "text", (20, 202, 80, 24)),
+            ControlCandidate("bill_country", "Canada", "combobox", (120, 196, 260, 36)),
+        ]
+        instruction = "Open Country dropdown in Billing."
+
+        wrong_target = resolve_candidate_target(
+            target_id="ship_country",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "ship_country",
+                    "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(wrong_target)
+        assert wrong_target is not None
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.target_id, "bill_country")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "bill_country")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_repeated_option_controls_use_section_heading_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = [
+            (
+                "Click Terms checkbox in Billing.",
+                "checkbox",
+                "ship_terms",
+                "bill_terms",
+                [
+                    ControlCandidate("shipping_header", "Shipping", "text", (20, 30, 120, 24)),
+                    ControlCandidate("ship_terms_label", "Terms", "text", (70, 82, 80, 24)),
+                    ControlCandidate("ship_terms", "", "checkbox", (40, 82, 24, 24)),
+                    ControlCandidate("billing_header", "Billing", "text", (20, 150, 120, 24)),
+                    ControlCandidate("bill_terms_label", "Terms", "text", (70, 202, 80, 24)),
+                    ControlCandidate("bill_terms", "", "checkbox", (40, 202, 24, 24)),
+                ],
+            ),
+            (
+                "Select Yes radio in Billing.",
+                "radiobutton",
+                "ship_yes",
+                "bill_yes",
+                [
+                    ControlCandidate("shipping_header", "Shipping", "text", (20, 30, 120, 24)),
+                    ControlCandidate("ship_yes_label", "Yes", "text", (70, 82, 80, 24)),
+                    ControlCandidate("ship_yes", "", "radiobutton", (40, 82, 24, 24)),
+                    ControlCandidate("billing_header", "Billing", "text", (20, 150, 120, 24)),
+                    ControlCandidate("bill_yes_label", "Yes", "text", (70, 202, 80, 24)),
+                    ControlCandidate("bill_yes", "", "radiobutton", (40, 202, 24, 24)),
+                ],
+            ),
+        ]
+
+        for instruction, role, stale_id, expected_id, candidates in cases:
+            with self.subTest(role=role):
+                stale_rect = next(item.rect for item in candidates if item.id == stale_id)
+                expected_rect = next(item.rect for item in candidates if item.id == expected_id)
+                wrong_target = resolve_candidate_target(
+                    target_id=stale_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": stale_id,
+                            "target": {
+                                "x": stale_rect[0],
+                                "y": stale_rect[1],
+                                "width": stale_rect[2],
+                                "height": stale_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, expected_id)
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, expected_id)
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, expected_rect)
 
     def test_named_role_controls_parse_trailing_label_evidence(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -30220,6 +30548,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.rect, model_rect)
                 self.assertEqual(target.matched_text, matched_text)
                 self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_partial_overlap_action_mismatch_does_not_fall_back_to_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        button = _make_button("Reject request", 100, 100, 80, 32)
+        window = _make_window("Approvals", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Approve request.",
+                    "target": {"x": 140, "y": 100, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, (100, 100, 80, 32))
+        self.assertEqual(target.matched_text, "Reject request")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_partial_overlap_control_type_mismatch_does_not_fall_back_to_model_rect(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        button = _make_button("", 100, 100, 32, 32)
+        window = _make_window("Settings", 0, 0, 800, 600, [button])
+        desktop = _FakeDesktop([window])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this checkbox.",
+                    "target": {"x": 116, "y": 100, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rect, (100, 100, 32, 32))
+        self.assertEqual(target.rejected_reason, "control type mismatch")
 
     def test_fresh_snap_control_type_mismatch_does_not_fall_back_to_raw_model_rect(self) -> None:
         from help_session import resolve_help_target
