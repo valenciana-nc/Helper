@@ -84,6 +84,8 @@ PASSWORD_VISIBILITY_HIDE_WORDS = frozenset({"conceal", "hide", "mask"})
 AUDIO_OUTPUT_CONTEXT_WORDS = frozenset({"audio", "sound", "speaker", "speakers", "volume"})
 AUDIO_OUTPUT_UP_WORDS = frozenset({"increase", "louder", "raise", "up"})
 AUDIO_OUTPUT_DOWN_WORDS = frozenset({"decrease", "down", "lower", "quieter"})
+AUDIO_OUTPUT_MUTE_WORDS = frozenset({"mute"})
+AUDIO_OUTPUT_UNMUTE_WORDS = frozenset({"unmute"})
 SPINNER_INCREMENT_WORDS = frozenset({"increase", "increment", "raise", "up"})
 SPINNER_DECREMENT_WORDS = frozenset({"decrease", "decrement", "down", "lower"})
 CARDINAL_DIRECTION_ACTION_PAIRS = (
@@ -165,6 +167,17 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
         "row",
         "rows",
         "select",
+    }
+)
+NEUTRAL_ACTION_DESTINATION_WORDS = frozenset(
+    {
+        "about",
+        "details",
+        "info",
+        "information",
+        "overview",
+        "preferences",
+        "settings",
     }
 )
 GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"for", "on", "to"})
@@ -2180,6 +2193,7 @@ def _text_match_score(
         candidate,
         candidates,
     )
+    matches_audio_mute_action = _audio_output_mute_action_match(instruction, candidate)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate):
@@ -2229,6 +2243,13 @@ def _text_match_score(
         return min(1.0, score)
     if matches_spinner_stepper_button:
         score = TEXT_MATCH_FLOOR + 0.10
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if matches_audio_mute_action:
+        score = TEXT_MATCH_FLOOR + 0.08
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
@@ -2337,7 +2358,7 @@ def _text_match_score(
         return 0.0
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return 0.0
-    if _audio_output_polarity_action_mismatch(instruction, candidate):
+    if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _history_action_mismatch(instruction, candidate):
         return 0.0
@@ -2639,7 +2660,7 @@ def _context_text_match_score(
         return 0.0
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return 0.0
-    if _audio_output_polarity_action_mismatch(instruction, candidate):
+    if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _history_action_mismatch(instruction, candidate):
         return 0.0
@@ -3238,7 +3259,7 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _audio_output_polarity_action_mismatch(instruction, candidate):
+    if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -5873,23 +5894,87 @@ def _password_visibility_state_action_mismatch(
 def _audio_output_polarity_action_mismatch(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
 ) -> bool:
     instruction_tokens = _literal_words_from_text(instruction)
     if not (instruction_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
         return False
     requested_up = bool(instruction_tokens & AUDIO_OUTPUT_UP_WORDS)
     requested_down = bool(instruction_tokens & AUDIO_OUTPUT_DOWN_WORDS)
-    if requested_up == requested_down:
-        return False
 
     control_tokens = _literal_words_from_text(candidate.descriptor)
+    if requested_up != requested_down:
+        if not (control_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
+            return False
+        control_up = bool(control_tokens & AUDIO_OUTPUT_UP_WORDS)
+        control_down = bool(control_tokens & AUDIO_OUTPUT_DOWN_WORDS)
+        if control_up == control_down:
+            return False
+        return requested_up != control_up
+
+    requested_mute = bool(instruction_tokens & AUDIO_OUTPUT_MUTE_WORDS)
+    requested_unmute = bool(instruction_tokens & AUDIO_OUTPUT_UNMUTE_WORDS)
+    if requested_mute == requested_unmute:
+        return False
+    control_mute = bool(control_tokens & AUDIO_OUTPUT_MUTE_WORDS)
+    control_unmute = bool(control_tokens & AUDIO_OUTPUT_UNMUTE_WORDS)
+    if control_mute != control_unmute:
+        return requested_mute != control_mute
     if not (control_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
         return False
-    control_up = bool(control_tokens & AUDIO_OUTPUT_UP_WORDS)
-    control_down = bool(control_tokens & AUDIO_OUTPUT_DOWN_WORDS)
-    if control_up == control_down:
+    return _has_requested_audio_mute_action_candidate(
+        instruction_tokens,
+        candidate,
+        candidates,
+    )
+
+
+def _audio_output_mute_action_match(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    instruction_tokens = _literal_words_from_text(instruction)
+    if not (instruction_tokens & AUDIO_OUTPUT_CONTEXT_WORDS):
         return False
-    return requested_up != control_up
+    requested_mute = bool(instruction_tokens & AUDIO_OUTPUT_MUTE_WORDS)
+    requested_unmute = bool(instruction_tokens & AUDIO_OUTPUT_UNMUTE_WORDS)
+    if requested_mute == requested_unmute:
+        return False
+    control_tokens = _literal_words_from_text(candidate.descriptor)
+    control_mute = bool(control_tokens & AUDIO_OUTPUT_MUTE_WORDS)
+    control_unmute = bool(control_tokens & AUDIO_OUTPUT_UNMUTE_WORDS)
+    if control_mute == control_unmute:
+        return False
+    return requested_mute == control_mute
+
+
+def _has_requested_audio_mute_action_candidate(
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate] | None,
+) -> bool:
+    if not candidates:
+        return False
+    requested_words = (
+        AUDIO_OUTPUT_UNMUTE_WORDS
+        if instruction_tokens & AUDIO_OUTPUT_UNMUTE_WORDS
+        else AUDIO_OUTPUT_MUTE_WORDS
+    )
+    opposite_words = (
+        AUDIO_OUTPUT_MUTE_WORDS
+        if requested_words == AUDIO_OUTPUT_UNMUTE_WORDS
+        else AUDIO_OUTPUT_UNMUTE_WORDS
+    )
+    for other in candidates:
+        if other.id == selected.id or _same_visual_candidate(other, selected):
+            continue
+        control_tokens = _literal_words_from_text(other.descriptor)
+        if not (control_tokens & requested_words):
+            continue
+        if control_tokens & opposite_words:
+            continue
+        return True
+    return False
 
 
 def _history_action_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
@@ -6443,6 +6528,8 @@ def _object_only_action_context_mismatch(
             - FILE_IDENTITY_WORDS
         )
         if not candidate_non_objects:
+            return True
+        if not (candidate_non_objects - NEUTRAL_ACTION_DESTINATION_WORDS):
             return True
     return False
 
@@ -7419,6 +7506,9 @@ def _contextual_duplicate_request_tokens(
     named_page_context = _named_page_context_request_tokens(instruction)
     if named_page_context and matched_action_tokens:
         return named_page_context
+    spatial_context = _spatial_contextual_duplicate_request_tokens(instruction)
+    if spatial_context and matched_action_tokens:
+        return spatial_context
     variant_only_surfaces = surface_tokens - (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     if variant_only_surfaces and not _candidate_pool_has_contextual_surface_evidence(
         variant_only_surfaces,
@@ -7429,6 +7519,7 @@ def _contextual_duplicate_request_tokens(
         if _positional_action_request_tokens(instruction):
             return set()
         return _implicit_contextual_duplicate_request_tokens(
+            instruction,
             instruction_tokens,
             raw_tokens,
             candidate,
@@ -7471,6 +7562,7 @@ def _named_page_context_request_tokens(instruction: str) -> set[str]:
 
 
 def _implicit_contextual_duplicate_request_tokens(
+    instruction: str,
     instruction_tokens: set[str],
     raw_tokens: set[str],
     candidate: ControlCandidate,
@@ -7490,6 +7582,11 @@ def _implicit_contextual_duplicate_request_tokens(
         - candidate_tokens
         - CONTEXTUAL_DUPLICATE_STOPWORDS
     )
+    spatial_context = _spatial_contextual_duplicate_request_tokens(instruction)
+    if spatial_context:
+        request_tokens = (
+            request_tokens - {"beside", "near", "next", "to"}
+        ) | spatial_context
     for family in EXCLUSIVE_ACTION_FAMILIES:
         if matched_action_tokens & family:
             request_tokens -= family
@@ -7518,6 +7615,25 @@ def _implicit_contextual_duplicate_request_tokens(
         ):
             return request_tokens
     return set()
+
+
+def _spatial_contextual_duplicate_request_tokens(instruction: str) -> set[str]:
+    matches = re.findall(
+        r"\b(?:beside|near|next\s+to)\s+(?:the\s+)?"
+        r"([a-z0-9][a-z0-9 _/&.-]{0,80}?)"
+        r"(?:\s+(?:card|entry|item|listitem|record|result|row|treeitem))?"
+        r"(?=\s*(?:[.!?,;:]|$))",
+        instruction.lower(),
+    )
+    tokens: set[str] = set()
+    for match in matches:
+        tokens.update(
+            _tokens_from_text(match)
+            - ACTION_OBJECT_STOPWORDS
+            - ROW_ACTION_CONTAINER_WORDS
+            - {"the"}
+        )
+    return _object_token_variants(tokens)
 
 
 def _contextual_duplicate_key(candidate: ControlCandidate) -> str:
@@ -8576,7 +8692,7 @@ def _target_id_ambiguity(
             continue
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
-        if _audio_output_polarity_action_mismatch(instruction, candidate):
+        if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
             continue
         if _history_action_mismatch(instruction, candidate):
             continue
@@ -8987,7 +9103,7 @@ def _has_semantic_alternative(
             continue
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
-        if _audio_output_polarity_action_mismatch(instruction, candidate):
+        if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
             continue
         if _history_action_mismatch(instruction, candidate):
             continue
@@ -9114,7 +9230,7 @@ def _has_visible_semantic_alternative(
             continue
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
-        if _audio_output_polarity_action_mismatch(instruction, candidate):
+        if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
             continue
         if _history_action_mismatch(instruction, candidate):
             continue
@@ -9289,7 +9405,7 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
-    if _audio_output_polarity_action_mismatch(instruction, candidate):
+    if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _history_action_mismatch(instruction, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
@@ -9450,6 +9566,8 @@ def _candidate_snap_score(
     if named_contextual_duplicate_satisfied:
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _spinner_stepper_button_match(instruction, candidate, candidates):
+        final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
+    if _audio_output_mute_action_match(instruction, candidate):
         final_score = max(final_score, CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP)
     if _menu_segment_intent(control_intents) and candidate.control_type == "splitbutton":
         if not _contains_tighter_same_intent_action(
@@ -10079,7 +10197,7 @@ def _single_contained_control_intent_candidate(
             continue
         if _password_visibility_state_action_mismatch(instruction, candidate):
             continue
-        if _audio_output_polarity_action_mismatch(instruction, candidate):
+        if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
             continue
         if _history_action_mismatch(instruction, candidate):
             continue
@@ -10508,7 +10626,7 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _password_visibility_state_action_mismatch(instruction, candidate):
         return True
-    if _audio_output_polarity_action_mismatch(instruction, candidate):
+    if _audio_output_polarity_action_mismatch(instruction, candidate, candidates):
         return True
     if _history_action_mismatch(instruction, candidate):
         return True

@@ -467,6 +467,26 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "destructive_action_rejects_neutral_destination_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 120, 32], "label": "Project settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Delete project.",
+                "target": {"x": 100, "y": 100, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "settings", "text": "Project settings", "control_type": "button", "rect": [100, 100, 120, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "loose_row_model_rect_snaps_to_tight_child_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -7211,6 +7231,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "audio_action_recovers_from_neutral_speaker_alias",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 100, 32], "label": "Speaker"},
+                {"rect": [200, 80, 100, 32], "label": "Unmute"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unmute audio.",
+                "target_id": "speaker",
+                "target": {"x": 20, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "speaker", "text": "Speaker", "control_type": "button", "rect": [20, 80, 100, 32]},
+                {"id": "unmute", "text": "Unmute", "control_type": "button", "rect": [200, 80, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "unmute",
+                "rect": [200, 80, 100, 32],
                 "overlay_emitted": True,
             },
         },
@@ -16348,6 +16392,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "pay2",
                 "rect": [620, 64, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "row_scoped_next_to_label_recovers_adjacent_action_column",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 30], "label": "Alice"},
+                {"rect": [220, 84, 70, 32], "label": "Edit"},
+                {"rect": [20, 140, 120, 30], "label": "Bob"},
+                {"rect": [220, 134, 70, 32], "label": "Edit"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Edit next to Alice.",
+                "target_id": "edit_bob",
+                "target": {"x": 220, "y": 134, "width": 70, "height": 32},
+            },
+            "candidates": [
+                {"id": "label_alice", "text": "Alice", "control_type": "text", "rect": [20, 80, 120, 30]},
+                {"id": "edit_alice", "text": "Edit", "control_type": "button", "rect": [220, 84, 70, 32]},
+                {"id": "label_bob", "text": "Bob", "control_type": "text", "rect": [20, 140, 120, 30]},
+                {"id": "edit_bob", "text": "Edit", "control_type": "button", "rect": [220, 134, 70, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit_alice",
+                "rect": [220, 84, 70, 32],
                 "overlay_emitted": True,
             },
         },

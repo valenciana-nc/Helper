@@ -14733,6 +14733,61 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (180, 90, 90, 30))
 
+    def test_contextual_duplicate_spatial_label_recovers_requested_row_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("label_alice", "Alice", "text", (20, 90, 120, 30)),
+            ControlCandidate("edit_alice", "Edit", "button", (220, 84, 70, 32)),
+            ControlCandidate("label_bob", "Bob", "text", (20, 140, 120, 30)),
+            ControlCandidate("edit_bob", "Edit", "button", (220, 134, 70, 32)),
+        ]
+        instructions = (
+            "Click Edit next to Alice.",
+            "Click Edit beside Alice.",
+            "Click Edit near Alice.",
+        )
+
+        for instruction in instructions:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="edit_bob",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(220, 134, 70, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(220, 134, 70, 32),
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(220, 134, 70, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "edit_bob",
+                            "target": {"x": 220, "y": 134, "width": 70, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "edit_bob")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                for target in (text_target, wrong_snap, help_target):
+                    self.assertEqual(target.target_id, "edit_alice")
+                    self.assertFalse(target.rejected_reason)
+                    self.assertEqual(target.rect, (220, 84, 70, 32))
+
     def test_contextual_duplicate_cell_label_rejects_wrong_row_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -18526,6 +18581,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.target_id, "c001")
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
 
+    def test_audio_mute_action_recovers_from_neutral_speaker_alias(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Mute audio.", "mute", "Mute"),
+            ("Unmute audio.", "unmute", "Unmute"),
+        )
+        for instruction, expected_id, expected_label in cases:
+            with self.subTest(instruction=instruction):
+                candidates = [
+                    ControlCandidate("speaker", "Speaker", "button", (10, 10, 100, 32)),
+                    ControlCandidate(expected_id, expected_label, "button", (200, 10, 100, 32)),
+                ]
+                wrong_target = resolve_candidate_target(
+                    target_id="speaker",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 100, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 100, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 10, 100, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "speaker",
+                            "target": {"x": 10, "y": 10, "width": 100, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "speaker")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, expected_id)
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.target_id, "speaker")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, expected_id)
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (200, 10, 100, 32))
+
     def test_start_video_rejects_taskbar_start_button(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -19092,6 +19203,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.source, "text_match")
                 self.assertEqual(target.target_id, "c002")
                 self.assertFalse(target.rejected_reason)
+
+    def test_destructive_action_rejects_neutral_destination_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("settings", "Project settings", "button", (100, 100, 120, 32)),
+        ]
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Delete project.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Delete project.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Delete project.",
+                    "target": {"x": 100, "y": 100, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.rejected_reason, "candidate snapshot no match")
+
+    def test_open_neutral_destination_button_still_matches(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("settings", "Project settings", "button", (100, 100, 120, 32)),
+        ]
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open project settings.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Open project settings.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+
+        for target in (text_target, snap_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "settings")
+            self.assertFalse(target.rejected_reason)
 
     def test_selected_file_actions_prefer_exact_action_over_alias_neighbor(self) -> None:
         from control_inventory import ControlCandidate
