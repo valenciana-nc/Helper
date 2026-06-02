@@ -764,6 +764,109 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
 
+    def test_current_screen_recheck_rejects_reused_control_identity_change(self) -> None:
+        app = _qt_app()
+        capture = _button_capture(button_rect=(40, 50, 80, 32))
+        rect = (40, 50, 80, 32)
+        cases = [
+            ("Click this checkbox.", "checkbox", "Notifications", "Dark mode"),
+            ("Click this combobox.", "combobox", "Country", "Language"),
+            ("Click this edit control.", "edit", "Email", "Phone"),
+            ("Select this radio option.", "radiobutton", "Weekly", "Daily"),
+            ("Adjust this slider.", "slider", "Volume", "Brightness"),
+            ("Adjust this spinner.", "spinner", "Retries", "Timeout"),
+        ]
+
+        for instruction, control_type, previous_text, current_text in cases:
+            with self.subTest(control_type=control_type):
+                current_candidates = [
+                    ControlCandidate("setting", current_text, control_type, rect),
+                ]
+                previous_candidates = [
+                    ControlCandidate("setting", previous_text, control_type, rect),
+                ]
+                session = HelpSession(
+                    agent=_DoneAgent(),  # type: ignore[arg-type]
+                    controller=_Controller(),  # type: ignore[arg-type]
+                    capture_provider=lambda: capture,
+                    candidate_provider=lambda _capture, items=current_candidates: items,
+                )
+                previous_target = TargetResolution(
+                    rect=rect,
+                    confidence=0.9,
+                    source="target_id",
+                    matched_text=previous_text,
+                    target_id="setting",
+                )
+                decision = LiveHelpDecision(
+                    kind="step",
+                    instruction=instruction,
+                    target_id="setting",
+                    target_norm_x=167,
+                    target_norm_y=313,
+                    target_norm_width=333,
+                    target_norm_height=200,
+                )
+
+                try:
+                    _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                        decision,
+                        previous_target=previous_target,
+                        previous_candidates=previous_candidates,
+                    )
+                finally:
+                    session.deleteLater()
+                    app.processEvents()
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_allows_reused_control_same_identity(self) -> None:
+        app = _qt_app()
+        capture = _button_capture(button_rect=(40, 50, 80, 32))
+        rect = (40, 50, 80, 32)
+        current_candidates = [
+            ControlCandidate("setting", "Notifications", "checkbox", rect),
+        ]
+        previous_candidates = [
+            ControlCandidate("setting", "Notifications", "checkbox", rect),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: current_candidates,
+        )
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Notifications",
+            target_id="setting",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click this checkbox.",
+            target_id="setting",
+            target_norm_x=167,
+            target_norm_y=313,
+            target_norm_width=333,
+            target_norm_height=200,
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_candidates=previous_candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "target_id")
+        self.assertFalse(target.rejected_reason)
+
     def test_current_screen_recheck_rejects_tiny_target_id_zero_overlap_drift(self) -> None:
         app = _qt_app()
         capture = _button_capture()

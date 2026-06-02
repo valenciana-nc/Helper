@@ -67,6 +67,9 @@ ROW_REVALIDATION_GENERIC_WORDS = frozenset(
 ACTION_REVALIDATION_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
 )
+CONTROL_IDENTITY_REVALIDATION_CONTROL_TYPES = frozenset(
+    {"checkbox", "combobox", "edit", "radiobutton", "slider", "spinner"}
+)
 ACTION_CONTEXT_REVALIDATION_CONTROL_TYPES = (
     ROW_REVALIDATION_CONTROL_TYPES
     | frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
@@ -108,6 +111,31 @@ ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
         "splitbutton",
         "tab",
         "tabitem",
+    }
+)
+CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS = ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS | frozenset(
+    {
+        "check",
+        "checkbox",
+        "combo",
+        "combobox",
+        "dropdown",
+        "edit",
+        "field",
+        "input",
+        "option",
+        "radio",
+        "radiobutton",
+        "select",
+        "selected",
+        "selection",
+        "slider",
+        "spinner",
+        "switch",
+        "text",
+        "textbox",
+        "toggle",
+        "value",
     }
 )
 
@@ -586,6 +614,13 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_control_identity_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _model_only_revalidation_lacks_fresh_evidence(previous_target, target):
         return replace(target, rejected_reason="current screen recheck target changed")
     if _same_revalidation_geometry(previous_target.rect, target.rect):
@@ -714,6 +749,59 @@ def _action_identity_revalidation_tokens(
         _tokenize_control(text)
         | _tokens_from_text(text)
     ) - ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS
+
+
+def _revalidated_control_identity_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    previous_type = previous.control_type.lower()
+    current_type = current.control_type.lower()
+    if current_type not in CONTROL_IDENTITY_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous_type not in CONTROL_IDENTITY_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous_type != current_type:
+        return True
+    previous_tokens = _control_identity_revalidation_tokens(
+        previous,
+        previous_target.matched_text,
+    )
+    current_tokens = _control_identity_revalidation_tokens(
+        current,
+        target.matched_text,
+    )
+    if not previous_tokens:
+        return False
+    if not current_tokens:
+        return True
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.5
+
+
+def _control_identity_revalidation_tokens(
+    candidate: ControlCandidate | None,
+    matched_text: str,
+) -> set[str]:
+    parts = [matched_text or ""]
+    if candidate is not None:
+        parts.extend([candidate.text or "", candidate.automation_id or ""])
+    text = " ".join(part for part in parts if part)
+    if not text:
+        return set()
+    return (
+        _tokenize_control(text)
+        | _tokens_from_text(text)
+    ) - CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS
 
 
 def _revalidated_action_context_changed(
