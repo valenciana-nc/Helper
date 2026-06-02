@@ -15961,6 +15961,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(target.rejected_reason)
         self.assertEqual(target.rect, (120, 160, 100, 32))
 
+    def test_dialog_dismiss_prefers_foreground_dialog_x_over_background_close(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("page_close", "Close", "button", (100, 100, 70, 30), window_rank=1),
+            ControlCandidate("dialog_surface", "Settings dialog", "window", (420, 80, 300, 120), window_rank=0),
+            ControlCandidate("dialog_close", "X", "button", (690, 90, 24, 24), window_rank=0),
+        ]
+        instruction = "Close the dialog."
+
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        help_from_model_rect = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        help_from_wrong_id = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_close",
+                    "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (text_target, help_from_model_rect, help_from_wrong_id):
+            self.assertEqual(resolved.source, "text_match")
+            self.assertEqual(resolved.target_id, "dialog_close")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (690, 90, 24, 24))
+
     def test_dialog_dismiss_uses_exact_model_rect_among_duplicate_close_buttons(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -24823,6 +24870,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
         for instruction in (
             "Click Active from the Status dropdown.",
             "Choose Active from the Status menu.",
+            "Choose Active under the Status dropdown.",
+            "Choose Active below the Status dropdown.",
+            "Choose Active for the Status dropdown.",
+            "Select Active option for Status.",
+            "Choose the Active menu item under Status.",
         ):
             with self.subTest(instruction=instruction):
                 wrong_target = resolve_candidate_target(
@@ -24863,11 +24915,74 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(text_target.source, "text_match")
                 self.assertEqual(text_target.target_id, "status_active")
                 self.assertFalse(text_target.rejected_reason)
-                self.assertIsNone(snap_target)
+                if snap_target is not None:
+                    self.assertEqual(snap_target.target_id, "priority_active")
+                    self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
                 self.assertEqual(help_target.source, "text_match")
                 self.assertEqual(help_target.target_id, "status_active")
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (10, 46, 180, 28))
+
+    def test_dropdown_item_context_uses_nearby_launcher_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_label", "Status", "text", (10, 14, 70, 20)),
+            ControlCandidate("status_combo", "", "combobox", (100, 10, 180, 32)),
+            ControlCandidate("status_active", "Active", "menuitem", (100, 46, 180, 28)),
+            ControlCandidate("priority_label", "Priority", "text", (330, 14, 70, 20)),
+            ControlCandidate("priority_combo", "", "combobox", (420, 10, 180, 32)),
+            ControlCandidate("priority_active", "Active", "menuitem", (420, 46, 180, 28)),
+        ]
+        for instruction in (
+            "Click Active in the Status dropdown.",
+            "Choose Active under the Status dropdown.",
+            "Select Active option for Status.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="priority_active",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(420, 46, 180, 28),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(420, 46, 180, 28),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(420, 46, 180, 28),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "priority_active",
+                            "target": {"x": 420, "y": 46, "width": 180, "height": 28},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "priority_active")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "status_active")
+                self.assertFalse(text_target.rejected_reason)
+                if snap_target is not None:
+                    self.assertEqual(snap_target.target_id, "priority_active")
+                    self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "status_active")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (100, 46, 180, 28))
 
     def test_dropdown_launcher_rejects_same_label_button_menuitem(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

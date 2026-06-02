@@ -3479,6 +3479,18 @@ def _single_dialog_dismiss_candidate(
     selected = preferred or dismiss_candidates
     if window_close_requested:
         selected = _window_close_preferred_candidates(selected)
+    elif raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
+        surface_selected = [
+            candidate
+            for candidate in selected
+            if _dismiss_candidate_has_requested_dialog_surface(
+                candidate,
+                candidates,
+                raw_tokens & DISMISS_DIALOG_CONTEXT_WORDS,
+            )
+        ]
+        if surface_selected:
+            selected = surface_selected
     if window_close_requested:
         contextual_selected = []
     else:
@@ -3573,6 +3585,36 @@ def _single_dialog_dismiss_candidate(
         matched_text=candidate.descriptor,
         target_id=candidate.id,
     )
+
+
+def _dismiss_candidate_has_requested_dialog_surface(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    requested_context: set[str],
+) -> bool:
+    if not _looks_like_close_or_x_button(candidate):
+        return False
+    requested_surfaces = _object_token_variants(requested_context & DISMISS_DIALOG_CONTEXT_WORDS)
+    if not requested_surfaces:
+        return False
+    for surface in candidates:
+        if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
+            continue
+        if surface.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+            continue
+        if surface.window_rank != candidate.window_rank:
+            continue
+        if not _contains_rect(_expand_rect(surface.rect, 4), candidate.rect):
+            continue
+        evidence_tokens = (
+            _candidate_semantic_tokens(surface)
+            | _tokens_from_text(surface.descriptor)
+            | _tokenize_control(surface.window_title)
+            | _surface_context_type_tokens(surface.control_type)
+        )
+        if _contextual_surface_tokens_match(requested_surfaces, evidence_tokens):
+            return True
+    return False
 
 
 def _window_close_preferred_candidates(
@@ -5445,9 +5487,20 @@ def _named_dropdown_request_tokens(instruction: str) -> set[str]:
 def _dropdown_item_request_tokens(instruction: str) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
     launcher_context = _dropdown_item_launcher_context_tokens(instruction)
-    if not _dropdown_launcher_requested(instruction) and not ("menu" in raw_tokens and launcher_context):
+    option_context_requested = bool(
+        launcher_context
+        and (
+            raw_tokens & {"choice", "choices", "menuitem", "option", "options"}
+            or {"menu", "item"} <= raw_tokens
+        )
+    )
+    if (
+        not _dropdown_launcher_requested(instruction)
+        and not ("menu" in raw_tokens and launcher_context)
+        and not option_context_requested
+    ):
         return set()
-    if not (raw_tokens & {"from", "in", "inside", "within"}):
+    if not (raw_tokens & {"below", "beneath", "for", "from", "in", "inside", "under", "within"}):
         return set()
     return _object_token_variants(
         (_tokenize_instruction(instruction) | raw_tokens)
@@ -5455,17 +5508,26 @@ def _dropdown_item_request_tokens(instruction: str) -> set[str]:
         - GENERIC_OBJECT_REQUEST_WORDS
         - CONTAINED_CONTROL_REQUEST_WORDS
         - launcher_context
-        - {"a", "an", "from", "in", "inside", "the", "within"}
+        - {"a", "an", "below", "beneath", "for", "from", "in", "inside", "the", "under", "within"}
     )
 
 
 def _dropdown_item_launcher_context_tokens(instruction: str) -> set[str]:
     text = (instruction or "").lower()
     matches = re.findall(
-        r"\b(?:from|in|inside|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
+        r"\b(?:below|beneath|for|from|in|inside|under|within)\s+(?:the\s+)?([a-z0-9][a-z0-9\s_.-]{0,60}?)\s+"
         r"(?:drop\s+down|dropdown|combobox|combo|menu|picker|selector)\b",
         text,
     )
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & {"choice", "choices", "menuitem", "option", "options"} or {"menu", "item"} <= raw_tokens:
+        matches.extend(
+            re.findall(
+                r"\b(?:below|beneath|for|in|inside|under|within)\s+(?:the\s+)?"
+                r"([a-z0-9][a-z0-9\s_.-]{0,60}?)(?:[.!?]|$)",
+                text,
+            )
+        )
     if not matches:
         return set()
     tokens: set[str] = set()
@@ -5476,7 +5538,19 @@ def _dropdown_item_launcher_context_tokens(instruction: str) -> set[str]:
         - OPEN_VIEW_REQUEST_WORDS
         - GENERIC_OBJECT_REQUEST_WORDS
         - CONTAINED_CONTROL_REQUEST_WORDS
-        - {"a", "an", "from", "inside", "in", "the", "within"}
+        - {
+            "a",
+            "an",
+            "below",
+            "beneath",
+            "for",
+            "from",
+            "inside",
+            "in",
+            "the",
+            "under",
+            "within",
+        }
     )
 
 
@@ -5520,6 +5594,7 @@ def _menuitem_matches_requested_dropdown_launcher(
             _candidate_semantic_tokens(launcher)
             | _tokens_from_text(launcher.text)
             | _tokens_from_text(launcher.automation_id)
+            | _field_alternative_label_tokens(launcher, candidates)
         )
         if not (launcher_context & launcher_tokens):
             continue
