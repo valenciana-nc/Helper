@@ -36,6 +36,20 @@ CANDIDATE_STRICT_QUALITY_CONTROL_TYPES = frozenset(
         "window",
     }
 )
+CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES = frozenset(
+    {
+        "button",
+        "checkbox",
+        "combobox",
+        "edit",
+        "menuitem",
+        "radiobutton",
+        "slider",
+        "spinner",
+        "splitbutton",
+        "tabitem",
+    }
+)
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
     {
@@ -183,6 +197,19 @@ def evaluate_target_quality(
             boundary_activity=boundary_activity,
             target_area_fraction=target_area_fraction,
         )
+    if (
+        _candidate_boundary_alignment_target(source, target_control_type)
+        and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
     if source == "model":
         if visual_activity < MODEL_EMPTY_VISUAL_FLOOR:
             return TargetQuality(
@@ -262,6 +289,12 @@ def _strict_candidate_quality_target(
     if target_control_type.lower() not in CANDIDATE_STRICT_QUALITY_CONTROL_TYPES:
         return False
     return _candidate_compound_rect_large_enough(rect)
+
+
+def _candidate_boundary_alignment_target(source: str, target_control_type: str) -> bool:
+    if source == "model":
+        return False
+    return target_control_type.lower() in CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES
 
 
 def _screen_to_image_rect(

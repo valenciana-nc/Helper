@@ -215,6 +215,45 @@ class TargetQualityTests(unittest.TestCase):
 
         self.assertTrue(quality.accepted)
 
+    def test_rejects_shifted_candidate_button_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 80, 150, 112), outline="black", fill="#f3f4f6")
+        draw.text((86, 90), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(70, 80, 90, 32),
+            source="target_id",
+            confidence=1.0,
+            target_control_type="button",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
+    def test_accepts_aligned_candidate_button_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 80, 150, 112), outline="black", fill="#f3f4f6")
+        draw.text((86, 90), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(60, 80, 90, 32),
+            source="target_id",
+            confidence=1.0,
+            target_control_type="button",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_rejects_noisy_model_rect_without_candidate_evidence(self) -> None:
         from target_quality import evaluate_target_quality
 
