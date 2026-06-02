@@ -1506,7 +1506,7 @@ SURFACE_CONTEXT_TYPE_WORDS = {
     "window": frozenset({"window"}),
 }
 DIRECT_SURFACE_CONTAINER_ALIASES = {
-    "group": frozenset({"card", "group"}),
+    "group": frozenset({"card", "form", "group", "panel", "section"}),
     "headeritem": frozenset({"column", "header", "heading"}),
     "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),

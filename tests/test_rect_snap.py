@@ -23271,8 +23271,18 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (20, 80, 300, 180),
             ),
             (
-                "card_group",
+                "card_group_name_only",
                 "Click Details card.",
+                [
+                    ControlCandidate("container", "Details", "group", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "section_group_name_only",
+                "Click Details section.",
                 [
                     ControlCandidate("container", "Details", "group", (20, 80, 300, 180)),
                     ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
@@ -23291,10 +23301,20 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 (20, 80, 300, 180),
             ),
             (
-                "panel_group",
+                "panel_group_name_only",
                 "Click Details panel.",
                 [
-                    ControlCandidate("container", "Details panel", "group", (20, 80, 300, 180)),
+                    ControlCandidate("container", "Details", "group", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "form_group_name_only",
+                "Click Details form.",
+                [
+                    ControlCandidate("container", "Details", "group", (20, 80, 300, 180)),
                     ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
                 ],
                 "container",
