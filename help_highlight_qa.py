@@ -7144,6 +7144,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "unarchive_item_recovers_from_unarchived_status",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Unarchived item"},
+                {"rect": [260, 80, 190, 32], "label": "Unarchive item"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unarchive item.",
+                "target_id": "stale",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Unarchived item", "control_type": "button", "rect": [20, 80, 180, 32]},
+                {"id": "exact", "text": "Unarchive item", "control_type": "button", "rect": [260, 80, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [260, 80, 190, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "unarchive_item_rejects_same_action_status_target",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Unarchive status"},
+                {"rect": [260, 80, 190, 32], "label": "Unarchive item"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Unarchive item.",
+                "target_id": "stale",
+                "target": {"x": 20, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Unarchive status", "control_type": "button", "rect": [20, 80, 180, 32]},
+                {"id": "exact", "text": "Unarchive item", "control_type": "button", "rect": [260, 80, 190, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [260, 80, 190, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "share_text_match_overrides_export_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -20528,6 +20576,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_name_invoice_dataitem_prefers_record_over_tab_and_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 400, 48], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme invoice.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "record", "text": "Acme", "control_type": "dataitem", "rect": [260, 80, 400, 48]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "record",
+                "rect": [260, 80, 400, 48],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_account_dataitem_prefers_record_over_tab_and_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 400, 48], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme account.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "record", "text": "Acme", "control_type": "dataitem", "rect": [260, 80, 400, 48]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "record",
+                "rect": [260, 80, 400, 48],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "same_rect_foreground_snap_prefers_active_window",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -20590,6 +20690,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "archive_bob",
                 "rect": [600, 112, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "business_object_row_action_prefers_contained_open_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+                {"rect": [600, 194, 70, 30], "label": "Open"},
+                {"rect": [260, 260, 420, 72], "label": "Globex"},
+                {"rect": [600, 284, 70, 30], "label": "Open"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open for Acme project.",
+                "target_id": "globex_open",
+                "target": {"x": 600, "y": 284, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "acme", "text": "Acme", "control_type": "dataitem", "rect": [260, 170, 420, 72]},
+                {"id": "acme_open", "text": "Open", "control_type": "button", "rect": [600, 194, 70, 30]},
+                {"id": "globex", "text": "Globex", "control_type": "dataitem", "rect": [260, 260, 420, 72]},
+                {"id": "globex_open", "text": "Open", "control_type": "button", "rect": [600, 284, 70, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "acme_open",
+                "rect": [600, 194, 70, 30],
                 "overlay_emitted": True,
             },
         },

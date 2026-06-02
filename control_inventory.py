@@ -275,14 +275,26 @@ ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
         "entries",
         "entry",
+        "account",
+        "accounts",
+        "customer",
+        "customers",
+        "invoice",
+        "invoices",
         "item",
         "items",
         "listitem",
+        "project",
+        "projects",
         "record",
         "records",
+        "report",
+        "reports",
         "result",
         "results",
         "treeitem",
+        "user",
+        "users",
     }
 )
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
@@ -489,7 +501,24 @@ NAMED_CONTROL_LABEL_STOPWORDS = NAMED_CONTROL_ROLE_WORDS | frozenset(
         "option",
     }
 )
-RECORD_TARGET_WORDS = frozenset({"record", "records"})
+RECORD_TARGET_WORDS = frozenset(
+    {
+        "account",
+        "accounts",
+        "customer",
+        "customers",
+        "invoice",
+        "invoices",
+        "project",
+        "projects",
+        "record",
+        "records",
+        "report",
+        "reports",
+        "user",
+        "users",
+    }
+)
 RECORD_TARGET_TRAILING_CONTEXT_WORDS = frozenset({"tab", "tabs", "tabitem"})
 RECORD_TARGET_LABEL_BOUNDARY_WORDS = (
     OPEN_VIEW_REQUEST_WORDS
@@ -797,6 +826,9 @@ STATE_LABEL_ACTION_GROUPS = (
         frozenset({"accepted", "allowed", "approved", "declined", "denied", "rejected"}),
     ),
     (frozenset({"mark", "read", "unread"}), frozenset({"read", "unread"})),
+)
+STATE_ACTION_WORDS = frozenset(
+    word for action_words, _state_words in STATE_LABEL_ACTION_GROUPS for word in action_words
 )
 SAME_FORM_STATE_ACTION_WORDS = frozenset({"reset"})
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
@@ -1978,6 +2010,38 @@ def resolve_candidate_target(
                 matched_text=candidate.descriptor,
                 target_id=candidate.id,
             )
+        if _row_scoped_action_target_matches_context(
+            instruction,
+            candidate,
+            candidates,
+        ) and not _row_scoped_action_target_matches_context(
+            instruction,
+            runner_up[1],
+            candidates,
+        ):
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=best_score,
+                source="text_match",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
+        if _candidate_satisfies_named_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        ) and not _candidate_satisfies_named_contextual_duplicate_request(
+            instruction,
+            runner_up[1],
+            candidates,
+        ):
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=best_score,
+                source="text_match",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
         if _contextual_control_intent_text_match_ambiguous(
             instruction=instruction,
             instruction_tokens=instruction_tokens,
@@ -2434,6 +2498,10 @@ def _text_match_score(
         instruction,
         candidate,
     )
+    matches_record_target = (
+        _record_target_candidate_matches_request(instruction, candidate)
+        and not _instruction_requests_contained_row_action(instruction)
+    )
     direct_surface_requested, direct_surface_label_tokens = _direct_surface_container_request_parts(
         instruction
     )
@@ -2511,6 +2579,7 @@ def _text_match_score(
         and not exact_visible_label_match
         and not matches_site_information_action
         and not matches_dropdown_item
+        and not matches_record_target
         and not matches_direct_surface_container
     ):
         return 0.0
@@ -2528,6 +2597,13 @@ def _text_match_score(
         return score
     if matches_dropdown_item:
         score = TEXT_MATCH_FLOOR + 0.08
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if matches_record_target:
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
@@ -5747,6 +5823,8 @@ def _explicit_generic_item_control_type_mismatch(
         return False
     if _literal_stopword_name_request_tokens(instruction) & {"item", "items"}:
         return False
+    if raw_tokens & STATE_ACTION_WORDS and _exact_visible_label_matches_request(instruction, candidate):
+        return False
     if raw_tokens & {"for", "from", "in", "inside", "on", "within", "with"}:
         return False
     action_words = (
@@ -5799,6 +5877,19 @@ def _record_target_alternative_mismatch(
         and bool(_record_target_candidate_label_tokens(other) & requested_label)
         for other in candidates
     )
+
+
+def _record_target_candidate_matches_request(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    requested_label = _record_target_requested_label_tokens(instruction)
+    if not requested_label:
+        return False
+    candidate_label = _record_target_candidate_label_tokens(candidate)
+    return bool(candidate_label & requested_label)
 
 
 def _record_target_requested_label_tokens(instruction: str) -> set[str]:
