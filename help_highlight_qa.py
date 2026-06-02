@@ -14426,6 +14426,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_scoped_refund_action_uses_singular_item_context",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 90, 560, 48], "label": "Acme item"},
+                {"rect": [610, 99, 80, 30], "label": "Refund"},
+                {"rect": [20, 150, 560, 48], "label": "Globex item"},
+                {"rect": [610, 159, 80, 30], "label": "Refund"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Refund for Globex item.",
+                "target_id": "refund_acme",
+                "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+            },
+            "candidates": [
+                {"id": "row_acme", "text": "Acme item", "control_type": "listitem", "rect": [20, 90, 560, 48]},
+                {"id": "refund_acme", "text": "Refund", "control_type": "button", "rect": [610, 99, 80, 30]},
+                {"id": "row_globex", "text": "Globex item", "control_type": "listitem", "rect": [20, 150, 560, 48]},
+                {"id": "refund_globex", "text": "Refund", "control_type": "button", "rect": [610, 159, 80, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "refund_globex",
+                "rect": [610, 159, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "row_scoped_clear_email_uses_requested_row_over_wrong_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14760,6 +14788,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "dialog_context_uses_foreground_modal_evidence",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 70, 30], "label": "Save"},
+                {"rect": [500, 300, 70, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the dialog.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 70, 30],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [500, 300, 70, 30],
+                    "window_title": "Preferences",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "dialog_save",
+                "rect": [500, 300, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "settings_popup_recovers_from_settings_panel_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -14783,6 +14849,36 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "target_id": "popup_save",
                 "rect": [630, 160, 60, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "notification_dismiss_recovers_from_page_dismiss_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [230, 160, 70, 30], "label": "Dismiss"},
+                {"rect": [420, 80, 300, 120], "label": "Updates notification"},
+                {"rect": [630, 160, 70, 30], "label": "Dismiss"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Dismiss in the Updates notification.",
+                "target_id": "main_dismiss",
+                "target": {"x": 630, "y": 160, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "main_dismiss", "text": "Dismiss", "control_type": "button", "rect": [230, 160, 70, 30]},
+                {
+                    "id": "updates_notification",
+                    "text": "Updates notification",
+                    "control_type": "pane",
+                    "rect": [420, 80, 300, 120],
+                },
+                {"id": "notification_dismiss", "text": "Dismiss", "control_type": "button", "rect": [630, 160, 70, 30]},
+            ],
+            "expected": {
+                "target_id": "notification_dismiss",
+                "rect": [630, 160, 70, 30],
                 "overlay_emitted": True,
             },
         },

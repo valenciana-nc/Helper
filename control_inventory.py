@@ -202,6 +202,9 @@ CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
         "toolbars",
     }
 )
+ROW_ACTION_CONTAINER_WORDS = CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
+    {"item", "items", "listitem", "treeitem"}
+)
 CONTEXTUAL_DUPLICATE_STOPWORDS = ACTION_OBJECT_STOPWORDS | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS | frozenset(
     {
         "by",
@@ -1945,7 +1948,7 @@ def _text_match_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
-    if _close_context_action_mismatch(instruction, candidate):
+    if _close_context_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -1993,6 +1996,8 @@ def _text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _positional_action_duplicate_mismatch(
         instruction,
         instruction_tokens,
@@ -2007,7 +2012,11 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
-    if _explicit_action_context_mismatch(instruction, candidate):
+    if _explicit_action_context_mismatch_without_contextual_evidence(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _object_only_action_context_mismatch(instruction, candidate):
         return 0.0
@@ -2167,7 +2176,7 @@ def _context_text_match_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
-    if _close_context_action_mismatch(instruction, candidate):
+    if _close_context_action_mismatch(instruction, candidate, candidates):
         return 0.0
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2215,6 +2224,8 @@ def _context_text_match_score(
         return 0.0
     if _unresolved_contextual_duplicate_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _contained_row_action_context_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _positional_action_duplicate_mismatch(
         instruction,
         instruction_tokens,
@@ -2229,7 +2240,11 @@ def _context_text_match_score(
         candidates,
     ):
         return 0.0
-    if _explicit_action_context_mismatch(instruction, candidate):
+    if _explicit_action_context_mismatch_without_contextual_evidence(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _object_only_action_context_mismatch(instruction, candidate):
         return 0.0
@@ -2543,7 +2558,7 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _close_context_action_mismatch(instruction, candidate):
+    if _close_context_action_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -2691,7 +2706,11 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
-    if _explicit_action_context_mismatch(instruction, candidate):
+    if _explicit_action_context_mismatch_without_contextual_evidence(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return (
             False,
             text_score,
@@ -3429,6 +3448,7 @@ def _clear_close_action_mismatch(
 def _close_context_action_mismatch(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
 ) -> bool:
     instruction_words = _literal_words_from_text(instruction)
     if not (instruction_words & CLEAR_CLOSE_WORDS):
@@ -3437,6 +3457,12 @@ def _close_context_action_mismatch(
     if not requested_context:
         return False
     if not _looks_like_close_or_x_button(candidate):
+        return False
+    if candidates is not None and _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return False
     control_words = _literal_words_from_text(candidate.descriptor)
     return not bool(control_words & requested_context)
@@ -4323,6 +4349,20 @@ def _explicit_action_context_mismatch(
     )
 
 
+def _explicit_action_context_mismatch_without_contextual_evidence(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not _explicit_action_context_mismatch(instruction, candidate):
+        return False
+    return not _candidate_satisfies_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    )
+
+
 def _edit_action_context_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
     if candidate.control_type in {"combobox", "edit"}:
         return False
@@ -4865,7 +4905,7 @@ def _instruction_contained_row_context_objects(
         {"1", "2", "3", "4", "5"}
     )
     for index, word in enumerate(words):
-        if word not in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+        if word not in ROW_ACTION_CONTAINER_WORDS:
             continue
         before: list[str] = []
         cursor = index - 1
@@ -4873,7 +4913,7 @@ def _instruction_contained_row_context_objects(
             token = words[cursor]
             if token in boundary_words:
                 break
-            if token not in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+            if token not in ROW_ACTION_CONTAINER_WORDS:
                 before.append(token)
             cursor -= 1
         before.reverse()
@@ -4884,7 +4924,7 @@ def _instruction_contained_row_context_objects(
             cursor += 1
         while cursor < len(words):
             token = words[cursor]
-            if token in boundary_words or token in CONTEXTUAL_DUPLICATE_CONTAINER_WORDS:
+            if token in boundary_words or token in ROW_ACTION_CONTAINER_WORDS:
                 break
             after.append(token)
             cursor += 1
@@ -5081,21 +5121,34 @@ def _contextual_duplicate_request_matches_evidence(
         return False
     requested_surfaces = _contextual_surface_token_variants(requested_context)
     if requested_surfaces and not requested_positions:
-        evidence_surfaces = _contextual_surface_token_variants(evidence_tokens)
-        if not (requested_surfaces & evidence_surfaces):
+        if not _contextual_surface_tokens_match(requested_context, evidence_tokens):
             return False
     required_identity = requested_context - requested_positions - CONTEXTUAL_DUPLICATE_SURFACE_WORDS
     required_identity -= CONTEXTUAL_DUPLICATE_GENERIC_CONTEXT_WORDS
     if required_identity:
         return required_identity <= evidence_tokens
+    if requested_surfaces:
+        return _contextual_surface_tokens_match(requested_context, evidence_tokens)
     return bool(requested_context & evidence_tokens)
 
 
 def _contextual_surface_token_variants(tokens: set[str]) -> set[str]:
-    surfaces = _object_token_variants(tokens) & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
-    if surfaces & {"pane", "panel"}:
-        surfaces.update({"pane", "panel"})
-    return surfaces
+    return _object_token_variants(tokens) & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+
+
+def _contextual_surface_tokens_match(
+    requested_tokens: set[str],
+    evidence_tokens: set[str],
+) -> bool:
+    requested = _contextual_surface_token_variants(requested_tokens)
+    evidence = _contextual_surface_token_variants(evidence_tokens)
+    if requested & evidence:
+        return True
+    if requested & {"dialog", "modal"} and evidence & {"dialog", "modal"}:
+        return True
+    if requested & {"pane", "panel"} and evidence <= {"pane"}:
+        return True
+    return False
 
 
 def _contextual_duplicate_request_tokens(
@@ -5886,7 +5939,7 @@ def _target_id_ambiguity(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
-        if _close_context_action_mismatch(instruction, candidate):
+        if _close_context_action_mismatch(instruction, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -5944,7 +5997,11 @@ def _target_id_ambiguity(
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
-        if _explicit_action_context_mismatch(instruction, candidate):
+        if _explicit_action_context_mismatch_without_contextual_evidence(
+            instruction,
+            candidate,
+            candidates,
+        ):
             continue
         if _object_only_action_context_mismatch(instruction, candidate):
             continue
@@ -6181,7 +6238,7 @@ def _has_semantic_alternative(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
-        if _close_context_action_mismatch(instruction, candidate):
+        if _close_context_action_mismatch(instruction, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -6225,7 +6282,11 @@ def _has_semantic_alternative(
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
-        if _explicit_action_context_mismatch(instruction, candidate):
+        if _explicit_action_context_mismatch_without_contextual_evidence(
+            instruction,
+            candidate,
+            candidates,
+        ):
             continue
         if _object_only_action_context_mismatch(instruction, candidate):
             continue
@@ -6302,7 +6363,7 @@ def _has_visible_semantic_alternative(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
-        if _close_context_action_mismatch(instruction, candidate):
+        if _close_context_action_mismatch(instruction, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -6346,7 +6407,11 @@ def _has_visible_semantic_alternative(
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
-        if _explicit_action_context_mismatch(instruction, candidate):
+        if _explicit_action_context_mismatch_without_contextual_evidence(
+            instruction,
+            candidate,
+            candidates,
+        ):
             continue
         if _object_only_action_context_mismatch(instruction, candidate):
             continue
@@ -6433,7 +6498,7 @@ def _candidate_snap_score(
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
-    if _close_context_action_mismatch(instruction, candidate):
+    if _close_context_action_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -6505,7 +6570,11 @@ def _candidate_snap_score(
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates, control_intents):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
-    if _explicit_action_context_mismatch(instruction, candidate):
+    if _explicit_action_context_mismatch_without_contextual_evidence(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _object_only_action_context_mismatch(instruction, candidate):
         return 0.0
@@ -6820,7 +6889,7 @@ def _row_scoped_action_target_matches_context(
 
 def _instruction_requests_contained_row_action(instruction: str) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+    if not (raw_tokens & ROW_ACTION_CONTAINER_WORDS):
         return False
     return bool(raw_tokens & {"for", "in", "inside", "on", "within"})
 
@@ -6906,7 +6975,7 @@ def _single_contained_control_intent_candidate(
             continue
         if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
             continue
-        if _close_context_action_mismatch(instruction, candidate):
+        if _close_context_action_mismatch(instruction, candidate, candidates):
             continue
         if _close_tab_action_mismatch(instruction, candidate, candidates):
             continue
@@ -6952,7 +7021,11 @@ def _single_contained_control_intent_candidate(
             continue
         if _contained_row_action_context_mismatch(instruction, candidate, candidates):
             continue
-        if _explicit_action_context_mismatch(instruction, candidate):
+        if _explicit_action_context_mismatch_without_contextual_evidence(
+            instruction,
+            candidate,
+            candidates,
+        ):
             continue
         if _object_only_action_context_mismatch(instruction, candidate):
             continue
@@ -7254,7 +7327,7 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return True
-    if _close_context_action_mismatch(instruction, candidate):
+    if _close_context_action_mismatch(instruction, candidate, candidates):
         return True
     if _close_tab_action_mismatch(instruction, candidate, candidates):
         return True
@@ -7306,7 +7379,11 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _exact_action_word_alternative_mismatch(instruction, candidate, candidates):
         return True
-    if _explicit_action_context_mismatch(instruction, candidate):
+    if _explicit_action_context_mismatch_without_contextual_evidence(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return True
     if _object_only_action_context_mismatch(instruction, candidate):
         return True

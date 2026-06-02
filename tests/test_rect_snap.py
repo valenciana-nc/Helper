@@ -17591,6 +17591,49 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (720, 64, 32, 30))
 
+    def test_row_scoped_action_matches_singular_item_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row_acme", "Acme item", "listitem", (20, 90, 560, 48)),
+            ControlCandidate("refund_acme", "Refund", "button", (610, 99, 80, 30)),
+            ControlCandidate("row_globex", "Globex item", "listitem", (20, 150, 560, 48)),
+            ControlCandidate("refund_globex", "Refund", "button", (610, 159, 80, 30)),
+        ]
+        instruction = "Click Refund for Globex item."
+        wrong_target = resolve_candidate_target(
+            target_id="refund_acme",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(610, 99, 80, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(610, 99, 80, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "refund_acme",
+                    "target": {"x": 610, "y": 99, "width": 80, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "refund_acme")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "refund_globex")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (610, 159, 80, 30))
+
     def test_row_scoped_action_wrong_target_id_recovers_to_filtered_action_word(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
@@ -18114,6 +18157,66 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(correct_target.rejected_reason)
         self.assertEqual(correct_target.rect, (630, 160, 32, 32))
 
+    def test_dialog_context_uses_foreground_modal_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "page_save",
+                "Save",
+                "button",
+                (100, 100, 70, 30),
+                window_title="Editor",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "dialog_save",
+                "Save",
+                "button",
+                (500, 300, 70, 30),
+                window_title="Preferences",
+                window_rank=1,
+            ),
+        ]
+        instruction = "Click Save in the dialog."
+        wrong_target = resolve_candidate_target(
+            target_id="page_save",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 70, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 300, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_save",
+                    "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "page_save")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "dialog_save")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 300, 70, 30))
+
     def test_settings_popup_rejects_settings_panel_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -18157,6 +18260,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "popup_save")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (630, 160, 60, 30))
+
+    def test_notification_dismiss_recovers_from_page_dismiss_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("main_dismiss", "Dismiss", "button", (230, 160, 70, 30)),
+            ControlCandidate("updates_notification", "Updates notification", "pane", (420, 80, 300, 120)),
+            ControlCandidate("notification_dismiss", "Dismiss", "button", (630, 160, 70, 30)),
+        ]
+        instruction = "Click Dismiss in the Updates notification."
+        wrong_target = resolve_candidate_target(
+            target_id="main_dismiss",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(630, 160, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(630, 160, 70, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(630, 160, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "main_dismiss",
+                    "target": {"x": 630, "y": 160, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "main_dismiss")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "notification_dismiss")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (630, 160, 70, 30))
 
     def test_positional_duplicate_action_recovers_requested_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
