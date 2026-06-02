@@ -1029,6 +1029,16 @@ def tokenize_instruction(instruction: str) -> set[str]:
 def instruction_control_intents(instruction: str) -> set[str]:
     raw_tokens = tokens_from_text(instruction)
     intents: set[str] = set()
+    explicit_item_words = raw_tokens & {
+        "entry",
+        "entries",
+        "item",
+        "items",
+        "node",
+        "nodes",
+        "result",
+        "results",
+    }
     checkbox_requested = (
         "checkbox" in raw_tokens
         or ("check" in raw_tokens and "box" in raw_tokens)
@@ -1081,6 +1091,11 @@ def instruction_control_intents(instruction: str) -> set[str]:
     tab_button_action_requested = tab_close_action_requested or (
         bookmark_action_requested and bool(raw_tokens & {"tab", "tabs", "tabitem"})
     )
+    tab_item_button_requested = (
+        bool(raw_tokens & {"tab", "tabs", "tabitem"})
+        and bool(raw_tokens & {"button", "buttons"})
+        and not tab_button_action_requested
+    )
     split_button_requested = "splitbutton" in raw_tokens or (
         "split" in raw_tokens and "button" in raw_tokens
     )
@@ -1101,7 +1116,7 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or {"text", "field"} <= raw_tokens
         or {"text", "input"} <= raw_tokens
     )
-    explicit_button_requested = "button" in raw_tokens
+    explicit_button_requested = "button" in raw_tokens and not tab_item_button_requested
     row_requested = bool(raw_tokens & {"row", "rows"}) and not (
         checkbox_requested
         or radio_requested
@@ -1212,11 +1227,11 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("tabitem")
     if "tabitem" in raw_tokens and not tab_button_action_requested:
         intents.add("tabitem")
-    if "listitem" in raw_tokens or ("list" in raw_tokens and "item" in raw_tokens):
+    if "listitem" in raw_tokens or ("list" in raw_tokens and explicit_item_words):
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if row_requested:
         intents.update(_LIST_ITEM_INTENT_TYPES)
-    if "treeitem" in raw_tokens or ("tree" in raw_tokens and "item" in raw_tokens):
+    if "treeitem" in raw_tokens or ("tree" in raw_tokens and explicit_item_words):
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
@@ -1439,7 +1454,10 @@ def _edit_action_requested(raw_tokens: set[str]) -> bool:
 
 
 def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
-    if "menuitem" in raw_tokens or ("menu" in raw_tokens and "item" in raw_tokens):
+    if "menuitem" in raw_tokens or (
+        "menu" in raw_tokens
+        and ("item" in raw_tokens or raw_tokens & _OPTION_INTENT_WORDS or "from" in raw_tokens)
+    ):
         return False
     if not ("menu" in raw_tokens or "options" in raw_tokens):
         return False
@@ -1451,7 +1469,10 @@ def _menu_launcher_requested(raw_tokens: set[str]) -> bool:
 
 
 def _contextual_menu_launcher_requested(raw_tokens: set[str]) -> bool:
-    if "menuitem" in raw_tokens or ("menu" in raw_tokens and "item" in raw_tokens):
+    if "menuitem" in raw_tokens or (
+        "menu" in raw_tokens
+        and ("item" in raw_tokens or raw_tokens & _OPTION_INTENT_WORDS or "from" in raw_tokens)
+    ):
         return False
     has_dropdown_wording = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens

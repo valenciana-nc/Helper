@@ -500,6 +500,16 @@ class HelpIntentLanguageTests(unittest.TestCase):
             {"listitem", "menuitem", "splitbutton"},
         )
 
+    def test_item_wording_intents_target_menu_list_tree_and_tab_items(self) -> None:
+        from help_intents import instruction_control_intents
+
+        self.assertEqual(instruction_control_intents("Click Settings menu option."), {"menuitem", "splitbutton"})
+        self.assertNotIn("button", instruction_control_intents("Click Settings menu option."))
+        self.assertEqual(instruction_control_intents("Click Settings list result."), {"listitem"})
+        self.assertEqual(instruction_control_intents("Click Settings list entry."), {"listitem"})
+        self.assertEqual(instruction_control_intents("Click Settings tree node."), {"treeitem"})
+        self.assertEqual(instruction_control_intents("Click Settings tab button."), {"tabitem"})
+
     def test_cart_action_aliases_expand_to_basket_language(self) -> None:
         from help_intents import tokenize_instruction, tokenize_control
 
@@ -13315,6 +13325,145 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "menu")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 150, 160, 32))
+
+    def test_item_wording_recovers_same_label_menu_list_tree_tab_and_item_targets(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "menu_option_launcher",
+                "Click Settings menu option.",
+                [
+                    ControlCandidate("launcher", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("item", "Settings", "menuitem", (20, 60, 180, 28)),
+                ],
+                "launcher",
+                "item",
+                (20, 20, 120, 32),
+                (20, 60, 180, 28),
+                True,
+            ),
+            (
+                "list_result_stale_menuitem",
+                "Click Settings list result.",
+                [
+                    ControlCandidate("stale", "Settings", "menuitem", (20, 20, 180, 28)),
+                    ControlCandidate("item", "Settings", "listitem", (20, 60, 180, 32)),
+                ],
+                "stale",
+                "item",
+                (20, 20, 180, 28),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "list_entry_launcher",
+                "Click Settings list entry.",
+                [
+                    ControlCandidate("launcher", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("item", "Settings", "listitem", (20, 60, 180, 32)),
+                ],
+                "launcher",
+                "item",
+                (20, 20, 120, 32),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "tree_node_launcher",
+                "Click Settings tree node.",
+                [
+                    ControlCandidate("launcher", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("node", "Settings", "treeitem", (20, 60, 180, 32)),
+                ],
+                "launcher",
+                "node",
+                (20, 20, 120, 32),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "tab_button_launcher",
+                "Click Settings tab button.",
+                [
+                    ControlCandidate("button", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("tab", "Settings", "tabitem", (20, 60, 180, 32)),
+                ],
+                "button",
+                "tab",
+                (20, 20, 120, 32),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "generic_item_container",
+                "Click Settings item.",
+                [
+                    ControlCandidate("pane", "Settings", "pane", (10, 10, 300, 300)),
+                    ControlCandidate("item", "Settings", "listitem", (20, 60, 180, 32)),
+                ],
+                "pane",
+                "item",
+                (10, 10, 300, 300),
+                (20, 60, 180, 32),
+                False,
+            ),
+        )
+
+        for name, instruction, candidates, wrong_id, expected_id, wrong_rect, expected_rect, expect_snap in cases:
+            with self.subTest(name=name):
+                wrong_target = resolve_candidate_target(
+                    target_id=wrong_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": wrong_id,
+                            "target": {
+                                "x": wrong_rect[0],
+                                "y": wrong_rect[1],
+                                "width": wrong_rect[2],
+                                "height": wrong_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, wrong_id)
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                for resolved in (text_target, help_target):
+                    self.assertEqual(resolved.target_id, expected_id)
+                    self.assertFalse(resolved.rejected_reason)
+                    self.assertEqual(resolved.rect, expected_rect)
+                if expect_snap:
+                    self.assertEqual(snap_target.target_id, expected_id)
+                    self.assertFalse(snap_target.rejected_reason)
+                    self.assertEqual(snap_target.rect, expected_rect)
+                else:
+                    self.assertTrue(
+                        snap_target is None
+                        or snap_target.target_id != wrong_id
+                        or bool(snap_target.rejected_reason)
+                    )
 
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate

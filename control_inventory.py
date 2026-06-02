@@ -2348,6 +2348,8 @@ def _text_match_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2613,6 +2615,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2846,6 +2850,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -4742,6 +4752,33 @@ def _explicit_pane_alternative_mismatch(
             continue
         pane_label_tokens = _field_alternative_label_tokens(other, candidates)
         if pane_label_tokens and candidate_label_tokens & pane_label_tokens:
+            return True
+    return False
+
+
+def _explicit_item_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"item", "items"}):
+        return False
+    item_control_types = ROW_CONTEXT_CONTROL_TYPES | {"menuitem", "tabitem"}
+    if candidate.control_type in item_control_types:
+        return False
+    if candidate.control_type not in (SURFACE_CONTEXT_CONTROL_TYPES | NON_ACTIONABLE_CONTROL_TYPES):
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in item_control_types:
+            continue
+        item_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if item_label_tokens and candidate_label_tokens & item_label_tokens:
             return True
     return False
 
@@ -8444,6 +8481,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -9488,6 +9527,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True
