@@ -155,6 +155,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "stale_open_file_target_id_recovers_to_exact_open",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 140, 32], "label": "Open file"},
+                {"rect": [10, 60, 100, 32], "label": "Open"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open.",
+                "target_id": "stale",
+                "target": {"x": 10, "y": 10, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Open file", "control_type": "button", "rect": [10, 10, 140, 32]},
+                {"id": "exact", "text": "Open", "control_type": "button", "rect": [10, 60, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [10, 60, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "stale_read_later_target_id_recovers_to_exact_read",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 140, 32], "label": "Read later"},
+                {"rect": [10, 60, 100, 32], "label": "Read"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Read.",
+                "target_id": "stale",
+                "target": {"x": 10, "y": 10, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Read later", "control_type": "button", "rect": [10, 10, 140, 32]},
+                {"id": "exact", "text": "Read", "control_type": "button", "rect": [10, 60, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [10, 60, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "close_notification_recovers_from_open_notification_target_id",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -175,6 +223,54 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "close_notification",
                 "rect": [320, 100, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "follow_project_recovers_from_unfollow_project_target_id",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 200, 32], "label": "Unfollow project"},
+                {"rect": [20, 140, 200, 32], "label": "Follow project"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Follow project",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 80, "width": 200, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Unfollow project", "control_type": "button", "rect": [20, 80, 200, 32]},
+                {"id": "exact", "text": "Follow project", "control_type": "button", "rect": [20, 140, 200, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [20, 140, 200, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "restore_file_recovers_from_delete_file_target_id",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 80, 200, 32], "label": "Delete file"},
+                {"rect": [20, 140, 200, 32], "label": "Restore file"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Restore file",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 80, "width": 200, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Delete file", "control_type": "button", "rect": [20, 80, 200, 32]},
+                {"id": "exact", "text": "Restore file", "control_type": "button", "rect": [20, 140, 200, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "rect": [20, 140, 200, 32],
                 "overlay_emitted": True,
             },
         },
@@ -729,6 +825,108 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "target",
                 "rect": [20, 90, 100, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "action_label_with_prepositional_context_resolves_duplicate_heading",
+            "capture": {"width": 520, "height": 240},
+            "draw": [
+                {"rect": [20, 20, 170, 32], "label": "Team settings"},
+                {"rect": [20, 90, 100, 32], "label": "Invite"},
+                {"rect": [250, 20, 190, 32], "label": "Account settings"},
+                {"rect": [250, 90, 100, 32], "label": "Invite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Invite in Team settings.",
+                "target_id": "team_settings",
+                "target": {"x": 20, "y": 20, "width": 170, "height": 32},
+            },
+            "candidates": [
+                {"id": "team_settings", "text": "Team settings", "control_type": "button", "rect": [20, 20, 170, 32]},
+                {"id": "team_invite", "text": "Invite", "control_type": "button", "rect": [20, 90, 100, 32]},
+                {"id": "acct_settings", "text": "Account settings", "control_type": "button", "rect": [250, 20, 190, 32]},
+                {"id": "acct_invite", "text": "Invite", "control_type": "button", "rect": [250, 90, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "team_invite",
+                "rect": [20, 90, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "action_label_for_clickable_row_label_resolves_duplicate_action",
+            "capture": {"width": 520, "height": 240},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Alice"},
+                {"rect": [240, 80, 80, 32], "label": "Open"},
+                {"rect": [20, 130, 120, 32], "label": "Bob"},
+                {"rect": [240, 130, 80, 32], "label": "Open"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open for Bob.",
+                "target_id": "bob_label",
+                "target": {"x": 20, "y": 130, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "alice_label", "text": "Alice", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "alice_open", "text": "Open", "control_type": "button", "rect": [240, 80, 80, 32]},
+                {"id": "bob_label", "text": "Bob", "control_type": "button", "rect": [20, 130, 120, 32]},
+                {"id": "bob_open", "text": "Open", "control_type": "button", "rect": [240, 130, 80, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bob_open",
+                "rect": [240, 130, 80, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_tab_role_recovers_from_same_label_listitem",
+            "capture": {"width": 500, "height": 240},
+            "draw": [
+                {"rect": [20, 20, 160, 32], "label": "Billing"},
+                {"rect": [20, 70, 160, 32], "label": "Billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Billing tab.",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 20, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Billing", "control_type": "listitem", "rect": [20, 20, 160, 32]},
+                {"id": "expected", "text": "Billing", "control_type": "tabitem", "rect": [20, 70, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "expected",
+                "rect": [20, 70, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "dropdown_option_rejects_combobox_launcher_only",
+            "capture": {"width": 500, "height": 240},
+            "draw": [
+                {"rect": [20, 20, 160, 32], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Canada dropdown option.",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 20, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Canada", "control_type": "combobox", "rect": [20, 20, 160, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "wrong",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
             },
         },
         {
@@ -8014,9 +8212,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "m", "text": "Edit", "control_type": "button", "rect": [560, 140, 60, 32]},
             ],
             "expected": {
-                "source": "candidate_snap",
-                "rejected_reason": "candidate snapshot no match",
-                "overlay_emitted": False,
+                "source": "text_match",
+                "target_id": "p",
+                "rect": [560, 60, 60, 32],
+                "overlay_emitted": True,
             },
         },
         {

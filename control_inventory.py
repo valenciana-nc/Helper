@@ -569,10 +569,15 @@ LOCK_ACTION_WORDS = frozenset({"lock", "unlock"})
 REVERSIBLE_ACTION_POLARITY_PAIRS = (
     (frozenset({"activate"}), frozenset({"deactivate"})),
     (frozenset({"archive"}), frozenset({"unarchive"})),
+    (frozenset({"block"}), frozenset({"unblock"})),
     (frozenset({"connect"}), frozenset({"disconnect"})),
+    (frozenset({"follow"}), frozenset({"unfollow"})),
+    (frozenset({"join"}), frozenset({"leave"})),
+    (frozenset({"like"}), frozenset({"unlike"})),
     (frozenset({"lock"}), frozenset({"unlock"})),
     (frozenset({"mute"}), frozenset({"unmute"})),
     (frozenset({"open"}), frozenset({"close"})),
+    (frozenset({"restore"}), frozenset({"bin", "delete", "remove", "trash", "wastebasket"})),
     (frozenset({"select"}), frozenset({"deselect"})),
     (frozenset({"start"}), frozenset({"stop"})),
     (frozenset({"subscribe"}), frozenset({"unsubscribe"})),
@@ -1819,6 +1824,15 @@ def resolve_candidate_target(
 
     runner_up = _first_distinct_ranked_candidate(ranked[1:], candidate)
     if runner_up is not None and best_score - runner_up[0] < TEXT_MATCH_GAP:
+        if _contextual_control_intent_text_match_ambiguous(
+            instruction=instruction,
+            instruction_tokens=instruction_tokens,
+            selected=candidate,
+            runner_up=runner_up[1],
+            candidates=candidates,
+            control_intents=control_intents,
+        ):
+            return None
         return TargetResolution(
             rect=candidate.rect,
             confidence=best_score,
@@ -1835,6 +1849,37 @@ def resolve_candidate_target(
         matched_text=candidate.descriptor,
         target_id=candidate.id,
     )
+
+
+def _contextual_control_intent_text_match_ambiguous(
+    *,
+    instruction: str,
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    runner_up: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str],
+) -> bool:
+    if not control_intents:
+        return False
+    for candidate in (selected, runner_up):
+        if not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
+            return False
+        if not _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        ):
+            return False
+    selected_tokens = _candidate_visible_text_tokens(selected)
+    runner_tokens = _candidate_visible_text_tokens(runner_up)
+    if instruction_tokens & (selected_tokens | runner_tokens):
+        return False
+    return True
 
 
 def snap_candidate_target(
@@ -1979,14 +2024,16 @@ def snap_candidate_target(
         )
     runner_up = _first_distinct_ranked_candidate(ranked[1:], candidate)
     if runner_up is not None and best_score - runner_up[0] < TEXT_MATCH_GAP:
-        return TargetResolution(
-            rect=candidate.rect,
-            confidence=best_score,
-            source="candidate_snap",
-            matched_text=candidate.descriptor,
-            target_id=candidate.id,
-            rejected_reason="ambiguous candidate snap",
-        )
+        min_rank = min(item.window_rank for _score, item in ranked)
+        if not (candidate.window_rank == min_rank and runner_up[1].window_rank > min_rank):
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=best_score,
+                source="candidate_snap",
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+                rejected_reason="ambiguous candidate snap",
+            )
     return TargetResolution(
         rect=candidate.rect,
         confidence=best_score,
@@ -2217,6 +2264,7 @@ def _text_match_score(
     control_intents = _instruction_control_intents(instruction)
     visible_tokens = _candidate_visible_text_tokens(candidate)
     literal_match_tokens = _literal_stopword_name_match_tokens(instruction, visible_tokens)
+    exact_visible_label_match = _exact_visible_label_matches_request(instruction, candidate)
     matches_dropdown_item = _dropdown_item_request_matches_candidate(
         instruction,
         candidate,
@@ -2228,11 +2276,24 @@ def _text_match_score(
         candidates,
     )
     matches_audio_mute_action = _audio_output_mute_action_match(instruction, candidate)
+    matches_site_information_action = _site_information_request_matches_candidate(
+        instruction,
+        candidate,
+    )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if model_rect is not None and _container_only_request_blocks_contained_candidate(
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+        candidate=candidate,
+        candidates=candidates,
+        model_rect=model_rect,
+    ):
         return 0.0
     matches_row_action = (
         _instruction_requests_contained_row_action(instruction)
@@ -2240,6 +2301,15 @@ def _text_match_score(
         and _contained_row_action_candidate_matches(candidate, instruction_tokens, instruction)
     )
     matches_named_contextual_duplicate = _candidate_satisfies_named_contextual_duplicate_request(
+        instruction,
+        candidate,
+        candidates,
+    )
+    matches_contextual_control_intent = bool(control_intents) and _candidate_matches_control_intent(
+        candidate,
+        control_intents,
+        instruction=instruction,
+    ) and _candidate_satisfies_contextual_duplicate_request(
         instruction,
         candidate,
         candidates,
@@ -2255,6 +2325,8 @@ def _text_match_score(
         and not matches_spinner_stepper_button
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
         and not literal_match_tokens
+        and not exact_visible_label_match
+        and not matches_site_information_action
         and not matches_dropdown_item
     ):
         return 0.0
@@ -2289,6 +2361,13 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
+    if matches_site_information_action:
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
     if _contains_tighter_row_action_candidate(
         selected=candidate,
         candidates=candidates,
@@ -2308,6 +2387,7 @@ def _text_match_score(
     if (
         not instruction_tokens
         and not literal_match_tokens
+        and not exact_visible_label_match
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
     ):
         return 0.0
@@ -2467,6 +2547,8 @@ def _text_match_score(
         candidates,
     ):
         return 0.0
+    if _state_action_object_only_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _object_only_action_context_mismatch(instruction, candidate):
         return 0.0
     if _action_object_alias_context_requested(
@@ -2505,6 +2587,23 @@ def _text_match_score(
         control_intents,
     ):
         return 0.0
+    if _ambiguous_exact_literal_alias_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ) or _exact_literal_alias_peer_alternative(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
@@ -2537,7 +2636,22 @@ def _text_match_score(
         control_intents=_instruction_control_intents(instruction),
     ):
         return 0.0
-    if _delimited_context_target_match(instruction, candidate):
+    if _has_visible_semantic_alternative(
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        selected=candidate,
+        candidates=candidates,
+        control_intents=control_intents,
+    ):
+        return 0.0
+    if exact_visible_label_match:
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
+    if _delimited_context_target_match(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR + 0.08
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
@@ -2549,6 +2663,13 @@ def _text_match_score(
     if not candidate_tokens:
         return 0.0
     if matches_named_contextual_duplicate:
+        score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
+    if matches_contextual_control_intent:
         score = TEXT_MATCH_FLOOR + 0.06
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
@@ -4571,6 +4692,8 @@ def _combobox_dropdown_arrow_match(
     candidates: list[ControlCandidate],
 ) -> bool:
     raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & {"choice", "choices", "option", "options"}:
+        return False
     if not (
         raw_tokens & COMBOBOX_DROPDOWN_ARROW_REQUEST_WORDS
         or {"drop", "down"} <= raw_tokens
@@ -4632,6 +4755,8 @@ def _named_dropdown_request_matches_candidate(
 ) -> bool:
     if candidate.control_type != "combobox":
         return False
+    if _tokens_from_text(instruction) & {"choice", "choices", "option", "options"}:
+        return False
     if _dropdown_item_request_tokens(instruction):
         return False
     if _tokens_from_text(instruction) & {"arrow", "caret", "chevron"}:
@@ -4651,6 +4776,8 @@ def _named_dropdown_alternative_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     if candidate.control_type != "combobox":
+        return False
+    if _tokens_from_text(instruction) & {"choice", "choices", "option", "options"}:
         return False
     if _dropdown_item_request_tokens(instruction):
         return False
@@ -5278,11 +5405,78 @@ def _explicit_subtype_alternative_mismatch(
     candidates: list[ControlCandidate],
 ) -> bool:
     return (
-        _explicit_plain_button_subtype_alternative_mismatch(instruction, candidate, candidates)
+        _explicit_role_control_type_mismatch(instruction, candidate, candidates)
+        or _explicit_dropdown_option_role_mismatch(instruction, candidate, candidates)
+        or _explicit_plain_button_subtype_alternative_mismatch(instruction, candidate, candidates)
         or _explicit_plain_field_subtype_alternative_mismatch(instruction, candidate, candidates)
         or _explicit_bare_option_role_alternative_mismatch(instruction, candidate, candidates)
         or _explicit_cell_subtype_alternative_mismatch(instruction, candidate, candidates)
     )
+
+
+def _explicit_role_control_type_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_types = _explicit_strict_role_control_types(instruction)
+    if not requested_types:
+        return False
+    if candidate.control_type in requested_types:
+        return False
+    if _app_local_row_item_matches_exact_text_intent(instruction, candidate, requested_types):
+        return False
+    if _exact_visible_label_matches_request(instruction, candidate):
+        return False
+    candidate_tokens = _subtype_alternative_label_tokens(candidate, candidates)
+    if _same_label_candidate_has_type(candidate, candidates, requested_types):
+        return True
+    return bool(candidate_tokens and candidate_tokens & _object_token_variants(_tokens_from_text(instruction)))
+
+
+def _explicit_strict_role_control_types(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    requested: set[str] = set()
+    if (
+        raw_tokens & {"tab", "tabs", "tabitem"}
+        and not _tab_context_tokens(instruction)
+        and not raw_tokens & {"bookmark", "close", "dismiss", "favorite", "new", "search", "star"}
+    ):
+        requested.add("tabitem")
+    if raw_tokens & {"checkbox", "toggle"} or {"check", "box"} <= raw_tokens:
+        requested.add("checkbox")
+    if "slider" in raw_tokens:
+        requested.add("slider")
+    if raw_tokens & {"hyperlink", "link"} and not raw_tokens & {
+        "copy",
+        "external",
+        "new",
+        "share",
+        "tab",
+        "window",
+    }:
+        requested.add("hyperlink")
+    return requested
+
+
+def _explicit_dropdown_option_role_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    dropdown_requested = "dropdown" in raw_tokens or {"drop", "down"} <= raw_tokens
+    option_requested = bool(raw_tokens & {"choice", "choices", "option", "options"})
+    if not (dropdown_requested and option_requested):
+        return False
+    candidate_tokens = _subtype_alternative_label_tokens(candidate, candidates)
+    if not candidate_tokens:
+        return False
+    if candidate.control_type in {"button", "combobox", "splitbutton"}:
+        return bool(candidate_tokens & _object_token_variants(raw_tokens))
+    if candidate.control_type != "menuitem":
+        return _same_label_candidate_has_type(candidate, candidates, {"menuitem"})
+    return False
 
 
 def _explicit_plain_button_subtype_alternative_mismatch(
@@ -5661,6 +5855,24 @@ def _site_information_action_mismatch(
     if instruction_tokens & SITE_INFORMATION_REQUEST_WORDS:
         return False
     return bool(instruction_tokens & {"site", "view"})
+
+
+def _site_information_request_matches_candidate(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not ("site" in raw_tokens and raw_tokens & {"info", "information"}):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    if (
+        candidate_tokens & {"lock", "locked", "padlock", "unlock"}
+        and _instruction_requests_local_app_content_surface(instruction, raw_tokens)
+    ):
+        return False
+    if "site_info_lock" in candidate_tokens:
+        return True
+    return bool("site" in candidate_tokens and candidate_tokens & {"info", "information"})
 
 
 def _looks_like_site_information_button(candidate: ControlCandidate) -> bool:
@@ -6297,6 +6509,8 @@ def _explicit_action_context_mismatch_without_contextual_evidence(
 ) -> bool:
     if not _explicit_action_context_mismatch(instruction, candidate):
         return False
+    if _same_action_family_object_mismatch(instruction, candidate.text):
+        return True
     return not _candidate_satisfies_contextual_duplicate_request(
         instruction,
         candidate,
@@ -6691,6 +6905,11 @@ def _object_only_action_context_mismatch(
     if (
         _clipboard_text_entry_target_request(instruction)
         and candidate.control_type in {"combobox", "edit", "spinner"}
+    ):
+        return False
+    if candidate.control_type == "checkbox" and (
+        instruction_raw_tokens & {"checkbox", "switch", "toggle"}
+        or {"check", "box"} <= instruction_raw_tokens
     ):
         return False
     candidate_raw_tokens = _tokens_from_text(candidate.descriptor)
@@ -7119,7 +7338,12 @@ def _contained_row_context_objects(
         and item.descriptor
         and _row_action_context_rect_matches(item, candidate)
     ]
-    containers.sort(key=lambda item: item.rect[2] * item.rect[3])
+    containers.sort(
+        key=lambda item: (
+            0 if _contains_rect(_expand_rect(item.rect, 2), candidate.rect) else 1,
+            item.rect[2] * item.rect[3],
+        )
+    )
     for container in containers:
         container_tokens = (
             _candidate_semantic_tokens(container)
@@ -7258,7 +7482,7 @@ def _row_action_context_rect_matches(
     action_left = action_x
     action_right = action_x + action_width
     horizontal_gap = max(row_left - action_right, action_left - row_right, 0)
-    max_gap = max(24, min(220, max(row_height * 5, row_width * 0.25)))
+    max_gap = max(24, min(360, max(row_height * 6, row_width * 0.50)))
     return horizontal_gap <= max_gap
 
 
@@ -7560,7 +7784,7 @@ def _prepositional_context_only_target_alternative_mismatch(
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
-        if control_intents is not None and not _candidate_matches_control_intent(
+        if control_intents and not _candidate_matches_control_intent(
             other,
             control_intents,
             instruction=instruction,
@@ -7609,18 +7833,34 @@ def _delimited_context_only_target_alternative_mismatch(
     return False
 
 
-def _delimited_context_target_match(instruction: str, candidate: ControlCandidate) -> bool:
-    target_tokens, _context_tokens = _delimited_context_action_tokens(instruction)
+def _delimited_context_target_match(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    target_tokens, context_tokens = _delimited_context_action_tokens(instruction)
     if not target_tokens:
         return False
     candidate_tokens = _object_token_variants(
         _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
     )
-    return bool(candidate_tokens & target_tokens)
+    if not (candidate_tokens & target_tokens):
+        return False
+    if context_tokens:
+        return _prepositional_context_tokens_match_candidate(
+            context_tokens,
+            candidate,
+            candidates,
+        )
+    return True
 
 
 def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
-    parts = re.split(r"\s+(?:-|:|\u2013|\u2014)\s+", instruction or "", maxsplit=1)
+    parts = re.split(
+        r"\s*[:\u2013\u2014]\s*|\s+-\s+|(?<=[A-Za-z0-9])-(?=[A-Z][A-Za-z0-9]*\s)",
+        instruction or "",
+        maxsplit=1,
+    )
     if len(parts) != 2:
         return set(), set()
     target_words = _literal_word_sequence(parts[0])
@@ -7667,7 +7907,7 @@ def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], se
     if not words:
         return set(), set()
     for index, word in enumerate(words):
-        if word not in {"in", "inside", "on", "within"}:
+        if word not in {"for", "in", "inside", "on", "within"}:
             continue
         target_words = list(words[:index])
         context_words = list(words[index + 1 :])
@@ -7995,10 +8235,15 @@ def _contextual_duplicate_evidence_tokens(
             continue
         if not context.descriptor:
             continue
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+            context,
+        ):
+            continue
         if not (
             _contains_rect(_expand_rect(context.rect, 4), candidate.rect)
             or _row_action_context_rect_matches(context, candidate)
             or _nearby_row_label_rect_matches(context, candidate)
+            or _nearby_context_label_rect_matches(context, candidate)
         ):
             continue
         tokens.update(_candidate_semantic_tokens(context))
@@ -8125,14 +8370,44 @@ def _contextual_duplicate_nearby_label_tokens(
         return set()
     tokens: set[str] = set()
     for label in candidates:
-        if label.id == candidate.id or label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
+        if label.id == candidate.id:
             continue
-        if not _nearby_row_label_rect_matches(label, candidate):
+        if label.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+            label,
+        ):
+            continue
+        if label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES and not (
+            label.control_type in CLICKABLE_CONTROL_TYPES
+            and _nearby_context_label_rect_matches(label, candidate)
+        ):
+            continue
+        if not (
+            _nearby_row_label_rect_matches(label, candidate)
+            or _nearby_context_label_rect_matches(label, candidate)
+        ):
             continue
         tokens.update(_candidate_semantic_tokens(label))
         tokens.update(_tokens_from_text(label.descriptor))
         tokens.update(_tokenize_control(label.window_title))
     return tokens
+
+
+def _clickable_context_label_candidate(candidate: ControlCandidate) -> bool:
+    tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    action_tokens = (
+        set().union(*EXCLUSIVE_ACTION_FAMILIES)
+        | REVERSIBLE_ACTION_POLARITY_WORDS
+        | OPEN_VIEW_REQUEST_WORDS
+        | CONFIRM_CANCEL_ACTION_WORDS
+        | ADD_ACTION_WORDS
+        | REMOVE_ACTION_WORDS
+        | PAY_ACTION_WORDS
+        | TASKBAR_PIN_ACTION_WORDS
+        | SEARCH_ACTION_WORDS
+        | BROWSER_SIGN_IN_ACTION_WORDS
+        | BROWSER_SIGN_OUT_ACTION_WORDS
+    )
+    return not bool(tokens & action_tokens)
 
 
 def _nearby_row_label_rect_matches(
@@ -8160,6 +8435,38 @@ def _nearby_row_label_rect_matches(
     horizontal_gap = max(action_x - label_right, label_x - action_right, 0)
     max_gap = max(48, min(220, max(label_height, action_height) * 6))
     return horizontal_gap <= max_gap
+
+
+def _nearby_context_label_rect_matches(
+    label: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if _same_visual_candidate(label, action):
+        return False
+    if _nearby_row_label_rect_matches(label, action):
+        return True
+    label_x, label_y, label_width, label_height = label.rect
+    action_x, action_y, action_width, action_height = action.rect
+    if min(label_width, label_height, action_width, action_height) <= 0:
+        return False
+    label_bottom = label_y + label_height
+    if label_bottom > action_y:
+        return False
+    vertical_gap = action_y - label_bottom
+    if vertical_gap > max(72, action_height * 2.5):
+        return False
+    label_right = label_x + label_width
+    action_right = action_x + action_width
+    horizontal_overlap = min(label_right, action_right) - max(label_x, action_x)
+    min_width = min(label_width, action_width)
+    left_aligned = abs(label_x - action_x) <= max(16, min_width * 0.30)
+    center_aligned = abs((label_x + label_right) / 2 - (action_x + action_right) / 2) <= max(
+        24,
+        min_width * 0.45,
+    )
+    return horizontal_overlap >= min_width * 0.30 or left_aligned or center_aligned
 
 
 def _contextual_duplicate_position_tokens(
@@ -8472,7 +8779,7 @@ def _exact_visible_label_alternative_mismatch(
     candidates: list[ControlCandidate],
     control_intents: set[str] | None = None,
 ) -> bool:
-    if candidate.control_type not in {"button", "hyperlink", "menuitem", "splitbutton"}:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     requested_words = _exact_visible_label_request_words(instruction)
     if not requested_words:
@@ -8498,8 +8805,21 @@ def _exact_visible_label_alternative_mismatch(
     return False
 
 
+def _exact_visible_label_matches_request(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    requested_words = _exact_visible_label_request_words(instruction)
+    if not requested_words:
+        return False
+    return _literal_words_from_text(candidate.text) == requested_words
+
+
 def _exact_visible_label_request_words(instruction: str) -> set[str]:
-    return _literal_words_from_text(instruction) - (
+    words = _literal_words_from_text(instruction)
+    requested_words = words - (
         OPEN_VIEW_REQUEST_WORDS
         | (GENERIC_OBJECT_REQUEST_WORDS - frozenset({"find", "go", "search"}))
         | frozenset(
@@ -8525,6 +8845,46 @@ def _exact_visible_label_request_words(instruction: str) -> set[str]:
             }
         )
     )
+    if requested_words:
+        return requested_words
+    return _single_word_visible_action_label(instruction)
+
+
+def _single_word_visible_action_label(instruction: str) -> set[str]:
+    words = [
+        word
+        for word in _literal_word_sequence(instruction)
+        if word
+        not in {
+            "a",
+            "an",
+            "at",
+            "button",
+            "control",
+            "hyperlink",
+            "icon",
+            "link",
+            "menu",
+            "menuitem",
+            "the",
+            "this",
+            "that",
+        }
+    ]
+    while words and words[0] in {
+        "choose",
+        "click",
+        "focus",
+        "hit",
+        "press",
+        "select",
+        "tap",
+        "use",
+    }:
+        words.pop(0)
+    if len(words) == 1 and words[0] in OPEN_VIEW_REQUEST_WORDS:
+        return {words[0]}
+    return set()
 
 
 def _ambiguous_exact_action_alias_alternative(
@@ -8600,6 +8960,37 @@ def _ambiguous_exact_literal_alias_alternative(
                 continue
             if _literal_words_from_text(other.descriptor) & exact_words:
                 return True
+    return False
+
+
+def _exact_literal_alias_peer_alternative(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    candidate_words = _literal_words_from_text(candidate.descriptor)
+    if not instruction_words or not candidate_words:
+        return False
+    if not (instruction_words & candidate_words):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        if _ambiguous_exact_literal_alias_alternative(
+            instruction,
+            other,
+            candidates,
+            control_intents,
+        ):
+            return True
     return False
 
 
@@ -8793,6 +9184,8 @@ def _state_label_action_mismatch(
         return False
 
     instruction_tokens = _literal_words_from_text(instruction)
+    if control_tokens == _exact_visible_label_request_words(instruction):
+        return False
     if _state_label_is_target_identity(instruction_tokens, control_tokens):
         return False
 
@@ -8803,6 +9196,78 @@ def _state_label_action_mismatch(
     for action_words, state_words in STATE_LABEL_ACTION_GROUPS:
         if instruction_tokens & action_words and control_tokens & state_words:
             return True
+    return False
+
+
+def _state_action_object_only_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if _literal_words_from_text(candidate.text) == _exact_visible_label_request_words(instruction):
+        return False
+    if candidate.control_type == "checkbox" and (
+        raw_tokens & {"checkbox", "switch", "toggle"} or {"check", "box"} <= raw_tokens
+    ):
+        return False
+    candidate_tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    turn_kind = _turn_on_off_action_kind(instruction)
+    if turn_kind and candidate.control_type == "checkbox":
+        if _turn_on_off_action_kind(candidate.descriptor):
+            return False
+        instruction_objects = _object_token_variants(
+            _action_object_tokens(
+                raw_tokens,
+                frozenset({"off", "on", "turn"}),
+                ACTION_OBJECT_STOPWORDS,
+            )
+        )
+        if instruction_objects and _object_token_variants(candidate_tokens) & instruction_objects:
+            for other in candidates:
+                if other.id == candidate.id or _same_visual_candidate(other, candidate):
+                    continue
+                if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+                    continue
+                if _turn_on_off_action_kind(other.descriptor) != turn_kind:
+                    continue
+                other_tokens = _candidate_semantic_tokens(other) | _tokens_from_text(
+                    other.descriptor
+                )
+                other_objects = _object_token_variants(
+                    _action_object_tokens(
+                        other_tokens,
+                        frozenset({"off", "on", "turn"}),
+                        ACTION_OBJECT_STOPWORDS,
+                    )
+                )
+                if other_objects & instruction_objects:
+                    return True
+    for action_words, _state_words in STATE_LABEL_ACTION_GROUPS:
+        requested_actions = raw_tokens & action_words
+        if not requested_actions:
+            continue
+        if candidate_tokens & action_words:
+            return False
+        instruction_objects = _object_token_variants(
+            _action_object_tokens(raw_tokens, action_words, ACTION_OBJECT_STOPWORDS)
+        )
+        if not instruction_objects:
+            continue
+        candidate_objects = _object_token_variants(candidate_tokens) & instruction_objects
+        if not candidate_objects:
+            continue
+        for other in candidates:
+            if other.id == candidate.id or _same_visual_candidate(other, candidate):
+                continue
+            if other.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+                continue
+            other_tokens = _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+            if not (other_tokens & requested_actions):
+                continue
+            other_objects = _object_token_variants(other_tokens) & instruction_objects
+            if other_objects:
+                return True
     return False
 
 
@@ -9459,7 +9924,7 @@ def _has_semantic_alternative(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if not _candidate_matches_control_intent(
+        if control_intents and not _candidate_matches_control_intent(
             candidate,
             control_intents,
             instruction=instruction,
@@ -9582,6 +10047,14 @@ def _has_visible_semantic_alternative(
     control_intents: set[str],
 ) -> bool:
     if not instruction_tokens or _candidate_visible_text_tokens(selected):
+        return False
+    if _row_scoped_action_target_matches_context(instruction, selected, candidates):
+        return False
+    if _candidate_satisfies_named_contextual_duplicate_request(
+        instruction,
+        selected,
+        candidates,
+    ):
         return False
     for candidate in candidates:
         if candidate.id == selected.id:
@@ -9716,6 +10189,7 @@ def _candidate_snap_score(
         candidate,
         candidates,
     )
+    exact_visible_label_match = _exact_visible_label_matches_request(instruction, candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
@@ -9970,6 +10444,22 @@ def _candidate_snap_score(
         return 0.0
     if _combobox_dropdown_arrow_match(instruction, candidate, candidates):
         return min(1.0, 0.45 * iou + 0.30 * proximity + 0.20)
+    if exact_visible_label_match and _contains_tighter_same_intent_action(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+    ):
+        return CONTAINING_ROW_SNAP_CAP
+    if exact_visible_label_match:
+        return min(
+            1.0,
+            max(
+                CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP,
+                0.45 * iou + 0.30 * proximity + 0.20,
+            ),
+        )
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if (
