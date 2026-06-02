@@ -31548,6 +31548,26 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, (120, 160, 180, 44))
         self.assertEqual(target.rejected_reason, "candidate evidence missing")
 
+    def test_weak_fresh_snap_does_not_return_non_weak_best_result(self) -> None:
+        from rect_snap import snap_to_control
+
+        model_rect = (100, 100, 100, 40)
+        weak = _make_button("", 145, 115, 20, 16)
+        off_target = _make_button("Submit", 20, 100, 80, 40)
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 1000, 1000, [off_target, weak])])
+
+        result = snap_to_control(
+            model_rect,
+            "Click Submit invoice payment approval form.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "candidate evidence missing")
+        self.assertEqual(result.rect, (145, 115, 20, 16))
+        self.assertNotEqual(result.rect, (20, 100, 80, 40))
+
     def test_multiple_weak_fresh_snap_candidates_do_not_fall_back_to_raw_model_rect(self) -> None:
         from help_session import resolve_help_target
         from rect_snap import snap_to_control

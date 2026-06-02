@@ -1276,16 +1276,17 @@ def snap_to_control(
             confidence_floor=confidence_floor,
         )
         if weak_model_candidates:
+            weak_score, weak_result = max(weak_model_candidates, key=lambda item: item[0])
             reason = (
                 "fresh snap ambiguous"
                 if len(weak_model_candidates) > 1
                 else "candidate evidence missing"
             )
             return SnapResult(
-                rect=best_result.rect,
-                confidence=best_score,
+                rect=weak_result.rect,
+                confidence=weak_score,
                 source="uia",
-                matched_text=best_result.matched_text,
+                matched_text=weak_result.matched_text,
                 rejected_reason=reason,
             )
         log.debug(
@@ -1312,14 +1313,14 @@ def _weak_model_fallback_candidates(
     model_rect: tuple[int, int, int, int],
     *,
     confidence_floor: float,
-) -> list[SnapResult]:
-    weak: list[SnapResult] = []
+) -> list[tuple[float, SnapResult]]:
+    weak: list[tuple[float, SnapResult]] = []
     for score, result, _semantic_text, _ctype, _window_rank in ranked:
         if score >= confidence_floor:
             continue
         if not _semantic_mismatch_targets_model_rect(result.rect, model_rect):
             continue
-        weak.append(result)
+        weak.append((score, result))
     return weak
 
 
