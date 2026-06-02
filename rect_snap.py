@@ -405,6 +405,14 @@ EXCLUSIVE_ACTION_FAMILIES = (
     frozenset({"share"}),
     frozenset({"sort"}),
 )
+PIN_ACTION_WORDS = frozenset({"pin", "pushpin", "thumbtack", "unpin"})
+SAME_ACTION_OBJECT_FAMILIES = EXCLUSIVE_ACTION_FAMILIES + (
+    PIN_ACTION_WORDS,
+    GENERIC_VISIBILITY_ACTION_WORDS,
+    SEARCH_ACTION_WORDS,
+    frozenset({"clear", "reset"}),
+    frozenset({"overlap", "restore"}),
+)
 OPEN_VIEW_CANDIDATE_ACTION_FAMILIES = (
     CONFIRM_ACTION_WORDS,
     CANCEL_ACTION_WORDS,
@@ -2916,7 +2924,7 @@ def _same_action_family_object_mismatch(instruction: str, candidate_text: str) -
     control_raw_tokens = _tokens_from_text(candidate_text)
     if not instruction_raw_tokens or not control_raw_tokens:
         return False
-    for family in EXCLUSIVE_ACTION_FAMILIES:
+    for family in SAME_ACTION_OBJECT_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
@@ -2956,7 +2964,7 @@ def _same_action_family_window_context_mismatch(
     ) & WINDOW_CONTEXT_OBJECT_WORDS
     if not context_objects:
         return False
-    for family in EXCLUSIVE_ACTION_FAMILIES:
+    for family in SAME_ACTION_OBJECT_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
