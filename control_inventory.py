@@ -1211,6 +1211,14 @@ SURFACE_CONTEXT_TYPE_WORDS = {
     "toolbar": frozenset({"toolbar"}),
     "window": frozenset({"window"}),
 }
+DIRECT_SURFACE_CONTAINER_ALIASES = {
+    "group": frozenset({"group"}),
+    "headeritem": frozenset({"column", "header", "heading"}),
+    "menu": frozenset({"menu"}),
+    "pane": frozenset({"drawer", "nav", "navigation", "pane", "panel", "section", "sidebar"}),
+    "toolbar": frozenset({"toolbar"}),
+    "window": frozenset({"window"}),
+}
 UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS = frozenset(
     {
         "alert",
@@ -2380,7 +2388,11 @@ def _text_match_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_surface_container_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_generic_item_control_type_mismatch(instruction, candidate):
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2402,6 +2414,13 @@ def _text_match_score(
         return 0.0
     if matches_named_contextual_duplicate:
         score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
+    if _candidate_satisfies_tab_context_action_request(instruction, candidate, candidates):
+        score = TEXT_MATCH_FLOOR + 0.04
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
@@ -2658,7 +2677,11 @@ def _context_text_match_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_surface_container_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_generic_item_control_type_mismatch(instruction, candidate):
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -2910,7 +2933,19 @@ def _target_id_plausibility(
             text_score,
             "target_id control type mismatch",
         )
+    if _explicit_surface_container_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
     if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_generic_item_control_type_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -4845,6 +4880,48 @@ def _explicit_item_alternative_mismatch(
         if item_label_tokens and candidate_label_tokens & item_label_tokens:
             return True
     return False
+
+
+def _explicit_generic_item_control_type_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"item", "items"}):
+        return False
+    if _literal_stopword_name_request_tokens(instruction) & {"item", "items"}:
+        return False
+    if raw_tokens & {"for", "from", "in", "inside", "on", "within", "with"}:
+        return False
+    action_words = (
+        set().union(*EXCLUSIVE_ACTION_FAMILIES)
+        | ADD_ACTION_WORDS
+        | CONFIRM_CANCEL_ACTION_WORDS
+        | TASKBAR_PIN_ACTION_WORDS
+        | BROWSER_BOOKMARK_ACTION_WORDS
+        | UNNAMED_BOOKMARK_ACTION_WORDS
+        | OPEN_VIEW_REQUEST_WORDS
+        | {"launch"}
+    )
+    if raw_tokens & action_words:
+        return False
+    if raw_tokens & {
+        "data",
+        "drawer",
+        "grid",
+        "list",
+        "menu",
+        "nav",
+        "navigation",
+        "option",
+        "sidebar",
+        "tab",
+        "table",
+        "tree",
+    }:
+        return False
+    item_control_types = ROW_CONTEXT_CONTROL_TYPES | {"menuitem", "tabitem"}
+    return candidate.control_type not in item_control_types
 
 
 def _cell_target_request_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
@@ -8357,6 +8434,23 @@ def _tab_context_candidate_matches_context(
     )
 
 
+def _candidate_satisfies_tab_context_action_request(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    context_tokens = _tab_context_tokens(instruction)
+    if not context_tokens:
+        return False
+    action_tokens = _tab_context_action_tokens(instruction, context_tokens)
+    if not action_tokens:
+        return False
+    return _tab_context_action_candidate_matches(
+        candidate,
+        action_tokens,
+    ) and _tab_context_candidate_matches_context(candidate, context_tokens, candidates)
+
+
 def _instruction_mentions_tab_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:tab|tabs|tabitem)\b", (instruction or "").lower()))
 
@@ -8706,7 +8800,11 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_surface_container_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_generic_item_control_type_mismatch(instruction, candidate):
         return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -9014,6 +9112,8 @@ def _contains_tighter_same_intent_action(
         control_intents,
         selected.control_type,
     ):
+        return False
+    if _direct_surface_container_candidate_matches_request(instruction, selected, candidates):
         return False
     selected_area = selected.rect[2] * selected.rect[3]
     for candidate in candidates:
@@ -9364,6 +9464,109 @@ def _explicit_surface_container_target_request(
     requested_tokens = _object_token_variants(raw_tokens)
     surface_tokens = _object_token_variants(_surface_context_type_tokens(selected_control_type))
     return bool(requested_tokens & surface_tokens)
+
+
+def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str], set[str]]:
+    text = (instruction or "").strip().lower()
+    text = re.sub(r"[.!?]+$", "", text).strip()
+    match = re.match(
+        r"^(?:click|focus|highlight|open|press|select|show|tap)\s+(?:the\s+)?(.+?)$",
+        text,
+    )
+    if not match:
+        return set(), set()
+    requested_object = match.group(1).strip()
+    if re.search(r"\b(?:for|from|in|inside|on|within|with)\b", requested_object):
+        return set(), set()
+    surface_phrases: tuple[tuple[str, set[str]], ...] = (
+        ("column header", {"column", "header"}),
+        ("column heading", {"column", "heading"}),
+        ("column", {"column"}),
+        ("side bar", {"sidebar"}),
+        ("sidebar", {"sidebar"}),
+        ("section", {"section"}),
+        ("drawer", {"drawer"}),
+        ("panel", {"panel"}),
+        ("pane", {"pane"}),
+        ("group", {"group"}),
+        ("toolbar", {"toolbar"}),
+        ("menu", {"menu"}),
+        ("window", {"window"}),
+        ("header", {"header"}),
+        ("heading", {"heading"}),
+    )
+    for phrase, surface_tokens in surface_phrases:
+        if requested_object == phrase:
+            return _object_token_variants(surface_tokens), set()
+        suffix = f" {phrase}"
+        if not requested_object.endswith(suffix):
+            continue
+        label = requested_object[: -len(suffix)].strip()
+        label_tokens = _object_token_variants(
+            _tokens_from_text(label) - ACTION_OBJECT_STOPWORDS - {"the"}
+        )
+        return _object_token_variants(surface_tokens), label_tokens
+    return set(), set()
+
+
+def _direct_surface_container_type_tokens(control_type: str) -> set[str]:
+    return _object_token_variants(DIRECT_SURFACE_CONTAINER_ALIASES.get(control_type, frozenset()))
+
+
+def _direct_surface_container_candidate_matches_request(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+        return False
+    requested_surface, label_tokens = _direct_surface_container_request_parts(instruction)
+    if not requested_surface:
+        return False
+    candidate_surface_tokens = _direct_surface_container_type_tokens(candidate.control_type)
+    candidate_surface_tokens |= _object_token_variants(
+        _tokens_from_text(candidate.descriptor)
+    ) & requested_surface
+    if not (requested_surface & candidate_surface_tokens):
+        return False
+    if not label_tokens:
+        return True
+    candidate_tokens = _field_alternative_label_tokens(candidate, candidates)
+    candidate_tokens |= _tokens_from_text(candidate.descriptor)
+    candidate_tokens = _object_token_variants(candidate_tokens)
+    return bool(label_tokens & candidate_tokens)
+
+
+def _explicit_surface_container_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested_surface, label_tokens = _direct_surface_container_request_parts(instruction)
+    if not requested_surface:
+        return False
+    if _direct_surface_container_candidate_matches_request(instruction, candidate, candidates):
+        return False
+    candidate_tokens = _field_alternative_label_tokens(candidate, candidates)
+    candidate_tokens |= _tokens_from_text(candidate.descriptor)
+    candidate_tokens = _object_token_variants(candidate_tokens)
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if not _direct_surface_container_candidate_matches_request(instruction, other, candidates):
+            continue
+        other_tokens = _field_alternative_label_tokens(other, candidates)
+        other_tokens |= _tokens_from_text(other.descriptor)
+        other_tokens = _object_token_variants(other_tokens)
+        if label_tokens and not (label_tokens & other_tokens):
+            continue
+        if label_tokens and not (label_tokens & candidate_tokens):
+            continue
+        if candidate_tokens & other_tokens:
+            return True
+        if _contains_rect(_expand_rect(other.rect, 4), candidate.rect):
+            return True
+    return False
 
 
 def _single_contained_control_intent_candidate(
@@ -9766,7 +9969,11 @@ def _candidate_snap_semantic_mismatch(
         return True
     if _explicit_pane_alternative_mismatch(instruction, candidate, candidates):
         return True
+    if _explicit_surface_container_alternative_mismatch(instruction, candidate, candidates):
+        return True
     if _explicit_item_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_generic_item_control_type_mismatch(instruction, candidate):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True

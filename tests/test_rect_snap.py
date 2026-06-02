@@ -507,7 +507,10 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertNotIn("button", instruction_control_intents("Click Settings menu option."))
         self.assertEqual(instruction_control_intents("Click Settings list result."), {"listitem"})
         self.assertEqual(instruction_control_intents("Click Settings list entry."), {"listitem"})
+        self.assertEqual(instruction_control_intents("Click Settings result."), {"listitem"})
+        self.assertEqual(instruction_control_intents("Click Settings entry."), {"listitem"})
         self.assertEqual(instruction_control_intents("Click Settings tree node."), {"treeitem"})
+        self.assertEqual(instruction_control_intents("Click Settings node."), {"treeitem"})
         self.assertEqual(instruction_control_intents("Click Settings data item."), {"dataitem"})
         self.assertEqual(instruction_control_intents("Click Settings grid item."), {"dataitem"})
         self.assertEqual(
@@ -13468,6 +13471,19 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 True,
             ),
             (
+                "result_stale_menuitem",
+                "Click Settings result.",
+                [
+                    ControlCandidate("stale", "Settings", "menuitem", (20, 20, 180, 28)),
+                    ControlCandidate("item", "Settings", "listitem", (20, 60, 180, 32)),
+                ],
+                "stale",
+                "item",
+                (20, 20, 180, 28),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
                 "list_entry_launcher",
                 "Click Settings list entry.",
                 [
@@ -13481,8 +13497,34 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 True,
             ),
             (
+                "entry_stale_menuitem",
+                "Click Settings entry.",
+                [
+                    ControlCandidate("stale", "Settings", "menuitem", (20, 20, 180, 28)),
+                    ControlCandidate("item", "Settings", "listitem", (20, 60, 180, 32)),
+                ],
+                "stale",
+                "item",
+                (20, 20, 180, 28),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
                 "tree_node_launcher",
                 "Click Settings tree node.",
+                [
+                    ControlCandidate("launcher", "Settings", "button", (20, 20, 120, 32)),
+                    ControlCandidate("node", "Settings", "treeitem", (20, 60, 180, 32)),
+                ],
+                "launcher",
+                "node",
+                (20, 20, 120, 32),
+                (20, 60, 180, 32),
+                True,
+            ),
+            (
+                "node_launcher",
+                "Click Settings node.",
                 [
                     ControlCandidate("launcher", "Settings", "button", (20, 20, 120, 32)),
                     ControlCandidate("node", "Settings", "treeitem", (20, 60, 180, 32)),
@@ -13600,6 +13642,108 @@ class HelpTargetHarnessTests(unittest.TestCase):
                         or snap_target.target_id != wrong_id
                         or bool(snap_target.rejected_reason)
                     )
+
+    def test_generic_item_wording_without_item_candidate_rejects_surface(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("button", "Settings", "button", (20, 20, 120, 32)),
+            ControlCandidate("pane", "Settings", "pane", (300, 10, 300, 300)),
+        ]
+        instruction = "Click Settings item."
+
+        wrong_target = resolve_candidate_target(
+            target_id="pane",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 10, 300, 300),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 10, 300, 300),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(300, 10, 300, 300),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "pane",
+                    "target": {"x": 300, "y": 10, "width": 300, "height": 300},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "pane")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "pane")
+        self.assertEqual(help_target.rejected_reason, "target_id control type mismatch")
+
+    def test_tab_context_action_recovers_from_wrong_tab_target(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("run", "Run", "button", (300, 100, 80, 30), window_title="Settings"),
+            ControlCandidate("settings_tab", "Settings", "tabitem", (20, 20, 120, 32)),
+        ]
+        cases = (
+            "Click Run in the Settings tab.",
+            "Click the Run button in the Settings tab.",
+        )
+
+        for instruction in cases:
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="settings_tab",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 20, 120, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 20, 120, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 20, 120, 32),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "settings_tab",
+                            "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "settings_tab")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(text_target.target_id, "run")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "run")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (300, 100, 80, 30))
 
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
@@ -21155,6 +21299,123 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "account_menu")
         self.assertEqual(target.rejected_reason, "target_id control type mismatch")
+
+    def test_explicit_surface_target_requests_recover_container_not_child(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "sidebar",
+                "Click the Settings sidebar.",
+                [
+                    ControlCandidate("container", "Settings sidebar", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Settings", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "section",
+                "Click the Settings section.",
+                [
+                    ControlCandidate("container", "Settings section", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Settings", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "drawer",
+                "Click the Settings drawer.",
+                [
+                    ControlCandidate("container", "Settings drawer", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Settings", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "group",
+                "Click the Settings group.",
+                [
+                    ControlCandidate("container", "Settings group", "group", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Settings", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "panel_pane",
+                "Click the Settings panel.",
+                [
+                    ControlCandidate("container", "Settings panel", "pane", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Settings", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "panel_group",
+                "Click Details panel.",
+                [
+                    ControlCandidate("container", "Details panel", "group", (20, 80, 300, 180)),
+                    ControlCandidate("child", "Details", "button", (40, 100, 100, 32)),
+                ],
+                "container",
+                (20, 80, 300, 180),
+            ),
+            (
+                "column",
+                "Click Status column.",
+                [
+                    ControlCandidate("child", "Status", "button", (320, 86, 70, 28)),
+                    ControlCandidate("container", "Status", "headeritem", (200, 40, 160, 36)),
+                ],
+                "container",
+                (200, 40, 160, 36),
+            ),
+        )
+
+        for name, instruction, candidates, expected_id, expected_rect in cases:
+            with self.subTest(name=name):
+                wrong = next(candidate for candidate in candidates if candidate.id == "child")
+                wrong_target = resolve_candidate_target(
+                    target_id="child",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "child",
+                            "target": {
+                                "x": wrong.rect[0],
+                                "y": wrong.rect[1],
+                                "width": wrong.rect[2],
+                                "height": wrong.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "child")
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                for resolved in (text_target, help_target):
+                    self.assertEqual(resolved.target_id, expected_id)
+                    self.assertFalse(resolved.rejected_reason)
+                    self.assertEqual(resolved.rect, expected_rect)
 
     def test_surface_action_model_rect_promotes_contained_menu_and_header_buttons(self) -> None:
         from control_inventory import ControlCandidate

@@ -16965,6 +16965,174 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_sidebar_target_recovers_container_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 180], "label": "Settings sidebar"},
+                {"rect": [40, 100, 100, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings sidebar.",
+                "target_id": "child",
+                "target": {"x": 40, "y": 100, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Settings sidebar", "control_type": "pane", "rect": [20, 80, 300, 180]},
+                {"id": "child", "text": "Settings", "control_type": "button", "rect": [40, 100, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [20, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_panel_target_recovers_group_surface_not_child",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 180], "label": "Details panel"},
+                {"rect": [40, 100, 100, 32], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details panel.",
+                "target_id": "child",
+                "target": {"x": 40, "y": 100, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "container", "text": "Details panel", "control_type": "group", "rect": [20, 80, 300, 180]},
+                {"id": "child", "text": "Details", "control_type": "button", "rect": [40, 100, 100, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "container",
+                "rect": [20, 80, 300, 180],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_column_target_recovers_header_not_same_label_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [200, 40, 160, 36], "label": "Status"},
+                {"rect": [320, 86, 70, 28], "label": "Status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Status column.",
+                "target_id": "status_filter",
+                "target": {"x": 320, "y": 86, "width": 70, "height": 28},
+            },
+            "candidates": [
+                {"id": "status_filter", "text": "Status", "control_type": "button", "rect": [320, 86, 70, 28]},
+                {"id": "status_header", "text": "Status", "control_type": "headeritem", "rect": [200, 40, 160, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_header",
+                "rect": [200, 40, 160, 36],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "short_result_wording_recovers_listitem_not_stale_menuitem",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 180, 28], "label": "Settings"},
+                {"rect": [20, 60, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings result.",
+                "target_id": "stale",
+                "target": {"x": 20, "y": 20, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Settings", "control_type": "menuitem", "rect": [20, 20, 180, 28]},
+                {"id": "item", "text": "Settings", "control_type": "listitem", "rect": [20, 60, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "item",
+                "rect": [20, 60, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "short_node_wording_recovers_treeitem_not_launcher",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Settings"},
+                {"rect": [20, 60, 180, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings node.",
+                "target_id": "launcher",
+                "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "launcher", "text": "Settings", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "node", "text": "Settings", "control_type": "treeitem", "rect": [20, 60, 180, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "node",
+                "rect": [20, 60, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "tab_context_action_recovers_button_not_tab",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Settings"},
+                {"rect": [300, 100, 80, 30], "label": "Run"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Run in the Settings tab.",
+                "target_id": "settings_tab",
+                "target": {"x": 20, "y": 20, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "run", "text": "Run", "control_type": "button", "rect": [300, 100, 80, 30], "window_title": "Settings"},
+                {"id": "settings_tab", "text": "Settings", "control_type": "tabitem", "rect": [20, 20, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "run",
+                "rect": [300, 100, 80, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_item_without_item_candidate_rejects_surface_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 120, 32], "label": "Settings"},
+                {"rect": [300, 10, 300, 300], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings item.",
+                "target_id": "pane",
+                "target": {"x": 300, "y": 10, "width": 300, "height": 300},
+            },
+            "candidates": [
+                {"id": "button", "text": "Settings", "control_type": "button", "rect": [20, 20, 120, 32]},
+                {"id": "pane", "text": "Settings", "control_type": "pane", "rect": [300, 10, 300, 300]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "pane",
+                "rejected_reason": "target_id control type mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "shorthand_row_context_recovers_requested_review_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

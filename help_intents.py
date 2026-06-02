@@ -1254,11 +1254,21 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("tabitem")
     if "tabitem" in raw_tokens and not tab_button_action_requested and not tab_context_requested:
         intents.add("tabitem")
-    if "listitem" in raw_tokens or ("list" in raw_tokens and explicit_item_words):
+    bare_list_item_requested = bool(raw_tokens & {"entries", "entry", "result", "results"}) and bool(
+        raw_tokens & (_SELECT_NOUN_ACTION_WORDS | _SELECTION_ACTION_WORDS)
+    )
+    bare_tree_item_requested = bool(raw_tokens & {"node", "nodes"}) and bool(
+        raw_tokens & (_SELECT_NOUN_ACTION_WORDS | _SELECTION_ACTION_WORDS)
+    )
+    if (
+        "listitem" in raw_tokens
+        or ("list" in raw_tokens and explicit_item_words)
+        or bare_list_item_requested
+    ):
         intents.update(_LIST_ITEM_INTENT_TYPES)
     if row_requested:
         intents.update(_LIST_ITEM_INTENT_TYPES)
-    if "treeitem" in raw_tokens or ("tree" in raw_tokens and explicit_item_words):
+    if "treeitem" in raw_tokens or ("tree" in raw_tokens and explicit_item_words) or bare_tree_item_requested:
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "dataitem" in raw_tokens or (
         explicit_item_words and raw_tokens & {"data", "grid", "table"}
