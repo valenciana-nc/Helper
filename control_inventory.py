@@ -396,6 +396,8 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "download",
         "downloads",
         "extensions",
+        "favorite",
+        "favorites",
         "find",
         "forward",
         "history",
@@ -406,8 +408,10 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "refresh",
         "save",
         "share",
+        "star",
     }
 )
+BROWSER_CHROME_FAVORITE_TOOLBAR_WORDS = frozenset({"favorite", "favorites", "star"})
 CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
@@ -2141,6 +2145,8 @@ def _text_match_score(
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2383,6 +2389,8 @@ def _context_text_match_score(
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -2583,6 +2591,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -3013,6 +3027,13 @@ def _target_id_plausibility(
     geometry_score = (
         _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
     )
+    if _contextual_action_candidate_matches_surface_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return True, max(0.86, text_score, geometry_score), ""
     if _candidate_satisfies_positional_action_duplicate_request(
         instruction,
         instruction_tokens,
@@ -3507,6 +3528,8 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     if "find" in toolbar_words and candidate.rect[1] > 72:
         return False
     if toolbar_words & BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS and candidate.rect[1] > 72:
+        return False
+    if toolbar_words & BROWSER_CHROME_FAVORITE_TOOLBAR_WORDS and candidate.rect[1] > 72:
         return False
     return bool(
         toolbar_words
@@ -4178,6 +4201,30 @@ def _explicit_spinner_alternative_mismatch(
             continue
         spinner_label_tokens = _field_alternative_label_tokens(other, candidates)
         if spinner_label_tokens and candidate_label_tokens & spinner_label_tokens:
+            return True
+    return False
+
+
+def _explicit_slider_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if "slider" not in raw_tokens:
+        return False
+    if candidate.control_type == "slider":
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != "slider":
+            continue
+        slider_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if slider_label_tokens and candidate_label_tokens & slider_label_tokens:
             return True
     return False
 
@@ -5882,6 +5929,8 @@ def _row_action_context_rect_matches(
         return True
     if row.control_type not in ROW_CONTEXT_CONTROL_TYPES:
         return False
+    if _tokens_from_text(row.descriptor) & {"card", "cards"}:
+        return False
     if action.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     row_x, row_y, row_width, row_height = row.rect
@@ -6072,7 +6121,7 @@ def _contextual_surface_action_alternative_mismatch(
     raw_tokens = _tokens_from_text(instruction)
     if not (raw_tokens & {"in", "inside", "on", "within"}):
         return False
-    if not (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS):
+    if not (_object_token_variants(raw_tokens) & CONTEXTUAL_DUPLICATE_SURFACE_WORDS):
         return False
     requested_context = _contextual_duplicate_request_tokens(
         instruction,
@@ -6153,16 +6202,41 @@ def _contextual_surface_tokens_match(
     return False
 
 
+def _candidate_pool_has_contextual_surface_evidence(
+    surface_tokens: set[str],
+    candidates: list[ControlCandidate] | None,
+) -> bool:
+    if not surface_tokens or not candidates:
+        return False
+    for item in candidates:
+        evidence_tokens = (
+            _candidate_semantic_tokens(item)
+            | _tokens_from_text(item.descriptor)
+            | _tokens_from_text(item.control_type)
+            | _surface_context_type_tokens(item.control_type)
+        )
+        if _contextual_surface_tokens_match(surface_tokens, evidence_tokens):
+            return True
+    return False
+
+
 def _contextual_duplicate_request_tokens(
     instruction: str,
     candidate: ControlCandidate,
     candidates: list[ControlCandidate] | None = None,
 ) -> set[str]:
     raw_tokens = _tokens_from_text(instruction)
+    raw_token_variants = _object_token_variants(raw_tokens)
     instruction_tokens = _tokenize_instruction(instruction)
     candidate_tokens = _candidate_semantic_tokens(candidate)
-    surface_tokens = raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
-    if not (raw_tokens & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
+    surface_tokens = raw_token_variants & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
+    variant_only_surfaces = surface_tokens - (raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
+    if variant_only_surfaces and not _candidate_pool_has_contextual_surface_evidence(
+        variant_only_surfaces,
+        candidates,
+    ):
+        surface_tokens -= variant_only_surfaces
+    if not (raw_token_variants & CONTEXTUAL_DUPLICATE_CONTAINER_WORDS):
         if _positional_action_request_tokens(instruction):
             return set()
         return _implicit_contextual_duplicate_request_tokens(
@@ -7658,6 +7732,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_option_alternative_mismatch(instruction, candidate, candidates):
@@ -8526,6 +8602,8 @@ def _candidate_snap_semantic_mismatch(
     if _explicit_combobox_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_spinner_alternative_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_slider_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True

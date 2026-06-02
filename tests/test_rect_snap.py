@@ -9347,6 +9347,23 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ),
             ),
             (
+                "Add favorite to item in the app.",
+                ControlCandidate(
+                    "c001",
+                    "Add to favorites",
+                    "button",
+                    (910, 8, 42, 34),
+                    window_title="Catalog - Microsoft Edge",
+                ),
+                ControlCandidate(
+                    "c002",
+                    "Add favorite",
+                    "button",
+                    (420, 180, 130, 32),
+                    window_title="Catalog - Microsoft Edge",
+                ),
+            ),
+            (
                 "Open Home in the sidebar.",
                 ControlCandidate(
                     "c001",
@@ -19397,6 +19414,17 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
             ),
             (
+                "Click Archive in the Billing card.",
+                "profile_archive",
+                "billing_archive",
+                [
+                    ControlCandidate("profile_card", "Profile card", "listitem", (20, 80, 300, 100)),
+                    ControlCandidate("profile_archive", "Archive", "button", (240, 140, 70, 30)),
+                    ControlCandidate("billing_card", "Billing card", "listitem", (360, 80, 300, 100)),
+                    ControlCandidate("billing_archive", "Archive", "button", (580, 140, 70, 30)),
+                ],
+            ),
+            (
                 "Click Save in the modal.",
                 "page_save",
                 "modal_save",
@@ -19488,6 +19516,17 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
             ),
             (
+                "Click Save in the drawers.",
+                "main_save",
+                "drawer_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("drawer", "Settings drawers", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("drawer_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
                 "Click Save in the popover.",
                 "main_save",
                 "popover_save",
@@ -19556,6 +19595,17 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
                     ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
                     ControlCandidate("notification", "Settings notification", "pane", (420, 80, 300, 120)),
+                    ControlCandidate("notification_save", "Save", "button", (630, 160, 60, 30)),
+                ],
+            ),
+            (
+                "Click Save in the notifications.",
+                "main_save",
+                "notification_save",
+                [
+                    ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+                    ControlCandidate("main_save", "Save", "button", (230, 160, 60, 30)),
+                    ControlCandidate("notification", "Settings notifications", "pane", (420, 80, 300, 120)),
                     ControlCandidate("notification_save", "Save", "button", (630, 160, 60, 30)),
                 ],
             ),
@@ -20763,6 +20813,53 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "quantity_spinner")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 150, 180, 32))
+
+    def test_explicit_slider_rejects_same_label_list_item(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("settings_item", "Settings", "listitem", (10, 10, 120, 32)),
+            ControlCandidate("settings_slider", "Settings", "slider", (10, 60, 120, 32)),
+        ]
+        instruction = "Select Settings slider."
+
+        wrong_target = resolve_candidate_target(
+            target_id="settings_item",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 120, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 120, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "settings_item",
+                    "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "settings_item")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "settings_slider")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (10, 60, 120, 32))
 
     def test_dropdown_launcher_rejects_same_label_menuitem_option(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

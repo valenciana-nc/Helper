@@ -10092,6 +10092,132 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_downloads_rejects_plural_drawers_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 8, 80, 34], "label": "Browser Downloads"},
+                {"rect": [300, 120, 500, 500], "label": "Drawers"},
+                {"rect": [420, 180, 120, 32], "label": "Downloads"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Downloads in the drawers.",
+                "target_id": "chrome_downloads",
+                "target": {"x": 900, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "chrome_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [900, 8, 80, 34],
+                    "automation_id": "downloads",
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "drawers",
+                    "text": "Drawers",
+                    "control_type": "group",
+                    "rect": [300, 120, 500, 500],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "app_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [420, 180, 120, 32],
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_downloads",
+                "rect": [420, 180, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "browser_downloads_rejects_plural_notifications_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [900, 8, 80, 34], "label": "Browser Downloads"},
+                {"rect": [300, 120, 500, 500], "label": "Notifications"},
+                {"rect": [420, 180, 120, 32], "label": "Downloads"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Downloads in the notifications.",
+                "target_id": "chrome_downloads",
+                "target": {"x": 900, "y": 8, "width": 80, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "chrome_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [900, 8, 80, 34],
+                    "automation_id": "downloads",
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "notifications",
+                    "text": "Notifications",
+                    "control_type": "group",
+                    "rect": [300, 120, 500, 500],
+                    "window_title": "Project - Google Chrome",
+                },
+                {
+                    "id": "app_downloads",
+                    "text": "Downloads",
+                    "control_type": "button",
+                    "rect": [420, 180, 120, 32],
+                    "window_title": "Project - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_downloads",
+                "rect": [420, 180, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "edge_favorites_chrome_rejects_app_favorite_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [910, 8, 42, 34], "label": "Edge favorite"},
+                {"rect": [420, 180, 130, 32], "label": "Add favorite"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Add favorite to item in the app.",
+                "target_id": "edge_fav",
+                "target": {"x": 910, "y": 8, "width": 42, "height": 34},
+            },
+            "candidates": [
+                {
+                    "id": "edge_fav",
+                    "text": "Add to favorites",
+                    "control_type": "button",
+                    "rect": [910, 8, 42, 34],
+                    "window_title": "Catalog - Microsoft Edge",
+                },
+                {
+                    "id": "app_fav",
+                    "text": "Add favorite",
+                    "control_type": "button",
+                    "rect": [420, 180, 130, 32],
+                    "window_title": "Catalog - Microsoft Edge",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "app_fav",
+                "rect": [420, 180, 130, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15767,6 +15893,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "billing_card_context_recovers_from_adjacent_profile_card_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 100], "label": "Profile card"},
+                {"rect": [240, 140, 70, 30], "label": "Archive"},
+                {"rect": [360, 80, 300, 100], "label": "Billing card"},
+                {"rect": [580, 140, 70, 30], "label": "Archive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Archive in the Billing card.",
+                "target_id": "profile_archive",
+                "target": {"x": 240, "y": 140, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "profile_card", "text": "Profile card", "control_type": "listitem", "rect": [20, 80, 300, 100]},
+                {"id": "profile_archive", "text": "Archive", "control_type": "button", "rect": [240, 140, 70, 30]},
+                {"id": "billing_card", "text": "Billing card", "control_type": "listitem", "rect": [360, 80, 300, 100]},
+                {"id": "billing_archive", "text": "Archive", "control_type": "button", "rect": [580, 140, 70, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "billing_archive",
+                "rect": [580, 140, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "shorthand_pane_context_recovers_requested_save_action",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -16602,6 +16756,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "quantity_spinner",
                 "rect": [100, 150, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_slider_rejects_same_label_list_item",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 120, 32], "label": "Settings item"},
+                {"rect": [10, 60, 120, 32], "label": "Settings slider"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Settings slider.",
+                "target_id": "settings_item",
+                "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "settings_item", "text": "Settings", "control_type": "listitem", "rect": [10, 10, 120, 32]},
+                {"id": "settings_slider", "text": "Settings", "control_type": "slider", "rect": [10, 60, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "settings_slider",
+                "rect": [10, 60, 120, 32],
                 "overlay_emitted": True,
             },
         },
