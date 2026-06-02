@@ -364,6 +364,47 @@ class TargetQualityTests(unittest.TestCase):
 
         self.assertTrue(quality.accepted)
 
+    def test_rejects_partial_candidate_row_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (500, 240), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((20, 80, 420, 128), outline="black", fill="#f8fafc")
+        draw.text((36, 96), "Invoice 42", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(20, 80, 120, 48),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click invoice 42 row.",
+            target_control_type="listitem",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
+    def test_accepts_text_heavy_candidate_button_without_internal_controls(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (260, 100), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((20, 20, 140, 52), outline="black", fill="#f3f4f6")
+        draw.text((34, 29), "Save helper precision", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(20, 20, 120, 32),
+            source="text_match",
+            confidence=0.76,
+            instruction="Click Save helper precision.",
+            target_control_type="button",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_accepts_compact_candidate_action_icon_with_internal_edges(self) -> None:
         from target_quality import evaluate_target_quality
 

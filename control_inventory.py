@@ -4465,6 +4465,14 @@ def _target_id_plausibility(
         candidates,
     ):
         return False, max(text_score, geometry_score), "target_id semantic mismatch"
+    if _same_contextual_duplicate_request_ambiguous(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _contextual_action_candidate_matches_surface_request(
         instruction,
         instruction_tokens,
@@ -9731,6 +9739,131 @@ def _candidate_satisfies_named_contextual_duplicate_request(
     )
 
 
+def _same_contextual_duplicate_request_ambiguous(
+    instruction: str,
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if selected.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        selected,
+        candidates,
+    ):
+        return False
+    duplicate_key = _contextual_duplicate_key(selected)
+    if not duplicate_key:
+        return False
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        selected,
+        candidates,
+    )
+    if not requested_context:
+        return False
+    selected_evidence = _contextual_duplicate_evidence_tokens(selected, candidates)
+    if not _contextual_duplicate_request_matches_evidence(requested_context, selected_evidence):
+        return False
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if _same_visual_and_context_candidate(candidate, selected):
+            continue
+        if candidate.control_type != selected.control_type:
+            continue
+        if _contextual_duplicate_key(candidate) != duplicate_key:
+            continue
+        if not _same_contextual_duplicate_literal_identity(selected, candidate):
+            continue
+        if control_intents and not _candidate_matches_control_intent(
+            candidate,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        evidence = _contextual_duplicate_evidence_tokens(candidate, candidates)
+        if _contextual_duplicate_request_matches_evidence(
+            requested_context,
+            evidence,
+        ) and _candidates_share_requested_context_carrier(
+            requested_context,
+            selected,
+            candidate,
+            candidates,
+        ):
+            return True
+    return False
+
+
+def _same_contextual_duplicate_literal_identity(
+    first: ControlCandidate,
+    second: ControlCandidate,
+) -> bool:
+    first_label = _contextual_duplicate_literal_identity(first)
+    second_label = _contextual_duplicate_literal_identity(second)
+    return bool(first_label and first_label == second_label)
+
+
+def _contextual_duplicate_literal_identity(candidate: ControlCandidate) -> str:
+    for value in (candidate.text, candidate.automation_id):
+        words = _literal_word_sequence(value)
+        if words:
+            return " ".join(words)
+    return ""
+
+
+def _candidates_share_requested_context_carrier(
+    requested_context: set[str],
+    selected: ControlCandidate,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    for context in candidates:
+        if context.id in {selected.id, candidate.id}:
+            continue
+        if _same_visual_candidate(context, selected) or _same_visual_candidate(
+            context,
+            candidate,
+        ):
+            continue
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+            context,
+        ):
+            continue
+        if not (
+            _context_carrier_rect_matches_action(context, selected)
+            and _context_carrier_rect_matches_action(context, candidate)
+        ):
+            continue
+        carrier_tokens = _object_token_variants(
+            _candidate_semantic_tokens(context)
+            | _tokens_from_text(context.descriptor)
+            | _tokens_from_text(context.control_type)
+            | _surface_context_type_tokens(context.control_type)
+            | _tokenize_control(context.window_title)
+        )
+        if _contextual_duplicate_request_matches_evidence(requested_context, carrier_tokens):
+            return True
+    return False
+
+
+def _context_carrier_rect_matches_action(
+    context: ControlCandidate,
+    action: ControlCandidate,
+) -> bool:
+    return (
+        _contains_rect(_expand_rect(context.rect, 4), action.rect)
+        or _row_action_context_rect_matches(
+            context,
+            action,
+        )
+    )
+
+
 def _contextual_action_candidate_matches_surface_request(
     instruction: str,
     instruction_tokens: set[str],
@@ -11815,6 +11948,14 @@ def _target_id_ambiguity(
     )
     selected_score = selected_text + 0.30 * selected_geometry
     selected_score += _foreground_rank_bonus(selected, candidates, model_rect=model_rect)
+    if _same_contextual_duplicate_request_ambiguous(
+        instruction,
+        instruction_tokens,
+        selected,
+        candidates,
+        control_intents,
+    ):
+        return True, 0.0
     closest_gap = 1.0
     selected_has_gmail_tab_evidence = _has_explicit_gmail_tab_evidence(selected)
     for candidate in candidates:
@@ -14459,6 +14600,12 @@ def _candidate_snap_global_ambiguity(
         instruction,
         selected,
         candidates,
+    ) or _same_contextual_duplicate_request_ambiguous(
+        instruction,
+        instruction_tokens,
+        selected,
+        candidates,
+        _instruction_control_intents(instruction),
     ) or _generic_shared_prefix_duplicate_ambiguous(
         instruction_tokens,
         selected,

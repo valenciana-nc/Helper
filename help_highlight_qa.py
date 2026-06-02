@@ -1203,6 +1203,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "partial_candidate_row_rect_rejects_overlay",
+            "capture": {"width": 500, "height": 240},
+            "draw": [
+                {"rect": [20, 80, 400, 48], "label": "Invoice 42"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click invoice 42 row.",
+                "target_id": "row",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 48},
+            },
+            "candidates": [
+                {
+                    "id": "row",
+                    "text": "Invoice 42",
+                    "control_type": "listitem",
+                    "rect": [20, 80, 120, 48],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target boundary misaligned",
+                "rejected_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

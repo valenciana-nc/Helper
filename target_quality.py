@@ -192,7 +192,7 @@ def evaluate_target_quality(
         and _candidate_compound_action_request(instruction)
         and _candidate_compound_rect_large_enough(image_rect)
         and (
-            _has_compound_control_separators(capture.png_bytes, clipped)
+            _has_compound_control_vertical_separators(capture.png_bytes, clipped)
             or _has_segmented_control_separator(capture.png_bytes, clipped)
         )
     ):
@@ -213,6 +213,20 @@ def evaluate_target_quality(
         return TargetQuality(
             accepted=False,
             reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
+        and _candidate_container_boundary_alignment_target(target_control_type)
+        and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
             visible_fraction=visible_fraction,
             visual_activity=visual_activity,
             boundary_activity=boundary_activity,
@@ -346,6 +360,10 @@ def _candidate_boundary_alignment_target(source: str, target_control_type: str) 
     if source == "model":
         return False
     return target_control_type.lower() in CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES
+
+
+def _candidate_container_boundary_alignment_target(target_control_type: str) -> bool:
+    return target_control_type.lower() in CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES
 
 
 def _candidate_allows_edge_flush_boundary(
@@ -539,6 +557,24 @@ def _has_compound_control_separators(
                 or _strong_internal_separator_groups(edges, vertical=False)
                 >= min_groups
             )
+    except Exception:
+        return False
+
+
+def _has_compound_control_vertical_separators(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    *,
+    min_groups: int = MODEL_COMPOUND_MIN_SEPARATOR_GROUPS,
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 24 or crop.height < 16:
+                return False
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return _strong_internal_separator_groups(edges, vertical=True) >= min_groups
     except Exception:
         return False
 

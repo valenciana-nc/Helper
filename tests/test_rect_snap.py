@@ -9568,6 +9568,52 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rejected_reason, "ambiguous text match")
 
+    def test_same_card_duplicate_action_stays_ambiguous_despite_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_card", "Billing card", "group", (20, 80, 500, 220)),
+            ControlCandidate("save_top", "Save", "button", (240, 120, 60, 30)),
+            ControlCandidate("save_bottom", "Save", "button", (240, 240, 60, 30)),
+        ]
+        instruction = "Click Save in the Billing card."
+
+        target_id = resolve_candidate_target(
+            target_id="save_top",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 120, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 120, 60, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 120, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "save_top",
+                    "target": {"x": 240, "y": 120, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
     def test_ambiguous_text_match_without_target_id_blocks_geometry_snap(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -9690,6 +9736,72 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target.target_id, "row")
         self.assertFalse(target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_row_moved_to_background_window(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Open Alice.",
+                "target_id": "alice_row",
+                "target": {"x": 100, "y": 100, "width": 220, "height": 44},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "alice_row",
+                "Alice",
+                "listitem",
+                (100, 100, 220, 44),
+                window_title="Customers",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "modal",
+                "Confirm dialog",
+                "window",
+                (80, 80, 360, 180),
+                window_title="Confirm",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "close",
+                "Close",
+                "button",
+                (400, 90, 28, 28),
+                window_title="Confirm",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "alice_row",
+                "Alice",
+                "listitem",
+                (100, 100, 220, 44),
+                window_title="Customers",
+                window_rank=2,
+            ),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_revalidation_rejects_recycled_target_id_when_independent_is_ambiguous(self) -> None:

@@ -679,6 +679,13 @@ def _guard_revalidated_target(
         return target
     if _revalidated_row_identity_changed(previous_target, target, candidates):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_row_window_context_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_action_identity_changed(
         previous_target,
         target,
@@ -775,6 +782,25 @@ def _revalidated_row_identity_changed(
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
+
+
+def _revalidated_row_window_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type not in ROW_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current.control_type not in ROW_REVALIDATION_CONTROL_TYPES:
+        return False
+    return previous.window_rank != current.window_rank
 
 
 def _model_only_revalidation_lacks_fresh_evidence(

@@ -508,17 +508,10 @@ def _decision_for_candidate(capture: Capture, candidate: ControlCandidate):
 
 
 def _decision_unknown_id(capture: Capture, candidate: ControlCandidate):
-    norm = _norm_rect(candidate.rect, capture)
     payload = {
         "kind": "step",
         "instruction": f"Click {TARGET_TEXT}.",
         "target_id": "c999",
-        "target": {
-            "x": norm[0],
-            "y": norm[1],
-            "width": norm[2],
-            "height": norm[3],
-        },
     }
     return _parse_live_help_decision(json.dumps(payload))
 
