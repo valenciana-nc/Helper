@@ -505,18 +505,80 @@ RECORD_TARGET_WORDS = frozenset(
     {
         "account",
         "accounts",
+        "card",
+        "cards",
+        "case",
+        "cases",
+        "client",
+        "clients",
+        "company",
+        "companies",
+        "contact",
+        "contacts",
+        "contract",
+        "contracts",
         "customer",
         "customers",
+        "dashboard",
+        "dashboards",
+        "deal",
+        "deals",
+        "detail",
+        "details",
         "invoice",
         "invoices",
+        "issue",
+        "issues",
+        "lead",
+        "leads",
+        "opportunities",
+        "opportunity",
+        "order",
+        "orders",
+        "organization",
+        "organizations",
+        "overview",
+        "overviews",
+        "page",
+        "pages",
+        "partner",
+        "partners",
+        "profile",
+        "profiles",
         "project",
         "projects",
+        "quote",
+        "quotes",
         "record",
         "records",
         "report",
         "reports",
+        "request",
+        "requests",
+        "screen",
+        "screens",
+        "subscription",
+        "subscriptions",
+        "summary",
+        "summaries",
+        "supplier",
+        "suppliers",
+        "task",
+        "tasks",
+        "team",
+        "teams",
+        "ticket",
+        "tickets",
+        "tile",
+        "tiles",
         "user",
         "users",
+        "vendor",
+        "vendors",
+        "view",
+        "views",
+        "workspace",
+        "workspaces",
     }
 )
 RECORD_TARGET_TRAILING_CONTEXT_WORDS = frozenset({"tab", "tabs", "tabitem"})
@@ -2585,7 +2647,7 @@ def _text_match_score(
         return 0.0
     if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
-    if _named_dropdown_request_matches_candidate(instruction, candidate):
+    if _named_dropdown_request_matches_candidate(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR + 0.08
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
@@ -5156,6 +5218,7 @@ def _dropdown_option_launcher_mismatch(
 def _named_dropdown_request_matches_candidate(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
 ) -> bool:
     if candidate.control_type != "combobox":
         return False
@@ -5170,7 +5233,11 @@ def _named_dropdown_request_matches_candidate(
     requested = _named_dropdown_request_tokens(instruction)
     if not requested:
         return False
-    identity = _candidate_visible_text_tokens(candidate) | _tokens_from_text(candidate.text)
+    identity = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _field_alternative_label_tokens(candidate, candidates)
+    )
     return bool(requested & identity)
 
 
@@ -5192,7 +5259,11 @@ def _named_dropdown_alternative_mismatch(
     requested = _named_dropdown_request_tokens(instruction)
     if not requested:
         return False
-    candidate_identity = _candidate_visible_text_tokens(candidate) | _tokens_from_text(candidate.text)
+    candidate_identity = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _field_alternative_label_tokens(candidate, candidates)
+    )
     if requested & candidate_identity:
         return False
     for other in candidates:
@@ -5200,7 +5271,11 @@ def _named_dropdown_alternative_mismatch(
             continue
         if other.control_type != "combobox":
             continue
-        other_identity = _candidate_visible_text_tokens(other) | _tokens_from_text(other.text)
+        other_identity = (
+            _candidate_visible_text_tokens(other)
+            | _tokens_from_text(other.text)
+            | _field_alternative_label_tokens(other, candidates)
+        )
         if requested & other_identity:
             return True
     return False
@@ -5691,7 +5766,11 @@ def _explicit_combobox_alternative_mismatch(
         return False
     if raw_tokens & {"button", "buttons", "launcher"}:
         return False
-    if candidate.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"button", "splitbutton"}):
+    if candidate.control_type not in (
+        LABELLED_FIELD_CONTROL_TYPES
+        | OPTION_ROLE_CONTROL_TYPES
+        | {"button", "splitbutton"}
+    ):
         return False
     candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
     if not candidate_label_tokens:
@@ -5871,6 +5950,7 @@ def _record_target_alternative_mismatch(
         return False
     candidate_priority = _record_target_control_priority(
         candidate,
+        instruction=instruction,
         candidates=candidates,
         requested_label=requested_label,
     )
@@ -5879,6 +5959,7 @@ def _record_target_alternative_mismatch(
         and not _same_visual_candidate(other, candidate)
         and _record_target_control_priority(
             other,
+            instruction=instruction,
             candidates=candidates,
             requested_label=requested_label,
         )
@@ -5935,9 +6016,16 @@ def _record_target_candidate_label_tokens(candidate: ControlCandidate) -> set[st
 def _record_target_control_priority(
     candidate: ControlCandidate,
     *,
+    instruction: str = "",
     candidates: list[ControlCandidate] | None = None,
     requested_label: set[str] | None = None,
 ) -> int:
+    if instruction and _direct_surface_container_candidate_matches_request(
+        instruction,
+        candidate,
+        candidates or [],
+    ):
+        return 0
     if candidate.control_type == "dataitem":
         return 0
     if candidate.control_type == "listitem":

@@ -20680,6 +20680,110 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_name_deal_card_prefers_content_card_over_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 36], "label": "Acme"},
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme deal.",
+                "target_id": "nav",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 36]},
+                {"id": "card", "text": "Acme", "control_type": "listitem", "rect": [260, 170, 420, 72]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card",
+                "rect": [260, 170, 420, 72],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_ticket_card_prefers_content_card_over_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 36], "label": "Acme"},
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme ticket.",
+                "target_id": "nav",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 36]},
+                {"id": "card", "text": "Acme", "control_type": "listitem", "rect": [260, 170, 420, 72]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card",
+                "rect": [260, 170, 420, 72],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_profile_card_prefers_content_card_over_nav",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 36], "label": "Acme"},
+                {"rect": [260, 170, 420, 72], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Acme profile.",
+                "target_id": "nav",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 36]},
+                {"id": "card", "text": "Acme", "control_type": "listitem", "rect": [260, 170, 420, 72]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "card",
+                "rect": [260, 170, 420, 72],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "named_dropdown_rejects_same_label_listitem_and_uses_labelled_combobox",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 24, 70, 20], "label": "Country"},
+                {"rect": [180, 20, 260, 32], "label": ""},
+                {"rect": [180, 70, 260, 32], "label": "Country"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Country dropdown.",
+                "target_id": "row",
+                "target": {"x": 180, "y": 70, "width": 260, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [180, 20, 260, 32]},
+                {"id": "row", "text": "Country", "control_type": "listitem", "rect": [180, 70, 260, 32]},
+                {"id": "label", "text": "Country", "control_type": "text", "rect": [100, 24, 70, 20]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "combo",
+                "rect": [180, 20, 260, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "same_rect_foreground_snap_prefers_active_window",
             "capture": {"width": 500, "height": 320},
             "draw": [

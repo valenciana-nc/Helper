@@ -23625,6 +23625,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (100, 150, 180, 32))
 
+    def test_explicit_dropdown_rejects_same_label_listitem_for_labelled_combobox(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("combo", "", "combobox", (180, 20, 260, 32)),
+            ControlCandidate("row", "Country", "listitem", (180, 70, 260, 32)),
+            ControlCandidate("label", "Country", "text", (100, 24, 70, 20)),
+        ]
+        instruction = "Select the Country dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="row",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 70, 260, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 70, 260, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 70, 260, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "row",
+                    "target": {"x": 180, "y": 70, "width": 260, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "row")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "combo")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "row")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "combo")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (180, 20, 260, 32))
+
     def test_explicit_spin_box_rejects_same_label_edit_field(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -27532,6 +27585,151 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.source, "target_id")
         self.assertEqual(help_target.target_id, "nav")
         self.assertFalse(help_target.rejected_reason)
+
+    def test_common_business_object_words_prefer_content_card_over_same_name_nav(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+            ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 36)),
+            ControlCandidate("card", "Acme", "listitem", (260, 170, 420, 72)),
+        ]
+
+        for noun in (
+            "case",
+            "client",
+            "company",
+            "contact",
+            "contract",
+            "deal",
+            "issue",
+            "lead",
+            "opportunity",
+            "order",
+            "organization",
+            "partner",
+            "quote",
+            "request",
+            "subscription",
+            "supplier",
+            "task",
+            "team",
+            "ticket",
+            "vendor",
+        ):
+            instruction = f"Open Acme {noun}."
+            with self.subTest(noun=noun):
+                target_id = resolve_candidate_target(
+                    target_id="nav",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "nav",
+                            "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "card")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "card")
+                self.assertFalse(help_target.rejected_reason)
+
+    def test_common_surface_words_prefer_listitem_card_over_same_name_nav(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+            ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 36)),
+            ControlCandidate("card", "Acme", "listitem", (260, 170, 420, 72)),
+        ]
+
+        for noun in (
+            "card",
+            "dashboard",
+            "details",
+            "overview",
+            "page",
+            "profile",
+            "screen",
+            "summary",
+            "tile",
+            "view",
+            "workspace",
+        ):
+            instruction = f"Open Acme {noun}."
+            with self.subTest(noun=noun):
+                target_id = resolve_candidate_target(
+                    target_id="nav",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(20, 80, 160, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "nav",
+                            "target": {"x": 20, "y": 80, "width": 160, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.target_id, "card")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "card")
+                self.assertFalse(help_target.rejected_reason)
 
     def test_nested_row_label_target_id_recovers_to_requested_subrow_action(self) -> None:
         from control_inventory import ControlCandidate
