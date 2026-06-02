@@ -8318,6 +8318,96 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c001")
 
+    def test_open_label_target_id_does_not_accept_stale_geometry(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("stale", "Save", "button", (10, 10, 120, 32)),
+            ControlCandidate("right", "Open", "button", (10, 60, 120, 32)),
+        ]
+        instruction = "Click Open."
+
+        stale_target = resolve_candidate_target(
+            target_id="stale",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 120, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 120, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "stale",
+                    "target": {"x": 10, "y": 10, "width": 120, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.target_id, "right")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "right")
+        self.assertFalse(help_target.rejected_reason)
+
+    def test_wrong_target_id_preserves_ambiguous_text_over_stale_snap(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("wrong_id", "Cancel", "button", (20, 20, 90, 32)),
+            ControlCandidate("save_top", "Save", "button", (100, 100, 90, 32)),
+            ControlCandidate("save_bottom", "Save", "button", (100, 180, 90, 32)),
+        ]
+        instruction = "Click Save."
+
+        wrong_target = resolve_candidate_target(
+            target_id="wrong_id",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 90, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 90, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 90, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "wrong_id",
+                    "target": {"x": 100, "y": 100, "width": 90, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.target_id, "save_top")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.rejected_reason, "ambiguous text match")
+
     def test_exact_visible_label_preserves_phrase_order(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -8358,7 +8448,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             candidates,
         )
 
-        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
         self.assertEqual(text_target.target_id, "right")
         self.assertFalse(text_target.rejected_reason)
         self.assertEqual(snap_target.target_id, "right")
@@ -8366,6 +8456,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.source, "text_match")
         self.assertEqual(help_target.target_id, "right")
         self.assertFalse(help_target.rejected_reason)
+
+    def test_rejects_reordered_exact_label_without_alternative(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("wrong", "York New", "button", (10, 10, 100, 30)),
+        ]
+        instruction = "Click New York."
+
+        wrong_target = resolve_candidate_target(
+            target_id="wrong",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 10, 100, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "wrong",
+                    "target": {"x": 10, "y": 10, "width": 100, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
     def test_reversible_action_wrong_target_id_recovers_to_exact_action(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -9409,7 +9543,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
-    def test_wrong_target_id_recovers_by_geometry_when_text_is_ambiguous(self) -> None:
+    def test_wrong_target_id_preserves_ambiguous_text_over_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
@@ -9430,10 +9564,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "c002")
-        self.assertFalse(target.rejected_reason)
-        self.assertEqual(target.rect, (120, 160, 80, 32))
+        self.assertEqual(target.rejected_reason, "ambiguous text match")
 
     def test_ambiguous_text_match_without_target_id_blocks_geometry_snap(self) -> None:
         from control_inventory import ControlCandidate

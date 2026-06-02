@@ -324,7 +324,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "wrong_target_id_recovers_by_geometry_when_text_ambiguous",
+            "name": "wrong_target_id_preserves_duplicate_text_ambiguity_over_geometry",
             "capture": {"width": 500, "height": 320},
             "draw": [
                 {"rect": [40, 80, 80, 32], "label": "Cancel"},
@@ -343,10 +343,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "c003", "text": "Save", "control_type": "button", "rect": [300, 80, 80, 32]},
             ],
             "expected": {
-                "source": "candidate_snap",
+                "source": "text_match",
                 "target_id": "c002",
-                "rect": [160, 80, 80, 32],
-                "overlay_emitted": True,
+                "rejected_reason": "ambiguous text match",
+                "overlay_emitted": False,
             },
         },
         {
@@ -1165,6 +1165,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "text": "Request 42 Approve Reject",
                     "control_type": "listitem",
                     "rect": [20, 80, 360, 48],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "candidate_backed_row_with_single_embedded_action_rejects_overlay",
+            "capture": {"width": 500, "height": 260},
+            "draw": [
+                {"rect": [40, 80, 380, 80], "label": "Invoice 42"},
+                {"rect": [300, 100, 60, 32], "label": "Pay"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pay invoice 42.",
+                "target_id": "row",
+                "target": {"x": 40, "y": 80, "width": 380, "height": 80},
+            },
+            "candidates": [
+                {
+                    "id": "row",
+                    "text": "Invoice 42 Pay",
+                    "control_type": "listitem",
+                    "rect": [40, 80, 380, 80],
                 },
             ],
             "expected": {

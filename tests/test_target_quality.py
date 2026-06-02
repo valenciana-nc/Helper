@@ -321,6 +321,49 @@ class TargetQualityTests(unittest.TestCase):
 
         self.assertTrue(quality.accepted)
 
+    def test_rejects_candidate_row_rect_with_single_embedded_action_button(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (500, 260), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 80, 420, 160), outline="black", fill="#f8fafc")
+        draw.text((56, 112), "Invoice 42", fill="black")
+        draw.rectangle((300, 100, 360, 132), outline="black", fill="#f3f4f6")
+        draw.text((316, 110), "Pay", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 80, 380, 80),
+            source="target_id",
+            confidence=1.0,
+            instruction="Pay invoice 42.",
+            target_control_type="listitem",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_accepts_candidate_row_rect_for_row_request_without_embedded_action(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (500, 260), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 80, 420, 160), outline="black", fill="#f8fafc")
+        draw.text((56, 112), "Invoice 42", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 80, 380, 80),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click invoice 42 row.",
+            target_control_type="listitem",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_accepts_compact_candidate_action_icon_with_internal_edges(self) -> None:
         from target_quality import evaluate_target_quality
 

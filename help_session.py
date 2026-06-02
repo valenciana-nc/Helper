@@ -349,6 +349,12 @@ def resolve_help_target(
             return _maybe_clip_resolution_to_capture(text_target, capture, clip_to_capture)
 
         if target is not None and target.rejected_reason == "target_id semantic mismatch":
+            if (
+                text_target is not None
+                and text_target.rejected_reason == "ambiguous text match"
+                and _ambiguous_text_match_has_duplicate_visible_label(text_target, candidates)
+            ):
+                return text_target
             if model_rect is not None:
                 candidate_snap = snap_candidate_target(
                     instruction=decision.instruction,
@@ -609,6 +615,28 @@ def _target_id_has_foreground_exact_text_duplicate(
         if candidate.window_rank >= selected.window_rank:
             continue
         if _tokens_from_text(candidate.text) == selected_words:
+            return True
+    return False
+
+
+def _ambiguous_text_match_has_duplicate_visible_label(
+    target: TargetResolution,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if target.rejected_reason != "ambiguous text match" or not target.target_id:
+        return False
+    selected = next((candidate for candidate in candidates if candidate.id == target.target_id), None)
+    if selected is None:
+        return False
+    selected_text = selected.text.strip().casefold()
+    if not selected_text:
+        return False
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type != selected.control_type:
+            continue
+        if candidate.text.strip().casefold() == selected_text:
             return True
     return False
 

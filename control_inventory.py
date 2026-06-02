@@ -2673,6 +2673,8 @@ def _text_match_score(
     )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
+    if _exact_visible_label_order_mismatch(instruction, candidate):
+        return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
@@ -3277,6 +3279,8 @@ def _context_text_match_score(
         return 0.0
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
+    if _exact_visible_label_order_mismatch(instruction, candidate):
+        return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
@@ -3803,6 +3807,12 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id control type mismatch",
+        )
+    if _exact_visible_label_order_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
         )
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return (
@@ -4579,6 +4589,17 @@ def _target_id_plausibility(
         )
 
     if not instruction_tokens:
+        if text_score < TARGET_ID_TEXT_FLOOR and _exact_visible_label_requested_alternative_mismatch(
+            instruction,
+            candidate,
+            candidates,
+            control_intents,
+        ):
+            return (
+                False,
+                geometry_score,
+                "target_id semantic mismatch",
+            )
         if _has_ambiguous_unlabeled_competitor(candidate, candidates, instruction_tokens):
             return (
                 False,
@@ -11028,6 +11049,49 @@ def _exact_visible_label_matches_request(
     return _visible_label_sequence_matches_request_text(instruction, candidate.text)
 
 
+def _exact_visible_label_order_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if len(requested_sequence) < 2:
+        return False
+    candidate_sequence = tuple(_literal_word_sequence(candidate.text))
+    if candidate_sequence == requested_sequence:
+        return False
+    return len(candidate_sequence) == len(requested_sequence) and sorted(
+        candidate_sequence
+    ) == sorted(requested_sequence)
+
+
+def _exact_visible_label_requested_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if _exact_visible_label_matches_request(instruction, candidate):
+        return False
+    if not _exact_visible_label_request_sequence(instruction):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if control_intents is not None and not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        if _exact_visible_label_matches_request(instruction, other):
+            return True
+    return False
+
+
 def _visible_label_sequence_matches_request_text(instruction: str, text: str) -> bool:
     requested_sequence = _exact_visible_label_request_sequence(instruction)
     if not requested_sequence:
@@ -12452,6 +12516,8 @@ def _candidate_snap_score(
     exact_visible_label_match = _exact_visible_label_matches_request(instruction, candidate)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
+    if _exact_visible_label_order_mismatch(instruction, candidate):
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0

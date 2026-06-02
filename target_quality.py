@@ -20,8 +20,20 @@ MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
 MODEL_BOUNDARY_ALIGNMENT_FLOOR = 0.08
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 CANDIDATE_SEGMENTED_SEPARATOR_FLOOR = 0.85
+CANDIDATE_INNER_CONTROL_EDGE_FLOOR = 0.40
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
+CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES = frozenset(
+    {
+        "dataitem",
+        "group",
+        "listitem",
+        "pane",
+        "row",
+        "tableitem",
+        "treeitem",
+    }
+)
 CANDIDATE_STRICT_QUALITY_CONTROL_TYPES = frozenset(
     {
         "dataitem",
@@ -193,6 +205,20 @@ def evaluate_target_quality(
             target_area_fraction=target_area_fraction,
         )
     if (
+        source != "model"
+        and _candidate_action_container_target(target_control_type, image_rect)
+        and _candidate_compound_action_request(instruction)
+        and _has_internal_control_vertical_edges(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
         _strict_candidate_quality_target(source, target_control_type, image_rect)
         and visual_activity > MODEL_NOISY_VISUAL_CEILING
         and boundary_activity > MODEL_NOISY_BOUNDARY_FLOOR
@@ -293,6 +319,15 @@ def _candidate_compound_action_request(instruction: str) -> bool:
 def _candidate_compound_rect_large_enough(rect: tuple[int, int, int, int]) -> bool:
     _x, _y, width, height = rect
     return width >= CANDIDATE_COMPOUND_MIN_WIDTH and width * height >= CANDIDATE_COMPOUND_MIN_AREA
+
+
+def _candidate_action_container_target(
+    target_control_type: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if target_control_type.lower() not in CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES:
+        return False
+    return _candidate_compound_rect_large_enough(rect)
 
 
 def _strict_candidate_quality_target(
@@ -522,6 +557,45 @@ def _has_segmented_control_separator(
             return _strong_center_vertical_separator_groups(edges) >= 1
     except Exception:
         return False
+
+
+def _has_internal_control_vertical_edges(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 80 or crop.height < 36:
+                return False
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return _internal_vertical_edge_groups(edges) >= 2
+    except Exception:
+        return False
+
+
+def _internal_vertical_edge_groups(edges: Image.Image) -> int:
+    width, height = edges.size
+    band = max(2, min(5, width // 12, height // 12))
+    margin_x = max(band * 3, int(width * 0.08))
+    if width <= margin_x * 2 or height <= band * 2:
+        return 0
+    pixels = edges.load()
+    line_length = height - band * 2
+    groups = 0
+    last_strong: int | None = None
+    for position in range(margin_x, width - margin_x):
+        strong = 0
+        for y in range(band, height - band):
+            if int(pixels[position, y]) > 32:
+                strong += 1
+        if strong / max(1, line_length) < CANDIDATE_INNER_CONTROL_EDGE_FLOOR:
+            continue
+        if last_strong is None or position - last_strong > 2:
+            groups += 1
+        last_strong = position
+    return groups
 
 
 def _strong_center_vertical_separator_groups(edges: Image.Image) -> int:
