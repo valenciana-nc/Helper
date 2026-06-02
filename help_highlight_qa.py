@@ -5492,6 +5492,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "search_exact_neighbor_recovers_from_find_alias_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Find users"},
+                {"rect": [220, 80, 180, 32], "label": "Search users"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Search users.",
+                "target_id": "find",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "find", "text": "Find users", "control_type": "button", "rect": [20, 80, 160, 32]},
+                {"id": "search", "text": "Search users", "control_type": "button", "rect": [220, 80, 180, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "search",
+                "rect": [220, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "remove_instruction_rejects_add_action_target_id",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -9856,6 +9880,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "taskbar_app_button_rejects_in_app_report_instruction",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 952, 96, 40], "label": "Taskbar Report"},
+                {"rect": [120, 180, 180, 36], "label": "Reports"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Report in the app.",
+                "target_id": "taskbar_report",
+                "target": {"x": 80, "y": 952, "width": 96, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "taskbar_report",
+                    "text": "Report",
+                    "control_type": "button",
+                    "rect": [80, 952, 96, 40],
+                    "window_title": "Taskbar",
+                    "window_rank": 1,
+                },
+                {
+                    "id": "app_reports",
+                    "text": "Reports",
+                    "control_type": "listitem",
+                    "rect": [120, 180, 180, 36],
+                    "window_title": "Dashboard",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "taskbar_report",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "browser_forward_rejects_wizard_navigation_instruction",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -11996,6 +12058,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "select_field_rejects_same_label_menuitem_when_combobox_exists",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 220, 32], "label": "State field"},
+                {"rect": [100, 150, 220, 32], "label": "State menu item"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the State field.",
+                "target_id": "stale",
+                "target": {"x": 100, "y": 150, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {"id": "combo", "text": "State", "control_type": "combobox", "rect": [100, 100, 220, 32]},
+                {"id": "stale", "text": "State", "control_type": "menuitem", "rect": [100, 150, 220, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "combo",
+                "rect": [100, 100, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "popup_menu_item_model_rect_snaps_to_menuitem",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -13240,6 +13326,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rejected_reason": "target_id ambiguous",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "pin_same_action_object_mismatch_recovers_to_exact_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Pin Beta"},
+                {"rect": [180, 80, 120, 32], "label": "Pin Alpha"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Pin Alpha.",
+                "target_id": "wrong",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "wrong", "text": "Pin Beta", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "correct", "text": "Pin Alpha", "control_type": "button", "rect": [180, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "correct",
+                "rect": [180, 80, 120, 32],
+                "overlay_emitted": True,
             },
         },
         {

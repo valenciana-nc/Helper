@@ -749,6 +749,13 @@ TASKBAR_FILE_ACTION_WORDS = frozenset(
 TASKBAR_PIN_ACTION_WORDS = frozenset(
     {"pin", "pinned", "pushpin", "thumbtack", "unpin"}
 )
+SAME_ACTION_OBJECT_FAMILIES = EXCLUSIVE_ACTION_FAMILIES + (
+    TASKBAR_PIN_ACTION_WORDS,
+    GENERIC_VISIBILITY_ACTION_WORDS,
+    SEARCH_ACTION_WORDS,
+    frozenset({"clear", "reset"}),
+    frozenset({"overlap", "restore"}),
+)
 TASKBAR_GENERIC_FILE_IDENTITY_WORDS = frozenset({"file", "files"})
 TASKBAR_WINDOWS_SEARCH_TOKENS = frozenset({"windows_search"})
 BROWSER_PROFILE_WINDOW_WORDS = frozenset({"brave", "browser", "chrome", "edge"})
@@ -2123,6 +2130,8 @@ def _text_match_score(
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2353,6 +2362,8 @@ def _context_text_match_score(
         return 0.0
     if _dropdown_option_launcher_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     visible_tokens = _candidate_visible_text_tokens(candidate)
     label_tokens = _nearby_field_label_tokens(candidate, candidates)
     candidate_tokens = _candidate_semantic_tokens(candidate) | label_tokens
@@ -2535,6 +2546,12 @@ def _target_id_plausibility(
             "target_id control type mismatch",
         )
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -3970,6 +3987,61 @@ def _explicit_text_field_control_type_mismatch(
     return False
 
 
+def _explicit_field_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"field", "fields", "input", "inputs"}):
+        return False
+    if raw_tokens & {"button", "buttons"}:
+        return False
+    if candidate.control_type in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    candidate_label_tokens = _field_alternative_label_tokens(candidate, candidates)
+    if not candidate_label_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+            continue
+        field_label_tokens = _field_alternative_label_tokens(other, candidates)
+        if field_label_tokens and candidate_label_tokens & field_label_tokens:
+            return True
+    return False
+
+
+def _field_alternative_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens = (
+        _candidate_visible_text_tokens(candidate)
+        | _tokens_from_text(candidate.automation_id)
+        | _nearby_field_label_tokens(candidate, candidates)
+    )
+    return _object_token_variants(tokens) - {
+        "box",
+        "combo",
+        "combobox",
+        "dropdown",
+        "edit",
+        "field",
+        "fields",
+        "input",
+        "inputs",
+        "item",
+        "menuitem",
+        "option",
+        "radio",
+        "radiobutton",
+        "spinner",
+        "treeitem",
+    }
+
+
 def _spinner_stepper_button_match(
     instruction: str,
     candidate: ControlCandidate,
@@ -4160,9 +4232,26 @@ def _taskbar_surface_context_mismatch(
     is_taskbar = _candidate_is_taskbar_surface(candidate)
     if "taskbar" in raw_tokens:
         return not is_taskbar
+    if _instruction_requests_local_app_content_surface(instruction, raw_tokens):
+        return is_taskbar
     if raw_tokens & BROWSER_PAGE_TARGET_WORDS:
         return is_taskbar
     return False
+
+
+def _instruction_requests_local_app_content_surface(
+    instruction: str,
+    raw_tokens: set[str],
+) -> bool:
+    local_surface_words = BROWSER_CHROME_APP_CONTEXT_WORDS - {"app", "application"}
+    if raw_tokens & local_surface_words:
+        return True
+    text = (instruction or "").lower()
+    return bool(
+        re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?app\b", text)
+        or re.search(r"\b(?:in|inside|on|within)\s+(?:the\s+)?page\b", text)
+        or re.search(r"\bin[-\s]?page\b", text)
+    )
 
 
 def _candidate_is_taskbar_surface(candidate: ControlCandidate) -> bool:
@@ -5085,7 +5174,7 @@ def _same_action_family_object_mismatch(instruction: str, candidate_text: str) -
     control_raw_tokens = _tokens_from_text(candidate_text)
     if not instruction_raw_tokens or not control_raw_tokens:
         return False
-    for family in EXCLUSIVE_ACTION_FAMILIES:
+    for family in SAME_ACTION_OBJECT_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
@@ -5124,7 +5213,7 @@ def _same_action_family_window_context_mismatch(
     ) & WINDOW_CONTEXT_OBJECT_WORDS
     if not context_objects:
         return False
-    for family in EXCLUSIVE_ACTION_FAMILIES:
+    for family in SAME_ACTION_OBJECT_FAMILIES:
         if not (instruction_raw_tokens & family and control_raw_tokens & family):
             continue
         instruction_objects = _object_token_variants(
@@ -6138,6 +6227,7 @@ def _ambiguous_exact_literal_alias_alternative(
         CLEAR_CLOSE_WORDS,
         CONFIRM_ACTION_WORDS,
         LOCK_ACTION_WORDS,
+        SEARCH_ACTION_WORDS,
     ):
         exact_words = instruction_words & family
         if not exact_words or not (candidate_semantic & family):
@@ -7105,6 +7195,8 @@ def _candidate_snap_score(
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
+    if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _taskbar_start_button_generic_menu_mismatch(instruction, candidate):
@@ -7961,6 +8053,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
+        return True
+    if _explicit_field_alternative_mismatch(instruction, candidate, candidates):
         return True
     if instruction_tokens and not semantic_tokens and _has_unparsed_alnum_text(candidate.text):
         return True

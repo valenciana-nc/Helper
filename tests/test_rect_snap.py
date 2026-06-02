@@ -4357,6 +4357,39 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertEqual(result.source, "target_id")
         self.assertEqual(result.rejected_reason, "target_id control type mismatch")
 
+    def test_select_field_rejects_same_label_menuitem_when_field_exists(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("combo", "State", "combobox", (100, 100, 220, 32)),
+            ControlCandidate("stale", "State", "menuitem", (100, 150, 220, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="stale",
+            instruction="Select the State field.",
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Select the State field.",
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Select the State field.",
+            candidates=candidates,
+            model_rect=(100, 150, 220, 32),
+        )
+
+        self.assertEqual(target_id.target_id, "stale")
+        self.assertEqual(target_id.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.target_id, "combo")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "combo")
+        self.assertFalse(snap_target.rejected_reason)
+
     def test_generic_checkbox_target_id_accepts_checkbox_label_without_type_text(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -9455,6 +9488,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "browser_downloads")
         self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
 
+    def test_taskbar_app_button_does_not_steal_in_app_target(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        taskbar = ControlCandidate(
+            "taskbar_report",
+            "Report",
+            "button",
+            (80, 952, 96, 40),
+            window_title="Taskbar",
+            window_rank=1,
+        )
+        app_item = ControlCandidate(
+            "app_reports",
+            "Reports",
+            "listitem",
+            (120, 180, 180, 36),
+            window_title="Dashboard",
+            window_rank=0,
+        )
+        candidates = [taskbar, app_item]
+
+        target_id = resolve_candidate_target(
+            target_id="taskbar_report",
+            instruction="Open Report in the app.",
+            candidates=candidates,
+            model_rect=taskbar.rect,
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Open Report in the app.",
+            candidates=candidates,
+            model_rect=taskbar.rect,
+        )
+        snap_target = snap_candidate_target(
+            instruction="Open Report in the app.",
+            candidates=candidates,
+            model_rect=taskbar.rect,
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Open Report in the app.",
+                    "target_id": "taskbar_report",
+                    "target": {
+                        "x": taskbar.rect[0],
+                        "y": taskbar.rect[1],
+                        "width": taskbar.rect[2],
+                        "height": taskbar.rect[3],
+                    },
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.target_id, "taskbar_report")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "taskbar_report")
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
+
     def test_os_chrome_controls_do_not_steal_app_local_targets(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -10828,6 +10925,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.target_id, "c001")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
+
+    def test_same_action_object_mismatch_recovers_to_exact_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            ("Pin Alpha.", "Pin"),
+            ("Unpin Alpha.", "Unpin"),
+            ("Restore Alpha.", "Restore"),
+            ("Hide Alpha.", "Hide"),
+            ("Show Alpha.", "Show"),
+            ("Search Alpha.", "Search"),
+            ("Find Alpha.", "Find"),
+            ("Clear Alpha.", "Clear"),
+            ("Reset Alpha.", "Reset"),
+        )
+        for instruction, action in cases:
+            with self.subTest(instruction=instruction):
+                wrong = ControlCandidate("wrong", f"{action} Beta", "button", (120, 160, 120, 32))
+                correct = ControlCandidate("correct", f"{action} Alpha", "button", (300, 160, 120, 32))
+                candidates = [wrong, correct]
+
+                wrong_target = resolve_candidate_target(
+                    target_id="wrong",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=wrong.rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "wrong",
+                            "target": {
+                                "x": wrong.rect[0],
+                                "y": wrong.rect[1],
+                                "width": wrong.rect[2],
+                                "height": wrong.rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(wrong_target.target_id, "wrong")
+                self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+                self.assertEqual(snap_target.target_id, "wrong")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "correct")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, correct.rect)
 
     def test_pin_action_rejects_taskbar_pinned_app_state_labels(self) -> None:
         from control_inventory import ControlCandidate
@@ -18076,6 +18232,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Open cart.", "basket", "Basket", "cart", "Cart"),
             ("Download report.", "export", "Export", "download", "Download"),
             ("Refresh page.", "reload", "Reload", "refresh", "Refresh"),
+            ("Search users.", "find", "Find users", "search", "Search users"),
             ("Edit profile.", "pencil", "Pencil", "edit", "Edit"),
             ("Submit form.", "send", "Send", "submit", "Submit"),
             ("Click Done.", "finish", "Finish", "done", "Done"),
