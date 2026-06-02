@@ -26472,6 +26472,94 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, "customers")
                 self.assertFalse(help_target.rejected_reason)
 
+    def test_same_name_content_surface_beats_nav_and_tab_targets(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = [
+            (
+                "Click Billing card.",
+                [
+                    ControlCandidate("nav", "Billing", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Billing", "pane", (260, 80, 300, 100)),
+                ],
+                "nav",
+                (20, 80, 160, 32),
+            ),
+            (
+                "Open the Acme details.",
+                [
+                    ControlCandidate("tab", "Acme", "tabitem", (20, 20, 80, 32)),
+                    ControlCandidate("nav", "Acme", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Acme", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 80, 32),
+            ),
+            (
+                "Open Settings page.",
+                [
+                    ControlCandidate("tab", "Settings", "tabitem", (20, 20, 100, 32)),
+                    ControlCandidate("nav", "Settings", "listitem", (20, 80, 160, 32)),
+                    ControlCandidate("content", "Settings", "pane", (260, 80, 300, 100)),
+                ],
+                "tab",
+                (20, 20, 100, 32),
+            ),
+        ]
+
+        for instruction, candidates, stale_target_id, stale_rect in cases:
+            with self.subTest(instruction=instruction):
+                target_id = resolve_candidate_target(
+                    target_id=stale_target_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=stale_rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": stale_target_id,
+                            "target": {
+                                "x": stale_rect[0],
+                                "y": stale_rect[1],
+                                "width": stale_rect[2],
+                                "height": stale_rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(target_id)
+                assert target_id is not None
+                self.assertIn(
+                    target_id.rejected_reason,
+                    {"target_id control type mismatch", "target_id semantic mismatch"},
+                )
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "content")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "content")
+                self.assertFalse(help_target.rejected_reason)
+
     def test_left_rail_item_rejects_browser_tabitem_collision(self) -> None:
         from control_inventory import (
             ControlCandidate,

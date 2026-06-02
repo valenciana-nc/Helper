@@ -13569,6 +13569,82 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_name_billing_card_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Billing"},
+                {"rect": [260, 80, 300, 100], "label": "Billing"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Billing card.",
+                "target_id": "nav",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "nav", "text": "Billing", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Billing", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_acme_details_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 80, 32], "label": "Acme"},
+                {"rect": [20, 80, 160, 32], "label": "Acme"},
+                {"rect": [260, 80, 300, 100], "label": "Acme"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Acme details.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Acme", "control_type": "tabitem", "rect": [20, 20, 80, 32]},
+                {"id": "nav", "text": "Acme", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Acme", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_name_settings_page_prefers_content_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 20, 100, 32], "label": "Settings"},
+                {"rect": [20, 80, 160, 32], "label": "Settings"},
+                {"rect": [260, 80, 300, 100], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Settings page.",
+                "target_id": "tab",
+                "target": {"x": 20, "y": 20, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "tab", "text": "Settings", "control_type": "tabitem", "rect": [20, 20, 100, 32]},
+                {"id": "nav", "text": "Settings", "control_type": "listitem", "rect": [20, 80, 160, 32]},
+                {"id": "content", "text": "Settings", "control_type": "pane", "rect": [260, 80, 300, 100]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "content",
+                "rect": [260, 80, 300, 100],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "left_rail_item_rejects_browser_tabitem",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

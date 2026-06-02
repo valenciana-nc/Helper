@@ -1390,7 +1390,22 @@ DIRECT_SURFACE_CONTAINER_ALIASES = {
     "headeritem": frozenset({"column", "header", "heading"}),
     "menu": frozenset({"menu"}),
     "pane": frozenset(
-        {"drawer", "footer", "form", "nav", "navigation", "pane", "panel", "rail", "section", "sidebar"}
+        {
+            "card",
+            "details",
+            "drawer",
+            "footer",
+            "form",
+            "nav",
+            "navigation",
+            "page",
+            "pane",
+            "panel",
+            "rail",
+            "route",
+            "section",
+            "sidebar",
+        }
     ),
     "toolbar": frozenset({"toolbar"}),
     "window": frozenset(
@@ -2411,6 +2426,18 @@ def _text_match_score(
         instruction,
         candidate,
     )
+    direct_surface_requested, direct_surface_label_tokens = _direct_surface_container_request_parts(
+        instruction
+    )
+    matches_direct_surface_container = bool(
+        direct_surface_requested
+        and (direct_surface_label_tokens or model_rect is None)
+        and _direct_surface_container_candidate_matches_request(
+            instruction,
+            candidate,
+            candidates,
+        )
+    )
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate):
@@ -2476,6 +2503,7 @@ def _text_match_score(
         and not exact_visible_label_match
         and not matches_site_information_action
         and not matches_dropdown_item
+        and not matches_direct_surface_container
     ):
         return 0.0
     if _named_dropdown_alternative_mismatch(instruction, candidate, candidates):
@@ -2492,6 +2520,13 @@ def _text_match_score(
         return score
     if matches_dropdown_item:
         score = TEXT_MATCH_FLOOR + 0.08
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(1.0, score)
+    if matches_direct_surface_container:
+        score = TEXT_MATCH_FLOOR + 0.06
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(1.0, score)
@@ -11695,6 +11730,14 @@ def _direct_surface_container_request_parts(instruction: str) -> tuple[set[str],
         ("nav", {"nav"}),
         ("left rail", {"rail"}),
         ("rail", {"rail"}),
+        ("card", {"card"}),
+        ("cards", {"card"}),
+        ("details", {"details"}),
+        ("detail", {"details"}),
+        ("page", {"page"}),
+        ("pages", {"page"}),
+        ("route", {"route"}),
+        ("routes", {"route"}),
         ("section", {"section"}),
         ("drawer", {"drawer"}),
         ("panel", {"panel"}),
