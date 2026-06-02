@@ -2077,6 +2077,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "uncheck_option_rejects_same_label_radiobutton",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 160, 32], "label": "Weekly"},
+                {"rect": [100, 150, 160, 32], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Uncheck the Weekly option.",
+                "target_id": "radio",
+                "target": {"x": 100, "y": 150, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "check", "text": "Weekly", "control_type": "checkbox", "rect": [100, 100, 160, 32]},
+                {"id": "radio", "text": "Weekly", "control_type": "radiobutton", "rect": [100, 150, 160, 32]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "check",
+                "rect": [100, 100, 160, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "state_action_model_rect_prefers_matching_button_over_noun_checkbox",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -3701,6 +3725,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "button",
                 "rect": [500, 120, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_extensions_rejects_browser_tab_title_for_extensions_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 20, 240, 40], "label": "Extensions - Google Chrome"},
+                {"rect": [500, 120, 120, 32], "label": "Extensions"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open extensions.",
+                "target_id": "tab",
+                "target": {"x": 80, "y": 20, "width": 240, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "tab",
+                    "text": "Extensions - Google Chrome",
+                    "control_type": "tabitem",
+                    "rect": [80, 20, 240, 40],
+                    "window_title": "Extensions - Google Chrome",
+                },
+                {
+                    "id": "button",
+                    "text": "Extensions",
+                    "control_type": "button",
+                    "rect": [500, 120, 120, 32],
+                    "automation_id": "extensions",
+                    "window_title": "Extensions - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "button",
+                "rect": [500, 120, 120, 32],
                 "overlay_emitted": True,
             },
         },
@@ -14321,6 +14382,42 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "c001",
                 "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "state_word_in_exact_object_label_accepts_target",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 150, 36], "label": "Closed tickets"},
+                {"rect": [260, 100, 140, 36], "label": "Open tickets"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Closed tickets.",
+                "target_id": "closed_tab",
+                "target": {"x": 100, "y": 100, "width": 150, "height": 36},
+            },
+            "candidates": [
+                {
+                    "id": "closed_tab",
+                    "text": "Closed tickets",
+                    "control_type": "tabitem",
+                    "rect": [100, 100, 150, 36],
+                    "window_title": "Helpdesk",
+                },
+                {
+                    "id": "open_tab",
+                    "text": "Open tickets",
+                    "control_type": "tabitem",
+                    "rect": [260, 100, 140, 36],
+                    "window_title": "Helpdesk",
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "closed_tab",
+                "rect": [100, 100, 150, 36],
+                "overlay_emitted": True,
             },
         },
         {

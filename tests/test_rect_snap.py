@@ -8674,7 +8674,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
-    def test_generic_settings_downloads_and_history_reject_browser_tab_title(self) -> None:
+    def test_generic_settings_downloads_history_and_extensions_reject_browser_tab_title(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
@@ -8729,6 +8729,24 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     (500, 120, 100, 32),
                     automation_id="history",
                     window_title="History - Google Chrome",
+                ),
+            ),
+            (
+                "Open extensions.",
+                ControlCandidate(
+                    "tab",
+                    "Extensions - Google Chrome",
+                    "tabitem",
+                    (80, 0, 240, 40),
+                    window_title="Extensions - Google Chrome",
+                ),
+                ControlCandidate(
+                    "button",
+                    "Extensions",
+                    "button",
+                    (500, 120, 120, 32),
+                    automation_id="extensions",
+                    window_title="Extensions - Google Chrome",
                 ),
             ),
         )
@@ -11956,6 +11974,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(confirm_instruction.source, "target_id")
         self.assertEqual(confirm_instruction.rejected_reason, "target_id control type mismatch")
 
+    def test_uncheck_option_rejects_same_label_radiobutton(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("check", "Weekly", "checkbox", (100, 100, 160, 32)),
+            ControlCandidate("radio", "Weekly", "radiobutton", (100, 150, 160, 32)),
+        ]
+        instruction = "Uncheck the Weekly option."
+
+        wrong_target = resolve_candidate_target(
+            target_id="radio",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 160, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 160, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 160, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "radio",
+                    "target": {"x": 100, "y": 150, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.target_id, "radio")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.target_id, "check")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "check")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "check")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (100, 100, 160, 32))
+
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -12198,6 +12269,70 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
                 self.assertEqual(target.source, "target_id")
                 self.assertFalse(target.rejected_reason)
+
+    def test_state_word_in_exact_object_label_still_accepts_target(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "closed_tab",
+                "Closed tickets",
+                "tabitem",
+                (100, 100, 150, 36),
+                window_title="Helpdesk",
+            ),
+            ControlCandidate(
+                "open_tab",
+                "Open tickets",
+                "tabitem",
+                (260, 100, 140, 36),
+                window_title="Helpdesk",
+            ),
+        ]
+        instruction = "Open Closed tickets."
+
+        target_id = resolve_candidate_target(
+            target_id="closed_tab",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 150, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 150, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 150, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "closed_tab",
+                    "target": {"x": 100, "y": 100, "width": 150, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "closed_tab")
+        self.assertFalse(target_id.rejected_reason)
+        self.assertEqual(text_target.target_id, "closed_tab")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "closed_tab")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "closed_tab")
+        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rect, (100, 100, 150, 36))
 
     def test_generic_action_snap_checks_containing_row_context(self) -> None:
         from control_inventory import ControlCandidate, snap_candidate_target

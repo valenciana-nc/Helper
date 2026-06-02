@@ -757,6 +757,8 @@ BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
     {
         "download",
         "downloads",
+        "extension",
+        "extensions",
         "history",
         "home",
         "house",
@@ -4304,7 +4306,17 @@ def _explicit_checkbox_like_control_type_mismatch(
     if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
         return False
     raw_tokens = _tokens_from_text(instruction)
-    explicit_checkbox = "checkbox" in raw_tokens or {"check", "box"} <= raw_tokens
+    explicit_checkbox = (
+        "checkbox" in raw_tokens
+        or {"check", "box"} <= raw_tokens
+        or bool(raw_tokens & (CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS))
+    )
+    if explicit_checkbox and _state_action_button_matches_checkbox_intent(
+        instruction,
+        candidate,
+        control_intents,
+    ):
+        return False
     explicit_toggle_or_switch = bool(raw_tokens & {"switch", "toggle"}) and not bool(
         raw_tokens & {"button", "buttons"}
     )
@@ -5726,12 +5738,12 @@ def _state_label_is_target_identity(
         return True
     if {"hidden", "bookmarks"} <= control_tokens and {"hidden", "bookmarks"} <= instruction_tokens:
         return True
-    visibility_states = frozenset({"hidden", "shown", "visible"})
-    if (
-        instruction_tokens & GENERIC_VISIBILITY_ACTION_WORDS
-        and instruction_tokens & control_tokens & visibility_states
-    ):
-        identity_stopwords = CONFIRM_OBJECT_STOPWORDS | GENERIC_VISIBILITY_ACTION_WORDS | visibility_states
+    for action_words, state_words in STATE_LABEL_ACTION_GROUPS:
+        if not (instruction_tokens & action_words):
+            continue
+        if not (instruction_tokens & control_tokens & state_words):
+            continue
+        identity_stopwords = CONFIRM_OBJECT_STOPWORDS | action_words | state_words
         instruction_objects = _object_token_variants(instruction_tokens - identity_stopwords)
         control_objects = _object_token_variants(control_tokens - identity_stopwords)
         if instruction_objects and control_objects and instruction_objects & control_objects:
