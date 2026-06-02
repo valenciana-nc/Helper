@@ -390,6 +390,7 @@ BROWSER_CHROME_TOOLBAR_WORDS = frozenset(
         "house",
         "reload",
         "refresh",
+        "share",
     }
 )
 CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "sidebar"})
@@ -2416,6 +2417,19 @@ def _single_dialog_dismiss_candidate(
         ):
             preferred.append(candidate)
     selected = preferred or dismiss_candidates
+    contextual_selected = [
+        candidate
+        for candidate in selected
+        if _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        )
+    ]
+    if contextual_selected:
+        selected = contextual_selected
+    elif close_context_tokens & DISMISS_DIALOG_CONTEXT_WORDS:
+        return None
     if len(selected) != 1:
         if not selected:
             return None
@@ -2479,6 +2493,12 @@ def _target_id_plausibility(
     semantic_tokens = _candidate_semantic_tokens_with_field_label(candidate, candidates)
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
+        )
+    if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -3310,7 +3330,7 @@ def _looks_like_browser_toolbar_button(candidate: ControlCandidate) -> bool:
     compact_text_toolbar_shape = candidate.rect[2] <= 96 and candidate.rect[3] <= 44
     if (
         automation_id in BROWSER_CHROME_TOOLBAR_ACTION_AUTOMATION_IDS
-        and compact_toolbar_shape
+        and (compact_toolbar_shape or compact_text_toolbar_shape)
         and candidate.rect[1] <= 72
     ):
         return True
@@ -3759,27 +3779,21 @@ def _explicit_text_field_control_type_mismatch(
     instruction: str,
     candidate: ControlCandidate,
 ) -> bool:
-    if candidate.control_type not in {"combobox", "spinner"}:
-        return False
     raw_tokens = _tokens_from_text(instruction)
-    if (
-        candidate.control_type == "combobox"
-        and (
-            "textbox" in raw_tokens
-            or "textarea" in raw_tokens
-            or {"text", "box"} <= raw_tokens
-        )
-    ):
-        return True
+    strict_text_entry = (
+        "textbox" in raw_tokens
+        or "textarea" in raw_tokens
+        or {"text", "box"} <= raw_tokens
+        or {"text", "field"} <= raw_tokens
+        or {"text", "input"} <= raw_tokens
+    )
+    if strict_text_entry:
+        return candidate.control_type != "edit"
     if candidate.control_type != "spinner":
         return False
     if raw_tokens & {"spinner", "stepper"}:
         return False
-    return (
-        "textbox" in raw_tokens
-        or "textarea" in raw_tokens
-        or ("text" in raw_tokens and bool(raw_tokens & {"box", "field", "input"}))
-    )
+    return False
 
 
 def _has_combobox_dropdown_arrow_button(
@@ -5328,11 +5342,24 @@ def _contextual_duplicate_request_tokens(
     instruction_tokens = _tokenize_instruction(instruction)
     candidate_tokens = _candidate_semantic_tokens(candidate)
     surface_tokens = raw_tokens & CONTEXTUAL_DUPLICATE_SURFACE_WORDS
-    return _object_token_variants(
+    request_tokens = _object_token_variants(
         (instruction_tokens | raw_tokens | surface_tokens)
         - candidate_tokens
         - (CONTEXTUAL_DUPLICATE_STOPWORDS - CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     )
+    matched_action_tokens = (instruction_tokens | raw_tokens) & candidate_tokens
+    if matched_action_tokens & CLEAR_CLOSE_WORDS and raw_tokens & {
+        "modal",
+        "notification",
+        "popover",
+        "popup",
+        "toast",
+    }:
+        request_tokens -= CLEAR_CLOSE_WORDS
+    for family in EXCLUSIVE_ACTION_FAMILIES:
+        if matched_action_tokens & family:
+            request_tokens -= family
+    return request_tokens
 
 
 def _contextual_duplicate_key(candidate: ControlCandidate) -> str:
@@ -6634,6 +6661,8 @@ def _candidate_snap_score(
     )
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
+        return 0.0
+    if _explicit_text_field_control_type_mismatch(instruction, candidate):
         return 0.0
     if _taskbar_start_button_action_mismatch(instruction_tokens, candidate):
         return min(0.41, 0.45 * iou + 0.30 * proximity)

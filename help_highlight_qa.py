@@ -5007,6 +5007,43 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "browser_page_share_recovers_from_in_page_share_button",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [420, 180, 100, 32], "label": "Share"},
+                {"rect": [900, 20, 90, 32], "label": "Share page"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Share browser page.",
+                "target_id": "page_share",
+                "target": {"x": 420, "y": 180, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_share",
+                    "text": "Share",
+                    "control_type": "button",
+                    "rect": [420, 180, 100, 32],
+                    "window_title": "Dashboard - Google Chrome",
+                },
+                {
+                    "id": "chrome_share",
+                    "text": "Share this page",
+                    "control_type": "button",
+                    "rect": [900, 20, 90, 32],
+                    "automation_id": "share",
+                    "window_title": "Dashboard - Google Chrome",
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "chrome_share",
+                "rect": [900, 20, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "cut_action_target_id_accepts_scissors_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15210,6 +15247,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             ],
             "expected": {
                 "target_id": "notification_dismiss",
+                "rect": [630, 160, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "generic_popup_dismiss_recovers_from_page_dismiss_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 300, 120], "label": "Main content"},
+                {"rect": [230, 160, 70, 30], "label": "Dismiss"},
+                {"rect": [420, 80, 300, 120], "label": "Settings popup"},
+                {"rect": [630, 160, 70, 30], "label": "Dismiss"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Dismiss in the popup.",
+                "target_id": "main_dismiss",
+                "target": {"x": 230, "y": 160, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {"id": "main", "text": "Main content", "control_type": "pane", "rect": [20, 80, 300, 120]},
+                {"id": "main_dismiss", "text": "Dismiss", "control_type": "button", "rect": [230, 160, 70, 30]},
+                {"id": "settings_popup", "text": "Settings popup", "control_type": "window", "rect": [420, 80, 300, 120]},
+                {"id": "popup_dismiss", "text": "Dismiss", "control_type": "button", "rect": [630, 160, 70, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "popup_dismiss",
                 "rect": [630, 160, 70, 30],
                 "overlay_emitted": True,
             },

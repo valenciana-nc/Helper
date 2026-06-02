@@ -472,6 +472,8 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(literal_edit_intents, {"edit"})
         self.assertEqual(search_field_intents, {"combobox", "edit", "spinner"})
         self.assertEqual(search_field_button_intents, {"button", "splitbutton"})
+        self.assertEqual(instruction_control_intents("Type in the Email text field."), {"edit"})
+        self.assertEqual(instruction_control_intents("Enter Email in the text box."), {"edit"})
         self.assertIn("edit", tokenize_control("Pencil"))
         self.assertIn("pencil", tokenize_control("Edit"))
 
@@ -990,6 +992,17 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(radio_intents, {"radiobutton"})
         self.assertEqual(radio_option_intents, {"radiobutton"})
         self.assertEqual(checkbox_option_intents, {"checkbox"})
+
+    def test_menu_option_intent_does_not_broaden_to_radio_options(self) -> None:
+        from help_intents import instruction_control_intents
+
+        from_menu_intents = instruction_control_intents("Select Weekly option from the menu.")
+        menu_option_intents = instruction_control_intents("Select Weekly menu option.")
+
+        self.assertIn("menuitem", from_menu_intents)
+        self.assertIn("menuitem", menu_option_intents)
+        self.assertNotIn("radiobutton", from_menu_intents)
+        self.assertNotIn("radiobutton", menu_option_intents)
 
     def test_iconic_disclosure_and_menu_launcher_intents(self) -> None:
         from help_intents import instruction_control_intents, menu_segment_intent
@@ -12218,6 +12231,100 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (100, 100, 160, 32))
 
+    def test_text_box_wording_rejects_same_label_non_input_target(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("edit", "Email", "edit", (100, 100, 180, 32)),
+            ControlCandidate("button", "Email", "button", (100, 150, 180, 32)),
+        ]
+        instruction = "Enter Email in the text box."
+
+        wrong_target = resolve_candidate_target(
+            target_id="button",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 150, 180, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "button",
+                    "target": {"x": 100, "y": 150, "width": 180, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "button")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "edit")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (100, 100, 180, 32))
+
+    def test_menu_option_wording_rejects_same_label_radio_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("radio", "Weekly", "radiobutton", (100, 100, 160, 32)),
+            ControlCandidate("menu", "Weekly", "menuitem", (100, 150, 160, 32)),
+        ]
+        instruction = "Select Weekly option from the menu."
+
+        wrong_target = resolve_candidate_target(
+            target_id="radio",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "radio",
+                    "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "radio")
+        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+        for resolved in (text_target, snap_target, help_target):
+            self.assertEqual(resolved.target_id, "menu")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (100, 150, 160, 32))
+
     def test_create_and_completion_alias_text_match_overrides_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -15194,6 +15301,69 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, (16, 8, 34, 34))
         self.assertFalse(target.rejected_reason)
         self.assertIsNone(snap_target)
+
+    def test_browser_page_share_wording_recovers_from_in_page_share(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "page_share",
+                "Share",
+                "button",
+                (420, 180, 100, 32),
+                window_title="Dashboard - Google Chrome",
+            ),
+            ControlCandidate(
+                "chrome_share",
+                "Share this page",
+                "button",
+                (900, 20, 90, 32),
+                automation_id="share",
+                window_title="Dashboard - Google Chrome",
+            ),
+        ]
+        instruction = "Share browser page."
+
+        wrong_target = resolve_candidate_target(
+            target_id="page_share",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 100, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 100, 32),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 180, 100, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "page_share",
+                    "target": {"x": 420, "y": 180, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "page_share")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        if wrong_snap is not None:
+            self.assertEqual(wrong_snap.target_id, "page_share")
+            self.assertTrue(wrong_snap.rejected_reason)
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "chrome_share")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (900, 20, 90, 32))
 
     def test_navigation_arrow_aliases_do_not_cross_history_controls(self) -> None:
         from control_inventory import ControlCandidate
@@ -18757,6 +18927,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
         for resolved in (text_target, snap_target, help_target):
             self.assertEqual(resolved.target_id, "notification_dismiss")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (630, 160, 70, 30))
+
+    def test_generic_popup_dismiss_recovers_from_page_dismiss_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("main", "Main content", "pane", (20, 80, 300, 120)),
+            ControlCandidate("main_dismiss", "Dismiss", "button", (230, 160, 70, 30)),
+            ControlCandidate("settings_popup", "Settings popup", "window", (420, 80, 300, 120)),
+            ControlCandidate("popup_dismiss", "Dismiss", "button", (630, 160, 70, 30)),
+        ]
+        instruction = "Click Dismiss in the popup."
+
+        wrong_target = resolve_candidate_target(
+            target_id="main_dismiss",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(230, 160, 70, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "main_dismiss",
+                    "target": {"x": 230, "y": 160, "width": 70, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "main_dismiss")
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        if wrong_snap is not None:
+            self.assertEqual(wrong_snap.target_id, "main_dismiss")
+            self.assertTrue(wrong_snap.rejected_reason)
+        for resolved in (text_target, help_target):
+            self.assertEqual(resolved.target_id, "popup_dismiss")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (630, 160, 70, 30))
 

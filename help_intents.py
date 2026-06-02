@@ -1043,6 +1043,14 @@ def instruction_control_intents(instruction: str) -> set[str]:
     dropdown_requested = "dropdown" in raw_tokens or (
         "drop" in raw_tokens and "down" in raw_tokens
     )
+    menu_option_requested = "menuitem" in raw_tokens or (
+        "menu" in raw_tokens
+        and (
+            "item" in raw_tokens
+            or raw_tokens & _OPTION_INTENT_WORDS
+            or "from" in raw_tokens
+        )
+    )
     picker_launcher_requested = _picker_launcher_requested(raw_tokens)
     selector_requested = _selector_requested(raw_tokens)
     menu_launcher_requested = _menu_launcher_requested(raw_tokens)
@@ -1083,6 +1091,13 @@ def instruction_control_intents(instruction: str) -> set[str]:
         or search_bar_requested
         or _text_entry_action_requested(raw_tokens)
     )
+    strict_text_entry_requested = (
+        "textbox" in raw_tokens
+        or "textarea" in raw_tokens
+        or {"text", "box"} <= raw_tokens
+        or {"text", "field"} <= raw_tokens
+        or {"text", "input"} <= raw_tokens
+    )
     explicit_button_requested = "button" in raw_tokens
     row_requested = bool(raw_tokens & {"row", "rows"}) and not (
         checkbox_requested
@@ -1115,9 +1130,12 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.add("radiobutton")
     if raw_tokens & {"edit", "editable"} and not edit_action_requested:
         intents.update(EDIT_CONTROL_TYPES)
+    if strict_text_entry_requested:
+        intents.update(EDIT_CONTROL_TYPES)
     if (
         not checkbox_requested
         and input_requested
+        and not strict_text_entry_requested
         and not explicit_button_requested
         and not password_visibility_requested
         and not (clipboard_action_requested and not clipboard_text_entry_target_requested)
@@ -1200,9 +1218,13 @@ def instruction_control_intents(instruction: str) -> set[str]:
         intents.update(_TREE_ITEM_INTENT_TYPES)
     if "item" in raw_tokens and raw_tokens & {"drawer", "nav", "navigation", "sidebar"}:
         intents.update(_NAV_ITEM_INTENT_TYPES)
-    if raw_tokens & _OPTION_INTENT_WORDS and not (checkbox_requested or radio_requested):
+    if raw_tokens & _OPTION_INTENT_WORDS and not (
+        checkbox_requested or radio_requested or menu_option_requested
+    ):
         intents.update(_OPTION_INTENT_TYPES)
-    if selection_action_requested and not (checkbox_requested or radio_requested):
+    if selection_action_requested and not (
+        checkbox_requested or radio_requested or menu_option_requested
+    ):
         intents.update(_SELECTION_ACTION_INTENT_TYPES)
     if raw_tokens & {"header", "heading"}:
         intents.add("headeritem")
@@ -1212,6 +1234,8 @@ def instruction_control_intents(instruction: str) -> set[str]:
         menu_launcher_requested or contextual_menu_launcher_requested
     ):
         intents.update(_MENU_INTENT_TYPES)
+    if menu_option_requested:
+        intents.add("menuitem")
     if menu_launcher_requested or launcher_control_requested or contextual_menu_launcher_requested:
         intents.update(_MENU_LAUNCHER_INTENT_TYPES)
     if "menuitem" in raw_tokens:
