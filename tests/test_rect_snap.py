@@ -17897,6 +17897,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from help_session import resolve_help_target
 
         cases = (
+            ("Create item.", "add", "Add", "create", "Create"),
+            ("Add item.", "create", "Create", "add", "Add"),
+            ("New item.", "add", "Add", "new", "New"),
+            ("Cancel dialog.", "close", "Close", "cancel", "Cancel"),
+            ("Sign out.", "logout_all", "Logout all sessions", "signout", "Sign out"),
             ("Download report.", "export", "Export", "download", "Download"),
             ("Refresh page.", "reload", "Reload", "refresh", "Refresh"),
             ("Edit profile.", "pencil", "Pencil", "edit", "Edit"),

@@ -754,6 +754,8 @@ BROWSER_ADDRESS_BAR_REQUEST_WORDS = frozenset(
 )
 BROWSER_ABOUT_BLANK_TARGET_WORDS = frozenset({"blank", "tab", "tabitem"})
 BROWSER_TAB_AUTH_ACTION_WORDS = frozenset({"log", "login", "sign", "signin"})
+BROWSER_SIGN_IN_ACTION_WORDS = frozenset({"in", "login", "signin"})
+BROWSER_SIGN_OUT_ACTION_WORDS = frozenset({"logoff", "logout", "out", "signout"})
 BROWSER_TAB_GENERIC_SECTION_WORDS = frozenset(
     {
         "download",
@@ -5914,6 +5916,10 @@ def _ambiguous_exact_literal_alias_alternative(
     candidate_words = _literal_words_from_text(candidate.descriptor)
     for family in EXCLUSIVE_ACTION_FAMILIES + (
         BROWSER_BOOKMARK_ACTION_WORDS,
+        ADD_ACTION_WORDS,
+        BROWSER_SIGN_IN_ACTION_WORDS,
+        BROWSER_SIGN_OUT_ACTION_WORDS,
+        CLEAR_CLOSE_WORDS,
         CONFIRM_ACTION_WORDS,
     ):
         exact_words = instruction_words & family

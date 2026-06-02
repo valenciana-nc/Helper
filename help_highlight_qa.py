@@ -2936,6 +2936,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "create_exact_neighbor_recovers_from_add_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 120, 32], "label": "Add"},
+                {"rect": [180, 80, 140, 32], "label": "Create"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Create item.",
+                "target_id": "add",
+                "target": {"x": 20, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "add", "text": "Add", "control_type": "button", "rect": [20, 80, 120, 32]},
+                {"id": "create", "text": "Create", "control_type": "button", "rect": [180, 80, 140, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "create",
+                "rect": [180, 80, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "finish_action_text_match_overrides_back_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -2976,6 +3000,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "c001",
                 "rect": [20, 80, 100, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "sign_out_exact_neighbor_recovers_from_logout_all_geometry",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 80, 160, 32], "label": "Logout all sessions"},
+                {"rect": [220, 80, 120, 32], "label": "Sign out"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Sign out.",
+                "target_id": "logout_all",
+                "target": {"x": 20, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "logout_all",
+                    "text": "Logout all sessions",
+                    "control_type": "button",
+                    "rect": [20, 80, 160, 32],
+                },
+                {"id": "signout", "text": "Sign out", "control_type": "button", "rect": [220, 80, 120, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "signout",
+                "rect": [220, 80, 120, 32],
                 "overlay_emitted": True,
             },
         },
