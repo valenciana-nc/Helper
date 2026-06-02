@@ -87,6 +87,46 @@ class TargetQualityTests(unittest.TestCase):
         self.assertTrue(quality.accepted)
         self.assertGreaterEqual(quality.visual_activity, 0.035)
 
+    def test_rejects_shifted_model_rect_over_single_button(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 80, 150, 112), outline="black", fill="#f3f4f6")
+        draw.text((86, 90), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(70, 80, 90, 32),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+        self.assertGreaterEqual(quality.boundary_activity, 0.10)
+
+    def test_rejects_clipped_model_rect_over_single_button(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (220, 140), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 80, 150, 112), outline="black", fill="#f3f4f6")
+        draw.text((86, 90), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(60, 80, 80, 32),
+            source="model",
+            confidence=0.0,
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+        self.assertGreaterEqual(quality.boundary_activity, 0.10)
+
     def test_rejects_model_rect_containing_multiple_button_boundaries(self) -> None:
         from target_quality import evaluate_target_quality
 

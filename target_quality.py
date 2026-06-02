@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from PIL import Image, ImageFilter, ImageStat
 
@@ -15,6 +17,7 @@ MODEL_NOISY_VISUAL_CEILING = 0.40
 MODEL_NOISY_BOUNDARY_FLOOR = 0.25
 MODEL_COMPOUND_SEPARATOR_FLOOR = 0.65
 MODEL_COMPOUND_MIN_SEPARATOR_GROUPS = 2
+MODEL_BOUNDARY_ALIGNMENT_FLOOR = 0.08
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
@@ -220,6 +223,15 @@ def evaluate_target_quality(
                 boundary_activity=boundary_activity,
                 target_area_fraction=target_area_fraction,
             )
+        if not _model_boundary_aligned(capture.png_bytes, clipped):
+            return TargetQuality(
+                accepted=False,
+                reason="target boundary misaligned",
+                visible_fraction=visible_fraction,
+                visual_activity=visual_activity,
+                boundary_activity=boundary_activity,
+                target_area_fraction=target_area_fraction,
+            )
 
     return TargetQuality(
         accepted=True,
@@ -316,6 +328,97 @@ def _boundary_activity(crop: Image.Image) -> float:
     mean = sum(values) / len(values)
     variance = sum((value - mean) ** 2 for value in values) / len(values)
     return min(1.0, (variance ** 0.5) / 255.0)
+
+
+def _model_boundary_aligned(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            image = img.convert("L")
+            scores = _boundary_crossing_scores(image, rect)
+            if len(scores) < 4:
+                return True
+            return all(score >= MODEL_BOUNDARY_ALIGNMENT_FLOOR for score in scores)
+    except Exception:
+        return True
+
+
+def _boundary_crossing_scores(
+    image: Image.Image,
+    rect: tuple[int, int, int, int],
+) -> list[float]:
+    x, y, width, height = rect
+    if width < 8 or height < 8:
+        return []
+    x2 = x + width
+    y2 = y + height
+    image_width, image_height = image.size
+    band = max(1, min(3, width // 12, height // 12))
+    margin = max(2, min(8, width // 8, height // 4))
+    pixels = image.load()
+    scores: list[float] = []
+
+    if x - band >= 0 and y + margin < y2 - margin:
+        scores.append(
+            _average_boundary_difference(
+                pixels,
+                (
+                    (x - 1 - offset, row, x + offset, row)
+                    for row in range(y + margin, y2 - margin)
+                    for offset in range(band)
+                ),
+            )
+        )
+    if x2 + band <= image_width and y + margin < y2 - margin:
+        scores.append(
+            _average_boundary_difference(
+                pixels,
+                (
+                    (x2 + offset, row, x2 - 1 - offset, row)
+                    for row in range(y + margin, y2 - margin)
+                    for offset in range(band)
+                ),
+            )
+        )
+    if y - band >= 0 and x + margin < x2 - margin:
+        scores.append(
+            _average_boundary_difference(
+                pixels,
+                (
+                    (col, y - 1 - offset, col, y + offset)
+                    for col in range(x + margin, x2 - margin)
+                    for offset in range(band)
+                ),
+            )
+        )
+    if y2 + band <= image_height and x + margin < x2 - margin:
+        scores.append(
+            _average_boundary_difference(
+                pixels,
+                (
+                    (col, y2 + offset, col, y2 - 1 - offset)
+                    for col in range(x + margin, x2 - margin)
+                    for offset in range(band)
+                ),
+            )
+        )
+    return scores
+
+
+def _average_boundary_difference(
+    pixels: Any,
+    pairs: Iterable[tuple[int, int, int, int]],
+) -> float:
+    total = 0
+    count = 0
+    for x1, y1, x2, y2 in pairs:
+        total += abs(int(pixels[x1, y1]) - int(pixels[x2, y2]))
+        count += 1
+    if count == 0:
+        return 0.0
+    return total / (count * 255)
 
 
 def _has_compound_control_separators(

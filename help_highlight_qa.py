@@ -14837,6 +14837,24 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "shifted_model_rect_over_button_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [60, 80, 90, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 140, "y": 250, "width": 180, "height": 100},
+            },
+            "candidates": [],
+            "expected": {
+                "source": "model",
+                "quality_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "compound_model_rect_over_multiple_buttons_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
