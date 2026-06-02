@@ -2827,6 +2827,8 @@ def _text_match_score(
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
         return 0.0
+    if _clear_field_action_alternative_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
     if _close_context_action_mismatch(instruction, candidate, candidates):
@@ -3878,6 +3880,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _clear_field_action_alternative_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return (
             False,
@@ -4737,17 +4745,29 @@ def _instruction_requests_browser_address_bar(instruction: str) -> bool:
     raw_tokens = _tokens_from_text(instruction)
     if _instruction_requests_page_address_field(instruction):
         return False
-    if raw_tokens & (BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}):
+    if "omnibox" in raw_tokens:
+        return True
+    if "bar" in raw_tokens and raw_tokens & BROWSER_ADDRESS_BAR_REQUEST_WORDS:
+        return True
+    if raw_tokens & BROWSER_APP_IDENTITY_WORDS and raw_tokens & (
+        BROWSER_ADDRESS_BAR_REQUEST_WORDS - {"find", "search"}
+    ):
         return True
     return "bar" in raw_tokens and bool(raw_tokens & {"find", "search"})
 
 
 def _instruction_requests_page_address_field(instruction: str) -> bool:
     raw_tokens = _tokens_from_text(instruction)
-    if not (raw_tokens & BROWSER_PAGE_TARGET_WORDS):
+    if not (raw_tokens & (BROWSER_PAGE_TARGET_WORDS | BROWSER_ADDRESS_BAR_ROLE_WORDS)):
         return False
     if raw_tokens & BROWSER_APP_IDENTITY_WORDS:
         return False
+    if "omnibox" in raw_tokens:
+        return False
+    if "bar" in raw_tokens and raw_tokens & BROWSER_ADDRESS_BAR_REQUEST_WORDS:
+        return False
+    if raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}):
+        return True
     return bool(raw_tokens & (BROWSER_ADDRESS_BAR_ROLE_WORDS - {"bar", "search"}))
 
 
@@ -4910,6 +4930,12 @@ def _instruction_has_explicit_app_local_context(
     surface_tokens = _object_token_variants(raw_tokens)
     if surface_tokens & {"app", "application", "in_app", "in_page"}:
         return True
+    if (
+        raw_tokens & BROWSER_PAGE_TARGET_WORDS
+        and raw_tokens & (TEXT_ENTRY_FIELD_WORDS | SEARCH_ACTION_WORDS | {"find", "search"})
+        and not raw_tokens & BROWSER_CHROME_EXPLICIT_CONTEXT_WORDS
+    ):
+        return True
     text = (instruction or "").lower()
     return bool(
         re.search(r"\bin\s+(?:the\s+)?app\b", text)
@@ -5068,6 +5094,35 @@ def _clear_close_action_mismatch(
     if _candidate_has_literal_clear_evidence(candidate):
         return False
     return not _has_clear_field_context(candidate, candidates, instruction_words)
+
+
+def _clear_field_action_alternative_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    instruction_words = _literal_words_from_text(instruction)
+    if "clear" not in instruction_words:
+        return False
+    requested_context = instruction_words & CLEAR_CONTEXT_WORDS
+    if not requested_context:
+        return False
+    candidate_tokens = _candidate_context_tokens(candidate)
+    if candidate_tokens & requested_context:
+        return False
+    if _looks_like_close_or_x_button(candidate) and _has_clear_field_context(
+        candidate,
+        candidates,
+        instruction_words,
+    ):
+        return False
+    return any(
+        other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and _looks_like_close_or_x_button(other)
+        and _has_clear_field_context(other, candidates, instruction_words)
+        for other in candidates
+    )
 
 
 def _close_context_action_mismatch(
@@ -7442,6 +7497,10 @@ def _explicit_action_context_mismatch_without_contextual_evidence(
         return False
     if _state_label_action_mismatch(instruction, candidate.descriptor):
         return True
+    if _instruction_requests_browser_address_bar(instruction) and _looks_like_strong_browser_address_bar(candidate):
+        return False
+    if _candidate_satisfies_app_local_context_request(instruction, candidate):
+        return False
     if _same_action_family_object_mismatch(instruction, candidate.text):
         return True
     return not _candidate_satisfies_contextual_duplicate_request(
@@ -7449,6 +7508,42 @@ def _explicit_action_context_mismatch_without_contextual_evidence(
         candidate,
         candidates,
     )
+
+
+def _candidate_satisfies_app_local_context_request(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not _instruction_has_explicit_app_local_context(instruction, raw_tokens):
+        return False
+    if _looks_like_browser_chrome_surface(candidate):
+        return False
+    if _looks_like_strong_browser_address_bar(candidate):
+        return False
+    requested_action = (raw_tokens | _tokenize_instruction(instruction)) - {
+        "app",
+        "application",
+        "in_app",
+        "in_page",
+        "page",
+    }
+    candidate_tokens = _candidate_semantic_tokens(candidate)
+    matched_action = requested_action & candidate_tokens
+    if not matched_action:
+        return False
+    request_objects = _object_token_variants(
+        requested_action
+        - candidate_tokens
+        - ACTION_OBJECT_STOPWORDS
+        - CONTAINED_CONTROL_REQUEST_WORDS
+        - FIELD_ENTRY_ACTION_WORDS
+        - TEXT_ENTRY_FIELD_WORDS
+        - OPEN_VIEW_REQUEST_WORDS
+        - SEARCH_ACTION_WORDS
+        - {"click", "enter", "focus", "for", "from", "in", "inside", "on", "press", "tap", "the", "type", "within", "with"}
+    )
+    return not request_objects or bool(request_objects & candidate_tokens)
 
 
 def _edit_action_context_mismatch(instruction: str, candidate: ControlCandidate) -> bool:
@@ -11515,7 +11610,11 @@ def _has_visible_semantic_alternative(
         alternative_tokens = visible_tokens | label_tokens
         if not alternative_tokens:
             continue
-        if _text_evidence_score(instruction_tokens, alternative_tokens) >= TARGET_ID_TEXT_FLOOR:
+        alternative_score = _text_evidence_score(instruction_tokens, alternative_tokens)
+        if alternative_score >= TARGET_ID_TEXT_FLOOR:
+            selected_score = _text_evidence_score(instruction_tokens, selected_evidence_tokens)
+            if selected_score >= alternative_score + TEXT_MATCH_GAP:
+                continue
             return True
     return False
 
@@ -11635,6 +11734,8 @@ def _candidate_snap_score(
     ):
         return 0.0
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return 0.0
+    if _clear_field_action_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return 0.0
@@ -13038,6 +13139,8 @@ def _candidate_snap_semantic_mismatch(
     ):
         return True
     if _hidden_bookmarks_overflow_action_mismatch(instruction_tokens, candidate):
+        return True
+    if _clear_field_action_alternative_mismatch(instruction, candidate, candidates):
         return True
     if _clear_close_action_mismatch(instruction, instruction_tokens, candidate, candidates):
         return True

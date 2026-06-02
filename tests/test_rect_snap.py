@@ -16629,6 +16629,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.target_id, "c002")
         self.assertFalse(snap_target.rejected_reason)
 
+    def test_clear_search_recovers_from_clear_filters_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("field", "Search", "edit", (110, 72, 360, 36)),
+            ControlCandidate("x", "X", "button", (440, 78, 24, 24)),
+            ControlCandidate("filter", "Clear filters", "button", (500, 72, 120, 36)),
+        ]
+        instruction = "Clear search."
+
+        stale_target = resolve_candidate_target(
+            target_id="filter",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 72, 120, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 72, 120, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 72, 120, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "filter",
+                    "target": {"x": 500, "y": 72, "width": 120, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+        filters_target = resolve_candidate_target(
+            target_id="filter",
+            instruction="Clear filters.",
+            candidates=candidates,
+            model_rect=(500, 72, 120, 36),
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        for target in (text_target, help_target):
+            self.assertEqual(target.target_id, "x")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (440, 78, 24, 24))
+        self.assertEqual(filters_target.target_id, "filter")
+        self.assertFalse(filters_target.rejected_reason)
+
     def test_weather_widget_accepts_weather_and_widget_wording(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -27100,6 +27156,241 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 260, 32))
+
+    def test_app_local_search_recovers_from_browser_address_bar(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "address",
+                "Address and search bar",
+                "edit",
+                (120, 10, 420, 32),
+                window_title="Users - Google Chrome",
+            ),
+            ControlCandidate(
+                "app_search",
+                "Search users",
+                "edit",
+                (80, 120, 260, 32),
+                window_title="Users - Google Chrome",
+            ),
+            ControlCandidate(
+                "search_button",
+                "Search",
+                "button",
+                (350, 120, 80, 32),
+                window_title="Users - Google Chrome",
+            ),
+        ]
+        instruction = "Search in app."
+
+        stale_target = resolve_candidate_target(
+            target_id="address",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 10, 420, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 10, 420, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "address",
+                    "target": {"x": 120, "y": 10, "width": 420, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        for target in (text_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.source, "text_match")
+            self.assertEqual(target.target_id, "app_search")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (80, 120, 260, 32))
+
+    def test_app_local_search_keeps_mismatched_search_field_rejected(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        target = resolve_candidate_target(
+            target_id="",
+            instruction="Search accounts in app.",
+            candidates=[
+                ControlCandidate(
+                    "address",
+                    "Address and search bar",
+                    "edit",
+                    (120, 10, 420, 32),
+                    window_title="Users - Google Chrome",
+                ),
+                ControlCandidate(
+                    "app_search",
+                    "Search users",
+                    "edit",
+                    (80, 120, 260, 32),
+                    window_title="Users - Google Chrome",
+                ),
+            ],
+            model_rect=(120, 10, 420, 32),
+        )
+
+        self.assertIsNone(target)
+
+    def test_nearby_label_recovers_duplicate_blank_text_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("shipping_label", "Shipping search", "text", (20, 80, 120, 24)),
+            ControlCandidate("shipping", "", "edit", (150, 72, 320, 36)),
+            ControlCandidate("billing_label", "Billing search", "text", (20, 140, 120, 24)),
+            ControlCandidate("billing", "", "edit", (150, 132, 320, 36)),
+        ]
+        instruction = "Type into Billing search."
+
+        stale_target = resolve_candidate_target(
+            target_id="shipping",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(150, 72, 320, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(150, 72, 320, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(150, 72, 320, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "shipping",
+                    "target": {"x": 150, "y": 72, "width": 320, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
+        for target in (text_target, snap_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "billing")
+            self.assertEqual(target.rect, (150, 132, 320, 36))
+
+    def test_app_local_address_recovers_from_browser_address_bar(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "omnibox",
+                "Checkout | Address and search bar",
+                "edit",
+                (88, 8, 520, 34),
+                automation_id="address and search bar",
+                window_title="Checkout - Google Chrome",
+            ),
+            ControlCandidate(
+                "shipping_address",
+                "Shipping address",
+                "edit",
+                (120, 220, 360, 36),
+                automation_id="shippingAddress",
+                window_title="Checkout - Google Chrome",
+            ),
+        ]
+        instruction = "Enter the shipping address."
+
+        stale_target = resolve_candidate_target(
+            target_id="omnibox",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(88, 8, 520, 34),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(88, 8, 520, 34),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(88, 8, 520, 34),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "omnibox",
+                    "target": {"x": 88, "y": 8, "width": 520, "height": 34},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.rejected_reason, "target_id semantic mismatch")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        for target in (text_target, help_target):
+            self.assertEqual(target.source, "text_match")
+            self.assertEqual(target.target_id, "shipping_address")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (120, 220, 360, 36))
+
+    def test_explicit_browser_address_bar_still_wins_over_page_address_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate(
+                "omnibox",
+                "Checkout | Address and search bar",
+                "edit",
+                (88, 8, 520, 34),
+                automation_id="address and search bar",
+                window_title="Checkout - Google Chrome",
+            ),
+            ControlCandidate(
+                "shipping_address",
+                "Shipping address",
+                "edit",
+                (120, 220, 360, 36),
+                automation_id="shippingAddress",
+                window_title="Checkout - Google Chrome",
+            ),
+        ]
+
+        for instruction in ("Click address bar.", "Focus the URL bar.", "Click the omnibox."):
+            with self.subTest(instruction=instruction):
+                target = resolve_candidate_target(
+                    target_id="omnibox",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(88, 8, 520, 34),
+                )
+
+                self.assertEqual(target.target_id, "omnibox")
+                self.assertFalse(target.rejected_reason)
 
     def test_site_info_text_match_recovers_from_address_bar_url_content(self) -> None:
         from control_inventory import ControlCandidate
