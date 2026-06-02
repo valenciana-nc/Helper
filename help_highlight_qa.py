@@ -17253,6 +17253,51 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "alert_context_uses_unnamed_foreground_window_surface",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [360, 200, 300, 180], "label": ""},
+                {"rect": [500, 310, 70, 30], "label": "Save"},
+                {"rect": [100, 100, 70, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save in the alert.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 70, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "alert_window",
+                    "text": "",
+                    "control_type": "window",
+                    "rect": [360, 200, 300, 180],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "alert_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [500, 310, 70, 30],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 70, 30],
+                    "window_title": "Editor",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "alert_save",
+                "rect": [500, 310, 70, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "dialog_close_exact_target_id_returns_clean_text_resolution",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

@@ -173,6 +173,8 @@ ROW_CONTEXT_OBJECT_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset(
 )
 CONTEXTUAL_DUPLICATE_CONTAINER_WORDS = frozenset(
     {
+        "alert",
+        "alerts",
         "area",
         "banner",
         "banners",
@@ -710,6 +712,8 @@ ROW_CONTEXT_GENERIC_WORDS = WINDOW_CONTEXT_OBJECT_WORDS | frozenset(
 )
 CONTEXTUAL_DUPLICATE_SURFACE_WORDS = frozenset(
     {
+        "alert",
+        "alerts",
         "banner",
         "card",
         "column",
@@ -1182,7 +1186,17 @@ SURFACE_CONTEXT_TYPE_WORDS = {
     "window": frozenset({"window"}),
 }
 UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS = frozenset(
-    {"dialog", "modal", "notification", "popover", "popup", "toast"}
+    {
+        "alert",
+        "alerts",
+        "banner",
+        "dialog",
+        "modal",
+        "notification",
+        "popover",
+        "popup",
+        "toast",
+    }
 )
 CONTAINED_CONTROL_REQUEST_WORDS = frozenset(
     {

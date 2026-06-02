@@ -20978,7 +20978,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
-        for surface in ("popup", "popover", "toast", "notification"):
+        for surface in ("alert", "alerts", "banner", "popup", "popover", "toast", "notification"):
             with self.subTest(surface=surface):
                 candidates = [
                     ControlCandidate(
