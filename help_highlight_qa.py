@@ -18676,6 +18676,44 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "dialog_context_does_not_clean_background_duplicate_without_evidence",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [940, 10, 32, 32], "label": "Close"},
+                {"rect": [940, 110, 32, 32], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target_id": "background_close",
+                "target": {"x": 940, "y": 110, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "foreground_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [940, 10, 32, 32],
+                    "window_title": "Foreground",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "background_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [940, 110, 32, 32],
+                    "window_title": "Background",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "background_close",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "dialog_context_uses_unnamed_foreground_window_surface",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

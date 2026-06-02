@@ -3295,6 +3295,113 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.source, "uia")
         self.assertEqual(result.rejected_reason, "compound target ambiguous")
 
+    def test_fresh_snap_suppresses_stale_action_outside_table_or_grid(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Click Save in the table.",
+                _make_button("Orders table", 420, 80, 300, 120, control_type="Table"),
+            ),
+            (
+                "Click Save in the grid.",
+                _make_button("Orders grid", 420, 80, 300, 120, control_type="DataGrid"),
+            ),
+        )
+        for instruction, surface in cases:
+            with self.subTest(instruction=instruction):
+                page_save = _make_button("Save", 230, 160, 60, 30)
+                table_save = _make_button("Save", 630, 160, 60, 30)
+                desktop = _FakeDesktop(
+                    [_make_window("App", 0, 0, 1000, 700, [page_save, surface, table_save])]
+                )
+
+                snap = snap_to_control(
+                    (230, 160, 60, 30),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+                self.assertEqual(snap.rect, (230, 160, 60, 30))
+                self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_recovers_action_inside_near_table(self) -> None:
+        from rect_snap import snap_to_control
+
+        page_save = _make_button("Save", 230, 160, 60, 30)
+        table = _make_button("Orders table", 180, 120, 300, 120, control_type="Table")
+        table_save = _make_button("Save", 300, 180, 60, 30)
+        desktop = _FakeDesktop(
+            [_make_window("App", 0, 0, 1000, 700, [page_save, table, table_save])]
+        )
+
+        result = snap_to_control(
+            (230, 160, 60, 30),
+            "Click Save in the table.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (300, 180, 60, 30))
+        self.assertFalse(result.rejected_reason)
+
+    def test_fresh_snap_suppresses_background_action_outside_named_dialog(self) -> None:
+        from rect_snap import snap_to_control
+
+        global_ok = _make_button("OK", 20, 20, 70, 30)
+        dialog_ok = _make_button("OK", 600, 160, 70, 30)
+        dialog = _FakeControl(
+            text="Settings dialog",
+            control_type="Pane",
+            rect=_FakeRect(500, 100, 800, 340),
+            children=[dialog_ok],
+        )
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 1000, 1000, [global_ok, dialog])])
+
+        snap = snap_to_control(
+            (20, 20, 70, 30),
+            "Click OK in the Settings dialog.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        self.assertEqual(snap.rect, (20, 20, 70, 30))
+        self.assertEqual(snap.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_suppresses_action_in_wrong_named_window(self) -> None:
+        from rect_snap import snap_to_control
+
+        alpha = _make_window(
+            "Alpha - App",
+            0,
+            0,
+            400,
+            400,
+            [_make_button("Duplicate", 240, 140, 80, 32)],
+            handle=1,
+        )
+        beta = _make_window(
+            "Beta - App",
+            500,
+            0,
+            400,
+            400,
+            [_make_button("Duplicate", 640, 140, 80, 32)],
+            handle=2,
+        )
+        desktop = _FakeDesktop([alpha, beta])
+
+        result = snap_to_control(
+            (240, 140, 80, 32),
+            "Use Duplicate on the Beta window.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (240, 140, 80, 32))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_snap_accepts_menu_launcher_button_wording(self) -> None:
         from rect_snap import snap_to_control
 
@@ -22807,6 +22914,62 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "dialog_save")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (500, 300, 70, 30))
+
+    def test_dialog_context_does_not_clean_background_duplicate_without_evidence(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "foreground_close",
+                "Close",
+                "button",
+                (940, 10, 32, 32),
+                window_title="Foreground",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "background_close",
+                "Close",
+                "button",
+                (940, 110, 32, 32),
+                window_title="Background",
+                window_rank=1,
+            ),
+        ]
+        instruction = "Close the dialog."
+
+        stale_target = resolve_candidate_target(
+            target_id="background_close",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(940, 110, 32, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(940, 110, 32, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "background_close",
+                    "target": {"x": 940, "y": 110, "width": 32, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.target_id, "background_close")
+        self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "background_close")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.target_id, "background_close")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 
     def test_dialog_context_uses_unnamed_foreground_window_surface(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

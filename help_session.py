@@ -201,7 +201,10 @@ def resolve_help_target(
                 and target.rejected_reason == "target_id ambiguous"
                 and text_target.target_id == target.target_id
             ):
-                if _instruction_has_dialog_resolution_context(decision.instruction):
+                if (
+                    _instruction_has_dialog_resolution_context(decision.instruction)
+                    and _target_has_dialog_resolution_evidence(text_target.target_id, candidates)
+                ):
                     return _maybe_clip_resolution_to_capture(
                         text_target,
                         capture,
@@ -328,6 +331,64 @@ def resolve_help_target(
 
 def _instruction_has_dialog_resolution_context(instruction: str) -> bool:
     return bool(re.search(r"\b(?:dialog|modal|popup)\b", instruction or "", re.IGNORECASE))
+
+
+def _target_has_dialog_resolution_evidence(
+    target_id: str,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not target_id:
+        return False
+    target_candidate = next((item for item in candidates if item.id == target_id), None)
+    if target_candidate is None:
+        return False
+    dialog_tokens = {"dialog", "modal", "popup"}
+    target_tokens = _surface_evidence_tokens(target_candidate)
+    if target_tokens & dialog_tokens:
+        return True
+    for candidate in candidates:
+        if candidate.id == target_candidate.id:
+            continue
+        if candidate.control_type not in {"group", "pane", "window"}:
+            continue
+        if not _rect_contains(_expand_rect(candidate.rect, 4), target_candidate.rect):
+            continue
+        if _surface_evidence_tokens(candidate) & dialog_tokens:
+            return True
+    return False
+
+
+def _surface_evidence_tokens(candidate: ControlCandidate) -> set[str]:
+    return set(
+        re.findall(
+            r"[a-z0-9]+",
+            " ".join(
+                (
+                    candidate.text or "",
+                    candidate.control_type or "",
+                    candidate.automation_id or "",
+                    candidate.window_title or "",
+                )
+            ).lower(),
+        )
+    )
+
+
+def _expand_rect(
+    rect: tuple[int, int, int, int],
+    margin: int,
+) -> tuple[int, int, int, int]:
+    x, y, width, height = rect
+    return (x - margin, y - margin, width + margin * 2, height + margin * 2)
+
+
+def _rect_contains(
+    outer: tuple[int, int, int, int],
+    inner: tuple[int, int, int, int],
+) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ix >= ox and iy >= oy and ix + iw <= ox + ow and iy + ih <= oy + oh
 
 
 def _instruction_has_surface_promotion_context(instruction: str) -> bool:

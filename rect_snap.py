@@ -51,7 +51,11 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
         "banner",
         "bar",
         "card",
+        "dialog",
+        "dialogs",
         "drawer",
+        "grid",
+        "grids",
         "list",
         "lists",
         "menu",
@@ -63,11 +67,28 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
         "popup",
         "section",
         "sidebar",
+        "table",
+        "tables",
         "toast",
         "toolbar",
+        "window",
+        "windows",
     }
 )
-SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
+SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
+    {"datagrid", "grid", "group", "list", "menu", "pane", "table", "toolbar", "window"}
+)
+SURFACE_CONTEXT_TYPE_WORDS = {
+    "datagrid": frozenset({"grid", "table"}),
+    "grid": frozenset({"grid", "table"}),
+    "group": frozenset({"group"}),
+    "list": frozenset({"list"}),
+    "menu": frozenset({"menu"}),
+    "pane": frozenset({"pane"}),
+    "table": frozenset({"grid", "table"}),
+    "toolbar": frozenset({"toolbar"}),
+    "window": frozenset({"window"}),
+}
 X_SYMBOL_TEXTS = frozenset({"x", "\u00d7", "\u2715", "\u2716"})
 PASSWORD_VISIBILITY_CONTEXT_WORDS = frozenset({"passcode", "password"})
 PASSWORD_VISIBILITY_SHOW_WORDS = frozenset({"reveal", "show", "unmask"})
@@ -3119,7 +3140,7 @@ def _surface_scoped_action_match(
         - action_tokens
         - ACTION_OBJECT_STOPWORDS
         - GENERIC_OBJECT_REQUEST_WORDS
-        - {"a", "an", "the", "this", "that"}
+        - {"a", "an", "for", "from", "in", "inside", "on", "the", "this", "that", "with", "within"}
     )
     required_identity = requested_context - CLOSE_CONTEXT_TARGET_WORDS
     for context_rect, context_text, context_type in surface_contexts:
@@ -3129,6 +3150,7 @@ def _surface_scoped_action_match(
             _tokenize_control(_semantic_text(context_text))
             | _tokens_from_text(context_text)
             | {context_type}
+            | set(SURFACE_CONTEXT_TYPE_WORDS.get(context_type, frozenset()))
         )
         if not (requested_surfaces & context_tokens):
             continue
