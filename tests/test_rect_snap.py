@@ -31615,6 +31615,98 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(generic_target.target_id, "edit")
         self.assertFalse(generic_target.rejected_reason)
 
+    def test_snap_candidate_target_uses_unique_named_field_context(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("shipping", "Shipping", "group", (20, 80, 260, 130)),
+            ControlCandidate("shipping_label", "Email", "text", (40, 110, 70, 24)),
+            ControlCandidate(
+                "shipping_email",
+                "",
+                "edit",
+                (40, 140, 160, 28),
+                automation_id="email",
+            ),
+            ControlCandidate("billing", "Billing", "group", (300, 80, 260, 130)),
+            ControlCandidate("billing_label", "Email", "text", (320, 110, 70, 24)),
+            ControlCandidate(
+                "billing_email",
+                "",
+                "edit",
+                (320, 140, 160, 28),
+                automation_id="email",
+            ),
+        ]
+
+        target = snap_candidate_target(
+            instruction="Click Email field in Billing.",
+            candidates=candidates,
+            model_rect=(160, 140, 160, 28),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "billing_email")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (320, 140, 160, 28))
+
+    def test_snap_candidate_target_keeps_duplicate_named_context_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("billing_a", "Billing", "group", (20, 80, 260, 130)),
+            ControlCandidate("a_label", "Email", "text", (40, 110, 70, 24)),
+            ControlCandidate("a_email", "", "edit", (40, 140, 160, 28), automation_id="email"),
+            ControlCandidate("billing_b", "Billing", "group", (300, 80, 260, 130)),
+            ControlCandidate("b_label", "Email", "text", (320, 110, 70, 24)),
+            ControlCandidate("b_email", "", "edit", (320, 140, 160, 28), automation_id="email"),
+        ]
+
+        target = snap_candidate_target(
+            instruction="Click Email field in Billing.",
+            candidates=candidates,
+            model_rect=(220, 140, 160, 28),
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "ambiguous candidate snap")
+
+    def test_snap_candidate_target_does_not_jump_to_context_outside_search_rect(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("shipping", "Shipping", "group", (20, 80, 260, 130)),
+            ControlCandidate("shipping_label", "Email", "text", (40, 110, 70, 24)),
+            ControlCandidate(
+                "shipping_email",
+                "",
+                "edit",
+                (40, 140, 160, 28),
+                automation_id="email",
+            ),
+            ControlCandidate("billing", "Billing", "group", (300, 80, 260, 130)),
+            ControlCandidate("billing_label", "Email", "text", (320, 110, 70, 24)),
+            ControlCandidate(
+                "billing_email",
+                "",
+                "edit",
+                (320, 140, 160, 28),
+                automation_id="email",
+            ),
+        ]
+
+        target = snap_candidate_target(
+            instruction="Click Email field in Billing.",
+            candidates=candidates,
+            model_rect=(80, 140, 160, 28),
+        )
+
+        self.assertIsNone(target)
+
     def test_named_role_controls_require_label_evidence(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target

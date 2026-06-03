@@ -14618,6 +14618,12 @@ def _candidate_snap_global_ambiguity(
         candidates,
     ):
         return False
+    if _candidate_has_unique_named_control_context_match(
+        instruction,
+        selected,
+        candidates,
+    ):
+        return False
     return _has_ambiguous_unlabeled_competitor(
         selected,
         candidates,
@@ -14637,6 +14643,33 @@ def _candidate_snap_global_ambiguity(
         selected,
         candidates,
     )
+
+
+def _candidate_has_unique_named_control_context_match(
+    instruction: str,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not _named_control_label_context_matches_request(
+        instruction,
+        selected,
+        candidates,
+    ):
+        return False
+    matches: list[ControlCandidate] = []
+    for candidate in candidates:
+        if candidate.control_type != selected.control_type:
+            continue
+        if not _named_control_label_context_matches_request(
+            instruction,
+            candidate,
+            candidates,
+        ):
+            continue
+        if any(_same_visual_candidate(candidate, match) for match in matches):
+            continue
+        matches.append(candidate)
+    return len(matches) == 1 and matches[0].id == selected.id
 
 
 def _proximity_score(
