@@ -11475,6 +11475,48 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_same_rank_option_covering_stale_button(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        reason = _foreground_candidate_covering_reason(
+            target,
+            [
+                ControlCandidate(
+                    "page_save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "blocking_option",
+                    "Required fields missing",
+                    "option",
+                    (96, 96, 88, 40),
+                    window_rank=0,
+                ),
+            ],
+            previous_candidates=[
+                ControlCandidate(
+                    "page_save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_rank=0,
+                ),
+            ],
+        )
+
+        self.assertEqual(reason, "target covered before overlay")
+
     def test_revalidation_rejects_same_rank_window_title_identity_change(self) -> None:
         from control_inventory import ControlCandidate, TargetResolution
         from help_session import _guard_revalidated_target
@@ -25875,6 +25917,57 @@ class HelpTargetHarnessTests(unittest.TestCase):
             {"target_id ambiguous", "ambiguous candidate snap", "candidate snapshot no match"},
         )
 
+    def test_duplicate_table_cell_without_context_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("acme_status", "Active", "cell", (260, 100, 120, 30)),
+            ControlCandidate("globex_status", "Active", "cell", (260, 160, 120, 30)),
+        ]
+        instruction = "Click Active cell."
+
+        target_id = resolve_candidate_target(
+            target_id="globex_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 160, 120, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 160, 120, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 160, 120, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "globex_status",
+                    "target": {"x": 260, "y": 160, "width": 120, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.target_id, "globex_status")
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "globex_status")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.target_id, "globex_status")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
     def test_duplicate_table_cell_mixed_cell_types_stay_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -26984,6 +27077,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
         self.assertEqual(text_target.target_id, "background_close")
         self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(help_target.target_id, "background_close")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
+
+    def test_dialog_context_rejects_surface_evidence_from_other_window_rank(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "foreground_close",
+                "Close",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Editor",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "foreground_dialog",
+                "Settings dialog",
+                "window",
+                (420, 220, 300, 180),
+                window_title="Editor",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "background_close",
+                "Close",
+                "button",
+                (500, 300, 80, 32),
+                window_title="Background",
+                window_rank=1,
+            ),
+        ]
+        instruction = "Close the dialog."
+
+        stale_target = resolve_candidate_target(
+            target_id="background_close",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 300, 80, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 300, 80, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 300, 80, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "background_close",
+                    "target": {"x": 500, "y": 300, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(stale_target.target_id, "background_close")
+        self.assertEqual(stale_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.target_id, "background_close")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "target_id")
         self.assertEqual(help_target.target_id, "background_close")
         self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 

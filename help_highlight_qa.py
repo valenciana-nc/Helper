@@ -20100,6 +20100,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "duplicate_table_cell_without_context_stays_ambiguous",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [260, 100, 120, 30], "label": "Active"},
+                {"rect": [260, 160, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Active cell.",
+                "target_id": "globex_status",
+                "target": {"x": 260, "y": 160, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "acme_status", "text": "Active", "control_type": "cell", "rect": [260, 100, 120, 30]},
+                {"id": "globex_status", "text": "Active", "control_type": "cell", "rect": [260, 160, 120, 30]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "globex_status",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "duplicate_table_cell_mixed_cell_types_stay_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -21069,6 +21093,53 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "text": "Close",
                     "control_type": "button",
                     "rect": [940, 110, 32, 32],
+                    "window_title": "Background",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "background_close",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "dialog_context_rejects_surface_evidence_from_other_window_rank",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Close"},
+                {"rect": [420, 220, 300, 180], "label": "Settings dialog"},
+                {"rect": [500, 300, 80, 32], "label": "Close"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Close the dialog.",
+                "target_id": "background_close",
+                "target": {"x": 500, "y": 300, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "foreground_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "foreground_dialog",
+                    "text": "Settings dialog",
+                    "control_type": "window",
+                    "rect": [420, 220, 300, 180],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "background_close",
+                    "text": "Close",
+                    "control_type": "button",
+                    "rect": [500, 300, 80, 32],
                     "window_title": "Background",
                     "window_rank": 1,
                 },
@@ -23244,6 +23315,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                     "text": "Suggestions popup",
                     "control_type": "window",
                     "rect": [90, 90, 220, 150],
+                    "window_rank": 0,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "same_rank_option_cover_rejects_stale_button_overlay",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "blocking_option",
+                    "text": "Required fields missing",
+                    "control_type": "option",
+                    "rect": [96, 96, 88, 40],
                     "window_rank": 0,
                 },
             ],

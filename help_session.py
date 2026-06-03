@@ -76,7 +76,7 @@ FOREGROUND_COVERAGE_MIN_FRACTION = 0.55
 FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
 SAME_RANK_PREVIOUS_OWNER_MIN_AREA_RATIO = 2.5
 SAME_RANK_COVERING_CONTROL_TYPES = frozenset(
-    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+    {"button", "hyperlink", "menuitem", "option", "splitbutton", "tabitem"}
 )
 SAME_RANK_OWNING_COVERING_CONTROL_TYPES = frozenset(
     {
@@ -761,6 +761,8 @@ def _target_has_dialog_resolution_evidence(
         if candidate.id == target_candidate.id:
             continue
         if candidate.control_type not in {"group", "pane", "window"}:
+            continue
+        if not _same_revalidation_context_window(target_candidate, candidate):
             continue
         if not _rect_contains(_expand_rect(candidate.rect, 4), target_candidate.rect):
             continue

@@ -7510,11 +7510,17 @@ def _duplicate_cell_context_target_ambiguous(
     if candidate.control_type not in CELL_CONTROL_TYPES:
         return False
     request = _duplicate_cell_context_request_tokens(instruction, candidate)
-    if not request:
-        return False
     peers = _duplicate_cell_context_peers(candidate, candidates)
     if len(peers) < 2:
         return False
+    if not request:
+        requested_type = _explicit_cell_subtype_request(instruction)
+        if requested_type == candidate.control_type and not any(
+            peer.id != candidate.id and peer.control_type == candidate.control_type
+            for peer in peers
+        ):
+            return False
+        return True
     matching = [
         peer
         for peer in peers

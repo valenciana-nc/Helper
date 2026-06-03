@@ -145,7 +145,13 @@ a different window rank. Helper now requires explicit modal/dialog surface
 evidence, compatible foreground transient-surface evidence, or refuses the
 highlight. A stale lower-rank target also cannot clean itself with only its own
 `dialog`/`modal`/`popup` window title when a same-label foreground duplicate is
-present.
+present. Explicit dialog/modal surface evidence must also come from the same
+window rank and compatible window-title context as the target it is proving.
+Duplicate same-label table/grid cells now refuse when the request lacks row,
+column, or other distinguishing context, even if the stale target ID and model
+rectangle both point at one duplicate.
+Same-rank `option` overlays are treated as final pre-overlay blockers when they
+cover a revalidated target.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
