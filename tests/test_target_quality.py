@@ -529,6 +529,92 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target boundary misaligned")
 
+    def test_accepts_candidate_checkbox_full_row_with_single_indicator(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "I agree to terms", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 190, 28),
+            source="target_id",
+            confidence=1.0,
+            instruction="Check I agree to terms.",
+            target_control_type="checkbox",
+        )
+
+        self.assertTrue(quality.accepted)
+
+    def test_rejects_candidate_checkbox_row_spanning_two_indicators(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Alpha", fill="black")
+        draw.rectangle((140, 76, 158, 94), outline="black", fill="white")
+        draw.text((170, 76), "Beta", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 210, 28),
+            source="target_id",
+            confidence=1.0,
+            instruction="Check Alpha.",
+            target_control_type="checkbox",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_rejects_candidate_checkbox_row_spanning_action_button(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (380, 180), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Alpha", fill="black")
+        draw.rectangle((220, 72, 300, 104), outline="black", fill="#f3f4f6")
+        draw.text((240, 82), "Save", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 320, 36),
+            source="target_id",
+            confidence=1.0,
+            instruction="Check Alpha.",
+            target_control_type="checkbox",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_accepts_candidate_option_full_row_with_single_indicator(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Weekly", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 150, 28),
+            source="target_id",
+            confidence=1.0,
+            instruction="Select Weekly option.",
+            target_control_type="option",
+        )
+
+        self.assertTrue(quality.accepted)
+
     def test_rejects_candidate_option_rect_over_label_only(self) -> None:
         from target_quality import evaluate_target_quality
 

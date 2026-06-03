@@ -2013,6 +2013,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "borderless_full_row_checkbox_accepts_row_candidate",
+            "capture": {"width": 320, "height": 160},
+            "draw": [
+                {"rect": [40, 76, 18, 18], "label": "", "fill": "white"},
+                {"kind": "text", "rect": [70, 76, 140, 20], "label": "I agree to terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Check I agree to terms.",
+                "target_id": "agree",
+                "target": {"x": 36, "y": 72, "width": 190, "height": 28},
+            },
+            "candidates": [
+                {
+                    "id": "agree",
+                    "text": "I agree to terms",
+                    "control_type": "checkbox",
+                    "rect": [36, 72, 190, 28],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "agree",
+                "rect": [36, 72, 190, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

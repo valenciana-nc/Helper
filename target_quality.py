@@ -68,6 +68,7 @@ CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES = frozenset(
 CANDIDATE_LEAF_ACTION_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "option", "splitbutton", "tabitem"}
 )
+SELECTION_ROW_CONTROL_TYPES = frozenset({"checkbox", "option", "radiobutton"})
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
     {
@@ -200,6 +201,11 @@ def evaluate_target_quality(
             _has_compound_control_vertical_separators(capture.png_bytes, clipped)
             or _has_segmented_control_separator(capture.png_bytes, clipped)
         )
+        and not _candidate_single_selection_row(
+            capture.png_bytes,
+            clipped,
+            target_control_type,
+        )
     ):
         return TargetQuality(
             accepted=False,
@@ -308,6 +314,11 @@ def evaluate_target_quality(
             _has_compound_control_vertical_separators(capture.png_bytes, clipped)
             or _has_segmented_control_separator(capture.png_bytes, clipped)
         )
+        and not _candidate_single_selection_row(
+            capture.png_bytes,
+            clipped,
+            target_control_type,
+        )
     ):
         return TargetQuality(
             accepted=False,
@@ -402,6 +413,23 @@ def _candidate_leaf_action_target(
     if target_control_type.lower() not in CANDIDATE_LEAF_ACTION_CONTROL_TYPES:
         return False
     return _candidate_compound_rect_large_enough(rect)
+
+
+def _candidate_selection_row_target(target_control_type: str) -> bool:
+    return target_control_type.lower() in SELECTION_ROW_CONTROL_TYPES
+
+
+def _candidate_single_selection_row(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    target_control_type: str,
+) -> bool:
+    if not _candidate_selection_row_target(target_control_type):
+        return False
+    matches = _selection_indicator_matches_inside(png_bytes, rect, target_control_type)
+    if len(matches) != 1:
+        return False
+    return not _has_selection_row_extra_separators(png_bytes, rect, matches[0])
 
 
 def _strict_candidate_quality_target(
@@ -660,7 +688,7 @@ def _has_adjacent_selection_indicator(
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> bool:
-    if target_control_type.lower() not in {"checkbox", "option", "radiobutton"}:
+    if not _candidate_selection_row_target(target_control_type):
         return False
     try:
         with Image.open(io.BytesIO(png_bytes)) as img:
@@ -685,6 +713,77 @@ def _has_adjacent_selection_indicator(
             return False
     except Exception:
         return False
+
+
+def _selection_indicator_matches_inside(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    target_control_type: str,
+) -> list[tuple[int, int, int]]:
+    if not _candidate_selection_row_target(target_control_type):
+        return []
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            image = img.convert("L")
+            x, y, width, height = rect
+            if width < 16 or height < 8:
+                return []
+            center_y = y + height // 2
+            max_size = max(12, min(32, height + 8))
+            min_size = max(10, min(18, height))
+            matches: list[tuple[int, int, int]] = []
+            for size in range(min_size, max_size + 1, 2):
+                top_start = center_y - size // 2 - 6
+                top_stop = center_y - size // 2 + 7
+                for top in range(top_start, top_stop):
+                    for left in range(x, x + width - size + 1):
+                        candidate = (left, top, size, size)
+                        if not _selection_indicator_rect_matches(image, candidate):
+                            continue
+                        center = (left + size // 2, top + size // 2)
+                        merge_radius = max(6, size // 2)
+                        if any(
+                            abs(center[0] - seen_x) <= merge_radius
+                            and abs(center[1] - seen_y) <= merge_radius
+                            for seen_x, seen_y, _seen_size in matches
+                        ):
+                            continue
+                        matches.append((center[0], center[1], size))
+                        if len(matches) > 1:
+                            return matches
+            return matches
+    except Exception:
+        return []
+
+
+def _has_selection_row_extra_separators(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    match: tuple[int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 24 or crop.height < 16:
+                return False
+            center_x, center_y, size = match
+            left = max(0, center_x - size // 2 - x - 3)
+            top = max(0, center_y - size // 2 - y - 3)
+            right = min(crop.width, center_x + size // 2 - x + 3)
+            bottom = min(crop.height, center_y + size // 2 - y + 3)
+            pixels = crop.load()
+            for erase_y in range(top, bottom):
+                for erase_x in range(left, right):
+                    pixels[erase_x, erase_y] = 255
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return (
+                _strong_internal_separator_groups(edges, vertical=True)
+                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+                or _strong_center_vertical_separator_groups(edges) >= 1
+            )
+    except Exception:
+        return True
 
 
 def _selection_indicator_rect_matches(
