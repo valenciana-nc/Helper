@@ -8,6 +8,7 @@ from PIL import Image
 
 from control_inventory import ControlCandidate, TargetResolution
 from ocr_text import (
+    OCR_EXTRA_TEXT_REASON,
     OCR_PARTIAL_TEXT_REASON,
     OCR_TEXT_MISMATCH_REASON,
     OcrTextResult,
@@ -101,6 +102,67 @@ class OcrTextTests(unittest.TestCase):
         self.assertFalse(result.accepted)
         self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
         self.assertEqual(result.recognized_text, "Save")
+
+    def test_rejects_extra_ocr_text_for_short_exact_label(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save",
+            control_type="button",
+            provider=_Provider(OcrTextResult(text="Save as", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_EXTRA_TEXT_REASON)
+        self.assertEqual(result.recognized_text, "Save as")
+
+    def test_rejects_extra_ocr_text_for_multi_word_label(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 160, 32),
+            expected_text="Save changes",
+            control_type="button",
+            provider=_Provider(OcrTextResult(text="Save changes now", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_EXTRA_TEXT_REASON)
+
+    def test_rejects_extra_ocr_text_for_generic_menu_label(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 160, 28),
+            expected_text="Open",
+            control_type="menuitem",
+            provider=_Provider(OcrTextResult(text="Open recent", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_EXTRA_TEXT_REASON)
+
+    def test_rejects_extra_ocr_text_for_retained_generic_menu_label(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 200, 28),
+            expected_text="Open recent",
+            control_type="menuitem",
+            provider=_Provider(OcrTextResult(text="Open recent files", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_EXTRA_TEXT_REASON)
+
+    def test_allows_shortcut_hint_as_extra_ocr_text(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save",
+            control_type="button",
+            provider=_Provider(OcrTextResult(text="Save Ctrl S", available=True)),
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.recognized_text, "Save Ctrl S")
 
     def test_rejects_numeric_cell_shared_suffix_mismatch(self) -> None:
         result = verify_target_text(

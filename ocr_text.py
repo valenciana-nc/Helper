@@ -18,6 +18,7 @@ from screen import Capture
 
 OCR_TEXT_MISMATCH_REASON = "ocr text mismatch"
 OCR_PARTIAL_TEXT_REASON = "ocr partial text match"
+OCR_EXTRA_TEXT_REASON = "ocr extra text mismatch"
 OCR_GENERIC_WORDS = frozenset(
     {
         "a",
@@ -81,6 +82,43 @@ OCR_STATE_VALUE_WORDS = frozenset(
         "true",
         "unchecked",
         "unselected",
+    }
+)
+OCR_ALLOWED_EXTRA_TEXT_TOKENS = frozenset(
+    {
+        "alt",
+        "backspace",
+        "cmd",
+        "command",
+        "control",
+        "ctrl",
+        "del",
+        "enter",
+        "esc",
+        "escape",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+        "fn",
+        "key",
+        "keys",
+        "meta",
+        "return",
+        "shift",
+        "shortcut",
+        "shortcuts",
+        "space",
+        "win",
+        "windows",
     }
 )
 OCR_LABEL_CONTROL_TYPES = frozenset(
@@ -417,6 +455,15 @@ def verify_target_text(
             available=True,
             elapsed_ms=result.elapsed_ms,
         )
+    if _has_extra_identity_text(expected_tokens, recognized_tokens):
+        return OcrTextVerification(
+            accepted=False,
+            reason=OCR_EXTRA_TEXT_REASON,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
     if _tokens_match(expected_tokens, recognized_tokens):
         return OcrTextVerification(
             accepted=True,
@@ -477,6 +524,8 @@ def _meaningful_tokens(text: str, *, keep_generic_label: bool = False) -> set[st
         for token in re.findall(r"[a-z0-9]+", (text or "").lower())
     }
     filtered = {token for token in tokens if token not in OCR_GENERIC_WORDS}
+    if keep_generic_label:
+        filtered |= {token for token in tokens if token in OCR_GENERIC_LABEL_EXCEPTIONS}
     if filtered:
         return filtered
     if keep_generic_label and tokens and tokens <= OCR_GENERIC_LABEL_EXCEPTIONS:
@@ -525,6 +574,38 @@ def _is_partial_text_match(expected: set[str], recognized: set[str]) -> bool:
         )
     }
     return bool(covered) and len(covered) < len(expected_signal)
+
+
+def _has_extra_identity_text(expected: set[str], recognized: set[str]) -> bool:
+    expected_signal = {token for token in expected if _token_has_signal(token)}
+    recognized_signal = {token for token in recognized if _token_has_signal(token)}
+    if not expected_signal or not recognized_signal:
+        return False
+    if not _all_signal_tokens_covered(expected_signal, recognized_signal):
+        return False
+    extra = {
+        recognized_token
+        for recognized_token in recognized_signal
+        if not _signal_token_matches_any(recognized_token, expected_signal)
+    }
+    return any(not _is_allowed_extra_text_token(token) for token in extra)
+
+
+def _all_signal_tokens_covered(expected_signal: set[str], recognized_signal: set[str]) -> bool:
+    return all(
+        _signal_token_matches_any(expected_token, recognized_signal)
+        for expected_token in expected_signal
+    )
+
+
+def _signal_token_matches_any(token: str, candidates: set[str]) -> bool:
+    return any(token == candidate or _similar_token(token, candidate) for candidate in candidates)
+
+
+def _is_allowed_extra_text_token(token: str) -> bool:
+    if token in OCR_ALLOWED_EXTRA_TEXT_TOKENS:
+        return True
+    return bool(re.fullmatch(r"f(?:1[0-9]|2[0-4]|[1-9])", token))
 
 
 def _is_strong_contradiction(expected: set[str], recognized: set[str]) -> bool:

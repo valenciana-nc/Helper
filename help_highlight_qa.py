@@ -127,6 +127,82 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_extra_text_save_as_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 120, 32], "label": "Save as"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 120, 32]},
+            ],
+            "ocr_result": {"text": "Save as"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr extra text mismatch",
+                "ocr_recognized_text": "Save as",
+                "rejected_reason": "ocr extra text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_shortcut_hint_extra_text_allows_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 120, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 120, 32]},
+            ],
+            "ocr_result": {"text": "Save Ctrl S"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "",
+                "ocr_recognized_text": "Save Ctrl S",
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_extra_neighbor_text_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+                {"rect": [170, 80, 90, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+                {"id": "c002", "text": "Cancel", "control_type": "button", "rect": [170, 80, 90, 32]},
+            ],
+            "ocr_result": {"text": "Save Cancel"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr extra text mismatch",
+                "ocr_recognized_text": "Save Cancel",
+                "rejected_reason": "ocr extra text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_numeric_table_cell_shared_suffix_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -501,6 +577,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "duplicate_label_rejection_skips_ocr_verification",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [160, 80, 80, 32], "label": "Save"},
+                {"rect": [300, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target": {"x": 160, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [160, 80, 80, 32]},
+                {"id": "c002", "text": "Save", "control_type": "button", "rect": [300, 80, 80, 32]},
+            ],
+            "ocr_result": {"text": "Save"},
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "rejected_reason": "ambiguous text match",
+                "ocr_recognized_text": None,
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ambiguous_text_without_target_id_blocks_geometry_snap",
             "capture": {"width": 700, "height": 320},
             "draw": [
@@ -814,6 +915,35 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "matched_text": "Settings",
                 "rect": [80, 80, 90, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_overbroad_uia_snap_crop_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 80, 90, 32], "label": "Settings"},
+                {"rect": [190, 80, 90, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target": {"x": 70, "y": 70, "width": 230, "height": 52},
+            },
+            "candidates": [],
+            "snap_result": {
+                "rect": [80, 80, 200, 32],
+                "confidence": 0.92,
+                "source": "uia",
+                "matched_text": "Settings",
+            },
+            "ocr_result": {"text": "Settings Profile"},
+            "expected": {
+                "source": "snap",
+                "matched_text": "Settings",
+                "ocr_reason": "ocr extra text mismatch",
+                "ocr_recognized_text": "Settings Profile",
+                "rejected_reason": "ocr extra text mismatch",
+                "overlay_emitted": False,
             },
         },
         {
