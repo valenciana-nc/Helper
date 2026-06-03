@@ -3503,6 +3503,71 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (260, 112, 120, 30))
                 self.assertFalse(result.rejected_reason)
 
+    def _duplicate_table_cell_desktop(self) -> _FakeDesktop:
+        controls = [
+            _make_button("Status", 180, 40, 140, 32, control_type="HeaderItem"),
+            _make_button("Plan", 340, 40, 140, 32, control_type="HeaderItem"),
+            _make_button("Acme", 20, 100, 500, 32, control_type="DataItem"),
+            _make_button("Acme", 20, 100, 140, 32, control_type="Cell"),
+            _make_button("Active", 180, 100, 140, 32, control_type="Cell", automation_id="acme_status"),
+            _make_button("Active", 340, 100, 140, 32, control_type="Cell", automation_id="acme_plan"),
+            _make_button("Globex", 20, 150, 500, 32, control_type="DataItem"),
+            _make_button("Globex", 20, 150, 140, 32, control_type="Cell"),
+            _make_button("Active", 180, 150, 140, 32, control_type="Cell", automation_id="globex_status"),
+            _make_button("Active", 340, 150, 140, 32, control_type="Cell", automation_id="globex_plan"),
+        ]
+        return _FakeDesktop([_make_window("Grid", 0, 0, 700, 400, controls)])
+
+    def test_snap_duplicate_table_cell_uses_row_and_column_context(self) -> None:
+        from rect_snap import snap_to_control
+
+        desktop = self._duplicate_table_cell_desktop()
+
+        result = snap_to_control(
+            (340, 150, 140, 32),
+            "Click the Active Status cell for Acme.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (180, 100, 140, 32))
+        self.assertIn("acme_status", result.matched_text)
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_explicit_row_column_cell_does_not_choose_row_label_cell(self) -> None:
+        from rect_snap import snap_to_control
+
+        desktop = self._duplicate_table_cell_desktop()
+
+        result = snap_to_control(
+            (20, 150, 140, 32),
+            "Click the Status cell for Globex.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (180, 150, 140, 32))
+        self.assertIn("globex_status", result.matched_text)
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_duplicate_table_cell_row_only_context_stays_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        desktop = self._duplicate_table_cell_desktop()
+
+        result = snap_to_control(
+            (180, 100, 140, 32),
+            "Click the Active cell in the Acme row.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+        self.assertEqual(result.rect, (180, 100, 140, 32))
+
     def test_snap_rejects_broad_header_band_without_raw_fallback(self) -> None:
         from rect_snap import snap_to_control
 

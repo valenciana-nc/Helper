@@ -890,6 +890,44 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             "target covered before overlay",
         )
 
+    def test_final_coverage_gate_rejects_existing_same_rank_popup_covering_background_target(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        candidates = [
+            ControlCandidate(
+                "page_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Dashboard",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "popup",
+                "Settings popup",
+                "window",
+                (90, 90, 220, 150),
+                window_title="Settings popup",
+                window_rank=0,
+            ),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "target covered before overlay",
+        )
+
     def test_final_coverage_gate_allows_existing_same_rank_popup_parent(self) -> None:
         from help_session import _foreground_candidate_covering_reason
 
@@ -901,8 +939,22 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             target_id="ok",
         )
         candidates = [
-            ControlCandidate("popup", "Settings popup", "window", (90, 90, 220, 150), window_rank=0),
-            ControlCandidate("ok", "OK", "button", (120, 110, 60, 28), window_rank=0),
+            ControlCandidate(
+                "popup",
+                "Settings popup",
+                "window",
+                (90, 90, 220, 150),
+                window_title="Settings popup",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "ok",
+                "OK",
+                "button",
+                (120, 110, 60, 28),
+                window_title="Settings popup",
+                window_rank=0,
+            ),
         ]
 
         self.assertEqual(
@@ -912,6 +964,180 @@ class HelpSessionEndToEndTests(unittest.TestCase):
                 previous_candidates=candidates,
             ),
             "",
+        )
+
+    def test_final_coverage_gate_allows_existing_same_window_shallower_surface_parent(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(120, 110, 60, 28),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Details",
+            target_id="details",
+        )
+        candidates = [
+            ControlCandidate(
+                "pane",
+                "Customer workspace",
+                "pane",
+                (90, 90, 220, 150),
+                window_title="Dashboard",
+                depth=1,
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "details",
+                "Details",
+                "button",
+                (120, 110, 60, 28),
+                window_title="Dashboard",
+                depth=2,
+                window_rank=0,
+            ),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_rejects_new_same_rank_dropdown_listitem_coverer(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate("page_save", "Save", "button", (100, 100, 80, 32), window_rank=0),
+        ]
+        candidates = previous_candidates + [
+            ControlCandidate("suggestion", "Alice", "listitem", (95, 95, 95, 45), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=previous_candidates,
+            ),
+            "target covered before overlay",
+        )
+
+    def test_final_coverage_gate_rejects_new_same_rank_structural_popup_surfaces(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate("page_save", "Save", "button", (100, 100, 80, 32), window_rank=0),
+        ]
+        surfaces = (
+            ControlCandidate("pane", "Settings popup", "pane", (90, 90, 220, 150), window_rank=0),
+            ControlCandidate("group", "Confirm changes dialog", "group", (90, 90, 220, 150), window_rank=0),
+            ControlCandidate("list", "Suggestions", "list", (90, 90, 220, 150), window_rank=0),
+            ControlCandidate("window", "Suggestions", "window", (90, 90, 220, 150), window_rank=0),
+        )
+
+        for surface in surfaces:
+            with self.subTest(surface=surface.control_type, text=surface.text):
+                self.assertEqual(
+                    _foreground_candidate_covering_reason(
+                        target,
+                        previous_candidates + [surface],
+                        previous_candidates=previous_candidates,
+                    ),
+                    "target covered before overlay",
+                )
+
+    def test_final_pre_overlay_full_path_rejects_same_rank_coverer_after_ocr(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        covered = False
+
+        def mark_covered() -> None:
+            nonlocal covered
+            covered = True
+
+        def candidate_provider(_capture: Capture) -> list[ControlCandidate]:
+            save = ControlCandidate(
+                id="c001",
+                text="Save changes",
+                control_type="button",
+                rect=(40, 50, 120, 32),
+                automation_id="saveButton",
+                window_rank=0,
+            )
+            if not covered:
+                return [save]
+            return [
+                save,
+                ControlCandidate("menuitem", "Archive", "menuitem", (40, 45, 120, 24), window_rank=0),
+            ]
+
+        ocr_provider = _MutatingOcrProvider(
+            OcrTextResult(text="Save changes", available=True),
+            mark_covered,
+        )
+        session = HelpSession(
+            agent=_ScriptedAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=candidate_provider,
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(
+            diagnostics[0]["overlay"]["rejected_reason"],
+            "target covered before overlay",
         )
 
     def test_final_pre_overlay_ocr_rejects_text_changed_after_initial_ocr(self) -> None:
@@ -1469,6 +1695,324 @@ class HelpSessionEndToEndTests(unittest.TestCase):
 
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
+
+    def test_current_screen_recheck_allows_specific_action_when_visual_context_stable(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Acme account details.",
+            button_rect=rect,
+        )
+        candidates = [ControlCandidate("c001", "Details", "button", rect)]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        current_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Details.",
+            target_id="c001",
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(guarded.rejected_reason)
+
+    def test_current_screen_recheck_rejects_specific_action_reused_id_when_visual_context_changes(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        previous_capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Acme account details.",
+            button_rect=rect,
+        )
+        current_capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Globex account details.",
+            button_rect=rect,
+        )
+        previous_candidates = [ControlCandidate("c001", "Details", "button", rect)]
+        current_candidates = [ControlCandidate("c001", "Details", "button", rect)]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        current_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Details.",
+            target_id="c001",
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=current_capture,
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=previous_capture,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_allows_specific_action_when_context_text_stable(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Acme customer details.",
+            button_rect=rect,
+        )
+        candidates = [
+            ControlCandidate("dialog", "Customer dialog", "window", (16, 18, 208, 130), depth=0),
+            ControlCandidate("body", "Showing Acme customer details.", "statictext", (28, 58, 170, 18), depth=1),
+            ControlCandidate("c001", "Details", "button", rect, depth=1),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        current_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Details.",
+            target_id="c001",
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(guarded.rejected_reason)
+
+    def test_current_screen_recheck_rejects_specific_action_labels_when_context_text_changes(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        previous_capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Acme customer details.",
+            button_rect=rect,
+        )
+        current_capture = _dialog_ok_capture(
+            "Customer details",
+            "Showing Globex project details.",
+            button_rect=rect,
+        )
+
+        for label in ("Details", "Open", "Edit"):
+            with self.subTest(label=label):
+                previous_candidates = [
+                    ControlCandidate("dialog", "Customer dialog", "window", (16, 18, 208, 130), depth=0),
+                    ControlCandidate(
+                        "body",
+                        "Showing Acme customer details.",
+                        "statictext",
+                        (28, 58, 170, 18),
+                        depth=1,
+                    ),
+                    ControlCandidate("c001", label, "button", rect, depth=1),
+                ]
+                current_candidates = [
+                    ControlCandidate("dialog", "Customer dialog", "window", (16, 18, 208, 130), depth=0),
+                    ControlCandidate(
+                        "body",
+                        "Showing Globex project details.",
+                        "statictext",
+                        (28, 58, 170, 18),
+                        depth=1,
+                    ),
+                    ControlCandidate("c001", label, "button", rect, depth=1),
+                ]
+                previous_target = TargetResolution(
+                    rect=rect,
+                    confidence=0.9,
+                    source="target_id",
+                    matched_text=label,
+                    target_id="c001",
+                )
+                current_target = TargetResolution(
+                    rect=rect,
+                    confidence=0.9,
+                    source="target_id",
+                    matched_text=label,
+                    target_id="c001",
+                )
+                decision = LiveHelpDecision(
+                    kind="step",
+                    instruction=f"Click {label}.",
+                    target_id="c001",
+                    target_norm_x=625,
+                    target_norm_y=712,
+                    target_norm_width=292,
+                    target_norm_height=175,
+                )
+
+                guarded = _guard_revalidated_target(
+                    decision=decision,
+                    capture=current_capture,
+                    candidates=current_candidates,
+                    previous_target=previous_target,
+                    previous_capture=previous_capture,
+                    previous_candidates=previous_candidates,
+                    target=current_target,
+                    snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+                )
+
+                self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_rejects_specific_action_when_weak_dialog_context_changes(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        previous_candidates = [
+            ControlCandidate("dialog", "Acme dialog", "window", (16, 18, 208, 130), depth=0),
+            ControlCandidate("c001", "Open", "button", rect, depth=1),
+        ]
+        current_candidates = [
+            ControlCandidate("dialog", "Globex dialog", "window", (16, 18, 208, 130), depth=0),
+            ControlCandidate("c001", "Open", "button", rect, depth=1),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Open",
+            target_id="c001",
+        )
+        current_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Open",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Open.",
+            target_id="c001",
+            target_norm_x=625,
+            target_norm_y=712,
+            target_norm_width=292,
+            target_norm_height=175,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=_dialog_ok_capture("Globex dialog", "", button_rect=rect),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=_dialog_ok_capture("Acme dialog", "", button_rect=rect),
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_rejects_specific_action_when_context_disappears(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 70, 28)
+        previous_candidates = [
+            ControlCandidate("row", "Acme customer", "dataitem", (82, 86, 150, 70), depth=0),
+            ControlCandidate("c001", "Edit", "button", rect, depth=1),
+        ]
+        current_candidates = [
+            ControlCandidate("c001", "Edit", "button", rect, depth=1),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Edit",
+            target_id="c001",
+        )
+        current_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Edit",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Edit.",
+            target_id="c001",
+            target_norm_x=625,
+            target_norm_y=712,
+            target_norm_width=292,
+            target_norm_height=175,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=_button_capture(button_rect=rect),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=_button_capture(button_rect=rect),
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_help_session_downgrades_generic_action_when_visual_context_changes(self) -> None:
         app = _qt_app()

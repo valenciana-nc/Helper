@@ -77,12 +77,14 @@ FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
 SAME_RANK_COVERING_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
 )
-SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES = frozenset({"menu", "window"})
+SAME_RANK_TRANSIENT_OPTION_CONTROL_TYPES = frozenset({"listitem"})
+SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES = frozenset({"group", "list", "menu", "pane", "window"})
 SAME_RANK_TRANSIENT_SURFACE_WORDS = frozenset(
-    {"dialog", "menu", "modal", "popup", "popover", "toast"}
+    {"dialog", "down", "dropdown", "flyout", "menu", "modal", "popup", "popover", "suggestion", "suggestions", "toast"}
 )
 GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX = 96
 GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.010
+EPHEMERAL_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.005
 ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 ROW_REVALIDATION_GENERIC_WORDS = frozenset(
     {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
@@ -113,11 +115,18 @@ ACTION_CONTEXT_REVALIDATION_CONTROL_TYPES = (
     ROW_REVALIDATION_CONTROL_TYPES
     | frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
 )
+ACTION_CONTEXT_TEXT_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS = ROW_REVALIDATION_GENERIC_WORDS | frozenset(
     {
         "account",
         "accounts",
+        "body",
         "button",
+        "caption",
+        "display",
+        "displaying",
+        "label",
+        "labels",
         "menu",
         "pane",
         "panel",
@@ -128,6 +137,11 @@ ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS = ROW_REVALIDATION_GENERIC_WORDS | fro
         "profiles",
         "request",
         "requests",
+        "show",
+        "showing",
+        "statictext",
+        "text",
+        "title",
         "user",
         "users",
     }
@@ -897,6 +911,15 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_action_visual_context_changed(
+        previous_target,
+        target,
+        previous_capture,
+        capture,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_control_context_changed(
         previous_target,
         target,
@@ -987,7 +1010,7 @@ def _revalidated_row_identity_changed(
         return False
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
-    return similarity < 0.5
+    return similarity <= 0.5
 
 
 def _revalidated_row_window_context_changed(
@@ -1449,10 +1472,16 @@ def _revalidated_action_context_changed(
         return False
     if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
         return False
-    previous_tokens = _action_context_revalidation_tokens(previous, previous_candidates)
-    current_tokens = _action_context_revalidation_tokens(current, candidates)
-    if not previous_tokens or not current_tokens:
+    previous_tokens = _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(previous, previous_candidates)
+    )
+    current_tokens = _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(current, candidates)
+    )
+    if not previous_tokens and not current_tokens:
         return False
+    if not previous_tokens or not current_tokens:
+        return True
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
@@ -1475,6 +1504,53 @@ def _revalidated_action_window_context_changed(
     if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
         return False
     return _revalidation_window_context_changed(previous, current)
+
+
+def _revalidated_action_visual_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_capture: Any,
+    capture: "Capture",
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if previous_capture is None:
+        return False
+    if not previous_target.target_id or previous_target.target_id != target.target_id:
+        return False
+    if not _ephemeral_revalidation_target_id(target.target_id):
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous.control_type != current.control_type:
+        return True
+    if not _same_revalidation_geometry(previous_target.rect, target.rect):
+        return False
+    previous_context = _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(previous, previous_candidates)
+    )
+    current_context = _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(current, candidates)
+    )
+    if previous_context or current_context:
+        if not previous_context or not current_context:
+            return True
+        overlap = previous_context & current_context
+        similarity = len(overlap) / max(1, max(len(previous_context), len(current_context)))
+        return similarity <= 0.5
+    return _revalidation_visual_context_changed(
+        previous_target.rect,
+        target.rect,
+        previous_capture,
+        capture,
+        diff_floor=EPHEMERAL_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR,
+    )
 
 
 def _revalidated_surface_identity_changed(
@@ -1585,6 +1661,8 @@ def _revalidation_visual_context_changed(
     current_rect: tuple[int, int, int, int],
     previous_capture: Any,
     capture: "Capture",
+    *,
+    diff_floor: float = GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR,
 ) -> bool:
     previous_crop = _capture_rect_image(
         previous_capture,
@@ -1601,7 +1679,7 @@ def _revalidation_visual_context_changed(
     diff = ImageChops.difference(previous_crop.convert("RGB"), current_crop.convert("RGB"))
     stat = ImageStat.Stat(diff)
     normalized = sum(stat.mean) / max(1, len(stat.mean) * 255)
-    return normalized > GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR
+    return normalized > diff_floor
 
 
 def _window_title_identity_changed(previous_title: str, current_title: str) -> bool:
@@ -1737,10 +1815,36 @@ def _action_context_revalidation_tokens(
     contexts.sort(key=lambda candidate: candidate.rect[2] * candidate.rect[3])
     for context in contexts:
         tokens = _surface_evidence_tokens(context) - target_tokens
+        tokens |= _contained_action_context_text_tokens(
+            target,
+            context,
+            candidates,
+            target_tokens,
+        )
         tokens -= ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS
         if tokens:
             return tokens
     return set()
+
+
+def _contained_action_context_text_tokens(
+    target: ControlCandidate,
+    context: ControlCandidate,
+    candidates: list[ControlCandidate],
+    target_tokens: set[str],
+) -> set[str]:
+    tokens: set[str] = set()
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type not in ACTION_CONTEXT_TEXT_CONTROL_TYPES:
+            continue
+        if not _rect_contains(_expand_rect(context.rect, 4), candidate.rect):
+            continue
+        if _rect_iou(candidate.rect, target.rect) >= 0.50:
+            continue
+        tokens |= _surface_evidence_tokens(candidate)
+    return tokens - target_tokens - ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS
 
 
 def _same_revalidated_target(a: TargetResolution, b: TargetResolution) -> bool:
@@ -1845,18 +1949,61 @@ def _same_rank_candidate_can_cover_selected(
     selected: ControlCandidate,
     previous_candidates: list[ControlCandidate],
 ) -> bool:
-    if candidate.control_type not in SAME_RANK_COVERING_CONTROL_TYPES:
-        if candidate.control_type not in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES:
+    if candidate.control_type in SAME_RANK_COVERING_CONTROL_TYPES:
+        return True
+    if candidate.control_type in SAME_RANK_TRANSIENT_OPTION_CONTROL_TYPES:
+        if _same_rank_surface_owns_selected(candidate, selected):
             return False
-        if _same_rank_surface_was_previously_present(candidate, previous_candidates):
-            return False
-        tokens = (
-            _tokenize_control(candidate.text)
-            | _tokenize_control(candidate.automation_id)
-            | _tokenize_control(candidate.window_title)
+        return not _same_rank_surface_was_previously_present(
+            candidate,
+            previous_candidates,
         )
-        return bool(tokens & SAME_RANK_TRANSIENT_SURFACE_WORDS)
-    return True
+    if candidate.control_type not in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES:
+        return False
+    if _same_rank_surface_was_previously_present(
+        candidate,
+        previous_candidates,
+    ) and _same_rank_surface_owns_selected(candidate, selected):
+        return False
+    tokens = (
+        _tokenize_control(candidate.text)
+        | _tokenize_control(candidate.automation_id)
+        | _tokenize_control(candidate.window_title)
+    )
+    return bool(tokens & SAME_RANK_TRANSIENT_SURFACE_WORDS)
+
+
+def _same_rank_surface_owns_selected(
+    candidate: ControlCandidate,
+    selected: ControlCandidate,
+) -> bool:
+    if not _rect_contains(_expand_rect(candidate.rect, 4), selected.rect):
+        return False
+    if candidate.control_type == "menu" and selected.control_type == "menuitem":
+        return True
+    selected_window = (selected.window_title or "").strip().lower()
+    surface_names = {
+        (candidate.text or "").strip().lower(),
+        (candidate.automation_id or "").strip().lower(),
+        (candidate.window_title or "").strip().lower(),
+    }
+    if selected_window and selected_window in surface_names:
+        return True
+    candidate_window = (candidate.window_title or "").strip().lower()
+    if (
+        candidate_window
+        and selected_window
+        and candidate_window == selected_window
+        and candidate.depth < selected.depth
+    ):
+        return True
+    surface_tokens = (
+        _tokenize_control(candidate.text)
+        | _tokenize_control(candidate.automation_id)
+        | _tokenize_control(candidate.window_title)
+    ) - SAME_RANK_TRANSIENT_SURFACE_WORDS - {"app", "application", "window"}
+    selected_context_tokens = _tokenize_control(selected.window_title)
+    return bool(surface_tokens and selected_context_tokens and surface_tokens & selected_context_tokens)
 
 
 def _same_rank_surface_was_previously_present(

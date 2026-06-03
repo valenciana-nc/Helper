@@ -28,6 +28,7 @@ log = logging.getLogger("helper.rect_snap")
 
 DEFAULT_TIMEOUT_MS = 400
 SEARCH_MARGIN_PX = 60
+TABLE_CONTEXT_MARGIN_PX = 240
 CONFIDENCE_FLOOR = 0.42
 SEMANTIC_MISMATCH_CAP = 0.41
 SEMANTIC_MISMATCH_IOU_FLOOR = 0.65
@@ -119,6 +120,7 @@ SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
     {"datagrid", "grid", "group", "headeritem", "list", "menu", "pane", "table", "toolbar", "window"}
 )
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "datagrid": frozenset({"grid", "table"}),
     "grid": frozenset({"grid", "table"}),
@@ -212,6 +214,24 @@ ACTION_OBJECT_STOPWORDS = CONFIRM_OBJECT_STOPWORDS | frozenset(
     }
 )
 GENERIC_OBJECT_REQUEST_STOPWORDS = ACTION_OBJECT_STOPWORDS | frozenset({"for", "on", "to"})
+TABLE_CELL_CONTEXT_STOPWORDS = GENERIC_OBJECT_REQUEST_STOPWORDS | GENERIC_OBJECT_REQUEST_WORDS | frozenset(
+    {
+        "cell",
+        "cells",
+        "column",
+        "columns",
+        "data",
+        "datagrid",
+        "grid",
+        "gridcell",
+        "in",
+        "of",
+        "table",
+        "the",
+        "this",
+        "with",
+    }
+)
 FILE_IDENTITY_WORDS = frozenset({"document", "documents", "file", "files"})
 FILE_OPEN_ACTION_WORDS = frozenset({"open"})
 FILE_SAVE_ACTION_WORDS = frozenset({"disk", "floppy", "save"})
@@ -791,6 +811,8 @@ def snap_to_control(
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
     surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    table_cell_surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    table_cell_row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -807,6 +829,35 @@ def snap_to_control(
             foreground_handle,
         )
     )
+    context_search_rect = _expand_rect(model_rect, max(margin_px, TABLE_CONTEXT_MARGIN_PX))
+    context_candidates = raw_candidates
+    if context_search_rect != search_rect and time.monotonic() < deadline:
+        context_candidates = raw_candidates + list(
+            _iter_candidates(
+                desktop,
+                context_search_rect,
+                deadline,
+                foreground_handle,
+            )
+        )
+    for (
+        control,
+        rect,
+        _is_own_process,
+        _window_rank,
+        _foreground_known,
+        _top_handle,
+        _control_handle,
+        _window_title,
+    ) in context_candidates:
+        ctype = _control_type(control)
+        if not _is_enabled(control) or not _is_visible(control):
+            continue
+        if ctype in ROW_CONTEXT_CONTROL_TYPES:
+            table_cell_row_contexts.append((rect, _control_text(control), ctype))
+        if ctype == "headeritem":
+            table_cell_surface_contexts.append((rect, _control_text(control), ctype))
+
     for (
         control,
         rect,
@@ -1275,6 +1326,19 @@ def snap_to_control(
         )
         if card_result is not None:
             return card_result
+
+    table_cell_result = _table_cell_context_snap_result(
+        ranked,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+        surface_contexts=table_cell_surface_contexts,
+        row_contexts=table_cell_row_contexts,
+        model_rect=model_rect,
+        confidence_floor=confidence_floor,
+    )
+    if table_cell_result is not None:
+        return table_cell_result
 
     if (
         best_result is not None
@@ -2875,6 +2939,206 @@ def _object_token_variants(tokens: set[str]) -> set[str]:
         if token.endswith("s") and not token.endswith("ss"):
             variants.add(token[:-1])
     return variants
+
+
+def _table_cell_context_snap_result(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    *,
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    row_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    model_rect: tuple[int, int, int, int],
+    confidence_floor: float,
+) -> SnapResult | None:
+    raw_tokens = _object_token_variants(_tokens_from_text(instruction))
+    if not (
+        control_intents & TABLE_CELL_CONTROL_TYPES
+        or raw_tokens & {"cell", "cells", "column", "columns", "gridcell"}
+    ):
+        return None
+    requested = raw_tokens - TABLE_CELL_CONTEXT_STOPWORDS
+    if not requested:
+        return None
+    cells = [
+        (score, result, semantic_text, ctype, window_rank)
+        for score, result, semantic_text, ctype, window_rank in ranked
+        if ctype in TABLE_CELL_CONTROL_TYPES
+    ]
+    if not cells:
+        return None
+
+    all_row_tokens: set[str] = set()
+    all_column_tokens: set[str] = set()
+    for _score, result, _semantic_text, _ctype, _window_rank in cells:
+        all_row_tokens.update(
+            _table_cell_row_context_tokens(
+                result.rect,
+                ranked=ranked,
+                row_contexts=row_contexts,
+            )
+        )
+        all_column_tokens.update(
+            _table_cell_column_context_tokens(
+                result.rect,
+                surface_contexts=surface_contexts,
+            )
+        )
+    requested_row = requested & all_row_tokens
+    requested_column = requested & all_column_tokens
+    requested_value = requested - all_row_tokens - all_column_tokens
+    if not (requested_row or requested_column or requested_value):
+        return None
+
+    matches: list[tuple[float, SnapResult]] = []
+    for score, result, semantic_text, _ctype, _window_rank in cells:
+        row_tokens = _table_cell_row_context_tokens(
+            result.rect,
+            ranked=ranked,
+            row_contexts=row_contexts,
+        )
+        if requested_row and not (row_tokens & requested_row):
+            continue
+        column_tokens = _table_cell_column_context_tokens(
+            result.rect,
+            surface_contexts=surface_contexts,
+        )
+        if requested_column and not (column_tokens & requested_column):
+            continue
+        value_tokens = _table_cell_value_tokens(semantic_text or result.matched_text)
+        if requested_value and not (value_tokens & requested_value):
+            continue
+        if not any(existing.rect == result.rect for _existing_score, existing in matches):
+            matches.append((score, result))
+
+    if len(matches) == 1:
+        score, result = matches[0]
+        return SnapResult(
+            rect=result.rect,
+            confidence=max(confidence_floor, score),
+            source=result.source,
+            matched_text=result.matched_text,
+        )
+    if len(matches) > 1:
+        score, result = max(matches, key=lambda item: item[0])
+        return SnapResult(
+            rect=result.rect,
+            confidence=score,
+            source=result.source,
+            matched_text=result.matched_text,
+            rejected_reason="fresh snap ambiguous",
+        )
+    if requested_row or requested_column:
+        return SnapResult(
+            rect=model_rect,
+            confidence=0.0,
+            source="uia",
+            rejected_reason="fresh snap ambiguous",
+        )
+    return None
+
+
+def _table_cell_value_tokens(text: str) -> set[str]:
+    return _object_token_variants(
+        (_tokenize_control(_semantic_text(text)) | _tokens_from_text(text))
+        - TABLE_CELL_CONTEXT_STOPWORDS
+        - TABLE_CELL_CONTROL_TYPES
+    )
+
+
+def _table_cell_column_context_tokens(
+    rect: tuple[int, int, int, int],
+    *,
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> set[str]:
+    tokens: set[str] = set()
+    for context_rect, context_text, context_type in surface_contexts:
+        if context_type != "headeritem":
+            continue
+        if not _header_surface_context_rect_matches(context_rect, rect):
+            continue
+        tokens.update(
+            _object_token_variants(
+                _tokenize_control(_semantic_text(context_text))
+                | _tokens_from_text(context_text)
+            )
+        )
+    return tokens - TABLE_CELL_CONTEXT_STOPWORDS
+
+
+def _table_cell_row_context_tokens(
+    rect: tuple[int, int, int, int],
+    *,
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    row_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> set[str]:
+    tokens: set[str] = set()
+    for context_rect, context_text, _context_type in row_contexts:
+        if not _row_context_rect_matches(context_rect, rect):
+            continue
+        tokens.update(
+            _object_token_variants(
+                _tokenize_control(_semantic_text(context_text))
+                | _tokens_from_text(context_text)
+            )
+        )
+    if tokens:
+        return tokens - TABLE_CELL_CONTEXT_STOPWORDS
+    for _score, result, semantic_text, ctype, _window_rank in ranked:
+        if ctype not in TABLE_CELL_CONTROL_TYPES:
+            continue
+        if result.rect == rect:
+            continue
+        if not _same_row_left_label_rect_matches(result.rect, rect):
+            continue
+        tokens.update(
+            _object_token_variants(
+                _tokenize_control(_semantic_text(semantic_text or result.matched_text))
+                | _tokens_from_text(semantic_text or result.matched_text)
+            )
+        )
+    return tokens - TABLE_CELL_CONTEXT_STOPWORDS
+
+
+def _row_context_rect_matches(
+    row_rect: tuple[int, int, int, int],
+    cell_rect: tuple[int, int, int, int],
+) -> bool:
+    if _contains_rect(_expand_rect(row_rect, 4), cell_rect):
+        return True
+    row_x, row_y, row_width, row_height = row_rect
+    cell_x, cell_y, cell_width, cell_height = cell_rect
+    if min(row_width, row_height, cell_width, cell_height) <= 0:
+        return False
+    row_right = row_x + row_width
+    cell_right = cell_x + cell_width
+    horizontal_overlap = min(row_right, cell_right) - max(row_x, cell_x)
+    if horizontal_overlap < min(row_width, cell_width) * 0.45:
+        return False
+    cell_center_y = cell_y + cell_height / 2
+    if row_y - 4 <= cell_center_y <= row_y + row_height + 4:
+        return True
+    vertical_overlap = min(row_y + row_height, cell_y + cell_height) - max(row_y, cell_y)
+    return vertical_overlap >= min(row_height, cell_height) * 0.45
+
+
+def _same_row_left_label_rect_matches(
+    label_rect: tuple[int, int, int, int],
+    cell_rect: tuple[int, int, int, int],
+) -> bool:
+    label_x, label_y, label_width, label_height = label_rect
+    cell_x, cell_y, cell_width, cell_height = cell_rect
+    if min(label_width, label_height, cell_width, cell_height) <= 0:
+        return False
+    label_right = label_x + label_width
+    if label_right > cell_x + 4:
+        return False
+    vertical_overlap = min(label_y + label_height, cell_y + cell_height) - max(label_y, cell_y)
+    if vertical_overlap < min(label_height, cell_height) * 0.45:
+        return False
+    horizontal_gap = max(0, cell_x - label_right)
+    return horizontal_gap <= max(260, min(960, cell_width * 6))
 
 
 def _neutral_same_label_state_option_snap_ambiguous(
