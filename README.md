@@ -70,8 +70,8 @@ Help mode resolves screen targets through UI Automation candidates, text matchin
 fresh screenshot revalidation, geometry/visual quality checks, and a final OCR
 text check before emitting an overlay. The safety policy is conservative: when
 evidence is stale, ambiguous, visually misaligned, or the final OCR crop clearly
-contradicts the expected visible label, Helper downgrades to narration instead
-of highlighting a likely wrong target.
+contradicts or only partially proves the expected visible label, Helper
+downgrades to narration instead of highlighting a likely wrong target.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

@@ -102,6 +102,106 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_partial_text_match_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 120, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save changes", "control_type": "button", "rect": [80, 80, 120, 32]},
+            ],
+            "ocr_result": {"text": "Save"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr partial text match",
+                "ocr_recognized_text": "Save",
+                "rejected_reason": "ocr partial text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_numeric_table_cell_shared_suffix_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 100, 28], "label": "$9,234.00"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Highlight the $1,234.00 cell.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 100, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "$1,234.00", "control_type": "cell", "rect": [80, 80, 100, 28]},
+            ],
+            "ocr_result": {"text": "$9,234.00"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "$9,234.00",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_single_digit_table_cell_mismatch_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 90, 28], "label": "Quantity 5"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Highlight the Quantity 4 cell.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 90, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Quantity 4", "control_type": "cell", "rect": [80, 80, 90, 28]},
+            ],
+            "ocr_result": {"text": "Quantity 5"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Quantity 5",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_generic_open_menuitem_mismatch_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 100, 28], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 100, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Open", "control_type": "menuitem", "rect": [80, 80, 100, 28]},
+            ],
+            "ocr_result": {"text": "Delete"},
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Delete",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "deictic_target_id_accepts_exact_labeled_control",
             "capture": {"width": 500, "height": 320},
             "draw": [

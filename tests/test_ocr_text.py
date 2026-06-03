@@ -8,6 +8,7 @@ from PIL import Image
 
 from control_inventory import ControlCandidate, TargetResolution
 from ocr_text import (
+    OCR_PARTIAL_TEXT_REASON,
     OCR_TEXT_MISMATCH_REASON,
     OcrTextResult,
     WindowsOcrTextProvider,
@@ -84,6 +85,89 @@ class OcrTextTests(unittest.TestCase):
 
         self.assertTrue(result.accepted)
         self.assertEqual(result.recognized_text, "Save chanyes")
+
+    def test_rejects_partial_ocr_match_for_multi_word_label(self) -> None:
+        provider = _Provider(OcrTextResult(text="Save", available=True))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save changes",
+            control_type="button",
+            provider=provider,
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
+        self.assertEqual(result.recognized_text, "Save")
+
+    def test_rejects_numeric_cell_shared_suffix_mismatch(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="$1,234.00",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="$9,234.00", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_rejects_numeric_cell_partial_crop(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="$1,234.00",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="234.00", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
+
+    def test_checks_single_digit_cell_values(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 40, 24),
+            expected_text="4",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="5", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_menuitem_generic_label_still_verified(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="Open",
+            control_type="menuitem",
+            provider=_Provider(OcrTextResult(text="Delete", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_dotted_abbreviation_compact_compare(self) -> None:
+        matching = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 60, 24),
+            expected_text="U.S.",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="US", available=True)),
+        )
+        mismatching = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 60, 24),
+            expected_text="U.S.",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="U.K.", available=True)),
+        )
+
+        self.assertTrue(matching.accepted)
+        self.assertFalse(mismatching.accepted)
+        self.assertEqual(mismatching.reason, OCR_TEXT_MISMATCH_REASON)
 
     def test_unavailable_or_blank_ocr_is_inconclusive(self) -> None:
         unavailable = verify_target_text(

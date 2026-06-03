@@ -17,6 +17,7 @@ from PIL import Image
 from screen import Capture
 
 OCR_TEXT_MISMATCH_REASON = "ocr text mismatch"
+OCR_PARTIAL_TEXT_REASON = "ocr partial text match"
 OCR_GENERIC_WORDS = frozenset(
     {
         "a",
@@ -61,6 +62,10 @@ OCR_GENERIC_WORDS = frozenset(
         "this",
         "visit",
     }
+)
+OCR_GENERIC_LABEL_EXCEPTIONS = frozenset({"cell", "open", "option"})
+OCR_NUMERIC_STRICT_CONTROL_TYPES = frozenset(
+    {"cell", "dataitem", "datagridcell", "edit", "gridcell", "row", "rowheader"}
 )
 OCR_VERIFICATION_CONTROL_TYPES = frozenset(
     {
@@ -198,7 +203,11 @@ def verify_target_text(
     if not _should_check_ocr(expected, control_type, rect):
         return OcrTextVerification(accepted=True, expected_text=expected)
 
-    expected_tokens = _meaningful_tokens(expected)
+    keep_generic_label = _keep_generic_label_tokens(control_type)
+    expected_tokens = _meaningful_tokens(
+        expected,
+        keep_generic_label=keep_generic_label,
+    )
     if not expected_tokens:
         return OcrTextVerification(accepted=True, expected_text=expected)
     provider = provider if provider is not None else default_ocr_text_provider()
@@ -216,10 +225,59 @@ def verify_target_text(
             error=result.error,
             elapsed_ms=result.elapsed_ms,
         )
-    recognized_tokens = _meaningful_tokens(recognized)
+    numeric_reason = _numeric_text_rejection_reason(expected, recognized, control_type)
+    if numeric_reason:
+        return OcrTextVerification(
+            accepted=False,
+            reason=numeric_reason,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+    if _numeric_text_matches(expected, recognized, control_type):
+        return OcrTextVerification(
+            accepted=True,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+    compact_reason = _compact_abbreviation_rejection_reason(expected, recognized)
+    if compact_reason:
+        return OcrTextVerification(
+            accepted=False,
+            reason=compact_reason,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+    if _compact_abbreviation_matches(expected, recognized):
+        return OcrTextVerification(
+            accepted=True,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+
+    recognized_tokens = _meaningful_tokens(
+        recognized,
+        keep_generic_label=keep_generic_label,
+    )
     if not recognized_tokens:
         return OcrTextVerification(
             accepted=True,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+    if _is_partial_text_match(expected_tokens, recognized_tokens):
+        return OcrTextVerification(
+            accepted=False,
+            reason=OCR_PARTIAL_TEXT_REASON,
             expected_text=expected,
             recognized_text=recognized,
             available=True,
@@ -259,7 +317,17 @@ def _should_check_ocr(
     normalized_type = (control_type or "").strip().lower()
     if normalized_type and normalized_type not in OCR_VERIFICATION_CONTROL_TYPES:
         return False
-    tokens = _meaningful_tokens(expected)
+    if (
+        normalized_type in OCR_NUMERIC_STRICT_CONTROL_TYPES
+        and _compact_digits(expected)
+    ):
+        return True
+    if _looks_like_compact_abbreviation(expected):
+        return True
+    tokens = _meaningful_tokens(
+        expected,
+        keep_generic_label=_keep_generic_label_tokens(control_type),
+    )
     if not tokens:
         return False
     if not any(_token_has_signal(token) for token in tokens):
@@ -269,11 +337,26 @@ def _should_check_ocr(
     return True
 
 
-def _meaningful_tokens(text: str) -> set[str]:
-    return {
+def _meaningful_tokens(text: str, *, keep_generic_label: bool = False) -> set[str]:
+    tokens = {
         token
         for token in re.findall(r"[a-z0-9]+", (text or "").lower())
-        if token not in OCR_GENERIC_WORDS
+    }
+    filtered = {token for token in tokens if token not in OCR_GENERIC_WORDS}
+    if filtered:
+        return filtered
+    if keep_generic_label and tokens and tokens <= OCR_GENERIC_LABEL_EXCEPTIONS:
+        return tokens
+    return set()
+
+
+def _keep_generic_label_tokens(control_type: str) -> bool:
+    return (control_type or "").strip().lower() in {
+        "button",
+        "cell",
+        "datagridcell",
+        "gridcell",
+        "menuitem",
     }
 
 
@@ -293,6 +376,23 @@ def _similar_token(first: str, second: str) -> bool:
     return SequenceMatcher(None, first, second).ratio() >= 0.74
 
 
+def _is_partial_text_match(expected: set[str], recognized: set[str]) -> bool:
+    expected_signal = {token for token in expected if _token_has_signal(token)}
+    recognized_signal = {token for token in recognized if _token_has_signal(token)}
+    if len(expected_signal) < 2 or not recognized_signal:
+        return False
+    covered = {
+        expected_token
+        for expected_token in expected_signal
+        if any(
+            expected_token == recognized_token
+            or _similar_token(expected_token, recognized_token)
+            for recognized_token in recognized_signal
+        )
+    }
+    return bool(covered) and len(covered) < len(expected_signal)
+
+
 def _is_strong_contradiction(expected: set[str], recognized: set[str]) -> bool:
     expected_signal = {token for token in expected if _token_has_signal(token)}
     recognized_signal = {token for token in recognized if _token_has_signal(token)}
@@ -303,6 +403,61 @@ def _is_strong_contradiction(expected: set[str], recognized: set[str]) -> bool:
 
 def _token_has_signal(token: str) -> bool:
     return len(token) >= 2 and any(char.isalnum() for char in token)
+
+
+def _numeric_text_rejection_reason(
+    expected: str,
+    recognized: str,
+    control_type: str,
+) -> str:
+    if (control_type or "").strip().lower() not in OCR_NUMERIC_STRICT_CONTROL_TYPES:
+        return ""
+    expected_digits = _compact_digits(expected)
+    recognized_digits = _compact_digits(recognized)
+    if not expected_digits or not recognized_digits or expected_digits == recognized_digits:
+        return ""
+    if expected_digits in recognized_digits or recognized_digits in expected_digits:
+        return OCR_PARTIAL_TEXT_REASON
+    return OCR_TEXT_MISMATCH_REASON
+
+
+def _numeric_text_matches(expected: str, recognized: str, control_type: str) -> bool:
+    if (control_type or "").strip().lower() not in OCR_NUMERIC_STRICT_CONTROL_TYPES:
+        return False
+    expected_digits = _compact_digits(expected)
+    recognized_digits = _compact_digits(recognized)
+    return bool(expected_digits and recognized_digits and expected_digits == recognized_digits)
+
+
+def _compact_digits(text: str) -> str:
+    return "".join(re.findall(r"\d+", text or ""))
+
+
+def _compact_abbreviation_rejection_reason(expected: str, recognized: str) -> str:
+    if not _looks_like_compact_abbreviation(expected):
+        return ""
+    expected_compact = _compact_alnum(expected)
+    recognized_compact = _compact_alnum(recognized)
+    if not expected_compact or not recognized_compact or expected_compact == recognized_compact:
+        return ""
+    return OCR_TEXT_MISMATCH_REASON
+
+
+def _compact_abbreviation_matches(expected: str, recognized: str) -> bool:
+    if not _looks_like_compact_abbreviation(expected):
+        return False
+    expected_compact = _compact_alnum(expected)
+    recognized_compact = _compact_alnum(recognized)
+    return bool(expected_compact and recognized_compact and expected_compact == recognized_compact)
+
+
+def _looks_like_compact_abbreviation(text: str) -> bool:
+    compact = _compact_alnum(text)
+    return "." in (text or "") and 2 <= len(compact) <= 4
+
+
+def _compact_alnum(text: str) -> str:
+    return "".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
 
 
 def _elapsed_ms(started: float) -> float:
