@@ -1204,6 +1204,23 @@ def snap_to_control(
         if card_result is not None:
             return card_result
 
+    if (
+        best_result is not None
+        and _neutral_same_label_state_option_snap_ambiguous(
+            instruction,
+            selected=best_result,
+            selected_ctype=best_ctype,
+            ranked=ranked,
+        )
+    ):
+        return SnapResult(
+            rect=best_result.rect,
+            confidence=best_score,
+            source="uia",
+            matched_text=best_result.matched_text,
+            rejected_reason="state option ambiguous",
+        )
+
     if best_result is not None and best_score >= confidence_floor:
         contained_best = _tighter_contained_snap_result(
             ranked,
@@ -2753,6 +2770,70 @@ def _object_token_variants(tokens: set[str]) -> set[str]:
         if token.endswith("s") and not token.endswith("ss"):
             variants.add(token[:-1])
     return variants
+
+
+def _neutral_same_label_state_option_snap_ambiguous(
+    instruction: str,
+    *,
+    selected: SnapResult,
+    selected_ctype: str,
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+) -> bool:
+    neutral_types = {"button", "checkbox", "radiobutton", "splitbutton"}
+    if selected_ctype not in neutral_types:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if (
+        raw_tokens & {
+            "button",
+            "buttons",
+            "check",
+            "checked",
+            "checkbox",
+            "radio",
+            "radiobutton",
+            "splitbutton",
+            "switch",
+            "toggle",
+            "uncheck",
+            "unchecked",
+        }
+        or {"check", "box"} <= raw_tokens
+        or {"split", "button"} <= raw_tokens
+    ):
+        return False
+    selected_tokens = _snap_state_option_label_tokens(selected.matched_text)
+    if not selected_tokens:
+        return False
+    control_types = {selected_ctype}
+    for _score, result, semantic_text, ctype, _window_rank in ranked:
+        if ctype not in neutral_types:
+            continue
+        tokens = _snap_state_option_label_tokens(semantic_text or result.matched_text)
+        if tokens and selected_tokens & tokens:
+            control_types.add(ctype)
+    return {"checkbox", "radiobutton"} <= control_types
+
+
+def _snap_state_option_label_tokens(text: str) -> set[str]:
+    return _object_token_variants(
+        (_tokenize_control(text) | _tokens_from_text(text))
+        - {
+            "box",
+            "button",
+            "buttons",
+            "check",
+            "checkbox",
+            "control",
+            "option",
+            "radio",
+            "radiobutton",
+            "split",
+            "splitbutton",
+            "switch",
+            "toggle",
+        }
+    )
 
 
 def _action_object_tokens(

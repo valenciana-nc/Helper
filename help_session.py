@@ -174,6 +174,7 @@ CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENER
     }
 )
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
+CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane"})
 WINDOW_TITLE_REVALIDATION_GENERIC_WORDS = frozenset(
     {
         "app",
@@ -1122,12 +1123,12 @@ def _revalidated_control_context_changed(
     previous_tokens = _control_context_revalidation_tokens(previous, previous_candidates)
     current_tokens = _control_context_revalidation_tokens(current, candidates)
     if not previous_tokens:
-        return False
+        return bool(current_tokens)
     if not current_tokens:
         return True
     overlap = previous_tokens & current_tokens
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
-    return similarity < 0.75
+    return similarity <= 0.75
 
 
 def _revalidated_control_window_context_changed(
@@ -1174,6 +1175,7 @@ def _control_context_revalidation_tokens(
     candidates: list[ControlCandidate],
 ) -> set[str]:
     best: tuple[float, ControlCandidate] | None = None
+    tokens: set[str] = set()
     for candidate in candidates:
         if candidate.id == target.id:
             continue
@@ -1187,15 +1189,41 @@ def _control_context_revalidation_tokens(
             continue
         if best is None or score > best[0]:
             best = (score, candidate)
-    if best is None:
-        return set()
-    return _control_label_context_tokens(best[1])
+    if best is not None:
+        tokens.update(_control_label_context_tokens(best[1]))
+    tokens.update(_control_section_context_revalidation_tokens(target, candidates))
+    return tokens
+
+
+def _control_section_context_revalidation_tokens(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    target_area = max(1, target.rect[2] * target.rect[3])
+    best_area: int | None = None
+    best_tokens: set[str] = set()
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type.lower() not in CONTROL_CONTEXT_SECTION_TYPES:
+            continue
+        if not _rect_contains(_expand_rect(candidate.rect, 4), target.rect):
+            continue
+        area = max(1, candidate.rect[2] * candidate.rect[3])
+        if area <= target_area:
+            continue
+        tokens = _control_label_context_tokens(candidate)
+        if not tokens:
+            continue
+        if best_area is None or area < best_area:
+            best_area = area
+            best_tokens = tokens
+    return best_tokens
 
 
 def _control_label_context_tokens(candidate: ControlCandidate) -> set[str]:
     return (
         _tokens_from_text(candidate.text)
-        | _tokenize_control(candidate.text)
     ) - CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS
 
 

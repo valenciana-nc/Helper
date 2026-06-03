@@ -73,6 +73,13 @@ evidence is stale, ambiguous, visually misaligned, or the final OCR crop clearly
 contradicts or only partially proves the expected visible label, Helper
 downgrades to narration instead of highlighting a likely wrong target.
 
+Recent guardrails also refuse neutral same-label state controls when a checkbox,
+radio button, and button all look plausible; repeated table cells must have a
+unique row and column context match before geometry can win; raw UIA snapping
+applies the same neutral state-control ambiguity check; and stale revalidation
+compares literal nearby labels plus containing section labels before preserving
+an old highlight.
+
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
 visual, and stale-target guards active. Target diagnostics include `quality`,
