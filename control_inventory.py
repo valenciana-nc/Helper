@@ -10693,8 +10693,6 @@ def _generic_surface_context_duplicate_ambiguous(
         return False
     if _candidate_has_foreground_unnamed_transient_surface_evidence(candidate, candidates):
         return False
-    if _candidate_has_rank_modal_evidence(candidate, candidates):
-        return False
     return any(
         other.id != candidate.id
         and not _same_visual_and_context_candidate(other, candidate)
@@ -12033,8 +12031,6 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_nearby_field_context_label_tokens(candidate, candidates))
     if _candidate_has_foreground_unnamed_transient_surface_evidence(candidate, candidates):
         tokens.update(_expand_token_aliases(set(UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS)))
-    if _candidate_has_rank_modal_evidence(candidate, candidates):
-        tokens.add("modal")
     if _candidate_has_foreground_rank_evidence(candidate, candidates):
         tokens.update(FOREGROUND_CONTEXT_WORDS)
     for context in candidates:
@@ -12092,15 +12088,6 @@ def _distinct_window_title_tokens(
     return title_tokens - peer_tokens
 
 
-def _candidate_has_rank_modal_evidence(
-    candidate: ControlCandidate,
-    candidates: list[ControlCandidate],
-) -> bool:
-    if _has_explicit_modal_surface_candidate(candidates):
-        return False
-    return any(candidate.window_rank > other.window_rank for other in candidates)
-
-
 def _candidate_has_foreground_unnamed_transient_surface_evidence(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -12155,20 +12142,6 @@ def _candidate_has_foreground_rank_evidence(
     if len(ranks) <= 1:
         return False
     return candidate.window_rank == min(ranks)
-
-
-def _has_explicit_modal_surface_candidate(candidates: list[ControlCandidate]) -> bool:
-    for candidate in candidates:
-        tokens = (
-            _candidate_semantic_tokens(candidate)
-            | _tokens_from_text(candidate.descriptor)
-            | _tokens_from_text(candidate.control_type)
-            | _surface_context_type_tokens(candidate.control_type)
-            | _tokenize_control(candidate.window_title)
-        )
-        if tokens & {"dialog", "modal"}:
-            return True
-    return False
 
 
 def _surface_context_type_tokens(control_type: str) -> set[str]:

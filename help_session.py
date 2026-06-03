@@ -750,7 +750,12 @@ def _target_has_dialog_resolution_evidence(
         return False
     dialog_tokens = {"dialog", "modal", "popup"}
     target_tokens = _surface_evidence_tokens(target_candidate)
-    if target_tokens & dialog_tokens:
+    # A stale lower-rank duplicate can carry dialog words only through its own
+    # window title; require stronger containing-surface evidence in that case.
+    if (
+        target_tokens & dialog_tokens
+        and not _target_id_has_foreground_exact_text_duplicate(target_id, candidates)
+    ):
         return True
     for candidate in candidates:
         if candidate.id == target_candidate.id:

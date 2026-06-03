@@ -139,6 +139,13 @@ The latest resolver hardening applies the same invariant during initial
 target resolution: nearby labels, row context, sections, menu parents, and
 container evidence must come from the same window rank and compatible window
 title before they can make a target ID, text match, or snap look safe.
+The next safety slice removes rank-only `modal`/`dialog` evidence: a duplicate
+button is no longer promoted into a supposed modal solely because it belongs to
+a different window rank. Helper now requires explicit modal/dialog surface
+evidence, compatible foreground transient-surface evidence, or refuses the
+highlight. A stale lower-rank target also cannot clean itself with only its own
+`dialog`/`modal`/`popup` window title when a same-label foreground duplicate is
+present.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

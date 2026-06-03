@@ -21098,7 +21098,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "c002")
         self.assertEqual(target.rejected_reason, "target_id ambiguous")
 
-    def test_dialog_close_exact_target_id_returns_clean_text_resolution(self) -> None:
+    def test_dialog_close_exact_target_id_with_title_stays_ambiguous_without_surface(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
 
@@ -21143,9 +21143,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target_id.target_id, "dialog_close")
         self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
-        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.source, "target_id")
         self.assertEqual(help_target.target_id, "dialog_close")
-        self.assertFalse(help_target.rejected_reason)
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
         self.assertEqual(help_target.rect, (500, 300, 80, 32))
 
     def test_window_control_aliases_do_not_cross_zoom_controls(self) -> None:
@@ -25269,6 +25269,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
                         window_rank=1,
                     ),
                 ],
+                "target_id ambiguous",
             ),
             (
                 "Click Save in the modal.",
@@ -25433,7 +25434,12 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ],
             ),
         )
-        for instruction, wrong_id, correct_id, candidates in cases:
+        for case in cases:
+            if len(case) == 4:
+                instruction, wrong_id, correct_id, candidates = case
+                expected_correct_rejection = ""
+            else:
+                instruction, wrong_id, correct_id, candidates, expected_correct_rejection = case
             with self.subTest(instruction=instruction):
                 wrong = next(candidate for candidate in candidates if candidate.id == wrong_id)
                 correct = next(candidate for candidate in candidates if candidate.id == correct_id)
@@ -25471,6 +25477,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 assert correct_target is not None
                 self.assertEqual(correct_target.source, "target_id")
                 self.assertEqual(correct_target.target_id, correct_id)
+                if expected_correct_rejection:
+                    self.assertEqual(correct_target.rejected_reason, expected_correct_rejection)
+                    continue
                 self.assertFalse(correct_target.rejected_reason)
                 self.assertEqual(correct_target.rect, correct.rect)
 
@@ -26862,7 +26871,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(target.rejected_reason)
             self.assertEqual(target.rect, (700, 520, 32, 32))
 
-    def test_dialog_context_uses_foreground_modal_evidence(self) -> None:
+    def test_dialog_context_without_surface_stays_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
@@ -26917,10 +26926,10 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(wrong_target.target_id, "page_save")
         self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
-        for resolved in (text_target, snap_target, help_target):
-            self.assertEqual(resolved.target_id, "dialog_save")
-            self.assertFalse(resolved.rejected_reason)
-            self.assertEqual(resolved.rect, (500, 300, 70, 30))
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.target_id, "page_save")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 
     def test_dialog_context_does_not_clean_background_duplicate_without_evidence(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
@@ -28038,7 +28047,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.rect, (100, 220, 120, 32))
         self.assertFalse(help_target.rejected_reason)
 
-    def test_same_label_modal_button_uses_geometry_over_foreground_rank(self) -> None:
+    def test_same_label_modal_button_without_surface_rejects_broad_geometry(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
 
@@ -28071,10 +28080,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(target.source, "text_match")
-        self.assertEqual(target.target_id, "modal")
-        self.assertFalse(target.rejected_reason)
-        self.assertEqual(target.rect, (400, 240, 80, 32))
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.target_id, "")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
     def test_same_label_dialog_button_uses_context_over_wrong_geometry(self) -> None:
         from control_inventory import ControlCandidate

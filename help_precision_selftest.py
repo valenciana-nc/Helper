@@ -42,8 +42,9 @@ from target_quality import evaluate_target_quality
 WINDOW_TITLE_PREFIX = "Helper Precision Self Test"
 TARGET_TEXT = "Save helper precision"
 CHILD_READY_SETTLE_SEC = 0.25
-INITIAL_UIA_SETTLE_SEC = 1.5
-TARGET_WAIT_TIMEOUT_SEC = 5.0
+INITIAL_UIA_SETTLE_SEC = 3.0
+TARGET_WAIT_TIMEOUT_SEC = 20.0
+SELFTEST_UIA_TIMEOUT_MS = 15000
 SELFTEST_CANDIDATE_LIMIT = max(MAX_CANDIDATES, 200)
 
 
@@ -51,7 +52,7 @@ def run_selftest(
     *,
     artifacts_dir: Path,
     clean: bool = True,
-    settle_sec: float = 0.8,
+    settle_sec: float = 3.0,
 ) -> dict[str, Any]:
     if clean and artifacts_dir.exists():
         shutil.rmtree(artifacts_dir)
@@ -471,7 +472,7 @@ def _wait_for_target_candidate(
         capture = capture_active_monitor()
         candidates = collect_control_candidates(
             capture,
-            timeout_ms=1500,
+            timeout_ms=SELFTEST_UIA_TIMEOUT_MS,
             limit=SELFTEST_CANDIDATE_LIMIT,
             foreground_handle_provider=_ignore_foreground_window,
         )

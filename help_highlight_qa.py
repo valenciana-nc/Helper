@@ -20741,7 +20741,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "same_label_modal_button_uses_geometry_over_foreground_rank",
+            "name": "same_label_modal_button_without_surface_rejects_broad_geometry",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [100, 100, 80, 32], "label": "Save"},
@@ -20771,10 +20771,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "text_match",
-                "target_id": "modal",
-                "rect": [400, 240, 80, 32],
-                "overlay_emitted": True,
+                "source": "candidate_snap",
+                "target_id": "",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
             },
         },
         {
@@ -20921,7 +20921,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "modal_context_recovers_from_page_duplicate_action",
+            "name": "modal_context_without_surface_rejects_rank_only_duplicate",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [100, 100, 70, 30], "label": "Save"},
@@ -20952,10 +20952,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "text_match",
-                "target_id": "modal_save",
-                "rect": [500, 300, 70, 30],
-                "overlay_emitted": True,
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
             },
         },
         {
@@ -21005,7 +21005,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "dialog_context_uses_foreground_modal_evidence",
+            "name": "dialog_context_without_surface_rejects_rank_only_duplicate",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [100, 100, 70, 30], "label": "Save"},
@@ -21036,10 +21036,10 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "text_match",
-                "target_id": "dialog_save",
-                "rect": [500, 300, 70, 30],
-                "overlay_emitted": True,
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
             },
         },
         {
@@ -21306,7 +21306,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "dialog_close_exact_target_id_returns_clean_text_resolution",
+            "name": "dialog_close_exact_target_id_with_title_rejects_rank_only_evidence",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
                 {"rect": [100, 100, 80, 32], "label": "Close"},
@@ -21337,10 +21337,11 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "text_match",
+                "source": "target_id",
                 "target_id": "dialog_close",
                 "rect": [500, 300, 80, 32],
-                "overlay_emitted": True,
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
             },
         },
         {
@@ -23679,6 +23680,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "foreground",
                 "rect": [100, 100, 80, 32],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "same_rect_same_rank_duplicate_snap_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this button.",
+                "target": {"x": 200, "y": 313, "width": 160, "height": 100},
+            },
+            "candidates": [
+                {
+                    "id": "alpha",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Alpha Editor",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "beta",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Beta Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
             },
         },
         {
