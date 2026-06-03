@@ -1030,6 +1030,7 @@ class HelpIntentLanguageTests(unittest.TestCase):
         self.assertEqual(radio_intents, {"radiobutton"})
         self.assertEqual(radio_option_intents, {"radiobutton"})
         self.assertEqual(checkbox_option_intents, {"checkbox"})
+        self.assertIn("option", generic_option_intents)
         self.assertIn("checkbox", generic_option_intents)
 
     def test_menu_option_intent_does_not_broaden_to_radio_options(self) -> None:
@@ -1162,6 +1163,28 @@ class SnapToControlTests(unittest.TestCase):
             _make_button("Active", 30, 70, 160, 28, control_type="ListItem"),
             _make_button("Priority options", 260, 40, 180, 100, control_type="List"),
             _make_button("Active", 270, 70, 160, 28, control_type="ListItem"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (270, 70, 160, 28),
+            "Click Active in Status options.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (30, 70, 160, 28))
+        self.assertFalse(result.rejected_reason)
+
+    def test_duplicate_real_option_uses_parent_list_context(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Status options", 20, 40, 180, 100, control_type="List"),
+            _make_button("Active", 30, 70, 160, 28, control_type="Option"),
+            _make_button("Priority options", 260, 40, 180, 100, control_type="List"),
+            _make_button("Active", 270, 70, 160, 28, control_type="Option"),
         ]
         desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
 
@@ -2344,6 +2367,31 @@ class SnapToControlTests(unittest.TestCase):
             140,
             32,
             control_type="RadioButton",
+        )
+        window = _make_window("Schedule", 0, 0, 800, 600, [option])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (100, 200, 140, 32),
+            "Select this option.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 200, 140, 32))
+        self.assertFalse(result.rejected_reason)
+
+    def test_snap_accepts_real_option_without_label_match(self) -> None:
+        from rect_snap import snap_to_control
+
+        option = _make_button(
+            "Weekly",
+            100,
+            200,
+            140,
+            32,
+            control_type="Option",
         )
         window = _make_window("Schedule", 0, 0, 800, 600, [option])
         desktop = _FakeDesktop([window])
@@ -5559,6 +5607,24 @@ class ControlInventoryTests(unittest.TestCase):
         self.assertFalse(result.rejected_reason)
         self.assertEqual(result.rect, (10, 10, 140, 32))
 
+    def test_generic_option_target_id_accepts_real_option_without_label_match(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        result = resolve_candidate_target(
+            target_id="c001",
+            instruction="Select this option.",
+            candidates=[
+                ControlCandidate("c001", "Weekly", "option", (10, 10, 140, 32)),
+            ],
+            model_rect=(10, 10, 140, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "target_id")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 140, 32))
+
     def test_generic_slider_target_id_accepts_slider_without_label_match(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
 
@@ -7798,6 +7864,24 @@ class ControlInventoryTests(unittest.TestCase):
             instruction="Select this option.",
             candidates=[
                 ControlCandidate("c001", "Weekly", "radiobutton", (10, 10, 140, 32)),
+            ],
+            model_rect=(10, 10, 140, 32),
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.source, "candidate_snap")
+        self.assertEqual(result.target_id, "c001")
+        self.assertFalse(result.rejected_reason)
+        self.assertEqual(result.rect, (10, 10, 140, 32))
+
+    def test_snap_candidate_target_accepts_generic_real_option(self) -> None:
+        from control_inventory import ControlCandidate, snap_candidate_target
+
+        result = snap_candidate_target(
+            instruction="Select this option.",
+            candidates=[
+                ControlCandidate("c001", "Weekly", "option", (10, 10, 140, 32)),
             ],
             model_rect=(10, 10, 140, 32),
         )
@@ -28383,52 +28467,54 @@ class HelpTargetHarnessTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
-        candidates = [
-            ControlCandidate("combo", "Country", "combobox", (10, 10, 180, 32)),
-            ControlCandidate("option", "Country", "menuitem", (10, 60, 180, 28)),
-        ]
-        instruction = "Open the Country dropdown."
+        for option_type in ("menuitem", "option"):
+            with self.subTest(option_type=option_type):
+                candidates = [
+                    ControlCandidate("combo", "Country", "combobox", (10, 10, 180, 32)),
+                    ControlCandidate("option", "Country", option_type, (10, 60, 180, 28)),
+                ]
+                instruction = "Open the Country dropdown."
 
-        wrong_target = resolve_candidate_target(
-            target_id="option",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(10, 60, 180, 28),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(10, 60, 180, 28),
-        )
-        wrong_snap = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(10, 60, 180, 28),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "option",
-                    "target": {"x": 10, "y": 60, "width": 180, "height": 28},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+                wrong_target = resolve_candidate_target(
+                    target_id="option",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 60, 180, 28),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 60, 180, 28),
+                )
+                wrong_snap = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(10, 60, 180, 28),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "option",
+                            "target": {"x": 10, "y": 60, "width": 180, "height": 28},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        self.assertEqual(wrong_target.target_id, "option")
-        self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
-        self.assertEqual(text_target.target_id, "combo")
-        self.assertFalse(text_target.rejected_reason)
-        if wrong_snap is not None:
-            self.assertNotEqual(wrong_snap.target_id, "option")
-        self.assertEqual(help_target.source, "text_match")
-        self.assertEqual(help_target.target_id, "combo")
-        self.assertFalse(help_target.rejected_reason)
-        self.assertEqual(help_target.rect, (10, 10, 180, 32))
+                self.assertEqual(wrong_target.target_id, "option")
+                self.assertEqual(wrong_target.rejected_reason, "target_id control type mismatch")
+                self.assertEqual(text_target.target_id, "combo")
+                self.assertFalse(text_target.rejected_reason)
+                if wrong_snap is not None:
+                    self.assertNotEqual(wrong_snap.target_id, "option")
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "combo")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (10, 10, 180, 32))
 
     def test_dropdown_item_request_recovers_visible_menuitem_from_launcher_id(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -28484,6 +28570,125 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertEqual(resolved.target_id, "active")
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (10, 46, 180, 28))
+
+    def test_candidate_inventory_option_parent_context_recovers_stale_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_list", "Status options", "list", (20, 40, 180, 100)),
+            ControlCandidate("status_active", "Active", "option", (30, 70, 160, 28)),
+            ControlCandidate("priority_list", "Priority options", "list", (260, 40, 180, 100)),
+            ControlCandidate("priority_active", "Active", "option", (270, 70, 160, 28)),
+        ]
+        instruction = "Click Active in Status options."
+
+        wrong_target = resolve_candidate_target(
+            target_id="priority_active",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(270, 70, 160, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(270, 70, 160, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(270, 70, 160, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "priority_active",
+                    "target": {"x": 270, "y": 70, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(wrong_target)
+        assert wrong_target is not None
+        self.assertEqual(wrong_target.target_id, "priority_active")
+        self.assertTrue(wrong_target.rejected_reason)
+        for resolved in (text_target, snap_target, help_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertEqual(resolved.target_id, "status_active")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (30, 70, 160, 28))
+
+    def test_candidate_inventory_duplicate_options_without_context_refuse(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("first", "Active", "option", (30, 70, 160, 28)),
+            ControlCandidate("second", "Active", "option", (270, 70, 160, 28)),
+        ]
+        instruction = "Click Active option."
+
+        wrong_target = resolve_candidate_target(
+            target_id="second",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(270, 70, 160, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(270, 70, 160, 28),
+        )
+
+        for resolved in (wrong_target, snap_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertTrue(resolved.rejected_reason)
+
+    def test_candidate_inventory_same_parent_duplicate_options_refuse(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_list", "Status options", "list", (20, 40, 220, 140)),
+            ControlCandidate("first", "Active", "option", (30, 70, 160, 28)),
+            ControlCandidate("second", "Active", "option", (30, 104, 160, 28)),
+        ]
+        instruction = "Click Active in Status options."
+
+        wrong_target = resolve_candidate_target(
+            target_id="second",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(30, 104, 160, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(30, 104, 160, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "second",
+                    "target": {"x": 30, "y": 104, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for resolved in (wrong_target, snap_target, help_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertTrue(resolved.rejected_reason)
 
     def test_dropdown_item_request_uses_named_launcher_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -29791,6 +29996,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("Select Canada dropdown option.", "Canada", "listitem", "menuitem"),
             ("Select Canada picker option.", "Canada", "listitem", "menuitem"),
             ("Select Canada selector option.", "Canada", "listitem", "menuitem"),
+            ("Select Canada option.", "Canada", "listitem", "option"),
         )
         for instruction, label, wrong_type, expected_type in cases:
             with self.subTest(instruction=instruction, wrong_type=wrong_type):

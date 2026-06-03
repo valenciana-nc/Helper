@@ -1481,6 +1481,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "button",
         "cell",
         "menuitem",
+        "option",
         "tabitem",
         "hyperlink",
         "listitem",
@@ -1509,8 +1510,56 @@ STRUCTURAL_CONTEXT_LABEL_CONTROL_TYPES = NEARBY_ROW_LABEL_CONTROL_TYPES | frozen
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 LABELLED_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
 NEARBY_LABELLED_CONTROL_TYPES = LABELLED_FIELD_CONTROL_TYPES | LABELLED_STATE_CONTROL_TYPES
-OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
-MENU_ITEM_CROSS_ROLE_CONTROL_TYPES = frozenset({"button", "menuitem", "splitbutton"})
+OPTION_ROLE_CONTROL_TYPES = frozenset(
+    {"checkbox", "listitem", "menuitem", "option", "radiobutton", "treeitem"}
+)
+SELECTABLE_POPUP_OPTION_CONTROL_TYPES = frozenset({"menuitem", "option"})
+PARENT_SCOPED_OPTION_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
+OPTION_PARENT_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
+OPTION_PARENT_SURFACE_WORDS = frozenset(
+    {"context", "drop", "down", "dropdown", "list", "menu", "picker", "selector"}
+)
+OPTION_PARENT_CONTEXT_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "below",
+        "beneath",
+        "choice",
+        "choices",
+        "choose",
+        "click",
+        "entry",
+        "entries",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "item",
+        "items",
+        "listitem",
+        "menuitem",
+        "of",
+        "on",
+        "open",
+        "option",
+        "options",
+        "press",
+        "select",
+        "selected",
+        "tap",
+        "that",
+        "the",
+        "this",
+        "to",
+        "under",
+        "value",
+        "values",
+        "within",
+        "with",
+    }
+)
+MENU_ITEM_CROSS_ROLE_CONTROL_TYPES = frozenset({"button", "menuitem", "option", "splitbutton"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 GENERIC_ROLE_ONLY_SNAP_CONTROL_TYPES = CELL_CONTROL_TYPES | ROW_CONTEXT_CONTROL_TYPES | frozenset(
@@ -2051,6 +2100,31 @@ def resolve_candidate_target(
     if target_id:
         for candidate in candidates:
             if candidate.id == target_id:
+                option_context = _option_parent_context_resolution(
+                    instruction=instruction,
+                    candidates=candidates,
+                    source="text_match",
+                    confidence=0.86,
+                    rejected_reason="ambiguous text match",
+                )
+                if option_context is not None and option_context.rejected_reason:
+                    return TargetResolution(
+                        rect=candidate.rect,
+                        confidence=option_context.confidence,
+                        source="target_id",
+                        matched_text=candidate.descriptor,
+                        target_id=candidate.id,
+                        rejected_reason="target_id ambiguous",
+                    )
+                if option_context is not None and option_context.target_id != candidate.id:
+                    return TargetResolution(
+                        rect=candidate.rect,
+                        confidence=option_context.confidence,
+                        source="target_id",
+                        matched_text=candidate.descriptor,
+                        target_id=candidate.id,
+                        rejected_reason="target_id semantic mismatch",
+                    )
                 accepted, confidence, reason = _target_id_plausibility(
                     instruction=instruction,
                     candidate=candidate,
@@ -2090,6 +2164,15 @@ def resolve_candidate_target(
     )
     if dialog_dismiss is not None:
         return dialog_dismiss
+    option_context = _option_parent_context_resolution(
+        instruction=instruction,
+        candidates=candidates,
+        source="text_match",
+        confidence=TEXT_MATCH_FLOOR,
+        rejected_reason="ambiguous text match",
+    )
+    if option_context is not None:
+        return option_context
     ranked: list[tuple[float, ControlCandidate]] = []
     for candidate in candidates:
         matches_row_action = (
@@ -2318,6 +2401,15 @@ def snap_candidate_target(
     ranked: list[tuple[float, ControlCandidate]] = []
     instruction_tokens = _tokenize_instruction(instruction)
     control_intents = _instruction_control_intents(instruction)
+    option_context = _option_parent_context_resolution(
+        instruction=instruction,
+        candidates=candidates,
+        source="candidate_snap",
+        confidence=confidence_floor,
+        rejected_reason="ambiguous candidate snap",
+    )
+    if option_context is not None:
+        return option_context
     for candidate in candidates:
         if not _intersects(candidate.rect, search_rect):
             continue
@@ -6148,7 +6240,7 @@ def _dropdown_option_launcher_mismatch(
         return False
     if raw_tokens & {"menuitem", "option", "options"}:
         return False
-    if candidate.control_type != "menuitem":
+    if candidate.control_type not in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
         return False
     if _dropdown_item_request_matches_candidate(instruction, candidate, candidates):
         return False
@@ -6305,7 +6397,7 @@ def _dropdown_item_request_matches_candidate(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate] | None = None,
 ) -> bool:
-    if candidate.control_type != "menuitem":
+    if candidate.control_type not in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
         return False
     requested = _dropdown_item_request_tokens(instruction)
     if not requested:
@@ -6355,7 +6447,7 @@ def _dropdown_item_request_menuitem_mismatch(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> bool:
-    if candidate.control_type != "menuitem":
+    if candidate.control_type not in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
         return False
     requested = _dropdown_item_request_tokens(instruction)
     if not requested:
@@ -7845,6 +7937,252 @@ def _same_label_option_control_types(
     return control_types
 
 
+def _option_parent_context_resolution(
+    *,
+    instruction: str,
+    candidates: list[ControlCandidate],
+    source: str,
+    confidence: float,
+    rejected_reason: str,
+) -> TargetResolution | None:
+    raw_tokens = _object_token_variants(_tokens_from_text(instruction))
+    if not _option_parent_context_request_applies(raw_tokens):
+        return None
+    request_tokens = _object_token_variants(raw_tokens | _tokenize_instruction(instruction))
+    label_matches = [
+        candidate
+        for candidate in candidates
+        if candidate.control_type in PARENT_SCOPED_OPTION_CONTROL_TYPES
+        and request_tokens & _option_context_label_tokens(candidate)
+    ]
+    if not label_matches:
+        return None
+
+    scoped_matches: list[ControlCandidate] = []
+    has_parent_context = False
+    for candidate in label_matches:
+        parent_request = _option_parent_context_request_tokens(
+            raw_tokens,
+            _option_context_label_tokens(candidate),
+        )
+        if not _option_parent_context_has_evidence(parent_request, candidates):
+            continue
+        has_parent_context = True
+        if _option_parent_context_matches_candidate(
+            candidate,
+            parent_request,
+            candidates,
+        ):
+            scoped_matches.append(candidate)
+
+    if scoped_matches:
+        preferred = _preferred_option_context_candidates(scoped_matches, raw_tokens)
+        matches = _distinct_option_context_candidates(preferred or scoped_matches)
+        if len(matches) == 1:
+            candidate = matches[0]
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=confidence,
+                source=source,
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
+        candidate = _option_context_anchor(matches)
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=confidence,
+            source=source,
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason=rejected_reason,
+        )
+
+    if has_parent_context and _same_label_option_like_duplicate_exists(label_matches):
+        candidate = _option_context_anchor(label_matches)
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=confidence,
+            source=source,
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason=rejected_reason,
+        )
+
+    launcher_context = _dropdown_item_launcher_context_tokens(instruction)
+    if launcher_context and any(
+        _dropdown_item_request_matches_candidate(instruction, candidate, candidates)
+        for candidate in label_matches
+    ):
+        return None
+
+    if (
+        raw_tokens & {"choice", "choices", "option", "options"}
+        and _same_label_same_type_option_like_duplicate_exists(label_matches)
+    ):
+        candidate = _option_context_anchor(label_matches)
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=confidence,
+            source=source,
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason=rejected_reason,
+        )
+    return None
+
+
+def _option_parent_context_request_applies(raw_tokens: set[str]) -> bool:
+    return bool(
+        raw_tokens
+        & {
+            "choice",
+            "choices",
+            "option",
+            "options",
+        }
+    )
+
+
+def _option_context_label_tokens(candidate: ControlCandidate) -> set[str]:
+    return _object_token_variants(
+        (
+            _candidate_visible_text_tokens(candidate)
+            | _tokens_from_text(candidate.text)
+            | _tokens_from_text(candidate.automation_id)
+        )
+        - OPTION_PARENT_CONTEXT_STOPWORDS
+    )
+
+
+def _option_parent_context_request_tokens(
+    raw_tokens: set[str],
+    label_tokens: set[str],
+) -> set[str]:
+    tokens = set(raw_tokens) - label_tokens - OPTION_PARENT_CONTEXT_STOPWORDS
+    return {token for token in _object_token_variants(tokens) if len(token) > 1}
+
+
+def _option_parent_context_has_evidence(
+    parent_request: set[str],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not parent_request:
+        return False
+    for candidate in candidates:
+        if candidate.control_type not in OPTION_PARENT_CONTEXT_CONTROL_TYPES:
+            continue
+        evidence = _option_parent_context_tokens(candidate)
+        if _contextual_duplicate_request_matches_evidence(parent_request, evidence):
+            return True
+    return False
+
+
+def _option_parent_context_matches_candidate(
+    child: ControlCandidate,
+    parent_request: set[str],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not parent_request:
+        return False
+    for parent in candidates:
+        if parent.id == child.id or _same_visual_candidate(parent, child):
+            continue
+        if parent.control_type not in OPTION_PARENT_CONTEXT_CONTROL_TYPES:
+            continue
+        if not _option_parent_context_rect_matches(parent, child):
+            continue
+        if _contextual_duplicate_request_matches_evidence(
+            parent_request,
+            _option_parent_context_tokens(parent),
+        ):
+            return True
+    return False
+
+
+def _option_parent_context_tokens(candidate: ControlCandidate) -> set[str]:
+    return _object_token_variants(
+        _candidate_semantic_tokens(candidate)
+        | _tokens_from_text(candidate.text)
+        | _tokens_from_text(candidate.descriptor)
+        | _tokens_from_text(candidate.automation_id)
+        | {candidate.control_type}
+        | _surface_context_type_tokens(candidate.control_type)
+    )
+
+
+def _option_parent_context_rect_matches(
+    parent: ControlCandidate,
+    child: ControlCandidate,
+) -> bool:
+    if parent.control_type == "menuitem":
+        return _menu_path_parent_item_rect_matches(parent, child)
+    return _contains_rect(_expand_rect(parent.rect, 4), child.rect)
+
+
+def _preferred_option_context_candidates(
+    candidates: list[ControlCandidate],
+    raw_tokens: set[str],
+) -> list[ControlCandidate]:
+    if raw_tokens & {"choice", "choices", "option", "options"}:
+        exact_options = [candidate for candidate in candidates if candidate.control_type == "option"]
+        if exact_options:
+            return exact_options
+    if raw_tokens & {"dropdown", "menu", "menuitem", "picker", "selector"} or {"drop", "down"} <= raw_tokens:
+        menu_items = [candidate for candidate in candidates if candidate.control_type == "menuitem"]
+        if menu_items:
+            return menu_items
+    return []
+
+
+def _distinct_option_context_candidates(
+    candidates: list[ControlCandidate],
+) -> list[ControlCandidate]:
+    out: list[ControlCandidate] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate.id in seen:
+            continue
+        seen.add(candidate.id)
+        out.append(candidate)
+    return out
+
+
+def _same_label_option_like_duplicate_exists(candidates: list[ControlCandidate]) -> bool:
+    for index, candidate in enumerate(candidates):
+        candidate_tokens = _option_context_label_tokens(candidate)
+        if not candidate_tokens:
+            continue
+        for other in candidates[index + 1 :]:
+            if _same_visual_candidate(candidate, other):
+                continue
+            other_tokens = _option_context_label_tokens(other)
+            if other_tokens and candidate_tokens & other_tokens:
+                return True
+    return False
+
+
+def _same_label_same_type_option_like_duplicate_exists(
+    candidates: list[ControlCandidate],
+) -> bool:
+    for index, candidate in enumerate(candidates):
+        candidate_tokens = _option_context_label_tokens(candidate)
+        if not candidate_tokens:
+            continue
+        for other in candidates[index + 1 :]:
+            if other.control_type != candidate.control_type:
+                continue
+            if _same_visual_candidate(candidate, other):
+                continue
+            other_tokens = _option_context_label_tokens(other)
+            if other_tokens and candidate_tokens & other_tokens:
+                return True
+    return False
+
+
+def _option_context_anchor(candidates: list[ControlCandidate]) -> ControlCandidate:
+    return sorted(candidates, key=lambda candidate: (candidate.window_rank, candidate.rect))[0]
+
+
 def _explicit_option_alternative_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -7949,8 +8287,12 @@ def _explicit_dropdown_option_role_mismatch(
         return False
     if candidate.control_type in {"button", "combobox", "splitbutton"}:
         return bool(candidate_tokens & _object_token_variants(raw_tokens))
-    if candidate.control_type != "menuitem":
-        return _same_label_candidate_has_type(candidate, candidates, {"menuitem"})
+    if candidate.control_type not in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
+        return _same_label_candidate_has_type(
+            candidate,
+            candidates,
+            SELECTABLE_POPUP_OPTION_CONTROL_TYPES,
+        )
     return False
 
 
@@ -8033,6 +8375,8 @@ def _explicit_bare_option_role_alternative_mismatch(
     if raw_tokens & (CHECKBOX_ON_ACTION_WORDS | CHECKBOX_OFF_ACTION_WORDS):
         return False
     if {"check", "box"} <= raw_tokens or {"drop", "down"} <= raw_tokens:
+        return False
+    if candidate.control_type == "option":
         return False
     if candidate.control_type in OPTION_ROLE_CONTROL_TYPES:
         return len(_same_label_option_control_types(candidate, candidates)) > 1
@@ -12213,6 +12557,8 @@ def _positional_duplicate_control_tokens(candidate: ControlCandidate) -> set[str
         tokens.update({"hyperlink", "link"})
     elif candidate.control_type == "menuitem":
         tokens.update({"item", "menuitem", "option"})
+    elif candidate.control_type == "option":
+        tokens.update({"choice", "item", "option"})
     elif candidate.control_type == "tabitem":
         tokens.update({"tab", "tabitem"})
     elif candidate.control_type == "headeritem":
@@ -15809,7 +16155,7 @@ def _menu_item_cross_role_duplicate_ambiguous(
 ) -> bool:
     if selected.control_type not in MENU_ITEM_CROSS_ROLE_CONTROL_TYPES:
         return False
-    if selected.control_type == "menuitem":
+    if selected.control_type in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
         return False
     control_intents = control_intents or _instruction_control_intents(instruction)
     if not _explicit_menu_item_cross_role_request(
@@ -15823,7 +16169,7 @@ def _menu_item_cross_role_duplicate_ambiguous(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if candidate.control_type != "menuitem":
+        if candidate.control_type not in SELECTABLE_POPUP_OPTION_CONTROL_TYPES:
             continue
         if not _menu_item_cross_role_label_matches(instruction, instruction_tokens, candidate):
             continue

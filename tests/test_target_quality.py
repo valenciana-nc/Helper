@@ -529,6 +529,27 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target boundary misaligned")
 
+    def test_rejects_candidate_option_rect_over_label_only(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (260, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Weekly", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(68, 72, 112, 28),
+            source="target_id",
+            confidence=1.0,
+            instruction="Select Weekly option.",
+            target_control_type="option",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
     def test_rejects_noisy_model_rect_without_candidate_evidence(self) -> None:
         from target_quality import evaluate_target_quality
 

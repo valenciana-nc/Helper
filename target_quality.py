@@ -57,6 +57,7 @@ CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES = frozenset(
         "combobox",
         "edit",
         "menuitem",
+        "option",
         "radiobutton",
         "slider",
         "spinner",
@@ -65,7 +66,7 @@ CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES = frozenset(
     }
 )
 CANDIDATE_LEAF_ACTION_CONTROL_TYPES = frozenset(
-    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+    {"button", "hyperlink", "menuitem", "option", "splitbutton", "tabitem"}
 )
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
@@ -659,7 +660,7 @@ def _has_adjacent_selection_indicator(
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> bool:
-    if target_control_type.lower() not in {"checkbox", "radiobutton"}:
+    if target_control_type.lower() not in {"checkbox", "option", "radiobutton"}:
         return False
     try:
         with Image.open(io.BytesIO(png_bytes)) as img:

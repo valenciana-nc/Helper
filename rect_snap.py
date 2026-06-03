@@ -122,7 +122,7 @@ SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 TABLE_CELL_ROW_LABEL_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
-OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem"})
+OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
 OPTION_CONTEXT_PARENT_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
 OPTION_PARENT_SURFACE_WORDS = frozenset(
     {"context", "drop", "down", "dropdown", "list", "menu", "picker", "selector"}
@@ -774,6 +774,7 @@ CLICKABLE_CONTROL_TYPES = frozenset(
     {
         "button",
         "menuitem",
+        "option",
         "tabitem",
         "hyperlink",
         "listitem",
@@ -3337,6 +3338,9 @@ def _option_context_preferred_type_matches(
         or {"menu", "item"} <= raw_tokens
     ):
         return []
+    exact_option = [item for item in matches if item[3] == "option"]
+    if exact_option and raw_tokens & {"choice", "choices", "option", "options"}:
+        return exact_option
     preferred_types: set[str] = set()
     if raw_tokens & {"context", "drop", "down", "dropdown", "menu", "picker", "selector"}:
         preferred_types.add("menuitem")
@@ -3438,6 +3442,8 @@ def _option_context_explicit_type_match(
             or "listitem" in raw_tokens
             or {"list", "item"} <= raw_tokens
         )
+    if ctype == "option":
+        return bool(option_words)
     return False
 
 
@@ -4187,6 +4193,7 @@ def _explicit_strict_role_control_types(instruction: str) -> set[str]:
     )
     if dropdown_requested and raw_tokens & {"choice", "choices", "option", "options"}:
         requested.add("menuitem")
+        requested.add("option")
     return requested
 
 
@@ -4196,7 +4203,7 @@ def _dropdown_launcher_option_mismatch(
     visible_text: str = "",
     automation_id: str = "",
 ) -> bool:
-    if ctype != "menuitem":
+    if ctype not in {"menuitem", "option"}:
         return False
     raw_tokens = _tokens_from_text(instruction)
     dropdown_requested = (
@@ -4588,7 +4595,7 @@ def _score(
     else:
         text_score = 0.0
 
-    if ctype in {"button", "menuitem", "tabitem", "hyperlink", "splitbutton"}:
+    if ctype in {"button", "menuitem", "option", "tabitem", "hyperlink", "splitbutton"}:
         type_score = 1.0
     elif ctype in {
         "listitem",
