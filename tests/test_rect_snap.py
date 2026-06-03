@@ -1120,6 +1120,32 @@ class SnapToControlTests(unittest.TestCase):
         self.assertFalse(explicit_button.rejected_reason)
         self.assertEqual(explicit_button.rect, (100, 190, 160, 32))
 
+    def test_specific_settings_request_rejects_generic_settings_overlap(self) -> None:
+        from rect_snap import snap_to_control
+
+        wrong = _make_button("Account settings", 100, 100, 100, 40)
+        window = _make_window("App", 0, 0, 800, 600, [wrong])
+        desktop = _FakeDesktop([window])
+
+        wrong_result = snap_to_control(
+            (100, 100, 100, 40),
+            "Click billing settings.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        account_result = snap_to_control(
+            (100, 100, 100, 40),
+            "Click account settings.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(wrong_result.source, "uia")
+        self.assertEqual(wrong_result.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(account_result.source, "uia")
+        self.assertFalse(account_result.rejected_reason)
+        self.assertEqual(account_result.rect, (100, 100, 100, 40))
+
     def test_returns_model_rect_when_no_overlap(self) -> None:
         from rect_snap import snap_to_control
 
@@ -8324,6 +8350,36 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertEqual(target.rect, (120, 160, 80, 32))
 
+    def test_empty_candidate_snapshot_rejects_specific_settings_raw_snap_mismatch(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import snap_to_control
+
+        wrong = _make_button("Account settings", 100, 100, 100, 40)
+        window = _make_window("App", 0, 0, 800, 600, [wrong])
+        desktop = _FakeDesktop([window])
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click billing settings.",
+                    "target": {"x": 100, "y": 100, "width": 100, "height": 40},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda rect, instruction: snap_to_control(
+                rect,
+                instruction,
+                desktop_factory=lambda: desktop,
+                timeout_ms=2000,
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(target.rect, (100, 100, 100, 40))
+
     def test_wrong_target_id_recovers_by_text_match(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -9642,6 +9698,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
+    def test_mixed_visible_and_automation_duplicate_row_actions_stay_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("row_a", "Acme", "listitem", (20, 80, 500, 44)),
+            ControlCandidate("row_b", "Acme", "listitem", (20, 140, 500, 44)),
+            ControlCandidate("row_a_delete", "Delete", "button", (420, 90, 70, 28)),
+            ControlCandidate(
+                "row_b_delete",
+                "",
+                "button",
+                (420, 150, 70, 28),
+                automation_id="Delete",
+            ),
+        ]
+        instruction = "Click Delete for Acme."
+
+        target_id = resolve_candidate_target(
+            target_id="row_b_delete",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 150, 70, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 150, 70, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(420, 150, 70, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "row_b_delete",
+                    "target": {"x": 420, "y": 150, "width": 70, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
     def test_duplicate_named_card_context_stays_ambiguous_without_position(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -10153,6 +10262,77 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(current_target.source, "target_id")
         self.assertFalse(current_target.rejected_reason)
         self.assertEqual(independent.rejected_reason, "ambiguous text match")
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_generic_action_with_same_weak_dialog_context_but_changed_visual_body(self) -> None:
+        import io
+
+        from PIL import Image, ImageDraw
+
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+        from screen import Capture
+
+        def dialog_capture(body: str) -> Capture:
+            image = Image.new("RGB", (260, 180), color=(238, 240, 244))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((16, 18, 244, 162), fill=(255, 255, 255), outline=(130, 136, 148), width=2)
+            draw.text((28, 34), "Dialog", fill=(18, 24, 38))
+            fill = (235, 250, 240) if "Delete" in body else (250, 235, 235)
+            draw.rectangle((28, 58, 222, 108), fill=fill)
+            draw.text((28, 62), body, fill=(56, 63, 77))
+            draw.rectangle((128, 122, 188, 150), fill=(52, 103, 190), outline=(26, 60, 130), width=2)
+            draw.text((149, 130), "OK", fill=(255, 255, 255))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            return Capture(
+                png_bytes=buffer.getvalue(),
+                width=image.width,
+                height=image.height,
+                monitor_left=0,
+                monitor_top=0,
+                scale=1.0,
+            )
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click OK.",
+                "target_id": "ok",
+                "target": {"x": 128, "y": 122, "width": 60, "height": 28},
+            }
+        )
+        candidates = [
+            ControlCandidate("dialog", "Dialog", "window", (16, 18, 228, 144)),
+            ControlCandidate("ok", "OK", "button", (128, 122, 60, 28)),
+        ]
+        previous_target = TargetResolution(
+            rect=(128, 122, 60, 28),
+            confidence=1.0,
+            source="target_id",
+            matched_text="OK",
+            target_id="ok",
+        )
+        current_target = TargetResolution(
+            rect=(128, 122, 60, 28),
+            confidence=1.0,
+            source="target_id",
+            matched_text="OK",
+            target_id="ok",
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=dialog_capture("Archive project?"),
+            candidates=candidates,
+            previous_target=previous_target,
+            previous_capture=dialog_capture("Delete customer?"),
+            previous_candidates=candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_revalidation_rejects_high_overlap_control_label_context_swap(self) -> None:
@@ -24154,6 +24334,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
         self.assertTrue(text_target is None or text_target.rejected_reason)
+        self.assertTrue(help_target.rejected_reason)
+        self.assertIn(
+            help_target.rejected_reason,
+            {"target_id ambiguous", "ambiguous candidate snap", "candidate snapshot no match"},
+        )
+
+    def test_duplicate_table_cell_mixed_cell_types_stay_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (180, 40, 140, 32)),
+            ControlCandidate("plan_header", "Plan", "headeritem", (340, 40, 140, 32)),
+            ControlCandidate("acme_row", "Acme", "dataitem", (20, 100, 500, 32)),
+            ControlCandidate("acme_name", "Acme", "rowheader", (20, 100, 140, 32)),
+            ControlCandidate("acme_status", "Active", "cell", (180, 100, 140, 32)),
+            ControlCandidate("acme_plan", "Active", "datagridcell", (340, 100, 140, 32)),
+            ControlCandidate("globex_row", "Globex", "dataitem", (20, 150, 500, 32)),
+            ControlCandidate("globex_name", "Globex", "rowheader", (20, 150, 140, 32)),
+            ControlCandidate("globex_status", "Active", "gridcell", (180, 150, 140, 32)),
+            ControlCandidate("globex_plan", "Active", "cell", (340, 150, 140, 32)),
+        ]
+        instruction = "Click the Active cell in the Acme row."
+
+        target_id = resolve_candidate_target(
+            target_id="acme_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "acme_status",
+                    "target": {"x": 180, "y": 100, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertTrue(text_target is None or text_target.rejected_reason)
+        self.assertIsNotNone(snap_target)
+        assert snap_target is not None
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertTrue(help_target.rejected_reason)
         self.assertIn(
             help_target.rejected_reason,

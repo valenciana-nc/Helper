@@ -2321,6 +2321,22 @@ def snap_candidate_target(
             target_id=candidate.id,
             rejected_reason="ambiguous candidate snap",
         )
+    row_action_anchor = _contained_row_action_ambiguity_anchor(
+        selected=candidate,
+        candidates=candidates,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        model_rect=model_rect,
+    )
+    if row_action_anchor is not None:
+        return TargetResolution(
+            rect=row_action_anchor.rect,
+            confidence=max(best_score, _geometry_agreement(row_action_anchor.rect, model_rect)),
+            source="candidate_snap",
+            matched_text=row_action_anchor.descriptor,
+            target_id=row_action_anchor.id,
+            rejected_reason="ambiguous candidate snap",
+        )
     if _candidate_snap_global_ambiguity(
         instruction,
         instruction_tokens,
@@ -3244,13 +3260,6 @@ def _text_match_score(
         candidates,
     ):
         score = TEXT_MATCH_FLOOR + 0.04
-        if visible_tokens:
-            score += VISIBLE_TEXT_MATCH_BONUS
-        if model_rect is not None:
-            score += 0.05 * _proximity_score(candidate.rect, model_rect)
-        return min(max(score, 0.0), 1.0)
-    if _duplicate_cell_context_target_matches(instruction, candidate, candidates):
-        score = TEXT_MATCH_FLOOR + 0.08
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
@@ -7093,19 +7102,31 @@ def _duplicate_cell_context_peers(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> list[ControlCandidate]:
-    duplicate_key = _contextual_duplicate_key(candidate)
+    duplicate_key = _duplicate_cell_context_key(candidate)
     if not duplicate_key:
         return []
     peers: dict[str, ControlCandidate] = {candidate.id: candidate}
     for other in candidates:
         if other.id == candidate.id or _same_visual_and_context_candidate(other, candidate):
             continue
-        if other.control_type != candidate.control_type:
+        if other.control_type not in CELL_CONTROL_TYPES:
             continue
-        if _contextual_duplicate_key(other) != duplicate_key:
+        if _duplicate_cell_context_key(other) != duplicate_key:
             continue
         peers.setdefault(other.id, other)
     return list(peers.values())
+
+
+def _duplicate_cell_context_key(candidate: ControlCandidate) -> str:
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return ""
+    visible = _candidate_text_key(candidate.text)
+    if visible:
+        return f"text:{visible}"
+    automation = _candidate_text_key(candidate.automation_id)
+    if automation:
+        return f"automation:{automation}"
+    return ""
 
 
 def _duplicate_cell_context_evidence_tokens(
@@ -7129,7 +7150,7 @@ def _same_row_cell_context_tokens(
     candidates: list[ControlCandidate],
 ) -> set[str]:
     tokens: set[str] = set()
-    duplicate_key = _contextual_duplicate_key(candidate)
+    duplicate_key = _duplicate_cell_context_key(candidate)
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
@@ -7137,8 +7158,8 @@ def _same_row_cell_context_tokens(
             continue
         if (
             duplicate_key
-            and context.control_type == candidate.control_type
-            and _contextual_duplicate_key(context) == duplicate_key
+            and context.control_type in CELL_CONTROL_TYPES
+            and _duplicate_cell_context_key(context) == duplicate_key
         ):
             continue
         if not _same_row_cell_context_rect_matches(context, candidate):
@@ -10068,7 +10089,13 @@ def _same_contextual_duplicate_request_ambiguous(
             continue
         if candidate.control_type != selected.control_type:
             continue
-        if _contextual_duplicate_key(candidate) != duplicate_key:
+        same_duplicate_key = _contextual_duplicate_key(candidate) == duplicate_key
+        same_row_action = _same_contained_row_action_duplicate(
+            selected,
+            candidate,
+            candidates,
+        )
+        if not (same_duplicate_key or same_row_action):
             continue
         if not _same_contextual_duplicate_literal_identity(selected, candidate):
             continue
@@ -10099,6 +10126,24 @@ def _same_contextual_duplicate_literal_identity(
     first_label = _contextual_duplicate_literal_identity(first)
     second_label = _contextual_duplicate_literal_identity(second)
     return bool(first_label and first_label == second_label)
+
+
+def _same_contained_row_action_duplicate(
+    first: ControlCandidate,
+    second: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if first.control_type != second.control_type:
+        return False
+    if first.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    if _same_visual_and_context_candidate(first, second):
+        return False
+    if not _same_contextual_duplicate_literal_identity(first, second):
+        return False
+    first_context = _contained_row_context_objects(first, candidates)
+    second_context = _contained_row_context_objects(second, candidates)
+    return bool(first_context and second_context)
 
 
 def _contextual_duplicate_literal_identity(candidate: ControlCandidate) -> str:
@@ -13745,6 +13790,65 @@ def _compound_surface_control_type_tokens(control_type: str) -> set[str]:
     if control_type == "datagrid":
         tokens |= {"data", "grid"}
     return tokens
+
+
+def _contained_row_action_ambiguity_anchor(
+    *,
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+    instruction_tokens: set[str],
+    model_rect: tuple[int, int, int, int],
+) -> ControlCandidate | None:
+    if selected.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return None
+    if not _contained_row_action_candidate_matches(selected, instruction_tokens, instruction):
+        return None
+    if not _contained_row_action_request_matches_context(
+        instruction,
+        selected,
+        candidates,
+    ):
+        return None
+    ambiguous = [selected]
+    for candidate in candidates:
+        if candidate.id == selected.id or _same_visual_and_context_candidate(candidate, selected):
+            continue
+        if not _same_contained_row_action_duplicate(selected, candidate, candidates):
+            continue
+        if not _contained_row_action_candidate_matches(
+            candidate,
+            instruction_tokens,
+            instruction,
+        ):
+            continue
+        if not _contained_row_action_request_matches_context(
+            instruction,
+            candidate,
+            candidates,
+        ):
+            continue
+        ambiguous.append(candidate)
+    if len(ambiguous) < 2:
+        return None
+    return max(
+        ambiguous,
+        key=lambda candidate: _geometry_agreement(candidate.rect, model_rect),
+    )
+
+
+def _contained_row_action_request_matches_context(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    requested = _instruction_row_context_objects(instruction, candidate, candidates)
+    if not requested:
+        return False
+    context = _contained_row_context_objects(candidate, candidates)
+    if not context:
+        return False
+    return _contextual_duplicate_request_matches_evidence(requested, context)
 
 
 def _contained_row_action_candidate_matches(

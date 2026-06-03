@@ -247,6 +247,25 @@ class _MutatingOcrProvider(_FakeOcrProvider):
         return result
 
 
+class _SequencingOcrProvider:
+    def __init__(self, results: list[OcrTextResult], on_first_call: Any | None = None) -> None:
+        self.results = list(results)
+        self.calls: list[tuple[Capture, tuple[int, int, int, int]]] = []
+        self._on_first_call = on_first_call
+
+    def recognize_text(
+        self,
+        capture: Capture,
+        rect: tuple[int, int, int, int],
+    ) -> OcrTextResult:
+        self.calls.append((capture, rect))
+        index = min(len(self.calls) - 1, max(0, len(self.results) - 1))
+        result = self.results[index] if self.results else OcrTextResult(available=False)
+        if len(self.calls) == 1 and self._on_first_call is not None:
+            self._on_first_call()
+        return result
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
     def setUp(self) -> None:
         self._previous_ocr_env = os.environ.get("HELP_OCR_TEXT_VERIFY")
@@ -647,8 +666,9 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertFalse(failed)
         self.assertEqual(finished, ["Done."])
         self.assertEqual(highlights, [(40, 52, 21, 21, "Click the Terms checkbox.")])
-        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertEqual(len(ocr_provider.calls), 2)
         self.assertEqual(ocr_provider.calls[0][1], (40, 52, 104, 21))
+        self.assertEqual(ocr_provider.calls[1][1], (40, 52, 104, 21))
         self.assertTrue(diagnostics[0]["overlay"]["emitted"])
         self.assertEqual(diagnostics[0]["overlay"]["rect"], (40, 52, 21, 21))
         self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Terms")
@@ -736,6 +756,80 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertFalse(diagnostics[0]["overlay"]["emitted"])
         self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "target covered before overlay")
         self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Save changes")
+
+    def test_final_pre_overlay_ocr_rejects_text_changed_after_initial_ocr(self) -> None:
+        app = _qt_app()
+        clean_capture = _button_capture()
+        changed_capture = _button_capture()
+        changed = False
+
+        def mark_changed() -> None:
+            nonlocal changed
+            changed = True
+
+        def capture_provider() -> Capture:
+            return changed_capture if changed else clean_capture
+
+        candidate = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        ocr_provider = _SequencingOcrProvider(
+            [
+                OcrTextResult(text="Save changes", available=True),
+                OcrTextResult(text="Delete changes", available=True),
+            ],
+            on_first_call=mark_changed,
+        )
+        session = HelpSession(
+            agent=_ScriptedAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=lambda _capture: [candidate],
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [])
+        self.assertEqual(len(ocr_provider.calls), 2)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "ocr partial text match")
+        self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Save changes")
+        self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Delete changes")
 
     def test_help_session_retries_transient_empty_candidate_snapshot(self) -> None:
         app = _qt_app()
@@ -1240,6 +1334,80 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             return capture
 
         candidates = [
+            ControlCandidate("ok", "OK", "button", rect),
+        ]
+        session = HelpSession(
+            agent=_OkAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=lambda _capture: candidates,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me confirm this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Done."])
+        self.assertGreaterEqual(len(capture_calls), 2)
+        self.assertEqual(highlights, [])
+        self.assertGreaterEqual(len(diagnostics), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["resolution"]["source"], "target_id")
+        self.assertEqual(
+            diagnostics[0]["resolution"]["rejected_reason"],
+            "current screen recheck target changed",
+        )
+
+    def test_help_session_downgrades_generic_action_with_weak_dialog_context_when_visual_changes(self) -> None:
+        app = _qt_app()
+        rect = (120, 110, 60, 28)
+        dialog_rect = (16, 18, 208, 130)
+        first_capture = _dialog_ok_capture(
+            "Delete customer?",
+            "This will remove Acme from the workspace.",
+            button_rect=rect,
+        )
+        current_capture = _dialog_ok_capture(
+            "Archive project?",
+            "This will hide Project Orion from active lists.",
+            button_rect=rect,
+        )
+        capture_calls: list[Capture] = []
+
+        def capture_provider() -> Capture:
+            capture = first_capture if not capture_calls else current_capture
+            capture_calls.append(capture)
+            return capture
+
+        candidates = [
+            ControlCandidate("dialog", "Dialog", "window", dialog_rect),
             ControlCandidate("ok", "OK", "button", rect),
         ]
         session = HelpSession(

@@ -122,6 +122,22 @@ ACTION_CONTEXT_REVALIDATION_GENERIC_WORDS = ROW_REVALIDATION_GENERIC_WORDS | fro
         "users",
     }
 )
+WEAK_ACTION_CONTEXT_REVALIDATION_WORDS = frozenset(
+    {
+        "dialog",
+        "dialogs",
+        "modal",
+        "modals",
+        "pane",
+        "panes",
+        "panel",
+        "panels",
+        "popup",
+        "popups",
+        "window",
+        "windows",
+    }
+)
 ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
     {
         "action",
@@ -1364,9 +1380,13 @@ def _contextless_generic_action_visual_context_changed(
         return False
     if _action_specific_revalidation_tokens(current, target.matched_text):
         return False
-    if _action_context_revalidation_tokens(previous, previous_candidates):
+    if _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(previous, previous_candidates)
+    ):
         return False
-    if _action_context_revalidation_tokens(current, candidates):
+    if _meaningful_action_context_revalidation_tokens(
+        _action_context_revalidation_tokens(current, candidates)
+    ):
         return False
     previous_crop = _capture_rect_image(
         previous_capture,
@@ -1384,6 +1404,10 @@ def _contextless_generic_action_visual_context_changed(
     stat = ImageStat.Stat(diff)
     normalized = sum(stat.mean) / max(1, len(stat.mean) * 255)
     return normalized > GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR
+
+
+def _meaningful_action_context_revalidation_tokens(tokens: set[str]) -> set[str]:
+    return set(tokens) - WEAK_ACTION_CONTEXT_REVALIDATION_WORDS
 
 
 def _action_specific_revalidation_tokens(
@@ -2096,6 +2120,50 @@ class HelpSession(QObject):
                     final_quality.reason,
                 )
                 continue
+            final_ocr_verification = ocr_verification
+            if ocr_verification.available and ocr_verification.expected_text:
+                final_ocr_evidence = expected_text_evidence_for_target(
+                    final_display_target,
+                    final_candidates,
+                )
+                final_ocr_verification = verify_target_text(
+                    capture=final_capture,
+                    rect=final_ocr_evidence.rect or final_rect,
+                    expected_text=final_ocr_evidence.text or ocr_verification.expected_text,
+                    control_type=final_target_control_type,
+                    provider=self._ocr_text_provider,
+                )
+                if not final_ocr_verification.accepted:
+                    self._emit_target_diagnostic(
+                        build_target_diagnostic(
+                            decision=decision,
+                            capture=final_capture,
+                            candidates=final_candidates,
+                            target=final_display_target,
+                            quality=final_quality,
+                            ocr=final_ocr_verification,
+                            rejected_reason=final_ocr_verification.reason,
+                        )
+                    )
+                    log.info(
+                        "Step downgraded by final OCR text gate (%s, expected=%r recognized=%r): %s",
+                        final_ocr_verification.reason,
+                        final_ocr_verification.expected_text,
+                        final_ocr_verification.recognized_text,
+                        decision.instruction,
+                    )
+                    self._clear_overlays()
+                    msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                    self.chat_message.emit(msg)
+                    self.chat_status.emit(msg)
+                    wait_outcome = self._wait_for_progress(rect=None)
+                    if wait_outcome == "cancelled":
+                        return
+                    outcome_note = self._outcome_after_quality_rejection(
+                        decision,
+                        final_ocr_verification.reason,
+                    )
+                    continue
             self._emit_target_diagnostic(
                 build_target_diagnostic(
                     decision=decision,
@@ -2103,7 +2171,7 @@ class HelpSession(QObject):
                     candidates=final_candidates,
                     target=final_display_target,
                     quality=final_quality,
-                    ocr=ocr_verification,
+                    ocr=final_ocr_verification,
                     overlay_rect=final_rect,
                 )
             )

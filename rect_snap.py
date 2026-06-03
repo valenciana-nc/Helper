@@ -46,6 +46,40 @@ FILTER_RESET_ALLOWED_CONTROL_WORDS = frozenset(
 FILTER_RESET_OBJECT_ONLY_WORDS = frozenset(
     {"apply", "filter", "filters", "funnel", "query", "result", "results", "search"}
 )
+SETTINGS_CONTEXT_WORDS = frozenset(
+    {"option", "options", "preference", "preferences", "setting", "settings"}
+)
+SETTINGS_SPECIFIC_REQUEST_STOPWORDS = frozenset(
+    {
+        "app",
+        "application",
+        "button",
+        "cog",
+        "gear",
+        "icon",
+        "item",
+        "left",
+        "list",
+        "listitem",
+        "menu",
+        "nav",
+        "navigation",
+        "option",
+        "page",
+        "pane",
+        "panel",
+        "rail",
+        "right",
+        "row",
+        "sidebar",
+        "screen",
+        "tab",
+        "tabitem",
+        "table",
+        "toolbar",
+        "view",
+    }
+)
 CLOSE_CONTEXT_TARGET_WORDS = frozenset(
     {
         "banner",
@@ -1005,6 +1039,7 @@ def snap_to_control(
             or surface_context_action_mismatch
             or clear_close_action_mismatch
             or close_context_action_mismatch
+            or _specific_settings_context_mismatch(instruction, instruction_tokens, semantic_text)
             or unparsed_visible_text_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
@@ -3553,6 +3588,54 @@ def _close_context_action_mismatch(
         return False
     control_words = _literal_words_from_text(" ".join((visible_text or "", automation_id or "")))
     return not bool(control_words & requested_context)
+
+
+def _specific_settings_context_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate_text: str,
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & SETTINGS_CONTEXT_WORDS):
+        return False
+    requested = _object_token_variants(raw_tokens | set(instruction_tokens))
+    if not (requested & SETTINGS_CONTEXT_WORDS):
+        return False
+    candidate_tokens = _object_token_variants(
+        _tokenize_control(_semantic_text(candidate_text))
+    )
+    if not (candidate_tokens & SETTINGS_CONTEXT_WORDS):
+        return False
+    requested_specific = (
+        requested
+        - SETTINGS_CONTEXT_WORDS
+        - OPEN_VIEW_REQUEST_WORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - BROWSER_PAGE_TARGET_WORDS
+        - BROWSER_CHROME_APP_CONTEXT_WORDS
+        - TASKBAR_WINDOW_WORDS
+        - SETTINGS_SPECIFIC_REQUEST_STOPWORDS
+        - SURFACE_CONTEXT_TYPE_WORDS.get("window", frozenset())
+        - frozenset(
+            {
+                "a",
+                "an",
+                "for",
+                "from",
+                "in",
+                "inside",
+                "of",
+                "on",
+                "the",
+                "to",
+                "within",
+            }
+        )
+    )
+    if not requested_specific:
+        return False
+    candidate_specific = candidate_tokens - SETTINGS_CONTEXT_WORDS
+    return not requested_specific <= candidate_specific
 
 
 def _literal_words_from_text(text: str) -> set[str]:

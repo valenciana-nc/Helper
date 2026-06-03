@@ -78,7 +78,12 @@ radio button, and button all look plausible; repeated table cells must have a
 unique row and column context match before geometry can win; raw UIA snapping
 applies the same neutral state-control ambiguity check; and stale revalidation
 compares literal nearby labels plus containing section labels before preserving
-an old highlight.
+an old highlight. The latest pass also groups repeated actions whose label is
+split between visible text and automation ID, treats mixed cell/datagrid/grid
+cell subtypes as duplicate table-cell peers, rejects raw snaps that only match
+generic settings words while missing the requested settings area, reruns OCR on
+the final fresh capture, and treats weak container-only dialog/window context
+as contextless for generic action revalidation.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
