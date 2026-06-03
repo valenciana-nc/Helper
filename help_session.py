@@ -77,8 +77,24 @@ FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
 SAME_RANK_COVERING_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
 )
-SAME_RANK_TRANSIENT_OPTION_CONTROL_TYPES = frozenset({"listitem"})
-SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES = frozenset({"group", "list", "menu", "pane", "window"})
+SAME_RANK_OWNING_COVERING_CONTROL_TYPES = frozenset(
+    {
+        "cell",
+        "checkbox",
+        "combobox",
+        "dataitem",
+        "datagridcell",
+        "edit",
+        "gridcell",
+        "headeritem",
+        "listitem",
+        "radiobutton",
+        "slider",
+        "spinner",
+        "treeitem",
+    }
+)
+SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES = frozenset({"group", "list", "menu", "pane", "toolbar", "window"})
 SAME_RANK_TRANSIENT_SURFACE_WORDS = frozenset(
     {"dialog", "down", "dropdown", "flyout", "menu", "modal", "popup", "popover", "suggestion", "suggestions", "toast"}
 )
@@ -209,12 +225,31 @@ CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS = ACTION_IDENTITY_REVALIDATION_GENER
 )
 CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENERIC_WORDS | frozenset(
     {
+        "checked",
+        "dialog",
+        "disable",
+        "disabled",
+        "address",
+        "enable",
+        "enabled",
+        "email",
+        "envelope",
         "find",
+        "location",
+        "mail",
+        "modal",
+        "off",
+        "on",
+        "preferences",
         "search",
+        "settings",
+        "unchecked",
+        "url",
+        "window",
     }
 )
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
-CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane"})
+CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane", "window"})
 CONTROL_CONTEXT_ROW_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 SURFACE_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
     {
@@ -1417,8 +1452,16 @@ def _control_aligned_header_context(
 
 
 def _control_label_context_tokens(candidate: ControlCandidate) -> set[str]:
+    text = " ".join(
+        part
+        for part in (candidate.text or "", candidate.automation_id or "")
+        if part
+    )
+    if not text:
+        return set()
     return (
-        _tokens_from_text(candidate.text)
+        _tokens_from_text(text)
+        | _tokenize_control(text)
     ) - CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS
 
 
@@ -1951,13 +1994,8 @@ def _same_rank_candidate_can_cover_selected(
 ) -> bool:
     if candidate.control_type in SAME_RANK_COVERING_CONTROL_TYPES:
         return True
-    if candidate.control_type in SAME_RANK_TRANSIENT_OPTION_CONTROL_TYPES:
-        if _same_rank_surface_owns_selected(candidate, selected):
-            return False
-        return not _same_rank_surface_was_previously_present(
-            candidate,
-            previous_candidates,
-        )
+    if candidate.control_type in SAME_RANK_OWNING_COVERING_CONTROL_TYPES:
+        return not _same_rank_surface_owns_selected(candidate, selected)
     if candidate.control_type not in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES:
         return False
     if _same_rank_surface_was_previously_present(
@@ -1965,6 +2003,8 @@ def _same_rank_candidate_can_cover_selected(
         previous_candidates,
     ) and _same_rank_surface_owns_selected(candidate, selected):
         return False
+    if not _same_rank_surface_was_previously_present(candidate, previous_candidates):
+        return True
     tokens = (
         _tokenize_control(candidate.text)
         | _tokenize_control(candidate.automation_id)

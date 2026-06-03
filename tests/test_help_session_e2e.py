@@ -1032,6 +1032,116 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             "target covered before overlay",
         )
 
+    def test_final_coverage_gate_rejects_same_rank_form_and_structural_coverers(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate("page_save", "Save", "button", (100, 100, 80, 32), window_rank=0),
+        ]
+        coverers = (
+            ControlCandidate("search", "Search", "edit", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("country", "Country", "combobox", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("enabled", "Enabled", "checkbox", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("weekly", "Weekly", "radiobutton", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("volume", "Volume", "slider", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("retries", "Retries", "spinner", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("row", "Result row", "dataitem", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("tree", "Result tree item", "treeitem", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("cell", "Result cell", "cell", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("gridcell", "Result grid cell", "gridcell", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("datagridcell", "Result data grid cell", "datagridcell", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("header", "Result header", "headeritem", (92, 94, 120, 42), window_rank=0),
+        )
+
+        for coverer in coverers:
+            with self.subTest(control_type=coverer.control_type):
+                self.assertEqual(
+                    _foreground_candidate_covering_reason(
+                        target,
+                        previous_candidates + [coverer],
+                        previous_candidates=previous_candidates,
+                    ),
+                    "target covered before overlay",
+                )
+
+    def test_final_coverage_gate_allows_same_rank_form_owner_for_contained_target(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(120, 110, 20, 20),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Checked",
+            target_id="box",
+        )
+        candidates = [
+            ControlCandidate(
+                "field",
+                "Notifications",
+                "combobox",
+                (100, 100, 180, 36),
+                window_title="Preferences",
+                depth=1,
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "box",
+                "Checked",
+                "checkbox",
+                (120, 110, 20, 20),
+                window_title="Preferences",
+                depth=2,
+                window_rank=0,
+            ),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_rejects_new_same_rank_ordinary_named_surfaces(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate("page_save", "Save", "button", (100, 100, 80, 32), window_rank=0),
+        ]
+        surfaces = (
+            ControlCandidate("toolbar", "Formatting", "toolbar", (90, 90, 220, 80), window_rank=0),
+            ControlCandidate("menu", "File", "menu", (90, 90, 220, 80), window_rank=0),
+            ControlCandidate("list", "Results", "list", (90, 90, 220, 80), window_rank=0),
+            ControlCandidate("window", "Calculator", "window", (90, 90, 220, 80), window_rank=0),
+        )
+
+        for surface in surfaces:
+            with self.subTest(control_type=surface.control_type, text=surface.text):
+                self.assertEqual(
+                    _foreground_candidate_covering_reason(
+                        target,
+                        previous_candidates + [surface],
+                        previous_candidates=previous_candidates,
+                    ),
+                    "target covered before overlay",
+                )
+
     def test_final_coverage_gate_rejects_new_same_rank_structural_popup_surfaces(self) -> None:
         from help_session import _foreground_candidate_covering_reason
 
@@ -2262,6 +2372,117 @@ class HelpSessionEndToEndTests(unittest.TestCase):
 
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
+
+    def test_current_screen_recheck_rejects_reused_control_section_automation_context_change(self) -> None:
+        app = _qt_app()
+        capture = _button_capture(button_rect=(40, 50, 80, 32))
+        rect = (120, 110, 24, 24)
+        previous_candidates = [
+            ControlCandidate("section", "", "group", (90, 90, 180, 80), automation_id="shipping_section"),
+            ControlCandidate("setting", "Enabled", "checkbox", rect),
+        ]
+        current_candidates = [
+            ControlCandidate("section", "", "group", (90, 90, 180, 80), automation_id="billing_section"),
+            ControlCandidate("setting", "Enabled", "checkbox", rect),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: current_candidates,
+        )
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Enabled",
+            target_id="setting",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click this checkbox.",
+            target_id="setting",
+            target_norm_x=500,
+            target_norm_y=688,
+            target_norm_width=100,
+            target_norm_height=150,
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_candidates=previous_candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "target_id")
+        self.assertEqual(target.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_rejects_input_control_window_context_swap_without_decision_target_id(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        rect = (120, 110, 80, 28)
+        previous_capture = _dialog_ok_capture(
+            "Billing settings",
+            "Enable invoice preferences.",
+            button_rect=rect,
+        )
+        current_capture = _dialog_ok_capture(
+            "Shipping settings",
+            "Enable shipment preferences.",
+            button_rect=rect,
+        )
+
+        cases = (
+            ("checkbox", "Checked", "Click Enable."),
+            ("radiobutton", "Selected", "Select On."),
+            ("edit", "", "Type in this field."),
+            ("combobox", "On", "Open this dropdown."),
+            ("slider", "50", "Adjust this slider."),
+            ("spinner", "1", "Adjust this spinner."),
+        )
+        for control_type, text, instruction in cases:
+            with self.subTest(control_type=control_type):
+                previous_candidates = [
+                    ControlCandidate("dialog", "Billing settings dialog", "window", (16, 18, 208, 140)),
+                    ControlCandidate("setting", text, control_type, rect),
+                ]
+                current_candidates = [
+                    ControlCandidate("dialog", "Shipping settings dialog", "window", (16, 18, 208, 140)),
+                    ControlCandidate("setting", text, control_type, rect),
+                ]
+                previous_target = TargetResolution(
+                    rect=rect,
+                    confidence=0.9,
+                    source="text_match",
+                    matched_text=text,
+                    target_id="setting",
+                )
+                current_target = TargetResolution(
+                    rect=rect,
+                    confidence=0.9,
+                    source="text_match",
+                    matched_text=text,
+                    target_id="setting",
+                )
+                decision = LiveHelpDecision(kind="step", instruction=instruction)
+
+                guarded = _guard_revalidated_target(
+                    decision=decision,
+                    capture=current_capture,
+                    candidates=current_candidates,
+                    previous_target=previous_target,
+                    previous_capture=previous_capture,
+                    previous_candidates=previous_candidates,
+                    target=current_target,
+                    snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+                )
+
+                self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_current_screen_recheck_rejects_tiny_target_id_zero_overlap_drift(self) -> None:
         app = _qt_app()

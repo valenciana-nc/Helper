@@ -1120,6 +1120,40 @@ class SnapToControlTests(unittest.TestCase):
         self.assertFalse(explicit_button.rejected_reason)
         self.assertEqual(explicit_button.rect, (100, 190, 160, 32))
 
+    def test_fresh_snap_duplicate_same_type_state_controls_stay_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Click Terms checkbox.", "CheckBox", (40, 82, 100, 24)),
+            ("Select Weekly radio option.", "RadioButton", (40, 82, 120, 24)),
+        )
+        for instruction, control_type, rect in cases:
+            with self.subTest(control_type=control_type):
+                first = _make_button(
+                    "Terms" if control_type == "CheckBox" else "Weekly",
+                    *rect,
+                    control_type=control_type,
+                )
+                second = _make_button(
+                    "Terms" if control_type == "CheckBox" else "Weekly",
+                    rect[0],
+                    rect[1] + 120,
+                    rect[2],
+                    rect[3],
+                    control_type=control_type,
+                )
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [first, second])])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rejected_reason, "state option ambiguous")
+
     def test_specific_settings_request_rejects_generic_settings_overlap(self) -> None:
         from rect_snap import snap_to_control
 

@@ -813,6 +813,7 @@ def snap_to_control(
     row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     table_cell_surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     table_cell_row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    state_option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -857,6 +858,8 @@ def snap_to_control(
             table_cell_row_contexts.append((rect, _control_text(control), ctype))
         if ctype == "headeritem":
             table_cell_surface_contexts.append((rect, _control_text(control), ctype))
+        if ctype in {"checkbox", "radiobutton"}:
+            state_option_contexts.append((rect, _control_text(control), ctype))
 
     for (
         control,
@@ -1347,6 +1350,7 @@ def snap_to_control(
             selected=best_result,
             selected_ctype=best_ctype,
             ranked=ranked,
+            state_option_contexts=state_option_contexts,
         )
     ):
         return SnapResult(
@@ -3147,11 +3151,23 @@ def _neutral_same_label_state_option_snap_ambiguous(
     selected: SnapResult,
     selected_ctype: str,
     ranked: list[tuple[float, SnapResult, str, str, int]],
+    state_option_contexts: list[tuple[tuple[int, int, int, int], str, str]] | None = None,
 ) -> bool:
     neutral_types = {"button", "checkbox", "radiobutton", "splitbutton"}
     if selected_ctype not in neutral_types:
         return False
     raw_tokens = _tokens_from_text(instruction)
+    selected_tokens = _snap_state_option_label_tokens(selected.matched_text)
+    if not selected_tokens:
+        return False
+    if selected_ctype in {"checkbox", "radiobutton"} and _same_type_state_option_duplicate_exists(
+        selected=selected,
+        selected_ctype=selected_ctype,
+        selected_tokens=selected_tokens,
+        ranked=ranked,
+        state_option_contexts=state_option_contexts or [],
+    ):
+        return True
     if (
         raw_tokens & {
             "button",
@@ -3171,9 +3187,6 @@ def _neutral_same_label_state_option_snap_ambiguous(
         or {"split", "button"} <= raw_tokens
     ):
         return False
-    selected_tokens = _snap_state_option_label_tokens(selected.matched_text)
-    if not selected_tokens:
-        return False
     control_types = {selected_ctype}
     for _score, result, semantic_text, ctype, _window_rank in ranked:
         if ctype not in neutral_types:
@@ -3182,6 +3195,33 @@ def _neutral_same_label_state_option_snap_ambiguous(
         if tokens and selected_tokens & tokens:
             control_types.add(ctype)
     return {"checkbox", "radiobutton"} <= control_types
+
+
+def _same_type_state_option_duplicate_exists(
+    *,
+    selected: SnapResult,
+    selected_ctype: str,
+    selected_tokens: set[str],
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    state_option_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    for _score, result, semantic_text, ctype, _window_rank in ranked:
+        if ctype != selected_ctype:
+            continue
+        if result.rect == selected.rect:
+            continue
+        tokens = _snap_state_option_label_tokens(semantic_text or result.matched_text)
+        if tokens and selected_tokens & tokens:
+            return True
+    for rect, text, ctype in state_option_contexts:
+        if ctype != selected_ctype:
+            continue
+        if rect == selected.rect:
+            continue
+        tokens = _snap_state_option_label_tokens(text)
+        if tokens and selected_tokens & tokens:
+            return True
+    return False
 
 
 def _snap_state_option_label_tokens(text: str) -> set[str]:
