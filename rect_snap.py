@@ -118,6 +118,7 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
     {"datagrid", "grid", "group", "headeritem", "list", "menu", "pane", "table", "toolbar", "window"}
 )
+ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 SURFACE_CONTEXT_TYPE_WORDS = {
     "datagrid": frozenset({"grid", "table"}),
     "grid": frozenset({"grid", "table"}),
@@ -817,7 +818,7 @@ def snap_to_control(
         text = _control_text(control)
         visible_text = _control_visible_text(control)
         automation_id = _control_automation_id(control)
-        if ctype in SURFACE_CONTEXT_CONTROL_TYPES:
+        if ctype in SURFACE_CONTEXT_CONTROL_TYPES or ctype in ROW_CONTEXT_CONTROL_TYPES:
             surface_contexts.append((rect, text, ctype))
         if ctype not in CLICKABLE_CONTROL_TYPES:
             continue
@@ -984,6 +985,13 @@ def snap_to_control(
             rect,
             surface_contexts,
         )
+        row_context_action_mismatch = _row_context_action_mismatch(
+            instruction,
+            instruction_tokens,
+            semantic_text,
+            rect,
+            surface_contexts,
+        )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,
             instruction_tokens,
@@ -1044,6 +1052,7 @@ def snap_to_control(
             or exclusive_action_family_mismatch
             or object_only_action_context_mismatch
             or surface_context_action_mismatch
+            or row_context_action_mismatch
             or clear_close_action_mismatch
             or close_context_action_mismatch
             or _specific_settings_context_mismatch(instruction, instruction_tokens, semantic_text)
@@ -3506,6 +3515,46 @@ def _surface_context_action_mismatch(
         rect,
         surface_contexts,
     )
+
+
+def _row_context_action_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    semantic_text: str,
+    rect: tuple[int, int, int, int],
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    control_tokens = _tokenize_control(_semantic_text(semantic_text))
+    action_tokens = instruction_tokens & control_tokens & AUTOMATION_ONLY_ACTION_MATCH_WORDS
+    if not action_tokens:
+        return False
+    requested_objects = _object_token_variants(
+        (_tokens_from_text(instruction) | instruction_tokens)
+        - action_tokens
+        - ACTION_OBJECT_STOPWORDS
+        - GENERIC_OBJECT_REQUEST_WORDS
+        - CLOSE_CONTEXT_TARGET_WORDS
+        - frozenset({"a", "an", "for", "from", "in", "inside", "on", "the", "this", "that", "with", "within"})
+    )
+    if not requested_objects:
+        return False
+    containing_row_tokens: set[str] = set()
+    matching_row_exists = False
+    for context_rect, context_text, context_type in surface_contexts:
+        if context_type not in ROW_CONTEXT_CONTROL_TYPES:
+            continue
+        context_tokens = _object_token_variants(
+            _tokenize_control(_semantic_text(context_text)) | _tokens_from_text(context_text)
+        )
+        if context_tokens & requested_objects:
+            matching_row_exists = True
+        if _contains_rect(_expand_rect(context_rect, 4), rect):
+            containing_row_tokens.update(context_tokens)
+    if not containing_row_tokens:
+        return False
+    if containing_row_tokens & requested_objects:
+        return False
+    return matching_row_exists
 
 
 def _surface_context_request_applies(

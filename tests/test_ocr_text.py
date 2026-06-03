@@ -255,6 +255,32 @@ class OcrTextTests(unittest.TestCase):
         self.assertFalse(blank.accepted)
         self.assertEqual(blank.reason, OCR_MISSING_TEXT_REASON)
 
+    def test_symbol_only_button_labels_use_available_blank_ocr_gate(self) -> None:
+        for label in ("+", "...", "\u00d7", "X"):
+            with self.subTest(label=label):
+                blank_provider = _Provider(OcrTextResult(text="", available=True))
+                blank = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 32, 32),
+                    expected_text=label,
+                    control_type="button",
+                    provider=blank_provider,
+                )
+                matching_provider = _Provider(OcrTextResult(text=label, available=True))
+                matching = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 32, 32),
+                    expected_text=label,
+                    control_type="button",
+                    provider=matching_provider,
+                )
+
+                self.assertEqual(len(blank_provider.calls), 1)
+                self.assertFalse(blank.accepted)
+                self.assertEqual(blank.reason, OCR_MISSING_TEXT_REASON)
+                self.assertEqual(len(matching_provider.calls), 1)
+                self.assertTrue(matching.accepted)
+
     def test_skips_small_checkbox_external_label_targets(self) -> None:
         provider = _Provider(OcrTextResult(text="Cancel", available=True))
 

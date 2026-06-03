@@ -3081,6 +3081,13 @@ def _text_match_score(
         control_intents,
     ):
         return 0.0
+    if _menu_path_target_match(instruction, candidate, candidates):
+        score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     if _reversible_action_exact_alternative_mismatch(
         instruction,
         candidate,
@@ -4385,6 +4392,11 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _delimited_context_target_match(instruction, candidate, candidates):
+        geometry_score = (
+            _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
+        )
+        return True, max(0.86, text_score, geometry_score), ""
     if _reversible_action_exact_alternative_mismatch(
         instruction,
         candidate,
@@ -10364,11 +10376,7 @@ def _delimited_action_context_mismatch(
     )
     if not (candidate_tokens & target_tokens):
         return False
-    if _delimited_context_tokens_match_candidate(
-        context_tokens,
-        candidate,
-        candidates,
-    ):
+    if _delimited_context_match_candidate(instruction, context_tokens, candidate, candidates):
         return False
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
@@ -10380,11 +10388,7 @@ def _delimited_action_context_mismatch(
         )
         if not (other_tokens & target_tokens):
             continue
-        if _delimited_context_tokens_match_candidate(
-            context_tokens,
-            other,
-            candidates,
-        ):
+        if _delimited_context_match_candidate(instruction, context_tokens, other, candidates):
             return True
     conflicting_context = _action_candidate_conflicting_context_tokens(candidate, candidates)
     return bool(conflicting_context and not (context_tokens & conflicting_context))
@@ -10519,12 +10523,36 @@ def _delimited_context_target_match(
     if not (candidate_tokens & target_tokens):
         return False
     if context_tokens:
-        return _delimited_context_tokens_match_candidate(
-            context_tokens,
-            candidate,
-            candidates,
-        )
+        return _delimited_context_match_candidate(instruction, context_tokens, candidate, candidates)
     return True
+
+
+def _delimited_context_match_candidate(
+    instruction: str,
+    context_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    path_segments, _target_tokens = _menu_path_context_segments(instruction)
+    if path_segments:
+        return _menu_path_context_segments_match_candidate(path_segments, candidate, candidates)
+    return _delimited_context_tokens_match_candidate(context_tokens, candidate, candidates)
+
+
+def _menu_path_target_match(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    context_segments, target_tokens = _menu_path_context_segments(instruction)
+    if not target_tokens:
+        return False
+    candidate_tokens = _object_token_variants(
+        _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    )
+    if not (candidate_tokens & target_tokens):
+        return False
+    return _menu_path_context_segments_match_candidate(context_segments, candidate, candidates)
 
 
 def _delimited_context_tokens_match_candidate(
@@ -10549,6 +10577,54 @@ def _delimited_context_tokens_match_candidate(
     return False
 
 
+def _menu_path_context_segments_match_candidate(
+    context_segments: list[set[str]],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not context_segments:
+        return True
+    if len(context_segments) == 1:
+        return _delimited_context_tokens_match_candidate(context_segments[0], candidate, candidates)
+    current = candidate
+    for segment in reversed(context_segments):
+        parent = _menu_path_parent_for_segment(segment, current, candidates)
+        if parent is None:
+            return False
+        current = parent
+    return True
+
+
+def _menu_path_parent_for_segment(
+    segment_tokens: set[str],
+    child: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> ControlCandidate | None:
+    for context in candidates:
+        if context.id == child.id or _same_visual_candidate(context, child):
+            continue
+        if not _candidate_matches_menu_path_segment(context, segment_tokens):
+            continue
+        if context.control_type == "menuitem" and _menu_path_parent_item_rect_matches(context, child):
+            return context
+        if context.control_type in SURFACE_CONTEXT_CONTROL_TYPES and _contains_rect(
+            _expand_rect(context.rect, 4),
+            child.rect,
+        ):
+            return context
+    return None
+
+
+def _candidate_matches_menu_path_segment(
+    candidate: ControlCandidate,
+    segment_tokens: set[str],
+) -> bool:
+    candidate_tokens = _object_token_variants(
+        _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    )
+    return bool(candidate_tokens & segment_tokens)
+
+
 def _menu_path_parent_item_rect_matches(
     parent: ControlCandidate,
     child: ControlCandidate,
@@ -10557,14 +10633,22 @@ def _menu_path_parent_item_rect_matches(
     child_x, child_y, child_width, child_height = child.rect
     parent_right = parent_x + parent_width
     child_right = child_x + child_width
-    if child_y < parent_y + parent_height - 2:
-        return False
-    vertical_gap = child_y - (parent_y + parent_height)
-    if vertical_gap > max(72, parent_height * 3):
-        return False
     horizontal_overlap = min(parent_right, child_right) - max(parent_x, child_x)
-    left_aligned = abs(parent_x - child_x) <= max(18, parent_width * 0.35)
-    return horizontal_overlap > 0 and left_aligned
+    if child_y >= parent_y + parent_height - 2:
+        vertical_gap = child_y - (parent_y + parent_height)
+        if vertical_gap <= max(72, parent_height * 3):
+            left_aligned = abs(parent_x - child_x) <= max(18, parent_width * 0.35)
+            if horizontal_overlap > 0 and left_aligned:
+                return True
+    parent_bottom = parent_y + parent_height
+    child_bottom = child_y + child_height
+    vertical_overlap = min(parent_bottom, child_bottom) - max(parent_y, child_y)
+    if vertical_overlap < min(parent_height, child_height) * 0.45:
+        return False
+    horizontal_gap = child_x - parent_right
+    if horizontal_gap < -4:
+        return False
+    return horizontal_gap <= max(96, parent_width * 0.75)
 
 
 def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
@@ -10620,43 +10704,48 @@ def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[st
 
 
 def _menu_path_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    context_segments, target_tokens = _menu_path_context_segments(instruction)
+    if not target_tokens:
+        return set(), set()
+    context_tokens = set().union(*context_segments) if context_segments else set()
+    return target_tokens, context_tokens
+
+
+def _menu_path_context_segments(instruction: str) -> tuple[list[set[str]], set[str]]:
     parts = re.split(
         r"\s*(?:>|\u203a|\u00bb|\u2192)\s*|\s+/\s+",
         instruction or "",
     )
     parts = [part for part in parts if part and part.strip()]
     if len(parts) < 2:
-        return set(), set()
-    context_words: list[str] = []
+        return [], set()
+    context_segments: list[set[str]] = []
     for part in parts[:-1]:
         words = _literal_word_sequence(part)
-        if not context_words:
+        if not context_segments:
             words = _strip_leading_context_action_words(words)
         while words and words[0] in {"a", "an", "the", "this", "that"}:
             words.pop(0)
-        context_words.extend(words)
+        segment_tokens = _menu_path_segment_tokens(words)
+        if segment_tokens:
+            context_segments.append(segment_tokens)
     target_words = _literal_word_sequence(parts[-1])
     target_words = _strip_leading_context_action_words(target_words)
     while target_words and target_words[0] in {"a", "an", "the", "this", "that"}:
         target_words.pop(0)
-    if not target_words or not context_words:
-        return set(), set()
+    if not target_words or not context_segments:
+        return [], set()
     target_action_tokens = set(target_words) & set().union(*EXCLUSIVE_ACTION_FAMILIES)
-    target_tokens = _object_token_variants(set(target_words)) - (
-        CONTAINED_CONTROL_REQUEST_WORDS
-        | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
-        | CONTEXTUAL_DUPLICATE_STOPWORDS
-    )
+    target_tokens = _menu_path_segment_tokens(target_words)
     target_tokens |= _object_token_variants(target_action_tokens)
-    context_tokens = _object_token_variants(set(context_words)) - {
-        "a",
-        "an",
-        "the",
-        "this",
-        "that",
-    }
-    context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
-    return target_tokens, context_tokens
+    return context_segments, target_tokens
+
+
+def _menu_path_segment_tokens(words: list[str]) -> set[str]:
+    return _object_token_variants(set(words)) - (
+        CONTAINED_CONTROL_REQUEST_WORDS
+        | {"a", "an", "the", "this", "that"}
+    )
 
 
 def _strip_leading_context_action_words(words: list[str]) -> list[str]:
@@ -13436,6 +13525,27 @@ def _candidate_snap_score(
         control_intents,
     ):
         return 0.0
+    if (
+        _delimited_context_target_match(instruction, candidate, candidates)
+        and not _menu_path_target_match(instruction, candidate, candidates)
+        and _geometry_agreement(candidate.rect, model_rect) < 0.35
+        and not _has_duplicate_tight_action(candidate, candidates)
+    ):
+        return 0.0
+    if _menu_path_target_match(instruction, candidate, candidates):
+        return min(
+            1.0,
+            max(
+                CANDIDATE_SNAP_FLOOR + TEXT_MATCH_GAP,
+                0.45 * iou + 0.30 * proximity + 0.20,
+            )
+            + _foreground_rank_bonus(
+                candidate,
+                candidates,
+                model_rect=model_rect,
+                suppress_for_stronger_geometry=False,
+            ),
+        )
     if _reversible_action_exact_alternative_mismatch(
         instruction,
         candidate,

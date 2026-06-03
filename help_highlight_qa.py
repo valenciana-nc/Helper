@@ -228,6 +228,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_symbol_button_available_blank_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 80, 32, 32], "label": "+"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click +.",
+                "target_id": "add",
+                "target": {"x": 80, "y": 80, "width": 32, "height": 32},
+            },
+            "candidates": [
+                {"id": "add", "text": "+", "control_type": "button", "rect": [80, 80, 32, 32]},
+            ],
+            "ocr_result": {"text": ""},
+            "expected": {
+                "source": "target_id",
+                "target_id": "add",
+                "ocr_reason": "ocr text missing",
+                "ocr_recognized_text": "",
+                "rejected_reason": "ocr text missing",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_numeric_table_cell_shared_suffix_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -15706,6 +15731,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "file_export",
                 "rect": [10, 40, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "menu_path_delimiter_recovers_multilevel_repeated_submenu_leaf",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 8, 48, 24], "label": "File"},
+                {"rect": [10, 40, 180, 28], "label": "Export"},
+                {"rect": [200, 40, 160, 28], "label": "CSV"},
+                {"rect": [260, 8, 58, 24], "label": "Tools"},
+                {"rect": [260, 72, 180, 28], "label": "Export"},
+                {"rect": [450, 72, 160, 28], "label": "CSV"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open File > Export > CSV.",
+                "target_id": "tools_csv",
+                "target": {"x": 450, "y": 72, "width": 160, "height": 28},
+            },
+            "candidates": [
+                {"id": "file_menu", "text": "File", "control_type": "menuitem", "rect": [10, 8, 48, 24]},
+                {"id": "file_export", "text": "Export", "control_type": "menuitem", "rect": [10, 40, 180, 28]},
+                {"id": "file_csv", "text": "CSV", "control_type": "menuitem", "rect": [200, 40, 160, 28]},
+                {"id": "tools_menu", "text": "Tools", "control_type": "menuitem", "rect": [260, 8, 58, 24]},
+                {"id": "tools_export", "text": "Export", "control_type": "menuitem", "rect": [260, 72, 180, 28]},
+                {"id": "tools_csv", "text": "CSV", "control_type": "menuitem", "rect": [450, 72, 160, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "file_csv",
+                "rect": [200, 40, 160, 28],
                 "overlay_emitted": True,
             },
         },

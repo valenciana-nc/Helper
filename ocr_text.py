@@ -150,6 +150,22 @@ OCR_VERIFICATION_CONTROL_TYPES = frozenset(
         "treeitem",
     }
 )
+OCR_SYMBOL_LABEL_CONTROL_TYPES = frozenset(
+    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+)
+OCR_SYMBOL_LABEL_TOKENS = {
+    "+": frozenset({"plus"}),
+    "-": frozenset({"minus"}),
+    "\u2212": frozenset({"minus"}),
+    "...": frozenset({"ellipsis"}),
+    "\u2026": frozenset({"ellipsis"}),
+    "\u22ee": frozenset({"ellipsis"}),
+    "\u22ef": frozenset({"ellipsis"}),
+    "x": frozenset({"close"}),
+    "\u00d7": frozenset({"close"}),
+    "\u2715": frozenset({"close"}),
+    "\u2716": frozenset({"close"}),
+}
 
 
 @dataclass(frozen=True)
@@ -461,6 +477,12 @@ def verify_target_text(
         expected,
         keep_generic_label=keep_generic_label,
     )
+    expected_symbol_tokens = _symbol_label_tokens(expected, control_type)
+    if expected_symbol_tokens and (
+        not expected_tokens
+        or not any(_token_has_signal(token) for token in expected_tokens)
+    ):
+        expected_tokens = expected_symbol_tokens
     if not expected_tokens:
         return OcrTextVerification(accepted=True, expected_text=expected)
     provider = provider if provider is not None else default_ocr_text_provider()
@@ -519,6 +541,12 @@ def verify_target_text(
         recognized,
         keep_generic_label=keep_generic_label,
     )
+    recognized_symbol_tokens = _symbol_label_tokens(recognized, control_type)
+    if recognized_symbol_tokens and (
+        not recognized_tokens
+        or not any(_token_has_signal(token) for token in recognized_tokens)
+    ):
+        recognized_tokens = recognized_symbol_tokens
     if not recognized_tokens:
         return OcrTextVerification(
             accepted=False,
@@ -592,6 +620,12 @@ def _should_check_ocr(
         keep_generic_label=_keep_generic_label_tokens(control_type),
     )
     if not tokens:
+        tokens = _symbol_label_tokens(expected, control_type)
+    elif not any(_token_has_signal(token) for token in tokens):
+        symbol_tokens = _symbol_label_tokens(expected, control_type)
+        if symbol_tokens:
+            tokens = symbol_tokens
+    if not tokens:
         return False
     if not any(_token_has_signal(token) for token in tokens):
         return False
@@ -612,6 +646,16 @@ def _meaningful_tokens(text: str, *, keep_generic_label: bool = False) -> set[st
         return filtered
     if keep_generic_label and tokens and tokens <= OCR_GENERIC_LABEL_EXCEPTIONS:
         return tokens
+    return set()
+
+
+def _symbol_label_tokens(text: str, control_type: str) -> set[str]:
+    normalized_type = (control_type or "").strip().lower()
+    if normalized_type and normalized_type not in OCR_SYMBOL_LABEL_CONTROL_TYPES:
+        return set()
+    stripped = (text or "").strip().lower()
+    if stripped in OCR_SYMBOL_LABEL_TOKENS:
+        return set(OCR_SYMBOL_LABEL_TOKENS[stripped])
     return set()
 
 

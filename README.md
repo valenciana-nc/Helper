@@ -87,7 +87,11 @@ as contextless for generic action revalidation. Newer v4 hardening refuses
 available-but-blank OCR for text-bearing targets, parses menu paths such as
 `File > Export` as parent context plus leaf target, includes row and header
 context during stale field revalidation, and prevents toolbar/menu actions from
-borrowing unrelated column-header context by x-alignment alone.
+borrowing unrelated column-header context by x-alignment alone. The current v4
+slice extends that to ordered multi-level menu paths like `File > Export > CSV`,
+symbol-only action labels such as `+`, `...`, and `X`, stale same-value grid
+cells whose row context changes, and raw UIA snaps that hit a repeated row
+action in the wrong containing row.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
