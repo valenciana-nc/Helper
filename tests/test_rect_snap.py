@@ -11475,6 +11475,133 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_stale_textbox_same_rect_foreground_partial_match(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click the Billing Email text box.",
+                "target_id": "billing_email",
+                "target": {"x": 220, "y": 96, "width": 260, "height": 36},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "billing_label",
+                "Billing Email",
+                "text",
+                (120, 70, 140, 24),
+                window_title="Account settings",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "billing_email",
+                "",
+                "edit",
+                (220, 96, 260, 36),
+                window_title="Account settings",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "modal_email",
+                "Email",
+                "edit",
+                (220, 96, 260, 36),
+                window_title="Sign in dialog",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "billing_label",
+                "Billing Email",
+                "text",
+                (120, 70, 140, 24),
+                window_title="Account settings",
+                window_rank=1,
+            ),
+            ControlCandidate(
+                "billing_email",
+                "",
+                "edit",
+                (220, 96, 260, 36),
+                window_title="Account settings",
+                window_rank=1,
+            ),
+        ]
+
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(previous_target.target_id, "billing_email")
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertEqual(current_target.source, "candidate_snap")
+        self.assertEqual(current_target.target_id, "modal_email")
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_requested_textbox_label_discriminator_change(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Type into Billing customer primary account number field.",
+                "target_id": "acct",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "label",
+                "Billing customer primary account number",
+                "text",
+                (20, 100, 200, 32),
+            ),
+            ControlCandidate("acct", "", "edit", (220, 100, 240, 32)),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "label",
+                "Shipping customer primary account number",
+                "text",
+                (20, 100, 200, 32),
+            ),
+            ControlCandidate("acct", "", "edit", (220, 100, 240, 32)),
+        ]
+
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(previous_target.target_id, "acct")
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertEqual(current_target.target_id, "acct")
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
     def test_revalidation_rejects_same_rank_option_covering_stale_button(self) -> None:
         from control_inventory import ControlCandidate, TargetResolution
         from help_session import _foreground_candidate_covering_reason
@@ -11510,6 +11637,51 @@ class HelpTargetHarnessTests(unittest.TestCase):
                     "Save",
                     "button",
                     (100, 100, 80, 32),
+                    window_rank=0,
+                ),
+            ],
+        )
+
+        self.assertEqual(reason, "target covered before overlay")
+
+    def test_revalidation_rejects_new_same_rank_listitem_covering_stale_button(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        reason = _foreground_candidate_covering_reason(
+            target,
+            [
+                ControlCandidate(
+                    "page_save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Editor",
+                    window_rank=0,
+                ),
+                ControlCandidate(
+                    "popup_row",
+                    "Save draft",
+                    "listitem",
+                    (92, 92, 210, 54),
+                    window_title="Editor",
+                    window_rank=0,
+                ),
+            ],
+            previous_candidates=[
+                ControlCandidate(
+                    "page_save",
+                    "Save",
+                    "button",
+                    (100, 100, 80, 32),
+                    window_title="Editor",
                     window_rank=0,
                 ),
             ],

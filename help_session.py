@@ -968,6 +968,7 @@ def _guard_revalidated_target(
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_control_context_changed(
+        decision.instruction,
         previous_target,
         target,
         previous_candidates or [],
@@ -1292,6 +1293,7 @@ def _revalidated_control_identity_changed(
 
 
 def _revalidated_control_context_changed(
+    instruction: str,
     previous_target: TargetResolution,
     target: TargetResolution,
     previous_candidates: list[ControlCandidate],
@@ -1318,6 +1320,13 @@ def _revalidated_control_context_changed(
     if not current_tokens:
         return True
     overlap = previous_tokens & current_tokens
+    previous_only = previous_tokens - current_tokens
+    requested_tokens = (
+        _tokens_from_text(instruction or "")
+        | _tokenize_instruction(instruction or "")
+    ) - CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS
+    if previous_only & requested_tokens:
+        return True
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity <= 0.75
 
@@ -2063,6 +2072,8 @@ def _same_rank_candidate_can_cover_selected(
             return False
         return True
     if candidate.control_type in SAME_RANK_OWNING_COVERING_CONTROL_TYPES:
+        if not _same_rank_surface_was_previously_present(candidate, previous_candidates):
+            return True
         if (
             _same_rank_surface_was_previously_present(candidate, previous_candidates)
             and _same_rank_previous_owner_contains_selected(candidate, selected)

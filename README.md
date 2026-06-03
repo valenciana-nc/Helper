@@ -150,8 +150,13 @@ window rank and compatible window-title context as the target it is proving.
 Duplicate same-label table/grid cells now refuse when the request lacks row,
 column, or other distinguishing context, even if the stale target ID and model
 rectangle both point at one duplicate.
-Same-rank `option` overlays are treated as final pre-overlay blockers when they
-cover a revalidated target.
+Same-rank `option` overlays and newly appeared owning containers such as
+`listitem` rows are treated as final pre-overlay blockers when they cover a
+revalidated target.
+Stale text-box revalidation also refuses same-rectangle foreground partial
+matches, such as a foreground `Email` field replacing a background
+`Billing Email` field, and rejects long-label swaps when a requested
+discriminator such as `Billing` disappears from the current field label.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
