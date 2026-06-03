@@ -50,7 +50,46 @@ class HelpHighlightQATests(unittest.TestCase):
 
         self.assertEqual(summary["failed"], 1)
 
+    def test_runner_applies_final_coverage_gate(self) -> None:
+        from help_highlight_qa import run_scenarios
+
+        scenario = {
+            "name": "covered_target",
+            "capture": {"width": 300, "height": 220},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "save", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+                {
+                    "id": "popup",
+                    "text": "Suggestions popup",
+                    "control_type": "window",
+                    "rect": [70, 70, 160, 100],
+                },
+            ],
+            "coverage_previous_candidates": [
+                {"id": "save", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results = run_scenarios([scenario], artifacts_dir=Path(tmp))
+
+        self.assertTrue(results[0].passed)
+
 
 if __name__ == "__main__":
     unittest.main()
-

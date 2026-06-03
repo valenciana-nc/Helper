@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 from agent import _parse_live_help_decision
 from control_inventory import ControlCandidate, TargetResolution
 from help_session import (
+    _foreground_candidate_covering_reason,
     _guard_revalidated_target,
     build_target_diagnostic,
     clip_resolution_to_capture,
@@ -23037,6 +23038,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "covered_page_button_final_gate_rejects_overlay",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "popup",
+                    "text": "Suggestions popup",
+                    "control_type": "window",
+                    "rect": [90, 90, 220, 150],
+                    "window_rank": 0,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "same_name_invoice_dataitem_prefers_record_over_tab_and_nav",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -24541,6 +24586,13 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
         clip_to_capture=False,
     )
     previous_candidates = [_candidate(item) for item in scenario.get("previous_candidates", [])]
+    if "coverage_previous_candidates" in scenario:
+        coverage_previous_source = scenario.get("coverage_previous_candidates", [])
+    elif "previous_candidates" in scenario:
+        coverage_previous_source = scenario.get("previous_candidates", [])
+    else:
+        coverage_previous_source = scenario.get("candidates", [])
+    coverage_previous_candidates = [_candidate(item) for item in coverage_previous_source]
     if previous_candidates:
         previous_target = resolve_help_target(
             decision,
@@ -24592,6 +24644,12 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
                     )
                     if not ocr_verification.accepted:
                         rejected_reason = ocr_verification.reason
+                if not rejected_reason:
+                    rejected_reason = _foreground_candidate_covering_reason(
+                        display_target,
+                        candidates,
+                        previous_candidates=coverage_previous_candidates,
+                    )
                 if not rejected_reason:
                     overlay_rect = display_target.rect
 

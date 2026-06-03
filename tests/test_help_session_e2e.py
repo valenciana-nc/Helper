@@ -1032,6 +1032,103 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             "target covered before overlay",
         )
 
+    def test_final_coverage_gate_allows_previous_row_owner_for_contained_action(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(730, 144, 60, 30),
+            confidence=0.8,
+            source="text_match",
+            matched_text="Pay",
+            target_id="pay",
+        )
+        candidates = [
+            ControlCandidate("row", "INV-002 Beta Pending", "listitem", (20, 140, 800, 40), window_rank=0),
+            ControlCandidate("pay", "Pay", "button", (730, 144, 60, 30), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_allows_previous_composite_parent_for_contained_button(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(286, 28, 24, 24),
+            confidence=0.96,
+            source="text_match",
+            matched_text="Close",
+            target_id="close",
+        )
+        candidates = [
+            ControlCandidate("tab", "Docs - Project Plan", "tabitem", (100, 20, 220, 40), window_rank=0),
+            ControlCandidate("close", "Close", "button", (286, 28, 24, 24), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_allows_same_rect_duplicate_control(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(600, 120, 80, 32),
+            confidence=0.74,
+            source="text_match",
+            matched_text="Save primary-action",
+            target_id="settings_save",
+        )
+        candidates = [
+            ControlCandidate("cust_save", "Save", "button", (600, 120, 80, 32), window_title="Customers"),
+            ControlCandidate("settings_save", "Save", "button", (600, 120, 80, 32), window_title="Settings"),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_allows_previous_row_owner_for_floating_menuitem(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(560, 124, 160, 28),
+            confidence=0.58,
+            source="candidate_snap",
+            matched_text="Delete",
+            target_id="delete",
+        )
+        candidates = [
+            ControlCandidate("row", "Alice", "dataitem", (20, 80, 660, 110), window_rank=0),
+            ControlCandidate("more", "More", "button", (560, 86, 64, 30), window_rank=0),
+            ControlCandidate("delete", "Delete", "menuitem", (560, 124, 160, 28), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
     def test_final_coverage_gate_rejects_same_rank_form_and_structural_coverers(self) -> None:
         from help_session import _foreground_candidate_covering_reason
 
@@ -1053,6 +1150,8 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             ControlCandidate("volume", "Volume", "slider", (92, 94, 120, 42), window_rank=0),
             ControlCandidate("retries", "Retries", "spinner", (92, 94, 120, 42), window_rank=0),
             ControlCandidate("row", "Result row", "dataitem", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("uia_row", "Result row", "row", (92, 94, 120, 42), window_rank=0),
+            ControlCandidate("tableitem", "Result row", "tableitem", (92, 94, 120, 42), window_rank=0),
             ControlCandidate("tree", "Result tree item", "treeitem", (92, 94, 120, 42), window_rank=0),
             ControlCandidate("cell", "Result cell", "cell", (92, 94, 120, 42), window_rank=0),
             ControlCandidate("gridcell", "Result grid cell", "gridcell", (92, 94, 120, 42), window_rank=0),

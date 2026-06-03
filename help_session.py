@@ -74,6 +74,7 @@ UIA_BACKED_TARGET_SOURCES = frozenset(
 MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
 FOREGROUND_COVERAGE_MIN_FRACTION = 0.55
 FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
+SAME_RANK_PREVIOUS_OWNER_MIN_AREA_RATIO = 2.5
 SAME_RANK_COVERING_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
 )
@@ -89,8 +90,10 @@ SAME_RANK_OWNING_COVERING_CONTROL_TYPES = frozenset(
         "headeritem",
         "listitem",
         "radiobutton",
+        "row",
         "slider",
         "spinner",
+        "tableitem",
         "treeitem",
     }
 )
@@ -1970,6 +1973,11 @@ def _foreground_candidate_covering_reason(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
+        if (
+            candidate.control_type == selected.control_type
+            and _rect_iou(candidate.rect, selected.rect) >= 0.98
+        ):
+            continue
         if candidate.window_rank > selected_rank:
             continue
         if candidate.window_rank == selected_rank and not _same_rank_candidate_can_cover_selected(
@@ -1995,8 +2003,18 @@ def _same_rank_candidate_can_cover_selected(
     previous_candidates: list[ControlCandidate],
 ) -> bool:
     if candidate.control_type in SAME_RANK_COVERING_CONTROL_TYPES:
+        if (
+            _same_rank_surface_was_previously_present(candidate, previous_candidates)
+            and _same_rank_previous_owner_contains_selected(candidate, selected)
+        ):
+            return False
         return True
     if candidate.control_type in SAME_RANK_OWNING_COVERING_CONTROL_TYPES:
+        if (
+            _same_rank_surface_was_previously_present(candidate, previous_candidates)
+            and _same_rank_previous_owner_contains_selected(candidate, selected)
+        ):
+            return False
         return not _same_rank_surface_owns_selected(candidate, selected)
     if candidate.control_type not in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES:
         return False
@@ -2004,6 +2022,11 @@ def _same_rank_candidate_can_cover_selected(
         candidate,
         previous_candidates,
     ) and _same_rank_surface_owns_selected(candidate, selected):
+        return False
+    if (
+        _same_rank_surface_was_previously_present(candidate, previous_candidates)
+        and _same_rank_previous_owner_contains_selected(candidate, selected)
+    ):
         return False
     if not _same_rank_surface_was_previously_present(candidate, previous_candidates):
         return True
@@ -2013,6 +2036,49 @@ def _same_rank_candidate_can_cover_selected(
         | _tokenize_control(candidate.window_title)
     )
     return bool(tokens & SAME_RANK_TRANSIENT_SURFACE_WORDS)
+
+
+def _same_rank_previous_owner_contains_selected(
+    candidate: ControlCandidate,
+    selected: ControlCandidate,
+) -> bool:
+    expanded = _expand_rect(candidate.rect, 4)
+    if not (
+        _rect_contains(expanded, selected.rect)
+        or _rect_contains_point(expanded, _rect_center(selected.rect))
+    ):
+        return False
+    selected_window = (selected.window_title or "").strip().lower()
+    candidate_surface_names = {
+        (candidate.text or "").strip().lower(),
+        (candidate.automation_id or "").strip().lower(),
+        (candidate.window_title or "").strip().lower(),
+    }
+    if (
+        selected_window
+        and candidate.control_type in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES
+        and selected_window not in candidate_surface_names
+    ):
+        return False
+    candidate_area = max(1, candidate.rect[2] * candidate.rect[3])
+    selected_area = max(1, selected.rect[2] * selected.rect[3])
+    if candidate_area <= selected_area:
+        return False
+    if candidate.depth < selected.depth:
+        return True
+    candidate_tokens = (
+        _tokenize_control(candidate.text)
+        | _tokenize_control(candidate.automation_id)
+        | _tokenize_control(candidate.window_title)
+    )
+    selected_tokens = (
+        _tokenize_control(selected.text)
+        | _tokenize_control(selected.automation_id)
+        | _tokenize_control(selected.window_title)
+    )
+    if candidate_tokens and selected_tokens and candidate_tokens & selected_tokens:
+        return True
+    return candidate_area / selected_area >= SAME_RANK_PREVIOUS_OWNER_MIN_AREA_RATIO
 
 
 def _same_rank_surface_owns_selected(

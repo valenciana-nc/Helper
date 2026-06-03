@@ -116,6 +116,10 @@ row+column cell requests whose intended cell is missing from inventory, OCR
 labels with one-character suffix differences such as `Plan A`/`Plan B`, signed
 or punctuated numeric text such as `$1.00`/`$100`, and over-broad fuzzy matches
 such as `Cancel`/`Cancer`.
+The current coverage-gate pass includes `row` and `tableitem` as structural
+coverers, runs the same final foreground-cover check in synthetic highlight QA,
+and distinguishes newly appeared covering surfaces from stable parent rows,
+tabs, split buttons, and dialogs that legitimately own the selected child.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
