@@ -195,6 +195,22 @@ def evaluate_target_quality(
         )
     if (
         source != "model"
+        and _candidate_multiple_selection_indicators(
+            capture.png_bytes,
+            clipped,
+            target_control_type,
+        )
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
         and _candidate_compound_action_request(instruction)
         and _candidate_compound_rect_large_enough(image_rect)
         and (
@@ -430,6 +446,28 @@ def _candidate_single_selection_row(
     if len(matches) != 1:
         return False
     return not _has_selection_row_extra_separators(png_bytes, rect, matches[0])
+
+
+def _candidate_multiple_selection_indicators(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+    target_control_type: str,
+) -> bool:
+    if not _candidate_selection_row_target(target_control_type):
+        return False
+    matches = _selection_indicator_matches_inside(png_bytes, rect, target_control_type)
+    for index, first in enumerate(matches):
+        for second in matches[index + 1 :]:
+            first_x, first_y, first_size = first
+            second_x, second_y, second_size = second
+            lane_tolerance = max(first_size, second_size) * 2
+            min_vertical_gap = max(20, min(first_size, second_size))
+            if (
+                abs(first_x - second_x) <= lane_tolerance
+                and abs(first_y - second_y) >= min_vertical_gap
+            ):
+                return True
+    return False
 
 
 def _strict_candidate_quality_target(
@@ -728,29 +766,38 @@ def _selection_indicator_matches_inside(
             x, y, width, height = rect
             if width < 16 or height < 8:
                 return []
-            center_y = y + height // 2
+            x2 = x + width
+            y2 = y + height
             max_size = max(12, min(32, height + 8))
             min_size = max(10, min(18, height))
             matches: list[tuple[int, int, int]] = []
             for size in range(min_size, max_size + 1, 2):
-                top_start = center_y - size // 2 - 6
-                top_stop = center_y - size // 2 + 7
-                for top in range(top_start, top_stop):
-                    for left in range(x, x + width - size + 1):
-                        candidate = (left, top, size, size)
-                        if not _selection_indicator_rect_matches(image, candidate):
+                scan_width = min(width, max(48, size * 4))
+                left_ranges = [(x, min(x2 - size + 1, x + scan_width))]
+                right_start = max(x, x2 - scan_width)
+                right_stop = x2 - size + 1
+                if right_start < right_stop:
+                    left_ranges.append((right_start, right_stop))
+                for top in range(y, y2 - size + 1):
+                    for left_start, left_stop in left_ranges:
+                        if left_start >= left_stop:
                             continue
-                        center = (left + size // 2, top + size // 2)
-                        merge_radius = max(6, size // 2)
-                        if any(
-                            abs(center[0] - seen_x) <= merge_radius
-                            and abs(center[1] - seen_y) <= merge_radius
-                            for seen_x, seen_y, _seen_size in matches
-                        ):
-                            continue
-                        matches.append((center[0], center[1], size))
-                        if len(matches) > 1:
-                            return matches
+                        for left in range(left_start, left_stop):
+                            candidate = (left, top, size, size)
+                            if not _selection_indicator_rect_matches(image, candidate):
+                                continue
+                            center = (left + size // 2, top + size // 2)
+                            merge_x_radius = max(12, size * 2)
+                            merge_y_radius = max(8, size)
+                            if any(
+                                abs(center[0] - seen_x) <= merge_x_radius
+                                and abs(center[1] - seen_y) <= merge_y_radius
+                                for seen_x, seen_y, _seen_size in matches
+                            ):
+                                continue
+                            matches.append((center[0], center[1], size))
+                            if len(matches) > 1:
+                                return matches
             return matches
     except Exception:
         return []

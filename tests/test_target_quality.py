@@ -600,7 +600,7 @@ class TargetQualityTests(unittest.TestCase):
 
         img = Image.new("RGB", (320, 160), "white")
         draw = ImageDraw.Draw(img)
-        draw.rectangle((40, 76, 58, 94), outline="black", fill="white")
+        draw.ellipse((40, 76, 58, 94), outline="black", fill="white")
         draw.text((70, 76), "Weekly", fill="black")
         capture = _capture_with_image(img)
 
@@ -614,6 +614,49 @@ class TargetQualityTests(unittest.TestCase):
         )
 
         self.assertTrue(quality.accepted)
+
+    def test_accepts_candidate_radio_full_row_with_single_indicator(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (320, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Weekly", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 150, 28),
+            source="target_id",
+            confidence=1.0,
+            instruction="Select Weekly radio.",
+            target_control_type="radiobutton",
+        )
+
+        self.assertTrue(quality.accepted)
+
+    def test_rejects_candidate_radio_row_spanning_two_indicators(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (360, 180), "white")
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((40, 76, 58, 94), outline="black", fill="white")
+        draw.text((70, 76), "Weekly", fill="black")
+        draw.ellipse((40, 112, 58, 130), outline="black", fill="white")
+        draw.text((70, 112), "Monthly", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(36, 72, 190, 62),
+            source="target_id",
+            confidence=1.0,
+            instruction="Select Weekly radio.",
+            target_control_type="radiobutton",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
 
     def test_rejects_candidate_option_rect_over_label_only(self) -> None:
         from target_quality import evaluate_target_quality

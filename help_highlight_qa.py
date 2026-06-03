@@ -2041,6 +2041,64 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "borderless_full_row_radio_accepts_row_candidate",
+            "capture": {"width": 320, "height": 160},
+            "draw": [
+                {"kind": "ellipse", "rect": [40, 76, 18, 18], "label": "", "fill": "white"},
+                {"kind": "text", "rect": [70, 76, 80, 20], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Weekly radio.",
+                "target_id": "weekly",
+                "target": {"x": 36, "y": 72, "width": 150, "height": 28},
+            },
+            "candidates": [
+                {
+                    "id": "weekly",
+                    "text": "Weekly",
+                    "control_type": "radiobutton",
+                    "rect": [36, 72, 150, 28],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "weekly",
+                "rect": [36, 72, 150, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "borderless_radio_group_candidate_rejects_multiple_controls",
+            "capture": {"width": 360, "height": 180},
+            "draw": [
+                {"kind": "ellipse", "rect": [40, 76, 18, 18], "label": "", "fill": "white"},
+                {"kind": "text", "rect": [70, 76, 80, 20], "label": "Weekly"},
+                {"kind": "ellipse", "rect": [40, 112, 18, 18], "label": "", "fill": "white"},
+                {"kind": "text", "rect": [70, 112, 90, 20], "label": "Monthly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Weekly radio.",
+                "target_id": "weekly_group",
+                "target": {"x": 36, "y": 72, "width": 190, "height": 62},
+            },
+            "candidates": [
+                {
+                    "id": "weekly_group",
+                    "text": "Weekly",
+                    "control_type": "radiobutton",
+                    "rect": [36, 72, 190, 62],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "generic_field_model_rect_with_clear_action_highlights_field",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -24548,6 +24606,14 @@ def _make_capture(scenario: dict[str, Any]) -> Capture:
                         (x, y, min(x + tile - 1, box[2] - 1), min(y + tile - 1, box[3] - 1)),
                         fill=fill,
                     )
+            continue
+        if item.get("kind") in {"circle", "ellipse"}:
+            draw.ellipse(
+                box,
+                outline=item.get("outline", "black"),
+                fill=item.get("fill", "#f8fafc"),
+                width=int(item.get("width", 1)),
+            )
             continue
         draw.rectangle(box, outline="black", fill=item.get("fill", "#f8fafc"), width=1)
         if label:
