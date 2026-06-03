@@ -101,9 +101,11 @@ SAME_RANK_TRANSIENT_SURFACE_WORDS = frozenset(
 GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX = 96
 GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.010
 EPHEMERAL_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.005
-ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+ROW_REVALIDATION_CONTROL_TYPES = frozenset(
+    {"dataitem", "listitem", "row", "tableitem", "treeitem"}
+)
 ROW_REVALIDATION_GENERIC_WORDS = frozenset(
-    {"card", "dataitem", "item", "listitem", "record", "row", "treeitem"}
+    {"card", "dataitem", "item", "listitem", "record", "row", "tableitem", "treeitem"}
 )
 TABULAR_REVALIDATION_CONTROL_TYPES = frozenset(
     {"cell", "datagridcell", "gridcell", "headeritem", "rowheader"}
@@ -250,7 +252,7 @@ CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENER
 )
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
 CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane", "window"})
-CONTROL_CONTEXT_ROW_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+CONTROL_CONTEXT_ROW_TYPES = frozenset({"dataitem", "listitem", "row", "tableitem", "treeitem"})
 SURFACE_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
     {
         "area",

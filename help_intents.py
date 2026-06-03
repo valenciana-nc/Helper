@@ -1364,7 +1364,11 @@ def _record_target_requested(instruction: str, raw_tokens: set[str]) -> bool:
 
 
 def control_type_matches_intent(control_type: str, control_intents: set[str]) -> bool:
-    return not control_intents or control_type in control_intents
+    if not control_intents or control_type in control_intents:
+        return True
+    if control_type in {"row", "tableitem"} and control_intents & {"dataitem", "listitem"}:
+        return True
+    return False
 
 
 def menu_segment_intent(control_intents: set[str]) -> bool:

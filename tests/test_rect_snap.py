@@ -1093,6 +1093,26 @@ class SnapToControlTests(unittest.TestCase):
         self.assertIn("Submit", result.matched_text)
         self.assertGreaterEqual(result.confidence, 0.42)
 
+    def test_row_and_tableitem_roles_match_row_requests(self) -> None:
+        from rect_snap import snap_to_control
+
+        for control_type in ("Row", "TableItem"):
+            with self.subTest(control_type=control_type):
+                row = _make_button("Acme", 100, 120, 240, 40, control_type=control_type)
+                window = _make_window("App", 0, 0, 800, 600, [row])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (96, 116, 250, 48),
+                    "Click Acme row.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (100, 120, 240, 40))
+                self.assertFalse(result.rejected_reason)
+
     def test_neutral_same_label_state_option_raw_snap_stays_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 

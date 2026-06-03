@@ -21,6 +21,7 @@ MODEL_BOUNDARY_ALIGNMENT_FLOOR = 0.08
 CANDIDATE_EMPTY_VISUAL_FLOOR = 0.012
 CANDIDATE_SEGMENTED_SEPARATOR_FLOOR = 0.85
 CANDIDATE_INNER_CONTROL_EDGE_FLOOR = 0.40
+CANDIDATE_INNER_ROW_EDGE_FLOOR = 0.70
 CANDIDATE_ENCLOSING_EDGE_FLOOR = 0.35
 CANDIDATE_COMPOUND_MIN_AREA = 3000
 CANDIDATE_COMPOUND_MIN_WIDTH = 120
@@ -34,6 +35,9 @@ CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES = frozenset(
         "tableitem",
         "treeitem",
     }
+)
+CANDIDATE_ROW_CONTAINER_CONTROL_TYPES = frozenset(
+    {"dataitem", "listitem", "row", "tableitem", "treeitem"}
 )
 CANDIDATE_STRICT_QUALITY_CONTROL_TYPES = frozenset(
     {
@@ -69,6 +73,9 @@ CANDIDATE_LEAF_ACTION_CONTROL_TYPES = frozenset(
     {"button", "hyperlink", "menuitem", "option", "splitbutton", "tabitem"}
 )
 SELECTION_ROW_CONTROL_TYPES = frozenset({"checkbox", "option", "radiobutton"})
+TABULAR_CELL_CONTROL_TYPES = frozenset(
+    {"cell", "datagridcell", "gridcell", "headeritem", "rowheader"}
+)
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
     {
@@ -211,6 +218,49 @@ def evaluate_target_quality(
         )
     if (
         source != "model"
+        and _candidate_tabular_cell_target(target_control_type)
+        and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
+        and _candidate_tabular_cell_target(target_control_type)
+        and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
+        and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
+        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+        and _has_visible_enclosing_boundary_outside(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target boundary misaligned",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
+        and _candidate_tabular_cell_target(target_control_type)
+        and _has_tabular_cell_internal_separators(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
         and _candidate_compound_action_request(instruction)
         and _candidate_compound_rect_large_enough(image_rect)
         and (
@@ -267,6 +317,19 @@ def evaluate_target_quality(
         return TargetQuality(
             accepted=False,
             reason="target appears visually noisy",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
+    if (
+        source != "model"
+        and _candidate_row_container_target(target_control_type, image_rect)
+        and _has_internal_control_horizontal_edges(capture.png_bytes, clipped)
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
             visible_fraction=visible_fraction,
             visual_activity=visual_activity,
             boundary_activity=boundary_activity,
@@ -422,6 +485,15 @@ def _candidate_action_container_target(
     return _candidate_compound_rect_large_enough(rect)
 
 
+def _candidate_row_container_target(
+    target_control_type: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if target_control_type.lower() not in CANDIDATE_ROW_CONTAINER_CONTROL_TYPES:
+        return False
+    return _candidate_compound_rect_large_enough(rect)
+
+
 def _candidate_leaf_action_target(
     target_control_type: str,
     rect: tuple[int, int, int, int],
@@ -433,6 +505,17 @@ def _candidate_leaf_action_target(
 
 def _candidate_selection_row_target(target_control_type: str) -> bool:
     return target_control_type.lower() in SELECTION_ROW_CONTROL_TYPES
+
+
+def _candidate_tabular_cell_target(target_control_type: str) -> bool:
+    return target_control_type.lower() in TABULAR_CELL_CONTROL_TYPES
+
+
+def _has_tabular_cell_internal_separators(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    return _has_compound_control_separators(png_bytes, rect, min_groups=1)
 
 
 def _candidate_single_selection_row(
@@ -995,6 +1078,22 @@ def _has_internal_control_vertical_edges(
         return False
 
 
+def _has_internal_control_horizontal_edges(
+    png_bytes: bytes,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    try:
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            x, y, width, height = rect
+            crop = img.convert("L").crop((x, y, x + width, y + height))
+            if crop.width < 80 or crop.height < 36:
+                return False
+            edges = crop.filter(ImageFilter.FIND_EDGES)
+            return _internal_horizontal_edge_groups(edges) >= 1
+    except Exception:
+        return False
+
+
 def _internal_vertical_edge_groups(edges: Image.Image) -> int:
     width, height = edges.size
     band = max(2, min(5, width // 12, height // 12))
@@ -1011,6 +1110,29 @@ def _internal_vertical_edge_groups(edges: Image.Image) -> int:
             if int(pixels[position, y]) > 32:
                 strong += 1
         if strong / max(1, line_length) < CANDIDATE_INNER_CONTROL_EDGE_FLOOR:
+            continue
+        if last_strong is None or position - last_strong > 2:
+            groups += 1
+        last_strong = position
+    return groups
+
+
+def _internal_horizontal_edge_groups(edges: Image.Image) -> int:
+    width, height = edges.size
+    band = max(2, min(5, width // 12, height // 12))
+    margin_y = max(band * 3, int(height * 0.18))
+    if width <= band * 2 or height <= margin_y * 2:
+        return 0
+    pixels = edges.load()
+    line_length = width - band * 2
+    groups = 0
+    last_strong: int | None = None
+    for position in range(margin_y, height - margin_y):
+        strong = 0
+        for x in range(band, width - band):
+            if int(pixels[x, position]) > 32:
+                strong += 1
+        if strong / max(1, line_length) < CANDIDATE_INNER_ROW_EDGE_FLOOR:
             continue
         if last_strong is None or position - last_strong > 2:
             groups += 1

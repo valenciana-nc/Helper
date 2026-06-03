@@ -119,7 +119,7 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
     {"datagrid", "grid", "group", "headeritem", "list", "menu", "pane", "table", "toolbar", "window"}
 )
-ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "row", "tableitem", "treeitem"})
 TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 TABLE_CELL_ROW_LABEL_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
@@ -779,6 +779,8 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "hyperlink",
         "listitem",
         "dataitem",
+        "row",
+        "tableitem",
         "treeitem",
         "edit",
         "combobox",
@@ -4391,6 +4393,8 @@ def _control_matches_effective_intent(
 ) -> bool:
     if ctype in control_intents:
         return True
+    if ctype in {"row", "tableitem"} and control_intents & {"dataitem", "listitem"}:
+        return True
     if "checkbox" not in control_intents or ctype not in {"button", "splitbutton"}:
         return False
 
@@ -4867,13 +4871,35 @@ def _explicit_container_snap_request(
     ctype: str,
     control_intents: set[str],
 ) -> bool:
-    if ctype not in {"dataitem", "listitem", "treeitem", "cell", "datagridcell", "gridcell"}:
+    if ctype not in {
+        "dataitem",
+        "listitem",
+        "row",
+        "tableitem",
+        "treeitem",
+        "cell",
+        "datagridcell",
+        "gridcell",
+    }:
         return False
     if ctype in control_intents:
         return True
     raw_tokens = _tokens_from_text(instruction)
-    if ctype in {"dataitem", "listitem", "treeitem"}:
-        return bool(raw_tokens & {"card", "dataitem", "item", "listitem", "record", "row", "table", "treeitem"})
+    if ctype in ROW_CONTEXT_CONTROL_TYPES:
+        return bool(
+            raw_tokens
+            & {
+                "card",
+                "dataitem",
+                "item",
+                "listitem",
+                "record",
+                "row",
+                "table",
+                "tableitem",
+                "treeitem",
+            }
+        )
     return bool(raw_tokens & {"cell", "column", "gridcell"})
 
 

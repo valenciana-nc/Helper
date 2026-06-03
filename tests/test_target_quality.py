@@ -408,6 +408,116 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target boundary misaligned")
 
+    def test_rejects_candidate_dataitem_spanning_two_rows(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (1000, 1000), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 80, 420, 128), outline="black", fill="#f8fafc")
+        draw.text((56, 96), "Acme", fill="black")
+        draw.rectangle((40, 128, 420, 176), outline="black", fill="#f8fafc")
+        draw.text((56, 144), "Globex", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 80, 380, 96),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Acme row.",
+            target_control_type="dataitem",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_rejects_candidate_tableitem_spanning_two_rows(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (1000, 1000), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((40, 80, 420, 128), outline="black", fill="#f8fafc")
+        draw.text((56, 96), "Acme", fill="black")
+        draw.rectangle((40, 128, 420, 176), outline="black", fill="#f8fafc")
+        draw.text((56, 144), "Globex", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(40, 80, 380, 96),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Acme row.",
+            target_control_type="tableitem",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_accepts_aligned_candidate_table_cell_rect(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (520, 220), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((100, 80, 220, 120), outline="black", fill="#f8fafc")
+        draw.text((120, 94), "Active", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(100, 80, 120, 40),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click the Active Status cell.",
+            target_control_type="cell",
+        )
+
+        self.assertTrue(quality.accepted)
+
+    def test_rejects_candidate_table_cell_spanning_adjacent_cells(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (520, 220), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((100, 80, 220, 120), outline="black", fill="#f8fafc")
+        draw.text((120, 94), "Active", fill="black")
+        draw.rectangle((220, 80, 340, 120), outline="black", fill="#f8fafc")
+        draw.text((244, 94), "Gold", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(100, 80, 240, 40),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click the Active Status cell.",
+            target_control_type="cell",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
+    def test_rejects_candidate_table_cell_inner_label_only(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (520, 220), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((100, 80, 220, 120), outline="black", fill="#f8fafc")
+        draw.text((120, 94), "Active", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(118, 90, 70, 18),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click the Active Status cell.",
+            target_control_type="cell",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target boundary misaligned")
+
     def test_accepts_text_heavy_candidate_button_without_internal_controls(self) -> None:
         from target_quality import evaluate_target_quality
 

@@ -1929,6 +1929,117 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "candidate_dataitem_spanning_two_rows_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [40, 80, 380, 48], "label": "Acme"},
+                {"rect": [40, 128, 380, 48], "label": "Globex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Acme record.",
+                "target_id": "acme",
+                "target": {"x": 40, "y": 80, "width": 380, "height": 96},
+            },
+            "candidates": [
+                {
+                    "id": "acme",
+                    "text": "Acme",
+                    "control_type": "dataitem",
+                    "rect": [40, 80, 380, 96],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "candidate_tableitem_spanning_two_rows_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [40, 80, 380, 48], "label": "Acme"},
+                {"rect": [40, 128, 380, 48], "label": "Globex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Acme table row.",
+                "target_id": "acme",
+                "target": {"x": 40, "y": 80, "width": 380, "height": 96},
+            },
+            "candidates": [
+                {
+                    "id": "acme",
+                    "text": "Acme",
+                    "control_type": "tableitem",
+                    "rect": [40, 80, 380, 96],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "candidate_cell_inner_label_rect_rejects_overlay",
+            "capture": {"width": 520, "height": 220},
+            "draw": [
+                {"rect": [100, 80, 120, 40], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Active Status cell.",
+                "target_id": "active",
+                "target": {"x": 118, "y": 90, "width": 70, "height": 18},
+            },
+            "candidates": [
+                {
+                    "id": "active",
+                    "text": "Active",
+                    "control_type": "cell",
+                    "rect": [118, 90, 70, 18],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target boundary misaligned",
+                "rejected_reason": "target boundary misaligned",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "candidate_cell_spanning_two_cells_rejects_overlay",
+            "capture": {"width": 520, "height": 220},
+            "draw": [
+                {"rect": [100, 80, 120, 40], "label": "Active"},
+                {"rect": [220, 80, 120, 40], "label": "Gold"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Active Status cell.",
+                "target_id": "active",
+                "target": {"x": 100, "y": 80, "width": 240, "height": 40},
+            },
+            "candidates": [
+                {
+                    "id": "active",
+                    "text": "Active",
+                    "control_type": "cell",
+                    "rect": [100, 80, 240, 40],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "candidate_button_inner_label_rect_rejects_overlay",
             "capture": {"width": 500, "height": 240},
             "draw": [

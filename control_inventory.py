@@ -1486,6 +1486,8 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "hyperlink",
         "listitem",
         "dataitem",
+        "row",
+        "tableitem",
         "datagridcell",
         "gridcell",
         "treeitem",
@@ -1560,8 +1562,10 @@ OPTION_PARENT_CONTEXT_STOPWORDS = frozenset(
     }
 )
 MENU_ITEM_CROSS_ROLE_CONTROL_TYPES = frozenset({"button", "menuitem", "option", "splitbutton"})
-ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
-ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
+ROW_LIKE_CONTROL_TYPES = frozenset(
+    {"listitem", "dataitem", "row", "tableitem", "treeitem", "edit", "combobox"}
+)
+ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "row", "tableitem", "treeitem"})
 GENERIC_ROLE_ONLY_SNAP_CONTROL_TYPES = CELL_CONTROL_TYPES | ROW_CONTEXT_CONTROL_TYPES | frozenset(
     {"headeritem"}
 )
