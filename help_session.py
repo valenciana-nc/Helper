@@ -1431,6 +1431,8 @@ def _control_containing_row_context(
             continue
         if candidate.control_type.lower() not in CONTROL_CONTEXT_ROW_TYPES:
             continue
+        if not _same_revalidation_context_window(target, candidate):
+            continue
         if not _rect_contains(_expand_rect(candidate.rect, 3), target.rect):
             continue
         area = max(1, candidate.rect[2] * candidate.rect[3])
@@ -1455,6 +1457,8 @@ def _control_aligned_header_context(
             continue
         if candidate.control_type.lower() != "headeritem":
             continue
+        if not _same_revalidation_context_window(target, candidate):
+            continue
         header_x, header_y, header_width, header_height = candidate.rect
         if min(header_width, header_height) <= 0:
             continue
@@ -1474,6 +1478,15 @@ def _control_aligned_header_context(
         if best is None or score > best[0]:
             best = (score, candidate)
     return best[1] if best is not None else None
+
+
+def _same_revalidation_context_window(
+    target: ControlCandidate,
+    context: ControlCandidate,
+) -> bool:
+    if target.window_rank != context.window_rank:
+        return False
+    return not _window_title_identity_changed(target.window_title, context.window_title)
 
 
 def _control_label_context_tokens(candidate: ControlCandidate) -> set[str]:
@@ -1999,6 +2012,10 @@ def _foreground_candidate_covering_reason(
             candidate.window_rank == selected_rank
             and candidate.control_type == selected.control_type
             and _rect_iou(candidate.rect, selected.rect) >= 0.98
+            and _same_rank_exact_duplicate_was_previously_present(
+                candidate,
+                previous_candidates or [],
+            )
         ):
             continue
         if candidate.window_rank == selected_rank and not _same_rank_candidate_can_cover_selected(
@@ -2057,6 +2074,27 @@ def _same_rank_candidate_can_cover_selected(
         | _tokenize_control(candidate.window_title)
     )
     return bool(tokens & SAME_RANK_TRANSIENT_SURFACE_WORDS)
+
+
+def _same_rank_exact_duplicate_was_previously_present(
+    candidate: ControlCandidate,
+    previous_candidates: list[ControlCandidate],
+) -> bool:
+    for previous in previous_candidates:
+        if previous.window_rank != candidate.window_rank:
+            continue
+        if previous.control_type != candidate.control_type:
+            continue
+        if _rect_iou(previous.rect, candidate.rect) < 0.98:
+            continue
+        if previous.text != candidate.text:
+            continue
+        if previous.automation_id != candidate.automation_id:
+            continue
+        if previous.window_title != candidate.window_title:
+            continue
+        return True
+    return False
 
 
 def _same_rank_previous_owner_contains_selected(

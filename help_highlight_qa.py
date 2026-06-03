@@ -23198,6 +23198,108 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_rank_same_rect_new_button_rejects_stale_overlay",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Dialog",
+                    "window_rank": 0,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "same_rank_same_rect_moved_button_rejects_stale_overlay",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "page_save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Dialog",
+                    "window_rank": 0,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "page_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "dialog_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [420, 100, 80, 32],
+                    "window_title": "Dialog",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "page_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "same_name_invoice_dataitem_prefers_record_over_tab_and_nav",
             "capture": {"width": 1000, "height": 1000},
             "draw": [

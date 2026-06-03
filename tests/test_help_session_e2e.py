@@ -1145,6 +1145,96 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             "target covered before overlay",
         )
 
+    def test_final_coverage_gate_rejects_new_same_rank_same_rect_duplicate_control(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "page_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Page",
+                window_rank=0,
+            ),
+        ]
+        candidates = [
+            previous_candidates[0],
+            ControlCandidate(
+                "dialog_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Dialog",
+                window_rank=0,
+            ),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=previous_candidates,
+            ),
+            "target covered before overlay",
+        )
+
+    def test_final_coverage_gate_rejects_moved_same_rank_same_rect_duplicate_control(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "page_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Page",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "dialog_save",
+                "Save",
+                "button",
+                (420, 100, 80, 32),
+                window_title="Dialog",
+                window_rank=0,
+            ),
+        ]
+        candidates = [
+            previous_candidates[0],
+            ControlCandidate(
+                "dialog_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Dialog",
+                window_rank=0,
+            ),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=previous_candidates,
+            ),
+            "target covered before overlay",
+        )
+
     def test_final_coverage_gate_allows_previous_row_owner_for_floating_menuitem(self) -> None:
         from help_session import _foreground_candidate_covering_reason
 
@@ -2512,6 +2602,59 @@ class HelpSessionEndToEndTests(unittest.TestCase):
 
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
+
+    def test_current_screen_recheck_rejects_tabular_context_from_other_window_rank(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        capture = _button_capture(button_rect=(120, 110, 60, 24))
+        rect = (120, 110, 60, 24)
+        previous_candidates = [
+            ControlCandidate("row", "Acme", "dataitem", (20, 100, 220, 44), window_title="Billing", window_rank=0),
+            ControlCandidate("header", "Status", "headeritem", (120, 70, 80, 24), window_title="Billing", window_rank=0),
+            ControlCandidate("cell", "Active", "cell", rect, window_title="Billing", window_rank=0),
+        ]
+        current_candidates = [
+            ControlCandidate("row", "Acme", "dataitem", (20, 100, 220, 44), window_title="Other App", window_rank=1),
+            ControlCandidate("header", "Status", "headeritem", (120, 70, 80, 24), window_title="Other App", window_rank=1),
+            ControlCandidate("cell", "Active", "cell", rect, window_title="Billing", window_rank=0),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Active",
+            target_id="cell",
+        )
+        target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Active",
+            target_id="cell",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click the Status cell for Acme.",
+            target_id="cell",
+            target_norm_x=500,
+            target_norm_y=688,
+            target_norm_width=250,
+            target_norm_height=150,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=previous_candidates,
+            target=target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_current_screen_recheck_rejects_reused_control_section_automation_context_change(self) -> None:
         app = _qt_app()

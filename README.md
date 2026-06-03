@@ -122,11 +122,16 @@ and distinguishes newly appeared covering surfaces from stable parent rows,
 tabs, split buttons, and dialogs that legitimately own the selected child.
 It also refuses a stale background target when a foreground control with the
 same type and exact same rectangle is now above it; same-rectangle duplicate
-controls are ignored only when they share the same foreground rank.
+controls are ignored only when they share the same foreground rank and were
+already present in the previous inventory with the same identity/context.
 The next hardening pass refuses current-screen revalidation when a stale
 candidate ID is replaced by a nearby same-label control via fallback text
 matching, and prevents table/grid cells from borrowing row or column context
 evidence from candidates in another window rank.
+The latest coverage/revalidation slice also rejects same-rank duplicate controls
+that move onto the selected rectangle between snapshots, and refuses stale cell
+revalidation when row/header context comes from a different window rank or
+window title than the cell itself.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
