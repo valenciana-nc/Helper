@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 from agent import _parse_live_help_decision
 from control_inventory import ControlCandidate, TargetResolution
 from help_session import (
+    _guard_revalidated_target,
     build_target_diagnostic,
     clip_resolution_to_capture,
     resolve_help_target,
@@ -614,6 +615,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "fresh_uia_snap_label_disagreement_rejects_overlay",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 80, 90, 32], "label": "Settings"},
+                {"rect": [220, 80, 90, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target": {"x": 220, "y": 80, "width": 90, "height": 32},
+            },
+            "candidates": [],
+            "snap_result": {
+                "rect": [220, 80, 90, 32],
+                "confidence": 0.92,
+                "source": "uia",
+                "matched_text": "Profile",
+            },
+            "expected": {
+                "source": "snap",
+                "matched_text": "Profile",
+                "rect": [220, 80, 90, 32],
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "fresh_uia_snap_label_agreement_highlights_snap_rect",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [80, 80, 90, 32], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target": {"x": 70, "y": 70, "width": 130, "height": 52},
+            },
+            "candidates": [],
+            "snap_result": {
+                "rect": [80, 80, 90, 32],
+                "confidence": 0.92,
+                "source": "uia",
+                "matched_text": "Settings",
+            },
+            "expected": {
+                "source": "snap",
+                "matched_text": "Settings",
+                "rect": [80, 80, 90, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "background_candidate_snap_conflict_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -1171,6 +1224,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "quality_reason": "target appears to contain multiple controls",
                 "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "revalidation_rejects_recycled_row_identity_at_same_rect",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 10, 600, 80], "label": "Beta row"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this row.",
+                "target_id": "row",
+                "target": {"x": 10, "y": 10, "width": 600, "height": 80},
+            },
+            "previous_candidates": [
+                {
+                    "id": "row",
+                    "text": "Alpha row",
+                    "control_type": "listitem",
+                    "rect": [10, 10, 600, 80],
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "row",
+                    "text": "Beta row",
+                    "control_type": "listitem",
+                    "rect": [10, 10, 600, 80],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "row",
+                "rejected_reason": "current screen recheck target changed",
                 "overlay_emitted": False,
             },
         },
@@ -23009,9 +23097,28 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
         decision,
         capture,
         candidates,
-        snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        snapper=_snapper_for_scenario(scenario),
         clip_to_capture=False,
     )
+    previous_candidates = [_candidate(item) for item in scenario.get("previous_candidates", [])]
+    if previous_candidates:
+        previous_target = resolve_help_target(
+            decision,
+            capture,
+            previous_candidates,
+            snapper=_snapper_for_scenario(scenario),
+            clip_to_capture=False,
+        )
+        target = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=previous_candidates,
+            target=target,
+            snapper=_snapper_for_scenario(scenario),
+        )
     quality: TargetQuality | None = None
     overlay_rect: tuple[int, int, int, int] | None = None
     rejected_reason = target.rejected_reason
@@ -23067,6 +23174,7 @@ def _check_expectations(expected: dict[str, Any], diagnostic: dict[str, Any]) ->
     checks = {
         "source": resolution.get("source"),
         "target_id": resolution.get("target_id"),
+        "matched_text": resolution.get("matched_text"),
         "rejected_reason": overlay.get("rejected_reason"),
         "quality_reason": quality.get("reason"),
         "overlay_emitted": overlay.get("emitted"),
@@ -23175,6 +23283,31 @@ def _candidate(item: dict[str, Any]) -> ControlCandidate:
         window_title=str(item.get("window_title") or ""),
         window_rank=int(item.get("window_rank") or 0),
     )
+
+
+def _snapper_for_scenario(scenario: dict[str, Any]):
+    spec = scenario.get("snap_result")
+    if not isinstance(spec, dict):
+        return lambda rect, _instruction: SnapResult(
+            rect=rect,
+            confidence=0.0,
+            source="model",
+        )
+
+    def _snapper(
+        rect: tuple[int, int, int, int],
+        _instruction: str,
+    ) -> SnapResult:
+        snap_rect = tuple(int(v) for v in spec.get("rect", rect))
+        return SnapResult(
+            rect=snap_rect,
+            confidence=float(spec.get("confidence") or 0.0),
+            source=str(spec.get("source") or "model"),
+            matched_text=str(spec.get("matched_text") or ""),
+            rejected_reason=str(spec.get("rejected_reason") or ""),
+        )
+
+    return _snapper
 
 
 def _screen_to_image_box(

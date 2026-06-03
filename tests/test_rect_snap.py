@@ -32500,6 +32500,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rect, model_rect)
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
 
+    def test_fresh_snap_visible_label_mismatch_rejects_overlay(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings.",
+                    "target": {"x": 160, "y": 80, "width": 80, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 80, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Profile",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.matched_text, "Profile")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_visible_label_match_accepts_overlay(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Settings.",
+                    "target": {"x": 150, "y": 70, "width": 120, "height": 56},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 80, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Settings",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.matched_text, "Settings")
+        self.assertFalse(target.rejected_reason)
+        self.assertEqual(target.rect, (160, 80, 80, 32))
+
     def test_weak_fresh_snap_candidate_does_not_fall_back_to_raw_model_rect(self) -> None:
         from help_session import resolve_help_target
         from rect_snap import snap_to_control

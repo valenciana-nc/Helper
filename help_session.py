@@ -204,6 +204,45 @@ RAW_SNAP_EXCLUSIVE_ACTION_FAMILIES = (
     PAY_ACTION_WORDS,
     *EXCLUSIVE_ACTION_FAMILIES,
 )
+RAW_SNAP_LABEL_GENERIC_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "area",
+        "button",
+        "cell",
+        "checkbox",
+        "choose",
+        "combobox",
+        "click",
+        "control",
+        "dropdown",
+        "field",
+        "find",
+        "focus",
+        "go",
+        "here",
+        "highlighted",
+        "hit",
+        "icon",
+        "item",
+        "list",
+        "menu",
+        "navigate",
+        "open",
+        "option",
+        "press",
+        "radio",
+        "radiobutton",
+        "row",
+        "select",
+        "tab",
+        "tap",
+        "the",
+        "this",
+        "visit",
+    }
+)
 
 
 def looks_oversized(decision: "LiveHelpDecision") -> bool:
@@ -488,7 +527,10 @@ def resolve_help_target(
         )
 
     if snap.source == "uia":
-        if _raw_snap_action_mismatch(decision.instruction, snap.matched_text):
+        if _raw_snap_action_mismatch(
+            decision.instruction,
+            snap.matched_text,
+        ) or _raw_snap_label_mismatch(decision.instruction, snap.matched_text):
             return TargetResolution(
                 rect=snap.rect,
                 confidence=snap.confidence,
@@ -548,6 +590,18 @@ def _raw_snap_action_mismatch(instruction: str, matched_text: str) -> bool:
     if not matched_indexes:
         return False
     return not bool(set(requested_indexes) & set(matched_indexes))
+
+
+def _raw_snap_label_mismatch(instruction: str, matched_text: str) -> bool:
+    instruction_tokens = (
+        _tokens_from_text(instruction) | _tokenize_instruction(instruction)
+    ) - RAW_SNAP_LABEL_GENERIC_WORDS
+    control_tokens = (
+        _tokens_from_text(matched_text) | _tokenize_control(matched_text)
+    ) - RAW_SNAP_LABEL_GENERIC_WORDS
+    if not instruction_tokens or not control_tokens:
+        return False
+    return not bool(instruction_tokens & control_tokens)
 
 
 def _instruction_has_dialog_resolution_context(instruction: str) -> bool:
