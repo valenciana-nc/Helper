@@ -67,6 +67,25 @@ OCR_GENERIC_LABEL_EXCEPTIONS = frozenset({"cell", "open", "option"})
 OCR_NUMERIC_STRICT_CONTROL_TYPES = frozenset(
     {"cell", "dataitem", "datagridcell", "edit", "gridcell", "row", "rowheader"}
 )
+OCR_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton"})
+OCR_STATE_VALUE_WORDS = frozenset(
+    {
+        "checked",
+        "disabled",
+        "enabled",
+        "false",
+        "mixed",
+        "off",
+        "on",
+        "selected",
+        "true",
+        "unchecked",
+        "unselected",
+    }
+)
+OCR_LABEL_CONTROL_TYPES = frozenset(
+    {"header", "headeritem", "label", "static", "text"}
+)
 OCR_VERIFICATION_CONTROL_TYPES = frozenset(
     {
         "button",
@@ -108,6 +127,12 @@ class OcrTextVerification:
     available: bool = False
     error: str = ""
     elapsed_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class OcrTextEvidence:
+    text: str = ""
+    rect: tuple[int, int, int, int] | None = None
 
 
 class OcrTextProvider(Protocol):
@@ -178,15 +203,117 @@ def default_ocr_text_provider() -> OcrTextProvider | None:
 
 
 def expected_text_for_target(target: object, candidates: list[object]) -> str:
+    return expected_text_evidence_for_target(target, candidates).text
+
+
+def expected_text_evidence_for_target(
+    target: object,
+    candidates: list[object],
+) -> OcrTextEvidence:
     target_id = getattr(target, "target_id", "")
     if target_id:
         for candidate in candidates:
             if getattr(candidate, "id", "") == target_id:
+                label = _state_control_visible_label_evidence(candidate, candidates)
+                if label.text:
+                    return label
                 text = str(getattr(candidate, "text", "") or "").strip()
                 if text:
-                    return text
+                    return OcrTextEvidence(text=text, rect=_object_rect(candidate))
                 break
-    return str(getattr(target, "matched_text", "") or "").strip()
+    return OcrTextEvidence(
+        text=str(getattr(target, "matched_text", "") or "").strip(),
+        rect=_object_rect(target),
+    )
+
+
+def _state_control_visible_label(candidate: object, candidates: list[object]) -> str:
+    return _state_control_visible_label_evidence(candidate, candidates).text
+
+
+def _state_control_visible_label_evidence(
+    candidate: object,
+    candidates: list[object],
+) -> OcrTextEvidence:
+    control_type = str(getattr(candidate, "control_type", "") or "").strip().lower()
+    if control_type not in OCR_STATE_CONTROL_TYPES:
+        return OcrTextEvidence()
+    text = str(getattr(candidate, "text", "") or "").strip()
+    if text and not _state_control_text_is_state_only(text):
+        return OcrTextEvidence()
+    rect = _object_rect(candidate)
+    if rect is None:
+        return OcrTextEvidence()
+    best_score = 0.0
+    best_text = ""
+    best_rect: tuple[int, int, int, int] | None = None
+    for label in candidates:
+        if getattr(label, "id", "") == getattr(candidate, "id", ""):
+            continue
+        label_type = str(getattr(label, "control_type", "") or "").strip().lower()
+        if label_type not in OCR_LABEL_CONTROL_TYPES:
+            continue
+        label_text = str(getattr(label, "text", "") or "").strip()
+        if not label_text or len(label_text.split()) > 8:
+            continue
+        label_rect = _object_rect(label)
+        if label_rect is None:
+            continue
+        score = _state_label_score(rect, label_rect)
+        if score > best_score:
+            best_score = score
+            best_text = label_text
+            best_rect = _union_rect(rect, label_rect)
+    if best_score < 0.5:
+        return OcrTextEvidence()
+    return OcrTextEvidence(text=best_text, rect=best_rect)
+
+
+def _state_control_text_is_state_only(text: str) -> bool:
+    tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    return bool(tokens) and tokens <= OCR_STATE_VALUE_WORDS
+
+
+def _object_rect(item: object) -> tuple[int, int, int, int] | None:
+    raw = getattr(item, "rect", None)
+    try:
+        x, y, width, height = raw
+        rect = (int(x), int(y), int(width), int(height))
+    except Exception:
+        return None
+    if rect[2] <= 0 or rect[3] <= 0:
+        return None
+    return rect
+
+
+def _state_label_score(
+    option_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    option_left, option_top, option_width, option_height = option_rect
+    option_right = option_left + option_width
+    option_bottom = option_top + option_height
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+
+    y_overlap = max(0, min(option_bottom, label_bottom) - max(option_top, label_top))
+    y_ratio = y_overlap / max(1, min(option_height, label_height))
+    right_gap = label_left - option_right
+    if y_ratio >= 0.45 and -4 <= right_gap <= 240 and label_right >= option_right:
+        return 0.75 + 0.25 * (1.0 - min(1.0, max(0, right_gap) / 240.0))
+    return 0.0
+
+
+def _union_rect(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    left = min(first[0], second[0])
+    top = min(first[1], second[1])
+    right = max(first[0] + first[2], second[0] + second[2])
+    bottom = max(first[1] + first[3], second[1] + second[3])
+    return (left, top, right - left, bottom - top)
 
 
 def verify_target_text(

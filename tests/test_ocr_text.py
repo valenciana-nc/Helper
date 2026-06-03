@@ -12,6 +12,7 @@ from ocr_text import (
     OCR_TEXT_MISMATCH_REASON,
     OcrTextResult,
     WindowsOcrTextProvider,
+    expected_text_evidence_for_target,
     expected_text_for_target,
     verify_target_text,
     _screen_rect_to_image_box,
@@ -217,6 +218,57 @@ class OcrTextTests(unittest.TestCase):
         ]
 
         self.assertEqual(expected_text_for_target(target, candidates), "Save changes")
+
+    def test_expected_text_uses_nearby_label_for_state_only_checkbox_text(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 48, 24),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Checked",
+            target_id="terms",
+        )
+        candidates = [
+            ControlCandidate("terms", "Checked", "checkbox", (20, 20, 48, 24)),
+            ControlCandidate("terms_label", "Terms", "text", (72, 20, 80, 24)),
+        ]
+
+        self.assertEqual(expected_text_for_target(target, candidates), "Terms")
+        evidence = expected_text_evidence_for_target(target, candidates)
+        self.assertEqual(evidence.text, "Terms")
+        self.assertEqual(evidence.rect, (20, 20, 132, 24))
+
+    def test_expected_text_uses_nearby_label_for_empty_radio_text(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 48, 24),
+            confidence=0.9,
+            source="target_id",
+            matched_text="",
+            target_id="weekly",
+        )
+        candidates = [
+            ControlCandidate("weekly", "", "radiobutton", (20, 20, 48, 24)),
+            ControlCandidate("weekly_label", "Weekly", "text", (72, 20, 80, 24)),
+        ]
+
+        self.assertEqual(expected_text_for_target(target, candidates), "Weekly")
+        evidence = expected_text_evidence_for_target(target, candidates)
+        self.assertEqual(evidence.text, "Weekly")
+        self.assertEqual(evidence.rect, (20, 20, 132, 24))
+
+    def test_expected_text_keeps_meaningful_checkbox_text(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 160, 32),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Remember me",
+            target_id="remember",
+        )
+        candidates = [
+            ControlCandidate("remember", "Remember me", "checkbox", (20, 20, 160, 32)),
+            ControlCandidate("nearby", "Other", "text", (184, 20, 80, 24)),
+        ]
+
+        self.assertEqual(expected_text_for_target(target, candidates), "Remember me")
 
     def test_crop_mapping_respects_monitor_offset_and_scale(self) -> None:
         capture = _capture(width=100, height=80, monitor_left=-100, monitor_top=50, scale=0.5)

@@ -19,7 +19,7 @@ from help_session import (
     resolve_help_target,
     target_control_type_for_resolution,
 )
-from ocr_text import OcrTextResult, expected_text_for_target, verify_target_text
+from ocr_text import OcrTextResult, expected_text_evidence_for_target, verify_target_text
 from rect_snap import SnapResult
 from screen import Capture
 from target_quality import TargetQuality, evaluate_target_quality
@@ -22853,6 +22853,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_checkbox_state_text_uses_nearby_label",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 48, 24], "label": "Checked"},
+                {"rect": [172, 96, 80, 24], "label": "Terms"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Terms checkbox.",
+                "target_id": "terms",
+                "target": {"x": 120, "y": 96, "width": 48, "height": 24},
+            },
+            "candidates": [
+                {"id": "terms", "text": "Checked", "control_type": "checkbox", "rect": [120, 96, 48, 24]},
+                {"id": "terms_label", "text": "Terms", "control_type": "text", "rect": [172, 96, 80, 24]},
+            ],
+            "ocr_result": {"text": "Terms"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "terms",
+                "rect": [120, 96, 48, 24],
+                "ocr_expected_text": "Terms",
+                "ocr_recognized_text": "Terms",
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "current_value_radio_accepts_nearby_label_evidence",
             "capture": {"width": 1000, "height": 500},
             "draw": [
@@ -22873,6 +22900,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "weekly",
                 "rect": [120, 96, 24, 24],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_radio_state_text_uses_nearby_label",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 48, 24], "label": "Selected"},
+                {"rect": [172, 96, 80, 24], "label": "Weekly"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select the Weekly radio.",
+                "target_id": "weekly",
+                "target": {"x": 120, "y": 96, "width": 48, "height": 24},
+            },
+            "candidates": [
+                {"id": "weekly", "text": "Selected", "control_type": "radiobutton", "rect": [120, 96, 48, 24]},
+                {"id": "weekly_label", "text": "Weekly", "control_type": "text", "rect": [172, 96, 80, 24]},
+            ],
+            "ocr_result": {"text": "Weekly"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "weekly",
+                "rect": [120, 96, 48, 24],
+                "ocr_expected_text": "Weekly",
+                "ocr_recognized_text": "Weekly",
                 "overlay_emitted": True,
             },
         },
@@ -23292,10 +23346,11 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
             if not rejected_reason:
                 ocr_provider = _ocr_provider_for_scenario(scenario)
                 if ocr_provider is not None:
+                    ocr_evidence = expected_text_evidence_for_target(display_target, candidates)
                     ocr_verification = verify_target_text(
                         capture=capture,
-                        rect=display_target.rect,
-                        expected_text=expected_text_for_target(display_target, candidates),
+                        rect=ocr_evidence.rect or display_target.rect,
+                        expected_text=ocr_evidence.text,
                         control_type=target_control_type,
                         provider=ocr_provider,
                     )

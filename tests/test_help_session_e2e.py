@@ -44,6 +44,31 @@ def _button_capture(button_rect: tuple[int, int, int, int] = (40, 50, 120, 32)) 
     )
 
 
+def _checkbox_capture(
+    checkbox_rect: tuple[int, int, int, int] = (40, 50, 24, 24),
+    label: str = "Terms",
+) -> Capture:
+    image = Image.new("RGB", (240, 160), color=(244, 246, 249))
+    draw = ImageDraw.Draw(image)
+    x, y, width, height = checkbox_rect
+    box_size = min(20, height)
+    box_y = y + (height - box_size) // 2
+    draw.rectangle((x, box_y, x + box_size, box_y + box_size), fill=(255, 255, 255), outline=(18, 48, 130), width=2)
+    draw.line((x + 4, box_y + 10, x + 8, box_y + 15), fill=(45, 100, 190), width=2)
+    draw.line((x + 8, box_y + 15, x + 16, box_y + 5), fill=(45, 100, 190), width=2)
+    draw.text((x + width + 4, y + 4), label, fill=(18, 24, 38))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return Capture(
+        png_bytes=buffer.getvalue(),
+        width=image.width,
+        height=image.height,
+        monitor_left=0,
+        monitor_top=0,
+        scale=1.0,
+    )
+
+
 def _dialog_ok_capture(
     title: str,
     body: str,
@@ -518,6 +543,100 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "ocr text mismatch")
         self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Save changes")
         self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Cancel")
+
+    def test_help_session_ocr_uses_state_label_evidence_rect_without_moving_overlay(self) -> None:
+        app = _qt_app()
+        capture = _checkbox_capture()
+        checkbox = ControlCandidate(
+            id="terms",
+            text="Checked",
+            control_type="checkbox",
+            rect=(40, 52, 21, 21),
+        )
+        label = ControlCandidate(
+            id="terms_label",
+            text="Terms",
+            control_type="text",
+            rect=(64, 52, 80, 21),
+        )
+        ocr_provider = _FakeOcrProvider(OcrTextResult(text="Terms", available=True))
+
+        class _TermsAgent(_ScriptedAgent):
+            def plan_next_step(
+                self,
+                history: Any,
+                *,
+                control_candidates: list[ControlCandidate] | None = None,
+                capture: Capture | None = None,
+            ) -> LiveHelpDecision:
+                self.calls.append(
+                    {
+                        "messages": [(msg.role, msg.text) for msg in history.conversation_messages()],
+                        "control_candidates": list(control_candidates or []),
+                        "capture": capture,
+                    }
+                )
+                if len(self.calls) == 1:
+                    return LiveHelpDecision(
+                        kind="step",
+                        instruction="Click the Terms checkbox.",
+                        expected_change="Terms is toggled.",
+                        target_id="terms",
+                        target_norm_x=167,
+                        target_norm_y=313,
+                        target_norm_width=200,
+                        target_norm_height=150,
+                    )
+                return LiveHelpDecision(kind="done", message="Done.")
+
+        session = HelpSession(
+            agent=_TermsAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [checkbox, label],
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+
+        session.highlight_show.connect(
+            lambda x, y, w, h, label_text: highlights.append((x, y, w, h, label_text))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        click_sent = False
+        try:
+            session.start("Help me accept the terms.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if highlights and not click_sent:
+                    x, y, width, height, _label = highlights[0]
+                    session.notify_user_click(x + width // 2, y + height // 2)
+                    click_sent = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Done."])
+        self.assertEqual(highlights, [(40, 52, 21, 21, "Click the Terms checkbox.")])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertEqual(ocr_provider.calls[0][1], (40, 52, 104, 21))
+        self.assertTrue(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["overlay"]["rect"], (40, 52, 21, 21))
+        self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Terms")
 
     def test_help_session_retries_transient_empty_candidate_snapshot(self) -> None:
         app = _qt_app()

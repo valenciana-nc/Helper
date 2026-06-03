@@ -37,7 +37,7 @@ from ocr_text import (
     OcrTextProvider,
     OcrTextVerification,
     default_ocr_text_provider,
-    expected_text_for_target,
+    expected_text_evidence_for_target,
     verify_target_text,
 )
 from rect_snap import SnapResult, snap_to_control
@@ -1839,10 +1839,11 @@ class HelpSession(QObject):
                 )
                 continue
             final_rect = display_target.rect
+            ocr_evidence = expected_text_evidence_for_target(display_target, candidates)
             ocr_verification = verify_target_text(
                 capture=capture,
-                rect=final_rect,
-                expected_text=expected_text_for_target(display_target, candidates),
+                rect=ocr_evidence.rect or final_rect,
+                expected_text=ocr_evidence.text,
                 control_type=target_control_type,
                 provider=self._ocr_text_provider,
             )
