@@ -165,6 +165,28 @@ CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENER
     }
 )
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
+WINDOW_TITLE_REVALIDATION_GENERIC_WORDS = frozenset(
+    {
+        "app",
+        "application",
+        "brave",
+        "browser",
+        "chrome",
+        "chromium",
+        "dialog",
+        "edge",
+        "firefox",
+        "foreground",
+        "google",
+        "microsoft",
+        "modal",
+        "page",
+        "popup",
+        "safari",
+        "tab",
+        "window",
+    }
+)
 GENERIC_ACTION_REVALIDATION_WORDS = (
     CONFIRM_ACTION_WORDS
     | CLEAR_CLOSE_WORDS
@@ -830,7 +852,7 @@ def _revalidated_row_window_context_changed(
         return False
     if current.control_type not in ROW_REVALIDATION_CONTROL_TYPES:
         return False
-    return previous.window_rank != current.window_rank
+    return _revalidation_window_context_changed(previous, current)
 
 
 def _model_only_revalidation_lacks_fresh_evidence(
@@ -885,7 +907,7 @@ def _revalidated_tabular_window_context_changed(
         return False
     if current.control_type not in TABULAR_REVALIDATION_CONTROL_TYPES:
         return False
-    return previous.window_rank != current.window_rank
+    return _revalidation_window_context_changed(previous, current)
 
 
 def _tabular_identity_tokens(text: str) -> set[str]:
@@ -1049,7 +1071,7 @@ def _revalidated_control_window_context_changed(
         return False
     if previous_type != current_type:
         return False
-    return previous.window_rank != current.window_rank
+    return _revalidation_window_context_changed(previous, current)
 
 
 def _control_identity_revalidation_tokens(
@@ -1173,7 +1195,42 @@ def _revalidated_action_window_context_changed(
         return False
     if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
         return False
-    return previous.window_rank != current.window_rank
+    return _revalidation_window_context_changed(previous, current)
+
+
+def _revalidation_window_context_changed(
+    previous: ControlCandidate,
+    current: ControlCandidate,
+) -> bool:
+    if previous.window_rank != current.window_rank:
+        return True
+    return _window_title_identity_changed(previous.window_title, current.window_title)
+
+
+def _window_title_identity_changed(previous_title: str, current_title: str) -> bool:
+    previous = (previous_title or "").strip()
+    current = (current_title or "").strip()
+    if not previous or not current:
+        return False
+    if previous.casefold() == current.casefold():
+        return False
+    previous_tokens = _window_title_identity_tokens(previous)
+    current_tokens = _window_title_identity_tokens(current)
+    if not previous_tokens or not current_tokens:
+        return False
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity < 0.5
+
+
+def _window_title_identity_tokens(title: str) -> set[str]:
+    parts = [part.strip() for part in re.split(r"\s+[-|:]\s+", title) if part.strip()]
+    if len(parts) > 1:
+        title = parts[0]
+    return (
+        _tokens_from_text(title)
+        | _tokenize_control(title)
+    ) - WINDOW_TITLE_REVALIDATION_GENERIC_WORDS
 
 
 def _contextless_generic_action_visual_context_changed(

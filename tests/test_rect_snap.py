@@ -10241,6 +10241,85 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_same_rank_window_title_identity_change(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        cases = (
+            ("Click Save.", "save", "Save", "button", (100, 100, 80, 32)),
+            ("Type into Email.", "email", "Email", "edit", (100, 100, 240, 32)),
+            ("Click this table cell.", "cell", "Alice", "cell", (100, 100, 120, 32)),
+            ("Click this row.", "row", "Alice row", "listitem", (100, 100, 360, 48)),
+        )
+
+        for instruction, target_id, text, control_type, rect in cases:
+            with self.subTest(control_type=control_type):
+                decision = self._decision(
+                    {
+                        "kind": "step",
+                        "instruction": instruction,
+                        "target_id": target_id,
+                        "target": {
+                            "x": rect[0],
+                            "y": rect[1],
+                            "width": rect[2],
+                            "height": rect[3],
+                        },
+                    }
+                )
+                previous_target = TargetResolution(
+                    rect=rect,
+                    confidence=1.0,
+                    source="target_id",
+                    matched_text=text,
+                    target_id=target_id,
+                )
+                current_target = TargetResolution(
+                    rect=rect,
+                    confidence=1.0,
+                    source="target_id",
+                    matched_text=text,
+                    target_id=target_id,
+                )
+
+                guarded = _guard_revalidated_target(
+                    decision=decision,
+                    capture=self._capture(),
+                    candidates=[
+                        ControlCandidate(
+                            target_id,
+                            text,
+                            control_type,
+                            rect,
+                            window_title="Invoices - Helper CRM",
+                            window_rank=0,
+                        ),
+                    ],
+                    previous_target=previous_target,
+                    previous_candidates=[
+                        ControlCandidate(
+                            target_id,
+                            text,
+                            control_type,
+                            rect,
+                            window_title="Orders - Helper CRM",
+                            window_rank=0,
+                        ),
+                    ],
+                    target=current_target,
+                    snapper=lambda rect, _instruction: SnapResult(
+                        rect=rect,
+                        confidence=0.0,
+                        source="model",
+                    ),
+                )
+
+                self.assertEqual(
+                    guarded.rejected_reason,
+                    "current screen recheck target changed",
+                )
+
     def test_model_rect_snaps_to_candidate_snapshot_without_fresh_uia(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -31833,6 +31912,65 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.target_id, "billing_email")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_repeated_dropdown_label_uses_spatial_section_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("shipping_header", "Shipping", "text", (20, 30, 120, 24)),
+            ControlCandidate("ship_country_label", "Country", "text", (20, 82, 80, 24)),
+            ControlCandidate("ship_country", "United States", "combobox", (120, 76, 260, 36)),
+            ControlCandidate("billing_header", "Billing", "text", (20, 150, 120, 24)),
+            ControlCandidate("bill_country_label", "Country", "text", (20, 202, 80, 24)),
+            ControlCandidate("bill_country", "Canada", "combobox", (120, 196, 260, 36)),
+        ]
+
+        for preposition in ("under", "below", "beneath"):
+            instruction = f"Open Country dropdown {preposition} Billing."
+            with self.subTest(preposition=preposition):
+                wrong_target = resolve_candidate_target(
+                    target_id="ship_country",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "ship_country",
+                            "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "bill_country")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "bill_country")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (120, 196, 260, 36))
 
     def test_repeated_field_label_uses_structural_section_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

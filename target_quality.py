@@ -64,6 +64,9 @@ CANDIDATE_BOUNDARY_ALIGNMENT_CONTROL_TYPES = frozenset(
         "tabitem",
     }
 )
+CANDIDATE_LEAF_ACTION_CONTROL_TYPES = frozenset(
+    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+)
 MAX_TARGET_AREA_FRACTION = 0.25
 CANDIDATE_COMPOUND_ACTION_WORDS = frozenset(
     {
@@ -297,6 +300,22 @@ def evaluate_target_quality(
             boundary_activity=boundary_activity,
             target_area_fraction=target_area_fraction,
         )
+    if (
+        source != "model"
+        and _candidate_leaf_action_target(target_control_type, image_rect)
+        and (
+            _has_compound_control_vertical_separators(capture.png_bytes, clipped)
+            or _has_segmented_control_separator(capture.png_bytes, clipped)
+        )
+    ):
+        return TargetQuality(
+            accepted=False,
+            reason="target appears to contain multiple controls",
+            visible_fraction=visible_fraction,
+            visual_activity=visual_activity,
+            boundary_activity=boundary_activity,
+            target_area_fraction=target_area_fraction,
+        )
     if source == "model":
         if visual_activity < MODEL_EMPTY_VISUAL_FLOOR:
             return TargetQuality(
@@ -371,6 +390,15 @@ def _candidate_action_container_target(
     rect: tuple[int, int, int, int],
 ) -> bool:
     if target_control_type.lower() not in CANDIDATE_ACTION_CONTAINER_CONTROL_TYPES:
+        return False
+    return _candidate_compound_rect_large_enough(rect)
+
+
+def _candidate_leaf_action_target(
+    target_control_type: str,
+    rect: tuple[int, int, int, int],
+) -> bool:
+    if target_control_type.lower() not in CANDIDATE_LEAF_ACTION_CONTROL_TYPES:
         return False
     return _candidate_compound_rect_large_enough(rect)
 

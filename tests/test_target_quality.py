@@ -252,6 +252,29 @@ class TargetQualityTests(unittest.TestCase):
         self.assertFalse(quality.accepted)
         self.assertEqual(quality.reason, "target appears to contain multiple controls")
 
+    def test_rejects_candidate_button_rect_spanning_two_buttons_for_click_instruction(self) -> None:
+        from target_quality import evaluate_target_quality
+
+        img = Image.new("RGB", (360, 160), "white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((60, 74, 140, 106), outline="black", fill="#f3f4f6")
+        draw.text((78, 84), "Settings", fill="black")
+        draw.rectangle((160, 74, 240, 106), outline="black", fill="#f3f4f6")
+        draw.text((180, 84), "Profile", fill="black")
+        capture = _capture_with_image(img)
+
+        quality = evaluate_target_quality(
+            capture=capture,
+            rect=(60, 74, 180, 32),
+            source="target_id",
+            confidence=1.0,
+            instruction="Click Settings.",
+            target_control_type="button",
+        )
+
+        self.assertFalse(quality.accepted)
+        self.assertEqual(quality.reason, "target appears to contain multiple controls")
+
     def test_accepts_candidate_icon_label_button_with_internal_edges(self) -> None:
         from target_quality import evaluate_target_quality
 

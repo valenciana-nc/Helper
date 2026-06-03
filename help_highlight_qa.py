@@ -1258,6 +1258,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "candidate_button_spanning_two_buttons_for_click_rejects_overlay",
+            "capture": {"width": 360, "height": 160},
+            "draw": [
+                {"rect": [60, 74, 80, 32], "label": "Settings"},
+                {"rect": [160, 74, 80, 32], "label": "Profile"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Settings.",
+                "target_id": "settings",
+                "target": {"x": 60, "y": 74, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "settings",
+                    "text": "Settings",
+                    "control_type": "button",
+                    "rect": [60, 74, 180, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "quality_reason": "target appears to contain multiple controls",
+                "rejected_reason": "target appears to contain multiple controls",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "candidate_checkbox_label_only_rect_rejects_overlay",
             "capture": {"width": 260, "height": 160},
             "draw": [
@@ -21595,6 +21623,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "email",
                 "rect": [40, 80, 220, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_dropdown_label_under_section_recovers_context",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"kind": "text", "rect": [20, 30, 120, 24], "label": "Shipping"},
+                {"kind": "text", "rect": [20, 82, 80, 24], "label": "Country"},
+                {"rect": [120, 76, 260, 36], "label": "United States"},
+                {"kind": "text", "rect": [20, 150, 120, 24], "label": "Billing"},
+                {"kind": "text", "rect": [20, 202, 80, 24], "label": "Country"},
+                {"rect": [120, 196, 260, 36], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Country dropdown under Billing.",
+                "target_id": "ship_country",
+                "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "shipping_header", "text": "Shipping", "control_type": "text", "rect": [20, 30, 120, 24]},
+                {"id": "ship_country_label", "text": "Country", "control_type": "text", "rect": [20, 82, 80, 24]},
+                {"id": "ship_country", "text": "United States", "control_type": "combobox", "rect": [120, 76, 260, 36]},
+                {"id": "billing_header", "text": "Billing", "control_type": "text", "rect": [20, 150, 120, 24]},
+                {"id": "bill_country_label", "text": "Country", "control_type": "text", "rect": [20, 202, 80, 24]},
+                {"id": "bill_country", "text": "Canada", "control_type": "combobox", "rect": [120, 196, 260, 36]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "bill_country",
+                "rect": [120, 196, 260, 36],
                 "overlay_emitted": True,
             },
         },

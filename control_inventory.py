@@ -6261,6 +6261,8 @@ def _named_control_requested_literal_context_tokens(
     context_tokens -= {
         "a",
         "an",
+        "below",
+        "beneath",
         "for",
         "from",
         "in",
@@ -6270,6 +6272,8 @@ def _named_control_requested_literal_context_tokens(
         "on",
         "the",
         "to",
+        "under",
+        "underneath",
         "within",
     }
     return context_tokens
@@ -6293,6 +6297,8 @@ def _named_control_requested_context_tokens(
     context_tokens -= {
         "a",
         "an",
+        "below",
+        "beneath",
         "for",
         "from",
         "in",
@@ -6302,6 +6308,8 @@ def _named_control_requested_context_tokens(
         "on",
         "the",
         "to",
+        "under",
+        "underneath",
         "within",
         "with",
     }
