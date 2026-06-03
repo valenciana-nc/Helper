@@ -191,6 +191,7 @@ CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENER
 )
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
 CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane"})
+CONTROL_CONTEXT_ROW_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 WINDOW_TITLE_REVALIDATION_GENERIC_WORDS = frozenset(
     {
         "app",
@@ -1208,6 +1209,7 @@ def _control_context_revalidation_tokens(
     if best is not None:
         tokens.update(_control_label_context_tokens(best[1]))
     tokens.update(_control_section_context_revalidation_tokens(target, candidates))
+    tokens.update(_control_tabular_context_revalidation_tokens(target, candidates))
     return tokens
 
 
@@ -1235,6 +1237,76 @@ def _control_section_context_revalidation_tokens(
             best_area = area
             best_tokens = tokens
     return best_tokens
+
+
+def _control_tabular_context_revalidation_tokens(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens: set[str] = set()
+    row = _control_containing_row_context(target, candidates)
+    if row is not None:
+        tokens.update(_control_label_context_tokens(row))
+    header = _control_aligned_header_context(target, candidates)
+    if header is not None:
+        tokens.update(_control_label_context_tokens(header))
+    return tokens
+
+
+def _control_containing_row_context(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> ControlCandidate | None:
+    target_area = max(1, target.rect[2] * target.rect[3])
+    best: tuple[int, ControlCandidate] | None = None
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type.lower() not in CONTROL_CONTEXT_ROW_TYPES:
+            continue
+        if not _rect_contains(_expand_rect(candidate.rect, 3), target.rect):
+            continue
+        area = max(1, candidate.rect[2] * candidate.rect[3])
+        if area <= target_area:
+            continue
+        if best is None or area < best[0]:
+            best = (area, candidate)
+    return best[1] if best is not None else None
+
+
+def _control_aligned_header_context(
+    target: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> ControlCandidate | None:
+    target_x, target_y, target_width, target_height = target.rect
+    if min(target_width, target_height) <= 0:
+        return None
+    target_right = target_x + target_width
+    best: tuple[float, ControlCandidate] | None = None
+    for candidate in candidates:
+        if candidate.id == target.id:
+            continue
+        if candidate.control_type.lower() != "headeritem":
+            continue
+        header_x, header_y, header_width, header_height = candidate.rect
+        if min(header_width, header_height) <= 0:
+            continue
+        if header_y >= target_y:
+            continue
+        header_right = header_x + header_width
+        horizontal_overlap = min(target_right, header_right) - max(target_x, header_x)
+        if horizontal_overlap <= 0:
+            continue
+        overlap_fraction = horizontal_overlap / max(1, min(target_width, header_width))
+        if overlap_fraction < 0.45:
+            continue
+        vertical_gap = target_y - (header_y + header_height)
+        if vertical_gap > max(96, target_height * 4):
+            continue
+        score = overlap_fraction - min(0.4, vertical_gap / max(1.0, target_height * 8.0))
+        if best is None or score > best[0]:
+            best = (score, candidate)
+    return best[1] if best is not None else None
 
 
 def _control_label_context_tokens(candidate: ControlCandidate) -> set[str]:

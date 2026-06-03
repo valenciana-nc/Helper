@@ -1146,6 +1146,43 @@ class SnapToControlTests(unittest.TestCase):
         self.assertFalse(account_result.rejected_reason)
         self.assertEqual(account_result.rect, (100, 100, 100, 40))
 
+    def test_column_header_context_does_not_snap_toolbar_action(self) -> None:
+        from rect_snap import snap_to_control
+
+        name_header = _make_button("Name", 20, 40, 140, 30, control_type="HeaderItem")
+        grid_sort = _make_button("Sort", 20, 90, 80, 28)
+        toolbar = _make_button("Actions toolbar", 0, 200, 400, 60, control_type="ToolBar")
+        toolbar_sort = _make_button("Sort", 20, 214, 80, 28)
+        window = _make_window(
+            "App",
+            0,
+            0,
+            800,
+            600,
+            [name_header, grid_sort, toolbar, toolbar_sort],
+        )
+        desktop = _FakeDesktop([window])
+
+        wrong = snap_to_control(
+            (20, 214, 80, 28),
+            "Click Sort in the Name column.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        right = snap_to_control(
+            (20, 90, 80, 28),
+            "Click Sort in the Name column.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(wrong.source, "uia")
+        self.assertEqual(wrong.rect, (20, 214, 80, 28))
+        self.assertEqual(wrong.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(right.source, "uia")
+        self.assertEqual(right.rect, (20, 90, 80, 28))
+        self.assertFalse(right.rejected_reason)
+
     def test_returns_model_rect_when_no_overlap(self) -> None:
         from rect_snap import snap_to_control
 
@@ -10335,6 +10372,56 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_tabular_control_row_context_swap(self) -> None:
+        from control_inventory import ControlCandidate, TargetResolution
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Open Status dropdown in the Acme row.",
+                "target_id": "status_combo",
+                "target": {"x": 260, "y": 106, "width": 120, "height": 30},
+            }
+        )
+        previous_target = TargetResolution(
+            rect=(260, 106, 120, 30),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Active",
+            target_id="status_combo",
+        )
+        current_target = TargetResolution(
+            rect=(260, 106, 120, 30),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Active",
+            target_id="status_combo",
+        )
+        previous_candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (260, 50, 120, 28)),
+            ControlCandidate("row", "Acme", "dataitem", (20, 100, 620, 42)),
+            ControlCandidate("status_combo", "Active", "combobox", (260, 106, 120, 30)),
+        ]
+        current_candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (260, 50, 120, 28)),
+            ControlCandidate("row", "Globex", "dataitem", (20, 100, 620, 42)),
+            ControlCandidate("status_combo", "Active", "combobox", (260, 106, 120, 30)),
+        ]
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
     def test_revalidation_rejects_high_overlap_control_label_context_swap(self) -> None:
         from control_inventory import ControlCandidate, TargetResolution
         from help_session import _guard_revalidated_target
@@ -11021,6 +11108,163 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(target.target_id, "c001")
                 self.assertFalse(target.rejected_reason)
                 self.assertEqual(target.rect, (120, 160, 120, 32))
+
+    def test_menu_path_delimiter_context_recovers_from_wrong_duplicate_leaf(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("file_menu", "File", "menu", (100, 100, 180, 160)),
+            ControlCandidate("profile_menu", "Profile", "menu", (320, 100, 180, 160)),
+            ControlCandidate("file_export", "Export", "menuitem", (110, 150, 160, 28)),
+            ControlCandidate("profile_export", "Export", "menuitem", (330, 150, 160, 28)),
+        ]
+        instruction = "Open File > Export."
+
+        wrong_target = resolve_candidate_target(
+            target_id="profile_export",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(330, 150, 160, 28),
+        )
+        right_target = resolve_candidate_target(
+            target_id="file_export",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(110, 150, 160, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(330, 150, 160, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(330, 150, 160, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "profile_export",
+                    "target": {"x": 330, "y": 150, "width": 160, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertFalse(right_target.rejected_reason)
+        self.assertEqual(text_target.target_id, "file_export")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "profile_export")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "file_export")
+        self.assertFalse(help_target.rejected_reason)
+
+    def test_menu_path_delimiter_uses_top_level_menuitem_parent_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("file_menu", "File", "menuitem", (10, 8, 48, 24)),
+            ControlCandidate("file_export", "Export", "menuitem", (10, 40, 180, 28)),
+            ControlCandidate("tools_menu", "Tools", "menuitem", (70, 8, 58, 24)),
+            ControlCandidate("tools_export", "Export", "menuitem", (70, 40, 180, 28)),
+        ]
+        instruction = "Open File > Export."
+
+        wrong_target = resolve_candidate_target(
+            target_id="tools_export",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(70, 40, 180, 28),
+        )
+        right_target = resolve_candidate_target(
+            target_id="file_export",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(10, 40, 180, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(70, 40, 180, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(70, 40, 180, 28),
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id semantic mismatch")
+        self.assertFalse(right_target.rejected_reason)
+        self.assertEqual(text_target.target_id, "file_export")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertEqual(snap_target.target_id, "file_export")
+        self.assertFalse(snap_target.rejected_reason)
+
+    def test_column_header_context_does_not_apply_to_toolbar_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("name_header", "Name", "headeritem", (20, 40, 140, 30)),
+            ControlCandidate("grid_sort", "Sort", "button", (20, 90, 80, 28)),
+            ControlCandidate("actions_toolbar", "Actions toolbar", "toolbar", (0, 200, 400, 60)),
+            ControlCandidate("toolbar_sort", "Sort", "button", (20, 214, 80, 28)),
+        ]
+        instruction = "Click Sort in the Name column."
+
+        wrong_target = resolve_candidate_target(
+            target_id="toolbar_sort",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 214, 80, 28),
+        )
+        right_target = resolve_candidate_target(
+            target_id="grid_sort",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 90, 80, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 214, 80, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 214, 80, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "toolbar_sort",
+                    "target": {"x": 20, "y": 214, "width": 80, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertFalse(right_target.rejected_reason)
+        self.assertEqual(text_target.target_id, "grid_sort")
+        self.assertFalse(text_target.rejected_reason)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "grid_sort")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_profile_menu_target_id_accepts_person_labels_and_icons(self) -> None:
         from control_inventory import ControlCandidate

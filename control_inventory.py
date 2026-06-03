@@ -3064,6 +3064,8 @@ def _text_match_score(
         return 0.0
     if _prepositional_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _delimited_action_context_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _delimited_context_only_target_alternative_mismatch(
         instruction,
         candidate,
@@ -3485,6 +3487,8 @@ def _context_text_match_score(
     ):
         return 0.0
     if _prepositional_action_context_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _delimited_action_context_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_action_context_mismatch_without_contextual_evidence(
         instruction,
@@ -4347,6 +4351,12 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _prepositional_action_context_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
+        )
+    if _delimited_action_context_mismatch(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -10339,6 +10349,47 @@ def _prepositional_action_context_mismatch(
     return bool(conflicting_context and not (context_tokens & conflicting_context))
 
 
+def _delimited_action_context_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in CLICKABLE_CONTROL_TYPES:
+        return False
+    target_tokens, context_tokens = _delimited_context_action_tokens(instruction)
+    if not target_tokens or not context_tokens:
+        return False
+    candidate_tokens = _object_token_variants(
+        _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+    )
+    if not (candidate_tokens & target_tokens):
+        return False
+    if _delimited_context_tokens_match_candidate(
+        context_tokens,
+        candidate,
+        candidates,
+    ):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in CLICKABLE_CONTROL_TYPES:
+            continue
+        other_tokens = _object_token_variants(
+            _candidate_semantic_tokens(other) | _tokens_from_text(other.descriptor)
+        )
+        if not (other_tokens & target_tokens):
+            continue
+        if _delimited_context_tokens_match_candidate(
+            context_tokens,
+            other,
+            candidates,
+        ):
+            return True
+    conflicting_context = _action_candidate_conflicting_context_tokens(candidate, candidates)
+    return bool(conflicting_context and not (context_tokens & conflicting_context))
+
+
 def _action_candidate_conflicting_context_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
@@ -10468,7 +10519,7 @@ def _delimited_context_target_match(
     if not (candidate_tokens & target_tokens):
         return False
     if context_tokens:
-        return _prepositional_context_tokens_match_candidate(
+        return _delimited_context_tokens_match_candidate(
             context_tokens,
             candidate,
             candidates,
@@ -10476,7 +10527,50 @@ def _delimited_context_target_match(
     return True
 
 
+def _delimited_context_tokens_match_candidate(
+    context_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if _prepositional_context_tokens_match_candidate(context_tokens, candidate, candidates):
+        return True
+    for context in candidates:
+        if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if context.control_type != "menuitem":
+            continue
+        context_tokens_for_candidate = _object_token_variants(
+            _candidate_semantic_tokens(context) | _tokens_from_text(context.descriptor)
+        )
+        if not (context_tokens_for_candidate & context_tokens):
+            continue
+        if _menu_path_parent_item_rect_matches(context, candidate):
+            return True
+    return False
+
+
+def _menu_path_parent_item_rect_matches(
+    parent: ControlCandidate,
+    child: ControlCandidate,
+) -> bool:
+    parent_x, parent_y, parent_width, parent_height = parent.rect
+    child_x, child_y, child_width, child_height = child.rect
+    parent_right = parent_x + parent_width
+    child_right = child_x + child_width
+    if child_y < parent_y + parent_height - 2:
+        return False
+    vertical_gap = child_y - (parent_y + parent_height)
+    if vertical_gap > max(72, parent_height * 3):
+        return False
+    horizontal_overlap = min(parent_right, child_right) - max(parent_x, child_x)
+    left_aligned = abs(parent_x - child_x) <= max(18, parent_width * 0.35)
+    return horizontal_overlap > 0 and left_aligned
+
+
 def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    path_tokens = _menu_path_context_action_tokens(instruction)
+    if path_tokens[0]:
+        return path_tokens
     parts = re.split(
         r"\s*[:\u2013\u2014]\s*|\s+-\s+|(?<=[A-Za-z0-9])-(?=[A-Z][A-Za-z0-9]*\s)",
         instruction or "",
@@ -10523,6 +10617,68 @@ def _delimited_context_action_tokens(instruction: str) -> tuple[set[str], set[st
     }
     context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
     return target_tokens, context_tokens
+
+
+def _menu_path_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    parts = re.split(
+        r"\s*(?:>|\u203a|\u00bb|\u2192)\s*|\s+/\s+",
+        instruction or "",
+    )
+    parts = [part for part in parts if part and part.strip()]
+    if len(parts) < 2:
+        return set(), set()
+    context_words: list[str] = []
+    for part in parts[:-1]:
+        words = _literal_word_sequence(part)
+        if not context_words:
+            words = _strip_leading_context_action_words(words)
+        while words and words[0] in {"a", "an", "the", "this", "that"}:
+            words.pop(0)
+        context_words.extend(words)
+    target_words = _literal_word_sequence(parts[-1])
+    target_words = _strip_leading_context_action_words(target_words)
+    while target_words and target_words[0] in {"a", "an", "the", "this", "that"}:
+        target_words.pop(0)
+    if not target_words or not context_words:
+        return set(), set()
+    target_action_tokens = set(target_words) & set().union(*EXCLUSIVE_ACTION_FAMILIES)
+    target_tokens = _object_token_variants(set(target_words)) - (
+        CONTAINED_CONTROL_REQUEST_WORDS
+        | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
+        | CONTEXTUAL_DUPLICATE_STOPWORDS
+    )
+    target_tokens |= _object_token_variants(target_action_tokens)
+    context_tokens = _object_token_variants(set(context_words)) - {
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+    }
+    context_tokens -= CONTAINED_CONTROL_REQUEST_WORDS
+    return target_tokens, context_tokens
+
+
+def _strip_leading_context_action_words(words: list[str]) -> list[str]:
+    out = list(words)
+    while len(out) > 1 and out[0] in {
+        "activate",
+        "choose",
+        "click",
+        "enter",
+        "fill",
+        "focus",
+        "hit",
+        "input",
+        "open",
+        "press",
+        "select",
+        "tap",
+        "type",
+        "use",
+    }:
+        out.pop(0)
+    return out
 
 
 def _prepositional_context_action_tokens(instruction: str) -> tuple[set[str], set[str]]:
@@ -11032,6 +11188,8 @@ def _contextual_duplicate_aligned_header_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
+    if _contained_by_header_exclusion_surface(candidate, candidates):
+        return set()
     cx, _cy = _center(candidate.rect)
     tokens: set[str] = set()
     for header in candidates:
@@ -11046,6 +11204,20 @@ def _contextual_duplicate_aligned_header_tokens(
         tokens.update(_tokens_from_text(header.descriptor))
         tokens.update(_surface_context_type_tokens(header.control_type))
     return tokens
+
+
+def _contained_by_header_exclusion_surface(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    for surface in candidates:
+        if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
+            continue
+        if surface.control_type not in {"menu", "toolbar"}:
+            continue
+        if _contains_rect(_expand_rect(surface.rect, 3), candidate.rect):
+            return True
+    return False
 
 
 def _contextual_duplicate_nearby_label_tokens(
@@ -13247,6 +13419,8 @@ def _candidate_snap_score(
         return 0.0
     if _prepositional_action_context_mismatch(instruction, candidate, candidates):
         return min(0.41, 0.45 * iou + 0.30 * proximity)
+    if _delimited_action_context_mismatch(instruction, candidate, candidates):
+        return min(0.41, 0.45 * iou + 0.30 * proximity)
     if _delimited_context_only_target_alternative_mismatch(
         instruction,
         candidate,
@@ -14801,6 +14975,8 @@ def _candidate_snap_semantic_mismatch(
     ):
         return True
     if _prepositional_action_context_mismatch(instruction, candidate, candidates):
+        return True
+    if _delimited_action_context_mismatch(instruction, candidate, candidates):
         return True
     if _delimited_context_only_target_alternative_mismatch(
         instruction,

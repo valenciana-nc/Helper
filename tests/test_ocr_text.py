@@ -9,6 +9,7 @@ from PIL import Image
 from control_inventory import ControlCandidate, TargetResolution
 from ocr_text import (
     OCR_EXTRA_TEXT_REASON,
+    OCR_MISSING_TEXT_REASON,
     OCR_PARTIAL_TEXT_REASON,
     OCR_TEXT_MISMATCH_REASON,
     OcrTextResult,
@@ -232,7 +233,7 @@ class OcrTextTests(unittest.TestCase):
         self.assertFalse(mismatching.accepted)
         self.assertEqual(mismatching.reason, OCR_TEXT_MISMATCH_REASON)
 
-    def test_unavailable_or_blank_ocr_is_inconclusive(self) -> None:
+    def test_unavailable_ocr_is_inconclusive_but_available_blank_ocr_rejects(self) -> None:
         unavailable = verify_target_text(
             capture=_capture(),
             rect=(20, 20, 120, 32),
@@ -251,7 +252,8 @@ class OcrTextTests(unittest.TestCase):
         self.assertTrue(unavailable.accepted)
         self.assertFalse(unavailable.available)
         self.assertEqual(unavailable.error, "No OCR")
-        self.assertTrue(blank.accepted)
+        self.assertFalse(blank.accepted)
+        self.assertEqual(blank.reason, OCR_MISSING_TEXT_REASON)
 
     def test_skips_small_checkbox_external_label_targets(self) -> None:
         provider = _Provider(OcrTextResult(text="Cancel", available=True))

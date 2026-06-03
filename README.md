@@ -83,7 +83,11 @@ split between visible text and automation ID, treats mixed cell/datagrid/grid
 cell subtypes as duplicate table-cell peers, rejects raw snaps that only match
 generic settings words while missing the requested settings area, reruns OCR on
 the final fresh capture, and treats weak container-only dialog/window context
-as contextless for generic action revalidation.
+as contextless for generic action revalidation. Newer v4 hardening refuses
+available-but-blank OCR for text-bearing targets, parses menu paths such as
+`File > Export` as parent context plus leaf target, includes row and header
+context during stale field revalidation, and prevents toolbar/menu actions from
+borrowing unrelated column-header context by x-alignment alone.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

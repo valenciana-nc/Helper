@@ -19,6 +19,7 @@ from screen import Capture
 OCR_TEXT_MISMATCH_REASON = "ocr text mismatch"
 OCR_PARTIAL_TEXT_REASON = "ocr partial text match"
 OCR_EXTRA_TEXT_REASON = "ocr extra text mismatch"
+OCR_MISSING_TEXT_REASON = "ocr text missing"
 OCR_GENERIC_WORDS = frozenset(
     {
         "a",
@@ -520,7 +521,8 @@ def verify_target_text(
     )
     if not recognized_tokens:
         return OcrTextVerification(
-            accepted=True,
+            accepted=False,
+            reason=OCR_MISSING_TEXT_REASON,
             expected_text=expected,
             recognized_text=recognized,
             available=True,

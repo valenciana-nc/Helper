@@ -85,11 +85,17 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
         "banner",
         "bar",
         "card",
+        "column",
+        "columns",
         "dialog",
         "dialogs",
         "drawer",
         "grid",
         "grids",
+        "header",
+        "headers",
+        "heading",
+        "headings",
         "list",
         "lists",
         "menu",
@@ -110,12 +116,13 @@ CLOSE_CONTEXT_TARGET_WORDS = frozenset(
     }
 )
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
-    {"datagrid", "grid", "group", "list", "menu", "pane", "table", "toolbar", "window"}
+    {"datagrid", "grid", "group", "headeritem", "list", "menu", "pane", "table", "toolbar", "window"}
 )
 SURFACE_CONTEXT_TYPE_WORDS = {
     "datagrid": frozenset({"grid", "table"}),
     "grid": frozenset({"grid", "table"}),
     "group": frozenset({"group"}),
+    "headeritem": frozenset({"column", "header", "heading"}),
     "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),
     "pane": frozenset({"pane"}),
@@ -3421,7 +3428,12 @@ def _surface_scoped_action_match(
     )
     required_identity = requested_context - CLOSE_CONTEXT_TARGET_WORDS
     for context_rect, context_text, context_type in surface_contexts:
-        if not _contains_rect(_expand_rect(context_rect, 4), rect):
+        if context_type == "headeritem":
+            if _rect_inside_surface_context_type(rect, surface_contexts, {"menu", "toolbar"}):
+                continue
+            if not _header_surface_context_rect_matches(context_rect, rect):
+                continue
+        elif not _contains_rect(_expand_rect(context_rect, 4), rect):
             continue
         context_tokens = _object_token_variants(
             _tokenize_control(_semantic_text(context_text))
@@ -3435,6 +3447,40 @@ def _surface_scoped_action_match(
             continue
         return True
     return False
+
+
+def _rect_inside_surface_context_type(
+    rect: tuple[int, int, int, int],
+    surface_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    context_types: set[str],
+) -> bool:
+    return any(
+        context_type in context_types
+        and _contains_rect(_expand_rect(context_rect, 3), rect)
+        for context_rect, _context_text, context_type in surface_contexts
+    )
+
+
+def _header_surface_context_rect_matches(
+    header_rect: tuple[int, int, int, int],
+    rect: tuple[int, int, int, int],
+) -> bool:
+    header_x, header_y, header_width, header_height = header_rect
+    x, y, width, height = rect
+    if min(header_width, header_height, width, height) <= 0:
+        return False
+    if header_y >= y:
+        return False
+    header_right = header_x + header_width
+    right = x + width
+    horizontal_overlap = min(header_right, right) - max(header_x, x)
+    if horizontal_overlap <= 0:
+        return False
+    overlap_fraction = horizontal_overlap / max(1, min(header_width, width))
+    if overlap_fraction < 0.45:
+        return False
+    vertical_gap = y - (header_y + header_height)
+    return vertical_gap <= max(120, height * 5)
 
 
 def _surface_context_action_mismatch(

@@ -203,6 +203,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_available_blank_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 120, 32], "label": "Save changes"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 120, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save changes", "control_type": "button", "rect": [80, 80, 120, 32]},
+            ],
+            "ocr_result": {"text": ""},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr text missing",
+                "ocr_recognized_text": "",
+                "rejected_reason": "ocr text missing",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_numeric_table_cell_shared_suffix_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -15657,6 +15682,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "menu_path_delimiter_recovers_from_wrong_duplicate_leaf",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [10, 8, 48, 24], "label": "File"},
+                {"rect": [10, 40, 180, 28], "label": "Export"},
+                {"rect": [260, 8, 58, 24], "label": "Tools"},
+                {"rect": [260, 40, 180, 28], "label": "Export"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open File > Export.",
+                "target_id": "tools_export",
+                "target": {"x": 260, "y": 40, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "file_menu", "text": "File", "control_type": "menuitem", "rect": [10, 8, 48, 24]},
+                {"id": "file_export", "text": "Export", "control_type": "menuitem", "rect": [10, 40, 180, 28]},
+                {"id": "tools_menu", "text": "Tools", "control_type": "menuitem", "rect": [260, 8, 58, 24]},
+                {"id": "tools_export", "text": "Export", "control_type": "menuitem", "rect": [260, 40, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "file_export",
+                "rect": [10, 40, 180, 28],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "menu_launcher_model_rect_highlights_button",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -15674,6 +15727,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "c001",
                 "rect": [20, 80, 120, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "column_header_context_does_not_apply_to_toolbar_action",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 40, 140, 30], "label": "Name"},
+                {"rect": [20, 90, 80, 28], "label": "Sort"},
+                {"rect": [0, 200, 400, 60], "label": "Actions toolbar"},
+                {"rect": [20, 214, 80, 28], "label": "Sort"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Sort in the Name column.",
+                "target_id": "toolbar_sort",
+                "target": {"x": 20, "y": 214, "width": 80, "height": 28},
+            },
+            "candidates": [
+                {"id": "name_header", "text": "Name", "control_type": "headeritem", "rect": [20, 40, 140, 30]},
+                {"id": "grid_sort", "text": "Sort", "control_type": "button", "rect": [20, 90, 80, 28]},
+                {"id": "actions_toolbar", "text": "Actions toolbar", "control_type": "toolbar", "rect": [0, 200, 400, 60]},
+                {"id": "toolbar_sort", "text": "Sort", "control_type": "button", "rect": [20, 214, 80, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "grid_sort",
+                "rect": [20, 90, 80, 28],
                 "overlay_emitted": True,
             },
         },

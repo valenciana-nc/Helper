@@ -578,6 +578,65 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Save changes")
         self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Cancel")
 
+    def test_help_session_available_blank_ocr_downgrades_before_highlight(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        candidate = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        ocr_provider = _FakeOcrProvider(OcrTextResult(text="", available=True))
+        session = HelpSession(
+            agent=_ScriptedAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [candidate],
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "ocr text missing")
+        self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Save changes")
+        self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "")
+
     def test_help_session_ocr_uses_state_label_evidence_rect_without_moving_overlay(self) -> None:
         app = _qt_app()
         capture = _checkbox_capture()
