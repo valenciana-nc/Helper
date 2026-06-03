@@ -32021,6 +32021,28 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "candidate_snap")
         self.assertEqual(target.rejected_reason, "candidate snapshot no match")
 
+    def test_generic_table_cell_broad_row_rejects_single_partial_inventory_cell(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this table cell.",
+                    "target": {"x": 20, "y": 100, "width": 620, "height": 42},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("row1", "Acme row", "dataitem", (20, 100, 620, 42)),
+                ControlCandidate("status1", "Active", "cell", (260, 112, 120, 30)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
     def test_generic_column_header_model_rect_highlights_header(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -32061,6 +32083,48 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 ControlCandidate("c001", "Name", "headeritem", (20, 50, 120, 28)),
                 ControlCandidate("c002", "Status", "headeritem", (140, 50, 120, 28)),
                 ControlCandidate("c003", "Owner", "headeritem", (260, 50, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_generic_column_header_broad_row_rejects_single_partial_inventory_header(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this column header.",
+                    "target": {"x": 20, "y": 50, "width": 360, "height": 28},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c002", "Status", "headeritem", (140, 50, 120, 28)),
+            ],
+        )
+
+        self.assertEqual(target.source, "candidate_snap")
+        self.assertEqual(target.rejected_reason, "candidate snapshot no match")
+
+    def test_table_row_broad_group_rejects_single_partial_inventory_listitem(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import resolve_help_target
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click this table row.",
+                    "target": {"x": 10, "y": 10, "width": 240, "height": 112},
+                }
+            ),
+            self._capture(),
+            [
+                ControlCandidate("c002", "Order 2", "listitem", (10, 50, 240, 32)),
             ],
         )
 
@@ -33958,6 +34022,68 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(help_target.target_id, "bill_country")
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (120, 196, 260, 36))
+
+    def test_repeated_current_value_dropdown_without_context_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("ship_country_label", "Country", "text", (20, 82, 80, 24)),
+            ControlCandidate("ship_country", "United States", "combobox", (120, 76, 260, 36)),
+            ControlCandidate("bill_country_label", "Country", "text", (20, 202, 80, 24)),
+            ControlCandidate("bill_country", "Canada", "combobox", (120, 196, 260, 36)),
+        ]
+        instruction = "Open Country dropdown."
+
+        ship_target = resolve_candidate_target(
+            target_id="ship_country",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        bill_target = resolve_candidate_target(
+            target_id="bill_country",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 196, 260, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 76, 260, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "ship_country",
+                    "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for target in (ship_target, bill_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.source, "target_id")
+            self.assertEqual(target.rejected_reason, "target_id ambiguous")
+        self.assertIsNotNone(text_target)
+        assert text_target is not None
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
     def test_named_field_rejects_when_requested_context_disappears(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

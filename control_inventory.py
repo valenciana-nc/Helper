@@ -1512,6 +1512,41 @@ NEARBY_LABELLED_CONTROL_TYPES = LABELLED_FIELD_CONTROL_TYPES | LABELLED_STATE_CO
 OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
+GENERIC_ROLE_ONLY_SNAP_CONTROL_TYPES = CELL_CONTROL_TYPES | ROW_CONTEXT_CONTROL_TYPES | frozenset(
+    {"headeritem"}
+)
+GENERIC_ROLE_ONLY_SNAP_WORDS = frozenset(
+    {
+        "cell",
+        "cells",
+        "column",
+        "columns",
+        "current",
+        "data",
+        "datagrid",
+        "datagridcell",
+        "grid",
+        "gridcell",
+        "header",
+        "headers",
+        "heading",
+        "headings",
+        "item",
+        "items",
+        "list",
+        "record",
+        "records",
+        "row",
+        "rows",
+        "table",
+        "thi",
+        "that",
+        "this",
+        "tree",
+        "value",
+        "values",
+    }
+)
 SURFACE_CONTEXT_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
 COMPOUND_SURFACE_CONTROL_TYPES = SURFACE_CONTEXT_CONTROL_TYPES | frozenset(
     {"datagrid", "grid", "table"}
@@ -2305,6 +2340,15 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            if _generic_role_only_broad_candidate_snap_mismatch(
+                instruction,
+                instruction_tokens,
+                contained,
+                candidates,
+                control_intents,
+                model_rect,
+            ):
+                return None
             if _contains_multiple_tight_row_action_candidates(
                 selected=contained,
                 candidates=candidates,
@@ -2365,6 +2409,7 @@ def snap_candidate_target(
     if (
         _neutral_same_label_state_option_ambiguous(instruction, candidate, candidates)
         or _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates)
+        or _duplicate_labelled_field_control_ambiguous(instruction, candidate, candidates)
         or (
             not _candidate_satisfies_positional_action_duplicate_request(
                 instruction,
@@ -2427,6 +2472,15 @@ def snap_candidate_target(
             control_intents=control_intents,
         )
         if contained is not None:
+            if _generic_role_only_broad_candidate_snap_mismatch(
+                instruction,
+                instruction_tokens,
+                contained,
+                candidates,
+                control_intents,
+                model_rect,
+            ):
+                return None
             if _contains_multiple_tight_row_action_candidates(
                 selected=contained,
                 candidates=candidates,
@@ -4693,6 +4747,8 @@ def _target_id_plausibility(
         candidates,
     ):
         return False, max(text_score, geometry_score), "target_id ambiguous"
+    if _duplicate_labelled_field_control_ambiguous(instruction, candidate, candidates):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if model_rect is not None and _same_label_duplicate_has_stronger_geometry(
         candidate,
         candidates,
@@ -6503,6 +6559,34 @@ def _named_control_label_context_mismatch(
         )
         for other in candidates
     )
+
+
+def _duplicate_labelled_field_control_ambiguous(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    requested_label, requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
+    if not requested_label or requested_context:
+        return False
+    candidate_evidence = _named_control_candidate_label_tokens(candidate, candidates)
+    if not (requested_label & candidate_evidence):
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        other_evidence = _named_control_candidate_label_tokens(other, candidates)
+        if requested_label & other_evidence:
+            return True
+    return False
 
 
 def _named_control_matches_label_context(
@@ -13639,6 +13723,15 @@ def _candidate_snap_score(
     text_score = _text_evidence_score(instruction_tokens, semantic_tokens)
     if candidate.control_type in NON_ACTIONABLE_CONTROL_TYPES:
         return 0.0
+    if _generic_role_only_broad_candidate_snap_mismatch(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+        model_rect,
+    ):
+        return 0.0
     if _exact_visible_label_order_mismatch(instruction, candidate):
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
@@ -14088,6 +14181,43 @@ def _candidate_snap_score(
     ):
         final_score = min(final_score, CONTAINING_ROW_SNAP_CAP)
     return min(1.0, final_score)
+
+
+def _generic_role_only_broad_candidate_snap_mismatch(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str],
+    model_rect: tuple[int, int, int, int],
+) -> bool:
+    if candidate.control_type not in GENERIC_ROLE_ONLY_SNAP_CONTROL_TYPES:
+        return False
+    if not _candidate_matches_control_intent(candidate, control_intents, instruction=instruction):
+        return False
+    raw_tokens = _object_token_variants(_tokens_from_text(instruction) | instruction_tokens)
+    identity_tokens = raw_tokens - GENERIC_OBJECT_REQUEST_WORDS - GENERIC_ROLE_ONLY_SNAP_WORDS - {
+        "a",
+        "an",
+        "select",
+        "selected",
+        "the",
+    }
+    if identity_tokens:
+        return False
+    if not _contains_rect(_expand_rect(model_rect, 2), candidate.rect):
+        return False
+    if _iou(candidate.rect, model_rect) >= 0.45:
+        return False
+    if _area_fit_score(candidate.rect, model_rect) >= 0.55:
+        return False
+    semantic_tokens = _candidate_semantic_tokens(candidate) | _named_control_candidate_label_tokens(
+        candidate,
+        candidates,
+    )
+    if _text_evidence_score(instruction_tokens, semantic_tokens) >= TARGET_ID_TEXT_FLOOR:
+        return False
+    return True
 
 
 def _contains_tighter_same_intent_action(

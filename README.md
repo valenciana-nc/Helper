@@ -105,7 +105,12 @@ same rectangle. The following pass tightens the same fail-safe policy for
 handleless UIA targets under same-root child overlays, repeated state controls
 with identical nearby labels but missing section context, explicit row+column
 cell requests whose correct cell value differs from the row label, and one-letter
-OCR crops that are too weak to prove the expected target text.
+OCR crops that are too weak to prove the expected target text. The newest pass
+also blocks final overlays when a newly appeared same-window popup/menu surface
+covers the target, rejects mixed text+numeric OCR crops such as `Quantity 4`
+recognized only as `4`, refuses broad role-only row/cell/header model rectangles
+that only partially expose one child candidate, and keeps duplicate current-value
+dropdowns ambiguous unless section or row context distinguishes them.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

@@ -355,6 +355,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_mixed_text_numeric_cell_digit_only_crop_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 90, 28], "label": "4"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Highlight the Quantity 4 cell.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 90, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Quantity 4", "control_type": "cell", "rect": [80, 80, 90, 28]},
+            ],
+            "ocr_result": {"text": "4"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr partial text match",
+                "ocr_expected_text": "Quantity 4",
+                "ocr_recognized_text": "4",
+                "rejected_reason": "ocr partial text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_generic_open_menuitem_mismatch_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -15462,6 +15488,28 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "generic_table_cell_broad_row_rejects_single_partial_inventory_cell",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [20, 100, 620, 42], "label": "Acme row"},
+                {"rect": [260, 112, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click this table cell.",
+                "target": {"x": 20, "y": 100, "width": 620, "height": 42},
+            },
+            "candidates": [
+                {"id": "row1", "text": "Acme row", "control_type": "dataitem", "rect": [20, 100, 620, 42]},
+                {"id": "status1", "text": "Active", "control_type": "cell", "rect": [260, 112, 120, 30]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "candidate snapshot no match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "copied_field_automation_id_uses_nearby_label_context",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -23795,6 +23843,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "bill_country",
                 "rect": [120, 196, 260, 36],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "repeated_current_value_dropdown_without_context_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 82, 80, 24], "label": "Country"},
+                {"rect": [120, 76, 260, 36], "label": "United States"},
+                {"rect": [20, 202, 80, 24], "label": "Country"},
+                {"rect": [120, 196, 260, 36], "label": "Canada"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Country dropdown.",
+                "target_id": "ship_country",
+                "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "ship_country_label", "text": "Country", "control_type": "text", "rect": [20, 82, 80, 24]},
+                {"id": "ship_country", "text": "United States", "control_type": "combobox", "rect": [120, 76, 260, 36]},
+                {"id": "bill_country_label", "text": "Country", "control_type": "text", "rect": [20, 202, 80, 24]},
+                {"id": "bill_country", "text": "Canada", "control_type": "combobox", "rect": [120, 196, 260, 36]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
             },
         },
         {

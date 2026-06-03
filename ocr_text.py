@@ -817,9 +817,15 @@ def _numeric_text_rejection_reason(
 def _numeric_text_matches(expected: str, recognized: str, control_type: str) -> bool:
     if (control_type or "").strip().lower() not in OCR_NUMERIC_STRICT_CONTROL_TYPES:
         return False
+    if _contains_alpha_text(expected) or _contains_alpha_text(recognized):
+        return False
     expected_digits = _compact_digits(expected)
     recognized_digits = _compact_digits(recognized)
     return bool(expected_digits and recognized_digits and expected_digits == recognized_digits)
+
+
+def _contains_alpha_text(text: str) -> bool:
+    return any(char.isalpha() for char in text or "")
 
 
 def _compact_digits(text: str) -> str:

@@ -819,6 +819,101 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         )
         self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Save changes")
 
+    def test_final_coverage_gate_rejects_same_rank_menuitem_covering_target(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(40, 50, 120, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save changes",
+            target_id="save",
+        )
+        candidates = [
+            ControlCandidate("save", "Save changes", "button", (40, 50, 120, 32), window_rank=0),
+            ControlCandidate("archive", "Archive", "menuitem", (35, 45, 132, 42), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(target, candidates),
+            "target covered before overlay",
+        )
+
+    def test_final_coverage_gate_allows_same_rank_parent_menu_for_selected_menuitem(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(40, 50, 120, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="save",
+        )
+        candidates = [
+            ControlCandidate("menu", "File menu", "menu", (20, 30, 180, 140), window_rank=0),
+            ControlCandidate("save", "Save", "menuitem", (40, 50, 120, 32), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
+    def test_final_coverage_gate_rejects_new_same_rank_popup_surface_covering_target(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="page_save",
+        )
+        previous_candidates = [
+            ControlCandidate("page_save", "Save", "button", (100, 100, 80, 32), window_rank=0),
+        ]
+        current_candidates = [
+            previous_candidates[0],
+            ControlCandidate("popup", "Settings popup", "window", (90, 90, 220, 150), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                current_candidates,
+                previous_candidates=previous_candidates,
+            ),
+            "target covered before overlay",
+        )
+
+    def test_final_coverage_gate_allows_existing_same_rank_popup_parent(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(120, 110, 60, 28),
+            confidence=1.0,
+            source="target_id",
+            matched_text="OK",
+            target_id="ok",
+        )
+        candidates = [
+            ControlCandidate("popup", "Settings popup", "window", (90, 90, 220, 150), window_rank=0),
+            ControlCandidate("ok", "OK", "button", (120, 110, 60, 28), window_rank=0),
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=candidates,
+            ),
+            "",
+        )
+
     def test_final_pre_overlay_ocr_rejects_text_changed_after_initial_ocr(self) -> None:
         app = _qt_app()
         clean_capture = _button_capture()

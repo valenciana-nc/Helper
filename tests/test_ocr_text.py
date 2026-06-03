@@ -226,6 +226,32 @@ class OcrTextTests(unittest.TestCase):
         self.assertFalse(result.accepted)
         self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
 
+    def test_rejects_mixed_text_numeric_cell_digit_only_crop(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 160, 28),
+            expected_text="Quantity 4",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="4", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
+        self.assertEqual(result.expected_text, "Quantity 4")
+        self.assertEqual(result.recognized_text, "4")
+
+    def test_allows_numeric_only_cell_digit_match(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="$1,234.00",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="$1,234.00", available=True)),
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.recognized_text, "$1,234.00")
+
     def test_checks_single_digit_cell_values(self) -> None:
         result = verify_target_text(
             capture=_capture(),

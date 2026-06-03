@@ -74,6 +74,13 @@ UIA_BACKED_TARGET_SOURCES = frozenset(
 MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
 FOREGROUND_COVERAGE_MIN_FRACTION = 0.55
 FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
+SAME_RANK_COVERING_CONTROL_TYPES = frozenset(
+    {"button", "hyperlink", "menuitem", "splitbutton", "tabitem"}
+)
+SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES = frozenset({"menu", "window"})
+SAME_RANK_TRANSIENT_SURFACE_WORDS = frozenset(
+    {"dialog", "menu", "modal", "popup", "popover", "toast"}
+)
 GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX = 96
 GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.010
 ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
@@ -1805,6 +1812,7 @@ def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
 def _foreground_candidate_covering_reason(
     target: TargetResolution,
     candidates: list[ControlCandidate],
+    previous_candidates: list[ControlCandidate] | None = None,
 ) -> str:
     selected = _revalidation_candidate_for_target(target, candidates)
     if selected is None:
@@ -1813,7 +1821,13 @@ def _foreground_candidate_covering_reason(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
-        if candidate.window_rank >= selected_rank:
+        if candidate.window_rank > selected_rank:
+            continue
+        if candidate.window_rank == selected_rank and not _same_rank_candidate_can_cover_selected(
+            candidate,
+            selected,
+            previous_candidates or [],
+        ):
             continue
         overlap = _target_coverage_fraction(candidate.rect, target.rect)
         if overlap >= FOREGROUND_COVERAGE_MIN_FRACTION:
@@ -1824,6 +1838,42 @@ def _foreground_candidate_covering_reason(
         ):
             return "target covered before overlay"
     return ""
+
+
+def _same_rank_candidate_can_cover_selected(
+    candidate: ControlCandidate,
+    selected: ControlCandidate,
+    previous_candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in SAME_RANK_COVERING_CONTROL_TYPES:
+        if candidate.control_type not in SAME_RANK_TRANSIENT_SURFACE_CONTROL_TYPES:
+            return False
+        if _same_rank_surface_was_previously_present(candidate, previous_candidates):
+            return False
+        tokens = (
+            _tokenize_control(candidate.text)
+            | _tokenize_control(candidate.automation_id)
+            | _tokenize_control(candidate.window_title)
+        )
+        return bool(tokens & SAME_RANK_TRANSIENT_SURFACE_WORDS)
+    return True
+
+
+def _same_rank_surface_was_previously_present(
+    candidate: ControlCandidate,
+    previous_candidates: list[ControlCandidate],
+) -> bool:
+    for previous in previous_candidates:
+        if previous.control_type != candidate.control_type:
+            continue
+        if previous.id == candidate.id:
+            return True
+        if _rect_iou(previous.rect, candidate.rect) >= 0.80 and (
+            previous.text == candidate.text
+            or previous.automation_id == candidate.automation_id
+        ):
+            return True
+    return False
 
 
 def _target_coverage_fraction(
@@ -2296,7 +2346,11 @@ class HelpSession(QObject):
                     return
                 outcome_note = self._outcome_after_quality_rejection(decision, reason)
                 continue
-            coverage_reason = _foreground_candidate_covering_reason(final_target, final_candidates)
+            coverage_reason = _foreground_candidate_covering_reason(
+                final_target,
+                final_candidates,
+                previous_candidates=candidates,
+            )
             if coverage_reason:
                 rejected = replace(final_target, rejected_reason=coverage_reason)
                 self._emit_target_diagnostic(
