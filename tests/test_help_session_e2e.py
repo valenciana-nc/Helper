@@ -232,6 +232,21 @@ class _FakeOcrProvider:
         return self.result
 
 
+class _MutatingOcrProvider(_FakeOcrProvider):
+    def __init__(self, result: OcrTextResult, on_call: Any) -> None:
+        super().__init__(result)
+        self._on_call = on_call
+
+    def recognize_text(
+        self,
+        capture: Capture,
+        rect: tuple[int, int, int, int],
+    ) -> OcrTextResult:
+        result = super().recognize_text(capture, rect)
+        self._on_call()
+        return result
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
     def setUp(self) -> None:
         self._previous_ocr_env = os.environ.get("HELP_OCR_TEXT_VERIFY")
@@ -637,6 +652,90 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertTrue(diagnostics[0]["overlay"]["emitted"])
         self.assertEqual(diagnostics[0]["overlay"]["rect"], (40, 52, 21, 21))
         self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Terms")
+
+    def test_final_pre_overlay_recheck_rejects_target_covered_after_ocr(self) -> None:
+        app = _qt_app()
+        clean_capture = _button_capture()
+        covered_capture = _dialog_ok_capture(
+            "Confirm changes",
+            "This dialog covers the stale page button.",
+            button_rect=(120, 110, 60, 28),
+        )
+        covered = False
+
+        def mark_covered() -> None:
+            nonlocal covered
+            covered = True
+
+        def capture_provider() -> Capture:
+            return covered_capture if covered else clean_capture
+
+        def candidate_provider(_capture: Capture) -> list[ControlCandidate]:
+            save = ControlCandidate(
+                id="c001",
+                text="Save changes",
+                control_type="button",
+                rect=(40, 50, 120, 32),
+                automation_id="saveButton",
+                window_rank=1,
+            )
+            if not covered:
+                return [save]
+            return [
+                ControlCandidate("dialog", "Confirm changes dialog", "window", (16, 18, 208, 130), window_rank=0),
+                ControlCandidate("ok", "OK", "button", (120, 110, 60, 28), window_rank=0),
+                save,
+            ]
+
+        ocr_provider = _MutatingOcrProvider(
+            OcrTextResult(text="Save changes", available=True),
+            mark_covered,
+        )
+        session = HelpSession(
+            agent=_ScriptedAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=capture_provider,
+            candidate_provider=candidate_provider,
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "target covered before overlay")
+        self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Save changes")
 
     def test_help_session_retries_transient_empty_candidate_snapshot(self) -> None:
         app = _qt_app()

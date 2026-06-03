@@ -69,6 +69,8 @@ UIA_BACKED_TARGET_SOURCES = frozenset(
     {"target_id", "text_match", "candidate_snap", "snap"}
 )
 MIN_REVALIDATION_OVERLAP_FRACTION = 0.25
+FOREGROUND_COVERAGE_MIN_FRACTION = 0.55
+FOREGROUND_CENTER_COVERAGE_MIN_FRACTION = 0.20
 GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX = 96
 GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR = 0.010
 ROW_REVALIDATION_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
@@ -1481,6 +1483,50 @@ def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
     return (x + width / 2.0, y + height / 2.0)
 
 
+def _foreground_candidate_covering_reason(
+    target: TargetResolution,
+    candidates: list[ControlCandidate],
+) -> str:
+    selected = _revalidation_candidate_for_target(target, candidates)
+    if selected is None:
+        return ""
+    selected_rank = selected.window_rank
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.window_rank >= selected_rank:
+            continue
+        overlap = _target_coverage_fraction(candidate.rect, target.rect)
+        if overlap >= FOREGROUND_COVERAGE_MIN_FRACTION:
+            return "target covered before overlay"
+        if (
+            overlap >= FOREGROUND_CENTER_COVERAGE_MIN_FRACTION
+            and _rect_contains_point(candidate.rect, _rect_center(target.rect))
+        ):
+            return "target covered before overlay"
+    return ""
+
+
+def _target_coverage_fraction(
+    covering_rect: tuple[int, int, int, int],
+    target_rect: tuple[int, int, int, int],
+) -> float:
+    inter = _intersection_rect(covering_rect, target_rect)
+    if inter is None:
+        return 0.0
+    target_area = max(1, target_rect[2] * target_rect[3])
+    return (inter[2] * inter[3]) / target_area
+
+
+def _rect_contains_point(
+    rect: tuple[int, int, int, int],
+    point: tuple[float, float],
+) -> bool:
+    x, y, width, height = rect
+    px, py = point
+    return x <= px <= x + width and y <= py <= y + height
+
+
 def _clip_rect_to_capture(
     rect: tuple[int, int, int, int],
     capture: "Capture",
@@ -1878,13 +1924,157 @@ class HelpSession(QObject):
                     ocr_verification.reason,
                 )
                 continue
+            try:
+                final_capture, final_candidates, final_target = self._revalidate_target_on_current_screen(
+                    decision,
+                    previous_target=display_target,
+                    previous_capture=capture,
+                    previous_candidates=candidates,
+                )
+            except Exception:
+                reason = "final pre-overlay recheck failed"
+                log.exception("Final pre-overlay target recheck failed")
+                rejected = replace(display_target, rejected_reason=reason)
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=capture,
+                        candidates=candidates,
+                        target=rejected,
+                        quality=quality,
+                        ocr=ocr_verification,
+                        rejected_reason=reason,
+                    )
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(decision, reason)
+                continue
+            if final_target.rejected_reason:
+                reason = f"final pre-overlay recheck: {final_target.rejected_reason}"
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=final_capture,
+                        candidates=final_candidates,
+                        target=final_target,
+                        ocr=ocr_verification,
+                        rejected_reason=reason,
+                    )
+                )
+                log.info("Step downgraded after final pre-overlay recheck (%s): %s", reason, decision.instruction)
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(decision, reason)
+                continue
+            coverage_reason = _foreground_candidate_covering_reason(final_target, final_candidates)
+            if coverage_reason:
+                rejected = replace(final_target, rejected_reason=coverage_reason)
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=final_capture,
+                        candidates=final_candidates,
+                        target=rejected,
+                        ocr=ocr_verification,
+                        rejected_reason=coverage_reason,
+                    )
+                )
+                log.info("Step downgraded by final coverage gate (%s): %s", coverage_reason, decision.instruction)
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(decision, coverage_reason)
+                continue
+            final_display_target = clip_resolution_to_capture(final_target, final_capture)
+            if final_display_target.rejected_reason:
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=final_capture,
+                        candidates=final_candidates,
+                        target=final_display_target,
+                        ocr=ocr_verification,
+                        rejected_reason=final_display_target.rejected_reason,
+                    )
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(
+                    decision,
+                    final_display_target.rejected_reason,
+                )
+                continue
+            final_rect = final_display_target.rect
+            final_target_control_type = target_control_type_for_resolution(
+                final_display_target,
+                final_candidates,
+            )
+            final_quality = evaluate_target_quality(
+                capture=final_capture,
+                rect=final_rect,
+                source=final_display_target.source,
+                confidence=final_display_target.confidence,
+                instruction=decision.instruction,
+                target_control_type=final_target_control_type,
+            )
+            if not final_quality.accepted:
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=final_capture,
+                        candidates=final_candidates,
+                        target=final_display_target,
+                        quality=final_quality,
+                        ocr=ocr_verification,
+                        rejected_reason=final_quality.reason,
+                    )
+                )
+                log.info(
+                    "Step downgraded by final target quality gate (%s, visible=%.2f activity=%.3f): %s",
+                    final_quality.reason,
+                    final_quality.visible_fraction,
+                    final_quality.visual_activity,
+                    decision.instruction,
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(
+                    decision,
+                    final_quality.reason,
+                )
+                continue
             self._emit_target_diagnostic(
                 build_target_diagnostic(
                     decision=decision,
-                    capture=capture,
-                    candidates=candidates,
-                    target=display_target,
-                    quality=quality,
+                    capture=final_capture,
+                    candidates=final_candidates,
+                    target=final_display_target,
+                    quality=final_quality,
                     ocr=ocr_verification,
                     overlay_rect=final_rect,
                 )

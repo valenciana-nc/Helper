@@ -16760,6 +16760,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertFalse(help_target.rejected_reason)
                 self.assertEqual(help_target.rect, (200, 90, 90, 30))
 
+    def test_action_like_cell_label_recovers_requested_row_action(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("open_invoice", "Open invoice", "cell", (20, 90, 150, 30)),
+            ControlCandidate("approve_open", "Approve", "button", (500, 90, 90, 30)),
+            ControlCandidate("paid_invoice", "Paid invoice", "cell", (20, 140, 150, 30)),
+            ControlCandidate("approve_paid", "Approve", "button", (500, 140, 90, 30)),
+        ]
+        instruction = "Click Approve for Open invoice."
+
+        wrong_target = resolve_candidate_target(
+            target_id="approve_paid",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 90, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 90, 30),
+        )
+        wrong_snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(500, 140, 90, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "approve_paid",
+                    "target": {"x": 500, "y": 140, "width": 90, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.target_id, "approve_paid")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        for resolved in (text_target, wrong_snap, help_target):
+            self.assertEqual(resolved.target_id, "approve_open")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (500, 90, 90, 30))
+
     def test_cell_only_grid_row_context_recovers_far_action_column(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target

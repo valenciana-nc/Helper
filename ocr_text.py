@@ -69,6 +69,9 @@ OCR_NUMERIC_STRICT_CONTROL_TYPES = frozenset(
     {"cell", "dataitem", "datagridcell", "edit", "gridcell", "row", "rowheader"}
 )
 OCR_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton"})
+OCR_NEARBY_LABEL_CONTROL_TYPES = frozenset(
+    {"combobox", "edit", "slider", "spinner"}
+)
 OCR_STATE_VALUE_WORDS = frozenset(
     {
         "checked",
@@ -260,6 +263,9 @@ def expected_text_evidence_for_target(
                     return OcrTextEvidence()
                 if text:
                     return OcrTextEvidence(text=text, rect=_object_rect(candidate))
+                label = _nearby_control_label_evidence(candidate, candidates)
+                if label.text:
+                    return label
                 break
     return OcrTextEvidence(
         text=str(getattr(target, "matched_text", "") or "").strip(),
@@ -314,6 +320,41 @@ def _state_control_visible_label_evidence(
     return OcrTextEvidence(text=best_text, rect=best_rect)
 
 
+def _nearby_control_label_evidence(
+    candidate: object,
+    candidates: list[object],
+) -> OcrTextEvidence:
+    control_type = str(getattr(candidate, "control_type", "") or "").strip().lower()
+    if control_type not in OCR_NEARBY_LABEL_CONTROL_TYPES:
+        return OcrTextEvidence()
+    rect = _object_rect(candidate)
+    if rect is None:
+        return OcrTextEvidence()
+    best_score = 0.0
+    best_text = ""
+    best_rect: tuple[int, int, int, int] | None = None
+    for label in candidates:
+        if getattr(label, "id", "") == getattr(candidate, "id", ""):
+            continue
+        label_type = str(getattr(label, "control_type", "") or "").strip().lower()
+        if label_type not in OCR_LABEL_CONTROL_TYPES:
+            continue
+        label_text = str(getattr(label, "text", "") or "").strip()
+        if not label_text or len(label_text.split()) > 8:
+            continue
+        label_rect = _object_rect(label)
+        if label_rect is None:
+            continue
+        score = _nearby_control_label_score(rect, label_rect)
+        if score > best_score:
+            best_score = score
+            best_text = label_text
+            best_rect = _union_rect(rect, label_rect)
+    if best_score < 0.5:
+        return OcrTextEvidence()
+    return OcrTextEvidence(text=best_text, rect=best_rect)
+
+
 def _state_control_text_is_state_only(text: str) -> bool:
     tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
     return bool(tokens) and tokens <= OCR_STATE_VALUE_WORDS
@@ -347,6 +388,45 @@ def _state_label_score(
     right_gap = label_left - option_right
     if y_ratio >= 0.45 and -4 <= right_gap <= 240 and label_right >= option_right:
         return 0.75 + 0.25 * (1.0 - min(1.0, max(0, right_gap) / 240.0))
+    return 0.0
+
+
+def _nearby_control_label_score(
+    control_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    control_left, control_top, control_width, control_height = control_rect
+    control_right = control_left + control_width
+    control_bottom = control_top + control_height
+    control_center_y = control_top + control_height / 2.0
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+    label_center_y = label_top + label_height / 2.0
+
+    y_overlap = max(0, min(control_bottom, label_bottom) - max(control_top, label_top))
+    y_ratio = y_overlap / max(1, min(control_height, label_height))
+    if y_ratio >= 0.45:
+        left_gap = control_left - label_right
+        if -4 <= left_gap <= 260 and label_left <= control_left:
+            y_penalty = abs(control_center_y - label_center_y) / max(1.0, control_height)
+            return 0.85 + 0.15 * (1.0 - min(1.0, y_penalty))
+        right_gap = label_left - control_right
+        if 0 <= right_gap <= 180 and label_right >= control_right:
+            y_penalty = abs(control_center_y - label_center_y) / max(1.0, control_height)
+            return 0.65 + 0.15 * (1.0 - min(1.0, y_penalty))
+
+    if label_bottom <= control_top:
+        vertical_gap = control_top - label_bottom
+        horizontal_overlap = max(0, min(control_right, label_right) - max(control_left, label_left))
+        left_aligned = abs(label_left - control_left) <= max(16, min(control_width, label_width) * 0.30)
+        center_aligned = abs(
+            (label_left + label_right) / 2.0 - (control_left + control_right) / 2.0
+        ) <= max(32, min(control_width, label_width) * 0.45)
+        if vertical_gap <= max(36, control_height * 1.2) and (
+            horizontal_overlap > 0 or left_aligned or center_aligned
+        ):
+            return 0.75 - min(0.25, vertical_gap / max(1.0, control_height * 3.0))
     return 0.0
 
 

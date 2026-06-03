@@ -1487,6 +1487,9 @@ NON_ACTIONABLE_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 NEARBY_ROW_LABEL_CONTROL_TYPES = NON_ACTIONABLE_CONTROL_TYPES | frozenset(
     {"cell", "datagridcell", "gridcell", "rowheader"}
 )
+STRUCTURAL_CONTEXT_LABEL_CONTROL_TYPES = NEARBY_ROW_LABEL_CONTROL_TYPES | frozenset(
+    {"headeritem"}
+)
 LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 LABELLED_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
 NEARBY_LABELLED_CONTROL_TYPES = LABELLED_FIELD_CONTROL_TYPES | LABELLED_STATE_CONTROL_TYPES
@@ -9186,13 +9189,13 @@ def _contained_row_line_label_tokens(
             continue
         if label.id == container.id or _same_visual_candidate(label, container):
             continue
-        if label.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+        if label.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             label,
         ):
             continue
         if label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES and not (
             label.control_type in CLICKABLE_CONTROL_TYPES
-            and _clickable_context_label_candidate(label)
+            and _context_label_candidate(label)
         ):
             continue
         if not _row_line_label_rect_matches(label, candidate, container):
@@ -9849,11 +9852,11 @@ def _requested_context_carrier_ids(
             action,
         ):
             continue
-        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             context,
         ):
             continue
-        if not _context_carrier_rect_matches_action(context, action):
+        if not _context_carrier_rect_matches_action(context, action, candidates):
             continue
         carrier_tokens = _object_token_variants(
             _candidate_semantic_tokens(context)
@@ -9870,8 +9873,18 @@ def _requested_context_carrier_ids(
 def _context_carrier_rect_matches_action(
     context: ControlCandidate,
     action: ControlCandidate,
+    candidates: list[ControlCandidate],
 ) -> bool:
-    return _contains_rect(_expand_rect(context.rect, 4), action.rect)
+    if _contains_rect(_expand_rect(context.rect, 4), action.rect):
+        return True
+    if context.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
+        return False
+    return (
+        _nearby_row_label_rect_matches(context, action)
+        or _same_row_cell_label_rect_matches(context, action)
+        or _nearby_context_label_rect_matches(context, action)
+        or _same_containing_row_line_label_rect_matches(context, action, candidates)
+    )
 
 
 def _contextual_action_candidate_matches_surface_request(
@@ -10007,7 +10020,7 @@ def _action_candidate_conflicting_context_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
-        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             context,
         ):
             continue
@@ -10558,7 +10571,7 @@ def _contextual_duplicate_evidence_tokens(
         context_surface_tokens = _surface_context_type_tokens(context.control_type)
         if not (context_semantic_tokens or context_descriptor_tokens or context_surface_tokens):
             continue
-        if context.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+        if context.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             context,
         ):
             continue
@@ -10718,7 +10731,7 @@ def _contextual_duplicate_nearby_label_tokens(
     for label in candidates:
         if label.id == candidate.id:
             continue
-        if label.control_type in CLICKABLE_CONTROL_TYPES and not _clickable_context_label_candidate(
+        if label.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             label,
         ):
             continue
@@ -10739,7 +10752,9 @@ def _contextual_duplicate_nearby_label_tokens(
     return tokens
 
 
-def _clickable_context_label_candidate(candidate: ControlCandidate) -> bool:
+def _context_label_candidate(candidate: ControlCandidate) -> bool:
+    if candidate.control_type in STRUCTURAL_CONTEXT_LABEL_CONTROL_TYPES:
+        return True
     tokens = _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
     action_tokens = (
         set().union(*EXCLUSIVE_ACTION_FAMILIES)

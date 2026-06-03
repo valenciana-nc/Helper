@@ -359,6 +359,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "stale_target_id_recovers_then_ocr_rejects_final_text",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 100, 32], "label": "Save as"},
+                {"rect": [120, 10, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "stale",
+                "target": {"x": 10, "y": 10, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "stale", "text": "Save as", "control_type": "button", "rect": [10, 10, 100, 32]},
+                {"id": "exact", "text": "Save", "control_type": "button", "rect": [120, 10, 80, 32]},
+            ],
+            "ocr_result": {"text": "Save as"},
+            "expected": {
+                "source": "text_match",
+                "target_id": "exact",
+                "ocr_expected_text": "Save",
+                "ocr_reason": "ocr extra text mismatch",
+                "ocr_recognized_text": "Save as",
+                "rejected_reason": "ocr extra text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "stale_search_filters_target_id_recovers_to_exact_search",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -22801,6 +22829,88 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "target_id",
                 "target_id": "edit",
                 "rect": [220, 100, 240, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_blank_text_field_uses_nearby_label",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 102, 80, 24], "label": "Email"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Email text field.",
+                "target_id": "edit",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Email", "control_type": "text", "rect": [120, 102, 80, 24]},
+                {"id": "edit", "text": "", "control_type": "edit", "rect": [220, 100, 240, 32]},
+            ],
+            "ocr_result": {"text": "Email"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "edit",
+                "rect": [220, 100, 240, 32],
+                "ocr_expected_text": "Email",
+                "ocr_recognized_text": "Email",
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_blank_text_field_label_mismatch_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 102, 80, 24], "label": "Phone"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Email text field.",
+                "target_id": "edit",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Email", "control_type": "text", "rect": [120, 102, 80, 24]},
+                {"id": "edit", "text": "", "control_type": "edit", "rect": [220, 100, 240, 32]},
+            ],
+            "ocr_result": {"text": "Phone"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "edit",
+                "ocr_expected_text": "Email",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Phone",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_blank_dropdown_uses_above_label",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [220, 68, 80, 24], "label": "Country"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country dropdown.",
+                "target_id": "combo",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {"id": "label", "text": "Country", "control_type": "text", "rect": [220, 68, 80, 24]},
+                {"id": "combo", "text": "", "control_type": "combobox", "rect": [220, 100, 240, 32]},
+            ],
+            "ocr_result": {"text": "Country"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "combo",
+                "rect": [220, 100, 240, 32],
+                "ocr_expected_text": "Country",
+                "ocr_recognized_text": "Country",
                 "overlay_emitted": True,
             },
         },

@@ -317,6 +317,59 @@ class OcrTextTests(unittest.TestCase):
         self.assertEqual(evidence.text, "Weekly")
         self.assertEqual(evidence.rect, (20, 20, 132, 24))
 
+    def test_expected_text_uses_nearby_label_for_blank_edit(self) -> None:
+        target = TargetResolution(
+            rect=(220, 100, 240, 32),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Email",
+            target_id="email",
+        )
+        candidates = [
+            ControlCandidate("email_label", "Email", "text", (120, 102, 80, 24)),
+            ControlCandidate("email", "", "edit", (220, 100, 240, 32)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "Email")
+        self.assertEqual(evidence.rect, (120, 100, 340, 32))
+
+    def test_expected_text_uses_above_label_for_blank_combobox(self) -> None:
+        target = TargetResolution(
+            rect=(220, 100, 240, 32),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Country",
+            target_id="country",
+        )
+        candidates = [
+            ControlCandidate("country_label", "Country", "text", (220, 68, 80, 24)),
+            ControlCandidate("country", "", "combobox", (220, 100, 240, 32)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "Country")
+        self.assertEqual(evidence.rect, (220, 68, 240, 64))
+
+    def test_expected_text_does_not_invent_label_for_unlabeled_blank_edit(self) -> None:
+        target = TargetResolution(
+            rect=(220, 100, 240, 32),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Email",
+            target_id="email",
+        )
+        candidates = [
+            ControlCandidate("email", "", "edit", (220, 100, 240, 32)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "Email")
+        self.assertEqual(evidence.rect, (220, 100, 240, 32))
+
     def test_expected_text_skips_unlabeled_state_only_checkbox_text(self) -> None:
         target = TargetResolution(
             rect=(20, 20, 64, 24),
