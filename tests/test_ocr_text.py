@@ -104,6 +104,27 @@ class OcrTextTests(unittest.TestCase):
         self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
         self.assertEqual(result.recognized_text, "Save")
 
+    def test_rejects_substring_fuzzy_ocr_as_partial_crop(self) -> None:
+        cases = (
+            ("Email address", "Mail address", "edit"),
+            ("Email", "Mail", "edit"),
+            ("Customer", "Custom", "button"),
+        )
+
+        for expected, recognized, control_type in cases:
+            with self.subTest(expected=expected, recognized=recognized):
+                result = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 160, 32),
+                    expected_text=expected,
+                    control_type=control_type,
+                    provider=_Provider(OcrTextResult(text=recognized, available=True)),
+                )
+
+                self.assertFalse(result.accepted)
+                self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
+                self.assertEqual(result.recognized_text, recognized)
+
     def test_rejects_extra_ocr_text_for_short_exact_label(self) -> None:
         result = verify_target_text(
             capture=_capture(),
@@ -380,6 +401,24 @@ class OcrTextTests(unittest.TestCase):
 
         self.assertEqual(evidence.text, "Country")
         self.assertEqual(evidence.rect, (220, 68, 240, 64))
+
+    def test_expected_text_prefers_nearby_label_for_filled_combobox(self) -> None:
+        target = TargetResolution(
+            rect=(120, 96, 260, 36),
+            confidence=0.9,
+            source="target_id",
+            matched_text="United States",
+            target_id="country",
+        )
+        candidates = [
+            ControlCandidate("country_label", "Country", "text", (20, 102, 80, 24)),
+            ControlCandidate("country", "United States", "combobox", (120, 96, 260, 36)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "Country")
+        self.assertEqual(evidence.rect, (20, 96, 360, 36))
 
     def test_expected_text_does_not_invent_label_for_unlabeled_blank_edit(self) -> None:
         target = TargetResolution(

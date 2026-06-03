@@ -1219,6 +1219,40 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(right.rect, (560, 60, 60, 32))
         self.assertFalse(right.rejected_reason)
 
+    def test_fresh_snap_row_context_is_not_uia_order_dependent(self) -> None:
+        from rect_snap import snap_to_control
+
+        profile_edit = _make_button("Edit", 560, 60, 60, 32)
+        message_edit = _make_button("Edit", 560, 140, 60, 32)
+        profile = _make_button("Profile", 100, 40, 520, 72, control_type="ListItem")
+        message = _make_button("Message from Alice", 100, 120, 520, 72, control_type="ListItem")
+        window = _make_window(
+            "App",
+            0,
+            0,
+            800,
+            600,
+            [message_edit, profile_edit, profile, message],
+        )
+        desktop = _FakeDesktop([window])
+
+        exact_wrong = snap_to_control(
+            (560, 140, 60, 32),
+            "Edit profile.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        loose_wrong = snap_to_control(
+            (552, 132, 76, 48),
+            "Edit profile.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        for result in (exact_wrong, loose_wrong):
+            self.assertEqual(result.source, "uia")
+            self.assertIn(result.rejected_reason, {"candidate semantic mismatch", "control type mismatch"})
+
     def test_returns_model_rect_when_no_overlap(self) -> None:
         from rect_snap import snap_to_control
 
@@ -9771,6 +9805,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
+    def test_delimited_same_card_duplicate_action_stays_ambiguous_despite_target_id(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_card", "Billing card", "group", (20, 80, 500, 220)),
+            ControlCandidate("save_top", "Save", "button", (240, 120, 60, 30)),
+            ControlCandidate("save_bottom", "Save", "button", (240, 240, 60, 30)),
+        ]
+        instruction = "Save - Billing card."
+
+        top_target = resolve_candidate_target(
+            target_id="save_top",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 120, 60, 30),
+        )
+        bottom_target = resolve_candidate_target(
+            target_id="save_bottom",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 240, 60, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 240, 60, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(240, 240, 60, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "save_bottom",
+                    "target": {"x": 240, "y": 240, "width": 60, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(top_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(bottom_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
     def test_mixed_visible_and_automation_duplicate_row_actions_stay_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
@@ -10335,6 +10422,116 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(current_target.source, "target_id")
         self.assertFalse(current_target.rejected_reason)
         self.assertEqual(independent.rejected_reason, "ambiguous text match")
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_recycled_ephemeral_target_id_losing_window_identity(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target_id": "c001",
+                "target": {"x": 40, "y": 50, "width": 120, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "c001",
+                "Save changes",
+                "button",
+                (40, 50, 120, 32),
+                window_title="Main page",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "c001",
+                "Save changes",
+                "button",
+                (40, 50, 120, 32),
+                window_title="",
+                window_rank=0,
+            ),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_revalidation_rejects_recycled_ephemeral_target_id_with_changed_visual_context(self) -> None:
+        import io
+
+        from PIL import Image, ImageDraw
+
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+        from screen import Capture
+
+        def capture_with_banner(text: str, fill: tuple[int, int, int]) -> Capture:
+            image = Image.new("RGB", (260, 160), color=(245, 246, 248))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((16, 18, 244, 52), fill=fill)
+            draw.text((24, 28), text, fill=(20, 24, 32))
+            draw.rectangle((40, 72, 160, 104), fill=(54, 104, 190), outline=(22, 60, 140), width=2)
+            draw.text((58, 82), "Save changes", fill=(255, 255, 255))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            return Capture(
+                png_bytes=buffer.getvalue(),
+                width=image.width,
+                height=image.height,
+                monitor_left=0,
+                monitor_top=0,
+                scale=1.0,
+            )
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target_id": "c001",
+                "target": {"x": 40, "y": 72, "width": 120, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate("c001", "Save changes", "button", (40, 72, 120, 32)),
+        ]
+        current_candidates = [
+            ControlCandidate("c001", "Save changes", "button", (40, 72, 120, 32)),
+        ]
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture_with_banner("Dialog copy", (250, 232, 232)),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=capture_with_banner("Page copy", (232, 240, 250)),
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertFalse(current_target.rejected_reason)
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
     def test_revalidation_rejects_generic_action_with_same_weak_dialog_context_but_changed_visual_body(self) -> None:

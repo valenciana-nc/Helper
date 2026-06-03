@@ -813,7 +813,10 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(highlights, [])
         self.assertEqual(len(ocr_provider.calls), 1)
         self.assertFalse(diagnostics[0]["overlay"]["emitted"])
-        self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "target covered before overlay")
+        self.assertEqual(
+            diagnostics[0]["overlay"]["rejected_reason"],
+            "final pre-overlay recheck: current screen recheck target changed",
+        )
         self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Save changes")
 
     def test_final_pre_overlay_ocr_rejects_text_changed_after_initial_ocr(self) -> None:

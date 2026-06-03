@@ -790,6 +790,7 @@ def snap_to_control(
     contained_control_intent_results: list[tuple[SnapResult, str]] = []
     control_intent_contexts: list[tuple[tuple[int, int, int, int], str]] = []
     surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -797,6 +798,29 @@ def snap_to_control(
     topmost_provider = topmost_handle_provider
     if topmost_provider is None and desktop_factory is None:
         topmost_provider = _topmost_window_handle_at_point
+
+    raw_candidates = list(
+        _iter_candidates(
+            desktop,
+            search_rect,
+            deadline,
+            foreground_handle,
+        )
+    )
+    for (
+        control,
+        rect,
+        _is_own_process,
+        _window_rank,
+        _foreground_known,
+        _top_handle,
+        _window_title,
+    ) in raw_candidates:
+        ctype = _control_type(control)
+        if not _is_enabled(control) or not _is_visible(control):
+            continue
+        if ctype in ROW_CONTEXT_CONTROL_TYPES:
+            row_contexts.append((rect, _control_text(control), ctype))
 
     for (
         control,
@@ -806,19 +830,14 @@ def snap_to_control(
         foreground_known,
         top_handle,
         window_title,
-    ) in _iter_candidates(
-        desktop,
-        search_rect,
-        deadline,
-        foreground_handle,
-    ):
+    ) in raw_candidates:
         ctype = _control_type(control)
         if not _is_enabled(control) or not _is_visible(control):
             continue
         text = _control_text(control)
         visible_text = _control_visible_text(control)
         automation_id = _control_automation_id(control)
-        if ctype in SURFACE_CONTEXT_CONTROL_TYPES or ctype in ROW_CONTEXT_CONTROL_TYPES:
+        if ctype in SURFACE_CONTEXT_CONTROL_TYPES:
             surface_contexts.append((rect, text, ctype))
         if ctype not in CLICKABLE_CONTROL_TYPES:
             continue
@@ -990,7 +1009,7 @@ def snap_to_control(
             instruction_tokens,
             semantic_text,
             rect,
-            surface_contexts,
+            row_contexts,
         )
         clear_close_action_mismatch = _clear_close_action_mismatch(
             instruction,

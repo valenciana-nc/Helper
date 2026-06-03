@@ -91,7 +91,12 @@ borrowing unrelated column-header context by x-alignment alone. The current v4
 slice extends that to ordered multi-level menu paths like `File > Export > CSV`,
 symbol-only action labels such as `+`, `...`, and `X`, stale same-value grid
 cells whose row context changes, and raw UIA snaps that hit a repeated row
-action in the wrong containing row.
+action in the wrong containing row. The newest hardening also rejects recycled
+ephemeral candidate IDs when final revalidation loses window identity or visual
+context changes, treats substring-like OCR fuzzy matches such as `Save`/`Saved`
+as partial crops, verifies filled dropdown/input identity through nearby labels,
+requires delimited context matches to remain unique, and makes raw row-context
+snapping independent of UIA enumeration order.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

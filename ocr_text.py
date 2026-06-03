@@ -278,11 +278,11 @@ def expected_text_evidence_for_target(
                 text = str(getattr(candidate, "text", "") or "").strip()
                 if _candidate_has_state_only_text_without_label(candidate, text):
                     return OcrTextEvidence()
-                if text:
-                    return OcrTextEvidence(text=text, rect=_object_rect(candidate))
                 label = _nearby_control_label_evidence(candidate, candidates)
                 if label.text:
                     return label
+                if text:
+                    return OcrTextEvidence(text=text, rect=_object_rect(candidate))
                 break
     return OcrTextEvidence(
         text=str(getattr(target, "matched_text", "") or "").strip(),
@@ -556,6 +556,15 @@ def verify_target_text(
             available=True,
             elapsed_ms=result.elapsed_ms,
         )
+    if _is_partial_token_crop_match(expected_tokens, recognized_tokens):
+        return OcrTextVerification(
+            accepted=False,
+            reason=OCR_PARTIAL_TEXT_REASON,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
     if _is_partial_text_match(expected_tokens, recognized_tokens):
         return OcrTextVerification(
             accepted=False,
@@ -682,7 +691,32 @@ def _tokens_match(expected: set[str], recognized: set[str]) -> bool:
 def _similar_token(first: str, second: str) -> bool:
     if min(len(first), len(second)) < 4:
         return False
+    if _substring_token_crop_match(first, second):
+        return False
     return SequenceMatcher(None, first, second).ratio() >= 0.74
+
+
+def _is_partial_token_crop_match(expected: set[str], recognized: set[str]) -> bool:
+    expected_signal = {token for token in expected if _token_has_signal(token)}
+    recognized_signal = {token for token in recognized if _token_has_signal(token)}
+    if not expected_signal or not recognized_signal:
+        return False
+    return any(
+        expected_token != recognized_token
+        and _substring_token_crop_match(expected_token, recognized_token)
+        and SequenceMatcher(None, expected_token, recognized_token).ratio() >= 0.74
+        for expected_token in expected_signal
+        for recognized_token in recognized_signal
+    )
+
+
+def _substring_token_crop_match(first: str, second: str) -> bool:
+    if min(len(first), len(second)) < 4:
+        return False
+    if first == second:
+        return False
+    shorter, longer = sorted((first, second), key=len)
+    return shorter in longer
 
 
 def _is_partial_text_match(expected: set[str], recognized: set[str]) -> bool:

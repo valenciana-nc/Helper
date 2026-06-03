@@ -127,6 +127,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_substring_fuzzy_match_rejects_as_partial_crop",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 100, 32], "label": "Saved"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 80, "y": 80, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "save", "text": "Save", "control_type": "button", "rect": [80, 80, 100, 32]},
+            ],
+            "ocr_result": {"text": "Saved"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "save",
+                "ocr_reason": "ocr partial text match",
+                "ocr_expected_text": "Save",
+                "ocr_recognized_text": "Saved",
+                "rejected_reason": "ocr partial text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_extra_text_save_as_rejects_candidate_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -433,6 +459,45 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "ocr_reason": "ocr extra text mismatch",
                 "ocr_recognized_text": "Save as",
                 "rejected_reason": "ocr extra text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "recycled_ephemeral_target_id_losing_window_identity_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 50, 120, 32], "label": "Save changes"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save changes.",
+                "target_id": "c001",
+                "target": {"x": 40, "y": 50, "width": 120, "height": 32},
+            },
+            "previous_candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save changes",
+                    "control_type": "button",
+                    "rect": [40, 50, 120, 32],
+                    "window_title": "Main page",
+                    "window_rank": 0,
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "c001",
+                    "text": "Save changes",
+                    "control_type": "button",
+                    "rect": [40, 50, 120, 32],
+                    "window_title": "",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "rejected_reason": "current screen recheck target changed",
                 "overlay_emitted": False,
             },
         },
@@ -899,6 +964,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "candidates": [
                 {"id": "c001", "text": "Duplicate", "control_type": "button", "rect": [100, 80, 90, 32]},
                 {"id": "c002", "text": "Duplicate", "control_type": "button", "rect": [110, 80, 90, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "delimited_same_card_duplicate_action_rejects_overlay",
+            "capture": {"width": 620, "height": 360},
+            "draw": [
+                {"rect": [20, 80, 500, 220], "label": "Billing card"},
+                {"rect": [240, 120, 60, 30], "label": "Save"},
+                {"rect": [240, 240, 60, 30], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Save - Billing card.",
+                "target_id": "save_bottom",
+                "target": {"x": 240, "y": 240, "width": 60, "height": 30},
+            },
+            "candidates": [
+                {"id": "billing_card", "text": "Billing card", "control_type": "group", "rect": [20, 80, 500, 220]},
+                {"id": "save_top", "text": "Save", "control_type": "button", "rect": [240, 120, 60, 30]},
+                {"id": "save_bottom", "text": "Save", "control_type": "button", "rect": [240, 240, 60, 30]},
             ],
             "expected": {
                 "source": "candidate_snap",
@@ -23354,6 +23444,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "country",
                 "rect": [120, 96, 260, 36],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "current_value_dropdown_label_mismatch_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 80, 24], "label": "State"},
+                {"rect": [120, 96, 260, 36], "label": "United States"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open the Country dropdown.",
+                "target_id": "country",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "country_label", "text": "Country", "control_type": "text", "rect": [20, 102, 80, 24]},
+                {"id": "country", "text": "United States", "control_type": "combobox", "rect": [120, 96, 260, 36]},
+            ],
+            "ocr_result": {"text": "State"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "country",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_expected_text": "Country",
+                "ocr_recognized_text": "State",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
             },
         },
         {

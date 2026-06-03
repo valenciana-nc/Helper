@@ -4396,6 +4396,14 @@ def _target_id_plausibility(
         geometry_score = (
             _geometry_agreement(candidate.rect, model_rect) if model_rect is not None else 0.0
         )
+        if _same_contextual_duplicate_request_ambiguous(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+            control_intents,
+        ):
+            return False, max(text_score, geometry_score), "target_id ambiguous"
         return True, max(0.86, text_score, geometry_score), ""
     if _reversible_action_exact_alternative_mismatch(
         instruction,

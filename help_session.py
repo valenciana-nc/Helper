@@ -893,6 +893,15 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_ephemeral_target_context_changed(
+        previous_target,
+        target,
+        previous_capture,
+        capture,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _model_only_revalidation_lacks_fresh_evidence(previous_target, target):
         return replace(target, rejected_reason="current screen recheck target changed")
     if decision.target_id and target.source == "target_id":
@@ -1434,6 +1443,76 @@ def _revalidation_window_context_changed(
     if previous.window_rank != current.window_rank:
         return True
     return _window_title_identity_changed(previous.window_title, current.window_title)
+
+
+def _revalidated_ephemeral_target_context_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_capture: Any,
+    capture: "Capture",
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id or previous_target.target_id != target.target_id:
+        return False
+    if not _ephemeral_revalidation_target_id(target.target_id):
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    if previous.control_type.lower() != current.control_type.lower():
+        return True
+    if _strict_window_identity_missing_or_changed(previous, current):
+        return True
+    if previous_capture is None:
+        return False
+    if not _same_revalidation_geometry(previous_target.rect, target.rect):
+        return False
+    return _revalidation_visual_context_changed(previous_target.rect, target.rect, previous_capture, capture)
+
+
+def _ephemeral_revalidation_target_id(target_id: str) -> bool:
+    return bool(re.fullmatch(r"c\d+", (target_id or "").strip()))
+
+
+def _strict_window_identity_missing_or_changed(
+    previous: ControlCandidate,
+    current: ControlCandidate,
+) -> bool:
+    if previous.window_rank != current.window_rank:
+        return True
+    previous_title = (previous.window_title or "").strip()
+    current_title = (current.window_title or "").strip()
+    if bool(previous_title) != bool(current_title):
+        return True
+    if previous_title and current_title:
+        return _window_title_identity_changed(previous_title, current_title)
+    return False
+
+
+def _revalidation_visual_context_changed(
+    previous_rect: tuple[int, int, int, int],
+    current_rect: tuple[int, int, int, int],
+    previous_capture: Any,
+    capture: "Capture",
+) -> bool:
+    previous_crop = _capture_rect_image(
+        previous_capture,
+        _expand_rect(previous_rect, GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX),
+    )
+    current_crop = _capture_rect_image(
+        capture,
+        _expand_rect(current_rect, GENERIC_ACTION_REVALIDATION_CONTEXT_MARGIN_PX),
+    )
+    if previous_crop is None or current_crop is None:
+        return False
+    if previous_crop.size != current_crop.size:
+        current_crop = current_crop.resize(previous_crop.size, Image.Resampling.BILINEAR)
+    diff = ImageChops.difference(previous_crop.convert("RGB"), current_crop.convert("RGB"))
+    stat = ImageStat.Stat(diff)
+    normalized = sum(stat.mean) / max(1, len(stat.mean) * 255)
+    return normalized > GENERIC_ACTION_REVALIDATION_CONTEXT_DIFF_FLOOR
 
 
 def _window_title_identity_changed(previous_title: str, current_title: str) -> bool:
