@@ -127,6 +127,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_single_letter_crop_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "S"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "save", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "ocr_result": {"text": "S"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "save",
+                "ocr_reason": "ocr partial text match",
+                "ocr_expected_text": "Save",
+                "ocr_recognized_text": "S",
+                "rejected_reason": "ocr partial text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_substring_fuzzy_match_rejects_as_partial_crop",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -19473,6 +19499,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "source": "text_match",
                 "target_id": "acme_status",
                 "rect": [180, 100, 140, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "explicit_row_column_cell_does_not_choose_row_label_cell",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [220, 60, 120, 32], "label": "Status"},
+                {"rect": [20, 160, 600, 40], "label": "Globex"},
+                {"rect": [20, 160, 180, 40], "label": "Globex"},
+                {"rect": [220, 160, 120, 40], "label": "Inactive"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Status cell for Globex.",
+                "target_id": "name_globex",
+                "target": {"x": 20, "y": 160, "width": 180, "height": 40},
+            },
+            "candidates": [
+                {"id": "header_status", "text": "Status", "control_type": "headeritem", "rect": [220, 60, 120, 32]},
+                {"id": "row_globex", "text": "Globex", "control_type": "dataitem", "rect": [20, 160, 600, 40]},
+                {"id": "name_globex", "text": "Globex", "control_type": "cell", "rect": [20, 160, 180, 40]},
+                {"id": "status_globex", "text": "Inactive", "control_type": "cell", "rect": [220, 160, 120, 40]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "status_globex",
+                "rect": [220, 160, 120, 40],
                 "overlay_emitted": True,
             },
         },

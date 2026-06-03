@@ -1904,7 +1904,7 @@ def _topmost_handle_matches_candidate(
     control_handle: int | None,
 ) -> bool:
     if control_handle is None:
-        return True
+        return actual_handle == top_handle
     if actual_handle in {top_handle, control_handle}:
         return True
     return _handles_are_related(control_handle, actual_handle)
@@ -2083,6 +2083,8 @@ def resolve_candidate_target(
         ) or matches_row_action or matches_named_contextual_duplicate or (
             _duplicate_cell_context_target_matches(instruction, candidate, candidates)
         ) or (
+            _explicit_row_column_cell_target_matches(instruction, candidate, candidates)
+        ) or (
             _spinner_stepper_button_match(instruction, candidate, candidates)
         )
         if control_intents and not matches_control_intent:
@@ -2098,6 +2100,9 @@ def resolve_candidate_target(
         score += _foreground_rank_bonus(candidate, candidates, model_rect=model_rect)
         if score > 0:
             if not matches_control_intent:
+                column_tokens, row_tokens = _explicit_row_column_cell_request_tokens(instruction)
+                if column_tokens and row_tokens:
+                    continue
                 contained = _single_contained_control_intent_candidate(
                     candidates=candidates,
                     model_rect=candidate.rect,
@@ -2783,6 +2788,8 @@ def _text_match_score(
         return 0.0
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
         return 0.0
+    if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
+        return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _named_control_label_missing(instruction, candidate, candidates):
@@ -2836,6 +2843,11 @@ def _text_match_score(
         candidate,
         candidates,
     )
+    matches_explicit_row_column_cell = _explicit_row_column_cell_target_matches(
+        instruction,
+        candidate,
+        candidates,
+    )
     matches_contextual_control_intent = bool(control_intents) and _candidate_matches_control_intent(
         candidate,
         control_intents,
@@ -2856,6 +2868,7 @@ def _text_match_score(
         and not matches_contextual_surface_action
         and not matches_segmented_control
         and not matches_duplicate_cell_context
+        and not matches_explicit_row_column_cell
         and not matches_spinner_stepper_button
         and not _cardinal_direction_request_matches_candidate(instruction, candidate)
         and not literal_match_tokens
@@ -3310,6 +3323,13 @@ def _text_match_score(
         if model_rect is not None:
             score += 0.05 * _proximity_score(candidate.rect, model_rect)
         return min(max(score, 0.0), 1.0)
+    if matches_explicit_row_column_cell:
+        score = TEXT_MATCH_FLOOR + 0.09
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
     if matches_contextual_surface_action:
         score = TEXT_MATCH_FLOOR + 0.06
         if visible_tokens:
@@ -3412,6 +3432,8 @@ def _context_text_match_score(
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3637,6 +3659,13 @@ def _context_text_match_score(
         return min(max(score, 0.0), 1.0)
     if _duplicate_cell_context_target_matches(instruction, candidate, candidates):
         score = TEXT_MATCH_FLOOR + 0.08
+        if visible_tokens:
+            score += VISIBLE_TEXT_MATCH_BONUS
+        if model_rect is not None:
+            score += 0.05 * _proximity_score(candidate.rect, model_rect)
+        return min(max(score, 0.0), 1.0)
+    if _explicit_row_column_cell_target_matches(instruction, candidate, candidates):
+        score = TEXT_MATCH_FLOOR + 0.09
         if visible_tokens:
             score += VISIBLE_TEXT_MATCH_BONUS
         if model_rect is not None:
@@ -4630,6 +4659,10 @@ def _target_id_plausibility(
         return False, max(text_score, geometry_score), "target_id ambiguous"
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
         return False, max(text_score, geometry_score), "target_id ambiguous"
+    if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
+        return False, max(text_score, geometry_score), "target_id semantic mismatch"
+    if _explicit_row_column_cell_target_matches(instruction, candidate, candidates):
+        return True, max(0.86, text_score, geometry_score), ""
     if _implicit_cell_target_request_matches(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _segmented_control_button_alternative_mismatch(
@@ -4948,7 +4981,12 @@ def _duplicate_state_only_control_ambiguous(
     identity_tokens = _state_control_identity_evidence_tokens(candidate, candidates)
     request_identity = _state_control_request_identity_tokens(instruction, instruction_tokens)
     if request_identity and identity_tokens and request_identity & identity_tokens:
-        return False
+        return _state_control_identity_match_has_duplicate(
+            request_identity,
+            state_tokens,
+            candidate,
+            candidates,
+        )
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
@@ -4958,6 +4996,38 @@ def _duplicate_state_only_control_ambiguous(
             continue
         other_identity = _state_control_identity_evidence_tokens(other, candidates)
         if request_identity and other_identity and request_identity & other_identity:
+            continue
+        return True
+    return False
+
+
+def _state_control_identity_match_has_duplicate(
+    request_identity: set[str],
+    state_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    candidate_identity = _state_control_identity_evidence_tokens(candidate, candidates)
+    candidate_match = request_identity & candidate_identity
+    if not candidate_match:
+        return False
+    candidate_extra = candidate_identity - candidate_match
+    request_extra = request_identity - candidate_match
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        if _state_only_control_value_tokens(other) != state_tokens:
+            continue
+        other_identity = _state_control_identity_evidence_tokens(other, candidates)
+        other_match = request_identity & other_identity
+        if not other_match:
+            continue
+        if not candidate_match <= other_match:
+            continue
+        other_extra = other_identity - other_match
+        if request_extra and request_extra <= candidate_extra and not request_extra <= other_extra:
             continue
         return True
     return False
@@ -7230,6 +7300,139 @@ def _duplicate_cell_context_target_ambiguous(
     if not any(peer.id == candidate.id for peer in matching):
         return True
     return len(matching) != 1
+
+
+def _explicit_row_column_cell_target_matches(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return False
+    column_tokens, row_tokens = _explicit_row_column_cell_request_tokens(instruction)
+    if not column_tokens or not row_tokens:
+        return False
+    matches = _explicit_row_column_cell_target_matches_for_request(
+        column_tokens,
+        row_tokens,
+        candidates,
+    )
+    return len(matches) == 1 and matches[0].id == candidate.id
+
+
+def _explicit_row_column_cell_target_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return False
+    column_tokens, row_tokens = _explicit_row_column_cell_request_tokens(instruction)
+    if not column_tokens or not row_tokens:
+        return False
+    matches = _explicit_row_column_cell_target_matches_for_request(
+        column_tokens,
+        row_tokens,
+        candidates,
+    )
+    return bool(matches) and not any(match.id == candidate.id for match in matches)
+
+
+def _explicit_row_column_cell_request_tokens(instruction: str) -> tuple[set[str], set[str]]:
+    words = _literal_word_sequence(instruction)
+    if not words or not any(word in {"cell", "cells", "gridcell", "datagridcell"} for word in words):
+        return set(), set()
+    cell_index = next(
+        (
+            index
+            for index, word in enumerate(words)
+            if word in {"cell", "cells", "gridcell", "datagridcell"}
+        ),
+        -1,
+    )
+    if cell_index < 0:
+        return set(), set()
+    column_words: list[str] = []
+    cursor = cell_index - 1
+    while cursor >= 0:
+        token = words[cursor]
+        if token in {"a", "an", "click", "select", "tap", "the"}:
+            cursor -= 1
+            continue
+        if token in {"for", "from", "in", "inside", "on", "with", "within"}:
+            break
+        column_words.append(token)
+        cursor -= 1
+    column_words.reverse()
+    row_words: list[str] = []
+    for index, word in enumerate(words):
+        if word not in {"for", "from", "in", "inside", "on", "with", "within"}:
+            continue
+        cursor = index + 1
+        while cursor < len(words):
+            token = words[cursor]
+            if token in {
+                "a",
+                "an",
+                "cell",
+                "cells",
+                "column",
+                "datagridcell",
+                "gridcell",
+                "in",
+                "inside",
+                "of",
+                "on",
+                "row",
+                "the",
+                "with",
+                "within",
+            }:
+                break
+            row_words.append(token)
+            cursor += 1
+        if row_words:
+            break
+    ignored = CONTEXTUAL_DUPLICATE_STOPWORDS | {
+        "cell",
+        "cells",
+        "column",
+        "columns",
+        "current",
+        "grid",
+        "row",
+        "rows",
+        "table",
+        "value",
+        "values",
+    }
+    return (
+        _object_token_variants(set(column_words) - ignored),
+        _object_token_variants(set(row_words) - ignored),
+    )
+
+
+def _explicit_row_column_cell_target_matches_for_request(
+    column_tokens: set[str],
+    row_tokens: set[str],
+    candidates: list[ControlCandidate],
+) -> list[ControlCandidate]:
+    matches: list[ControlCandidate] = []
+    for candidate in candidates:
+        if candidate.control_type not in CELL_CONTROL_TYPES:
+            continue
+        header_tokens = _object_token_variants(
+            _contextual_duplicate_aligned_header_tokens(candidate, candidates)
+        )
+        row_evidence = _object_token_variants(
+            _contained_row_context_objects(candidate, candidates)
+            | _same_row_cell_context_tokens(candidate, candidates)
+        )
+        if _contextual_duplicate_request_matches_evidence(column_tokens, header_tokens) and (
+            _contextual_duplicate_request_matches_evidence(row_tokens, row_evidence)
+        ):
+            matches.append(candidate)
+    return matches
 
 
 def _duplicate_cell_context_request_tokens(

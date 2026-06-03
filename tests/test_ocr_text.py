@@ -104,6 +104,22 @@ class OcrTextTests(unittest.TestCase):
         self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
         self.assertEqual(result.recognized_text, "Save")
 
+    def test_rejects_single_letter_ocr_as_partial_crop(self) -> None:
+        provider = _Provider(OcrTextResult(text="S", available=True))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save",
+            control_type="button",
+            provider=provider,
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_PARTIAL_TEXT_REASON)
+        self.assertEqual(result.expected_text, "Save")
+        self.assertEqual(result.recognized_text, "S")
+
     def test_rejects_substring_fuzzy_ocr_as_partial_crop(self) -> None:
         cases = (
             ("Email address", "Mail address", "edit"),

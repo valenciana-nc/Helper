@@ -101,7 +101,11 @@ duplicate state-only checkbox/radio values unless the request supplies positiona
 or identity evidence, OCR-verifies slider/spinner targets that rely on nearby
 labels, rejects targets hidden behind same-root child HWND overlays, and detects
 stable surface IDs whose visible pane/list/menu/table identity changed at the
-same rectangle.
+same rectangle. The following pass tightens the same fail-safe policy for
+handleless UIA targets under same-root child overlays, repeated state controls
+with identical nearby labels but missing section context, explicit row+column
+cell requests whose correct cell value differs from the row label, and one-letter
+OCR crops that are too weak to prove the expected target text.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

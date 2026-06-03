@@ -1614,7 +1614,7 @@ def _topmost_handle_matches_candidate(
     control_handle: int | None,
 ) -> bool:
     if control_handle is None:
-        return True
+        return actual_handle == top_handle
     if actual_handle in {top_handle, control_handle}:
         return True
     return _handles_are_related(control_handle, actual_handle)

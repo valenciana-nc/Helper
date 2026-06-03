@@ -558,6 +558,15 @@ def verify_target_text(
             available=True,
             elapsed_ms=result.elapsed_ms,
         )
+    if _recognized_text_too_weak_to_prove_expected(expected_tokens, recognized_tokens):
+        return OcrTextVerification(
+            accepted=False,
+            reason=OCR_PARTIAL_TEXT_REASON,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
     if _is_partial_token_crop_match(expected_tokens, recognized_tokens):
         return OcrTextVerification(
             accepted=False,
@@ -768,6 +777,13 @@ def _is_allowed_extra_text_token(token: str) -> bool:
     if token in OCR_ALLOWED_EXTRA_TEXT_TOKENS:
         return True
     return bool(re.fullmatch(r"f(?:1[0-9]|2[0-4]|[1-9])", token))
+
+
+def _recognized_text_too_weak_to_prove_expected(expected: set[str], recognized: set[str]) -> bool:
+    expected_signal = {token for token in expected if _token_has_signal(token)}
+    if not expected_signal:
+        return False
+    return not any(_token_has_signal(token) for token in recognized)
 
 
 def _is_strong_contradiction(expected: set[str], recognized: set[str]) -> bool:
