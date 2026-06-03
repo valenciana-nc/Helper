@@ -1711,6 +1711,41 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "revalidation_rejects_reused_surface_id_same_rect_changed_label",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [24, 30, 180, 90], "label": "Security settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Billing settings pane.",
+                "target_id": "settings_panel",
+                "target": {"x": 24, "y": 30, "width": 180, "height": 90},
+            },
+            "previous_candidates": [
+                {
+                    "id": "settings_panel",
+                    "text": "Billing settings",
+                    "control_type": "pane",
+                    "rect": [24, 30, 180, 90],
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "settings_panel",
+                    "text": "Security settings",
+                    "control_type": "pane",
+                    "rect": [24, 30, 180, 90],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "settings_panel",
+                "rejected_reason": "current screen recheck target changed",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "candidate_backed_row_with_single_embedded_action_rejects_overlay",
             "capture": {"width": 500, "height": 260},
             "draw": [
@@ -23499,6 +23534,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "current_value_slider_label_mismatch_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 100, 24], "label": "Brightness"},
+                {"rect": [120, 96, 260, 36], "label": "50"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Volume slider.",
+                "target_id": "volume",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "volume_label", "text": "Volume", "control_type": "text", "rect": [20, 102, 100, 24]},
+                {"id": "volume", "text": "50", "control_type": "slider", "rect": [120, 96, 260, 36]},
+            ],
+            "ocr_result": {"text": "Brightness"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "volume",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_expected_text": "Volume",
+                "ocr_recognized_text": "Brightness",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "current_value_checkbox_accepts_nearby_label_evidence",
             "capture": {"width": 1000, "height": 500},
             "draw": [
@@ -23520,6 +23583,29 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 "target_id": "terms",
                 "rect": [120, 96, 24, 24],
                 "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "duplicate_state_only_checkbox_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 80, 32], "label": "Checked"},
+                {"rect": [120, 150, 80, 32], "label": "Checked"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Checked checkbox.",
+                "target_id": "first_checked",
+                "target": {"x": 120, "y": 96, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "first_checked", "text": "Checked", "control_type": "checkbox", "rect": [120, 96, 80, 32]},
+                {"id": "second_checked", "text": "Checked", "control_type": "checkbox", "rect": [120, 150, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
             },
         },
         {

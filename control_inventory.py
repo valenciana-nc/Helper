@@ -913,6 +913,22 @@ STATE_ACTION_WORDS = frozenset(
 SAME_FORM_STATE_ACTION_WORDS = frozenset({"reset"})
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
+STATE_ONLY_CONTROL_VALUE_WORDS = frozenset(
+    {
+        "checked",
+        "deselected",
+        "disabled",
+        "enabled",
+        "false",
+        "mixed",
+        "off",
+        "on",
+        "selected",
+        "true",
+        "unchecked",
+        "unselected",
+    }
+)
 SEARCH_ACTION_WORDS = frozenset({"find", "search"})
 SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
 SORT_ASCENDING_WORDS = frozenset({"ascending"})
@@ -1716,7 +1732,12 @@ def collect_control_candidates(
                 and _is_enabled(control)
                 and _is_visible(control)
                 and _acceptable_bounds(rect, capture_rect, ctype)
-                and _is_candidate_topmost(top_handle, rect, topmost_provider)
+                and _is_candidate_topmost(
+                    top_handle,
+                    _window_handle(control),
+                    rect,
+                    topmost_provider,
+                )
             ):
                 raw.append(
                     ControlCandidate(
@@ -1841,6 +1862,7 @@ def _is_own_process_window(hwnd: int) -> bool:
 
 def _is_candidate_topmost(
     top_handle: int | None,
+    control_handle: int | None,
     rect: tuple[int, int, int, int],
     topmost_handle_provider: TopmostHandleProvider | None,
 ) -> bool:
@@ -1859,7 +1881,11 @@ def _is_candidate_topmost(
             continue
         checked += 1
         actual_root = _root_window_handle(actual)
-        if actual_root == expected_root:
+        if actual_root == expected_root and _topmost_handle_matches_candidate(
+            actual,
+            top_handle,
+            control_handle,
+        ):
             matches += 1
             if index == 0:
                 center_matched = True
@@ -1870,6 +1896,28 @@ def _is_candidate_topmost(
     if center_checked and not center_matched:
         return False
     return (matches / checked) >= MIN_TOPMOST_SAMPLE_FRACTION
+
+
+def _topmost_handle_matches_candidate(
+    actual_handle: int,
+    top_handle: int,
+    control_handle: int | None,
+) -> bool:
+    if control_handle is None:
+        return True
+    if actual_handle in {top_handle, control_handle}:
+        return True
+    return _handles_are_related(control_handle, actual_handle)
+
+
+def _handles_are_related(first: int, second: int) -> bool:
+    try:
+        user32 = ctypes.windll.user32
+        return bool(user32.IsChild(int(first), int(second))) or bool(
+            user32.IsChild(int(second), int(first))
+        )
+    except Exception:
+        return False
 
 
 def _safe_topmost_handle(
@@ -2312,6 +2360,20 @@ def snap_candidate_target(
     if (
         _neutral_same_label_state_option_ambiguous(instruction, candidate, candidates)
         or _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates)
+        or (
+            not _candidate_satisfies_positional_action_duplicate_request(
+                instruction,
+                instruction_tokens,
+                candidate,
+                candidates,
+            )
+            and _duplicate_state_only_control_ambiguous(
+                instruction,
+                instruction_tokens,
+                candidate,
+                candidates,
+            )
+        )
     ):
         return TargetResolution(
             rect=candidate.rect,
@@ -4591,6 +4653,13 @@ def _target_id_plausibility(
         candidates,
     ):
         return True, max(0.86, text_score, geometry_score), ""
+    if _duplicate_state_only_control_ambiguous(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if model_rect is not None and _same_label_duplicate_has_stronger_geometry(
         candidate,
         candidates,
@@ -4860,20 +4929,92 @@ def _state_control_visible_value_needs_nearby_label(candidate: ControlCandidate)
         return True
     if candidate.control_type == "slider":
         return not any(token.isalpha() for token in tokens)
-    state_value_words = {
-        "checked",
-        "deselected",
-        "disabled",
-        "enabled",
-        "off",
-        "on",
-        "selected",
-        "unchecked",
-        "unselected",
-    }
     if candidate.control_type in {"checkbox", "radiobutton"}:
-        return bool(tokens & state_value_words) and not bool(tokens - state_value_words)
+        return bool(tokens & STATE_ONLY_CONTROL_VALUE_WORDS) and not bool(
+            tokens - STATE_ONLY_CONTROL_VALUE_WORDS
+        )
     return False
+
+
+def _duplicate_state_only_control_ambiguous(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    state_tokens = _state_only_control_value_tokens(candidate)
+    if not state_tokens:
+        return False
+    identity_tokens = _state_control_identity_evidence_tokens(candidate, candidates)
+    request_identity = _state_control_request_identity_tokens(instruction, instruction_tokens)
+    if request_identity and identity_tokens and request_identity & identity_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type != candidate.control_type:
+            continue
+        if _state_only_control_value_tokens(other) != state_tokens:
+            continue
+        other_identity = _state_control_identity_evidence_tokens(other, candidates)
+        if request_identity and other_identity and request_identity & other_identity:
+            continue
+        return True
+    return False
+
+
+def _state_only_control_value_tokens(candidate: ControlCandidate) -> set[str]:
+    if candidate.control_type not in {"checkbox", "radiobutton"}:
+        return set()
+    tokens = _tokens_from_text(candidate.text)
+    if not tokens:
+        return set()
+    if tokens <= STATE_ONLY_CONTROL_VALUE_WORDS:
+        return tokens
+    return set()
+
+
+def _state_control_identity_evidence_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    tokens = _nearby_field_label_tokens(candidate, candidates) | _candidate_automation_tokens(candidate)
+    return _object_token_variants(tokens) - (
+        STATE_ONLY_CONTROL_VALUE_WORDS
+        | {"box", "button", "check", "checkbox", "control", "option", "radio", "radiobutton"}
+    )
+
+
+def _state_control_request_identity_tokens(
+    instruction: str,
+    instruction_tokens: set[str],
+) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    tokens = _object_token_variants(raw_tokens | instruction_tokens)
+    return tokens - (
+        STATE_ONLY_CONTROL_VALUE_WORDS
+        | STATE_ACTION_WORDS
+        | GENERIC_OBJECT_REQUEST_WORDS
+        | CONTEXTUAL_DUPLICATE_POSITION_WORDS
+        | {
+            "a",
+            "an",
+            "box",
+            "button",
+            "check",
+            "checkbox",
+            "control",
+            "option",
+            "radio",
+            "radiobutton",
+            "select",
+            "selected",
+            "state",
+            "the",
+            "this",
+            "that",
+        }
+    )
 
 
 def _nearby_field_context_label_tokens(

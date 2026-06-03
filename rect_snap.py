@@ -814,6 +814,7 @@ def snap_to_control(
         _window_rank,
         _foreground_known,
         _top_handle,
+        _control_handle,
         _window_title,
     ) in raw_candidates:
         ctype = _control_type(control)
@@ -829,6 +830,7 @@ def snap_to_control(
         window_rank,
         foreground_known,
         top_handle,
+        control_handle,
         window_title,
     ) in raw_candidates:
         ctype = _control_type(control)
@@ -1079,7 +1081,7 @@ def snap_to_control(
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
         )
-        if not _is_candidate_topmost(top_handle, rect, topmost_provider):
+        if not _is_candidate_topmost(top_handle, control_handle, rect, topmost_provider):
             if (
                 occluded_result is None
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
@@ -1332,6 +1334,10 @@ def snap_to_control(
                 source="uia",
                 rejected_reason="contained control ambiguous",
             )
+        if own_process_result is not None:
+            return own_process_result
+        if occluded_result is not None:
+            return occluded_result
         if (
             best_result is not None
             and _semantic_mismatch(
@@ -1347,10 +1353,6 @@ def snap_to_control(
                 matched_text=best_result.matched_text,
                 rejected_reason="candidate semantic mismatch",
             )
-        if own_process_result is not None:
-            return own_process_result
-        if occluded_result is not None:
-            return occluded_result
         if control_type_mismatch_result is not None:
             return control_type_mismatch_result
         if semantic_action_mismatch_result is not None:
@@ -1420,8 +1422,8 @@ def _default_desktop():
 def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
     """BFS visible top-level windows and their descendants, yielding
     ``(control, rect, is_own_process, window_rank, foreground_known,
-    top_handle)`` tuples whose rect intersects ``search_rect``. Pruned by
-    ``deadline`` and ``_MAX_BFS_DEPTH``.
+    top_handle, control_handle, window_title)`` tuples whose rect intersects
+    ``search_rect``. Pruned by ``deadline`` and ``_MAX_BFS_DEPTH``.
     """
     try:
         toplevels = list(desktop.windows(visible_only=True, enabled_only=True))
@@ -1455,6 +1457,7 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
                 return
             next_queue: list[tuple[object, tuple[int, int, int, int]]] = []
             for control, rect in queue:
+                control_handle = _window_handle(control)
                 yield (
                     control,
                     rect,
@@ -1462,6 +1465,7 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
                     window_rank,
                     foreground_known,
                     top_handle,
+                    control_handle,
                     _control_visible_text(top),
                 )
                 if time.monotonic() >= deadline:
@@ -1568,7 +1572,12 @@ def _candidate_window_rank(window_index: int, foreground_index: int | None) -> i
     return window_index + 1 if window_index < foreground_index else window_index
 
 
-def _is_candidate_topmost(top_handle: int | None, rect, topmost_handle_provider) -> bool:
+def _is_candidate_topmost(
+    top_handle: int | None,
+    control_handle: int | None,
+    rect,
+    topmost_handle_provider,
+) -> bool:
     if top_handle is None or topmost_handle_provider is None:
         return True
     expected_root = _root_window_handle(top_handle)
@@ -1582,7 +1591,11 @@ def _is_candidate_topmost(top_handle: int | None, rect, topmost_handle_provider)
             continue
         checked += 1
         actual_root = _root_window_handle(actual)
-        if actual_root == expected_root:
+        if actual_root == expected_root and _topmost_handle_matches_candidate(
+            actual,
+            top_handle,
+            control_handle,
+        ):
             matches += 1
             if index == 0:
                 center_matched = True
@@ -1593,6 +1606,28 @@ def _is_candidate_topmost(top_handle: int | None, rect, topmost_handle_provider)
     if center_checked and not center_matched:
         return False
     return (matches / checked) >= MIN_TOPMOST_SAMPLE_FRACTION
+
+
+def _topmost_handle_matches_candidate(
+    actual_handle: int,
+    top_handle: int,
+    control_handle: int | None,
+) -> bool:
+    if control_handle is None:
+        return True
+    if actual_handle in {top_handle, control_handle}:
+        return True
+    return _handles_are_related(control_handle, actual_handle)
+
+
+def _handles_are_related(first: int, second: int) -> bool:
+    try:
+        user32 = ctypes.windll.user32
+        return bool(user32.IsChild(int(first), int(second))) or bool(
+            user32.IsChild(int(second), int(first))
+        )
+    except Exception:
+        return False
 
 
 def _safe_topmost_handle(provider, x: int, y: int) -> int | None:

@@ -96,7 +96,12 @@ ephemeral candidate IDs when final revalidation loses window identity or visual
 context changes, treats substring-like OCR fuzzy matches such as `Save`/`Saved`
 as partial crops, verifies filled dropdown/input identity through nearby labels,
 requires delimited context matches to remain unique, and makes raw row-context
-snapping independent of UIA enumeration order.
+snapping independent of UIA enumeration order. The latest safety pass refuses
+duplicate state-only checkbox/radio values unless the request supplies positional
+or identity evidence, OCR-verifies slider/spinner targets that rely on nearby
+labels, rejects targets hidden behind same-root child HWND overlays, and detects
+stable surface IDs whose visible pane/list/menu/table identity changed at the
+same rectangle.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

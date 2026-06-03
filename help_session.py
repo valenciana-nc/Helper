@@ -63,6 +63,9 @@ POST_CLICK_SETTLE_SEC = 0.35
 OVERLAY_CLEAR_SETTLE_SEC = 0.05
 CLICK_HIT_MARGIN_PX = 24
 SURFACE_PROMOTION_CONTROL_TYPES = frozenset({"group", "headeritem", "list", "menu", "pane", "toolbar", "window"})
+SURFACE_REVALIDATION_CONTROL_TYPES = frozenset(
+    {"datagrid", "grid", "group", "list", "menu", "pane", "table", "toolbar", "window"}
+)
 CANDIDATE_EMPTY_RETRIES = 2
 CANDIDATE_EMPTY_RETRY_SEC = 0.08
 UIA_BACKED_TARGET_SOURCES = frozenset(
@@ -192,6 +195,30 @@ CONTROL_CONTEXT_REVALIDATION_GENERIC_WORDS = CONTROL_IDENTITY_REVALIDATION_GENER
 CONTROL_CONTEXT_LABEL_TYPES = frozenset({"headeritem", "label", "statictext", "text"})
 CONTROL_CONTEXT_SECTION_TYPES = frozenset({"group", "list", "pane"})
 CONTROL_CONTEXT_ROW_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
+SURFACE_IDENTITY_REVALIDATION_GENERIC_WORDS = frozenset(
+    {
+        "area",
+        "card",
+        "container",
+        "datagrid",
+        "dialog",
+        "grid",
+        "group",
+        "list",
+        "menu",
+        "modal",
+        "pane",
+        "panel",
+        "popup",
+        "preferences",
+        "section",
+        "settings",
+        "surface",
+        "table",
+        "toolbar",
+        "window",
+    }
+)
 WINDOW_TITLE_REVALIDATION_GENERIC_WORDS = frozenset(
     {
         "app",
@@ -884,6 +911,13 @@ def _guard_revalidated_target(
         candidates,
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_surface_identity_changed(
+        previous_target,
+        target,
+        previous_candidates or [],
+        candidates,
+    ):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if _contextless_generic_action_visual_context_changed(
         previous_target,
         target,
@@ -1434,6 +1468,54 @@ def _revalidated_action_window_context_changed(
     if current.control_type not in ACTION_REVALIDATION_CONTROL_TYPES:
         return False
     return _revalidation_window_context_changed(previous, current)
+
+
+def _revalidated_surface_identity_changed(
+    previous_target: TargetResolution,
+    target: TargetResolution,
+    previous_candidates: list[ControlCandidate],
+    candidates: list[ControlCandidate],
+) -> bool:
+    if not previous_target.target_id and not target.target_id:
+        return False
+    previous = _revalidation_candidate_for_target(previous_target, previous_candidates)
+    current = _revalidation_candidate_for_target(target, candidates)
+    if previous is None or current is None:
+        return False
+    previous_type = previous.control_type.lower()
+    current_type = current.control_type.lower()
+    if previous_type not in SURFACE_REVALIDATION_CONTROL_TYPES:
+        return False
+    if current_type not in SURFACE_REVALIDATION_CONTROL_TYPES:
+        return False
+    if previous_type != current_type:
+        return True
+    previous_tokens = _surface_identity_revalidation_tokens(previous, previous_target.matched_text)
+    current_tokens = _surface_identity_revalidation_tokens(current, target.matched_text)
+    if not previous_tokens:
+        return False
+    if not current_tokens:
+        return True
+    overlap = previous_tokens & current_tokens
+    similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
+    return similarity <= 0.5
+
+
+def _surface_identity_revalidation_tokens(
+    candidate: ControlCandidate,
+    matched_text: str,
+) -> set[str]:
+    text = " ".join(
+        part
+        for part in (matched_text or "", candidate.text or "", candidate.automation_id or "")
+        if part
+    )
+    if not text:
+        return set()
+    return (
+        _tokenize_control(text)
+        | _tokens_from_text(text)
+    ) - SURFACE_IDENTITY_REVALIDATION_GENERIC_WORDS
 
 
 def _revalidation_window_context_changed(

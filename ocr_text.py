@@ -145,7 +145,9 @@ OCR_VERIFICATION_CONTROL_TYPES = frozenset(
         "radiobutton",
         "row",
         "rowheader",
+        "slider",
         "splitbutton",
+        "spinner",
         "tabitem",
         "treeitem",
     }

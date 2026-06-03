@@ -420,6 +420,23 @@ class OcrTextTests(unittest.TestCase):
         self.assertEqual(evidence.text, "Country")
         self.assertEqual(evidence.rect, (20, 96, 360, 36))
 
+    def test_slider_label_mismatch_uses_ocr_gate(self) -> None:
+        provider = _Provider(OcrTextResult(text="Brightness", available=True))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 96, 360, 36),
+            expected_text="Volume",
+            control_type="slider",
+            provider=provider,
+        )
+
+        self.assertEqual(len(provider.calls), 1)
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+        self.assertEqual(result.expected_text, "Volume")
+        self.assertEqual(result.recognized_text, "Brightness")
+
     def test_expected_text_does_not_invent_label_for_unlabeled_blank_edit(self) -> None:
         target = TargetResolution(
             rect=(220, 100, 240, 32),
