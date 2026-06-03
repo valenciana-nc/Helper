@@ -668,7 +668,7 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "target_id",
                 "target_id": "setting",
-                "rejected_reason": "current screen recheck target changed",
+                "rejected_reason": "target_id ambiguous",
                 "overlay_emitted": False,
             },
         },
@@ -24046,6 +24046,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "named_text_field_rejects_label_from_other_window_rank",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 80, 24], "label": "Email"},
+                {"rect": [120, 96, 260, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Email text field.",
+                "target_id": "bg_email",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "fg_label", "text": "Email", "control_type": "text", "rect": [20, 102, 80, 24], "window_title": "Foreground", "window_rank": 0},
+                {"id": "bg_email", "text": "", "control_type": "edit", "rect": [120, 96, 260, 36], "window_title": "Background", "window_rank": 2},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "bg_email",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "same_label_menu_residue_recovers_requested_input_field",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 80, 180, 32], "label": "Settings"},
+                {"rect": [20, 130, 180, 32], "label": "Settings"},
+                {"rect": [20, 180, 180, 32], "label": "Settings"},
+                {"rect": [20, 230, 180, 28], "label": "Settings"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Settings input field.",
+                "target_id": "menu",
+                "target": {"x": 20, "y": 230, "width": 180, "height": 28},
+            },
+            "candidates": [
+                {"id": "edit", "text": "Settings", "control_type": "edit", "rect": [20, 80, 180, 32]},
+                {"id": "check", "text": "Settings", "control_type": "checkbox", "rect": [20, 130, 180, 32]},
+                {"id": "radio", "text": "Settings", "control_type": "radiobutton", "rect": [20, 180, 180, 32]},
+                {"id": "menu", "text": "Settings", "control_type": "menuitem", "rect": [20, 230, 180, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "edit",
+                "rect": [20, 80, 180, 32],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "ocr_blank_text_field_uses_nearby_label",
             "capture": {"width": 1000, "height": 500},
             "draw": [
@@ -24570,6 +24622,34 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "candidate_snap",
                 "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "row_action_rejects_context_from_other_window_rank",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [200, 110, 60, 28], "label": "Pay"},
+                {"rect": [200, 180, 60, 28], "label": "Pay"},
+                {"rect": [20, 100, 260, 48], "label": "Acme invoice"},
+                {"rect": [20, 170, 260, 48], "label": "Beta invoice"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Acme invoice.",
+                "target_id": "pay_top",
+                "target": {"x": 200, "y": 110, "width": 60, "height": 28},
+            },
+            "candidates": [
+                {"id": "pay_top", "text": "Pay", "control_type": "button", "rect": [200, 110, 60, 28], "window_title": "Foreground Checkout", "window_rank": 0},
+                {"id": "pay_bottom", "text": "Pay", "control_type": "button", "rect": [200, 180, 60, 28], "window_title": "Foreground Checkout", "window_rank": 0},
+                {"id": "row_bg_acme", "text": "Acme invoice", "control_type": "dataitem", "rect": [20, 100, 260, 48], "window_title": "Background Billing", "window_rank": 1},
+                {"id": "row_bg_beta", "text": "Beta invoice", "control_type": "dataitem", "rect": [20, 170, 260, 48], "window_title": "Background Billing", "window_rank": 1},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "pay_top",
+                "rejected_reason": "target_id semantic mismatch",
                 "overlay_emitted": False,
             },
         },

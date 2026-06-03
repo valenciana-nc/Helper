@@ -42,6 +42,7 @@ from target_quality import evaluate_target_quality
 WINDOW_TITLE_PREFIX = "Helper Precision Self Test"
 TARGET_TEXT = "Save helper precision"
 CHILD_READY_SETTLE_SEC = 0.25
+INITIAL_UIA_SETTLE_SEC = 1.5
 TARGET_WAIT_TIMEOUT_SEC = 5.0
 SELFTEST_CANDIDATE_LIMIT = max(MAX_CANDIDATES, 200)
 
@@ -59,6 +60,7 @@ def run_selftest(
     title = f"{WINDOW_TITLE_PREFIX} {os.getpid()} {uuid.uuid4().hex[:6]}"
     child = _start_child_window(title)
     try:
+        time.sleep(max(INITIAL_UIA_SETTLE_SEC, settle_sec))
         capture, candidates, target_candidate = _wait_for_target_candidate(
             title=title,
             timeout_sec=max(TARGET_WAIT_TIMEOUT_SEC, settle_sec),

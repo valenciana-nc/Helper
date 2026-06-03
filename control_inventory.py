@@ -2842,6 +2842,19 @@ def _candidate_context_identity_key(candidate: ControlCandidate) -> tuple[str, i
     return ((candidate.window_title or "").strip().lower(), candidate.window_rank)
 
 
+def _same_resolution_context_window(
+    target: ControlCandidate,
+    context: ControlCandidate,
+) -> bool:
+    if target.window_rank != context.window_rank:
+        return False
+    target_title = (target.window_title or "").strip().lower()
+    context_title = (context.window_title or "").strip().lower()
+    if target_title and context_title and target_title != context_title:
+        return False
+    return True
+
+
 def _first_distinct_ranked_candidate(
     ranked: list[tuple[float, ControlCandidate]],
     selected: ControlCandidate,
@@ -4044,9 +4057,9 @@ def _dismiss_candidate_has_requested_dialog_surface(
     for surface in candidates:
         if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
             continue
-        if surface.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
+        if not _same_resolution_context_window(candidate, surface):
             continue
-        if surface.window_rank != candidate.window_rank:
+        if surface.control_type not in SURFACE_CONTEXT_CONTROL_TYPES:
             continue
         surface_bounds = _expand_rect(surface.rect, 4)
         if not (
@@ -5283,6 +5296,8 @@ def _nearby_field_context_label_tokens(
     for label in candidates:
         if label.id == candidate.id:
             continue
+        if not _same_resolution_context_window(candidate, label):
+            continue
         if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
             continue
         tokens = _candidate_visible_text_tokens(label)
@@ -5316,6 +5331,8 @@ def _nearby_field_section_label_tokens(
     best_tokens: set[str] = set()
     for label in candidates:
         if label.id == candidate.id:
+            continue
+        if not _same_resolution_context_window(candidate, label):
             continue
         if direct_label is not None and (
             label.id == direct_label.id or _same_visual_candidate(label, direct_label)
@@ -6053,6 +6070,8 @@ def _has_clear_field_context(
     requested_context = instruction_words & CLEAR_CONTEXT_WORDS
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, context):
             continue
         if not (
             context.control_type in CLEAR_CONTEXT_CONTROL_TYPES
@@ -7000,6 +7019,8 @@ def _nearby_unlabeled_control_label_tokens(
     for label in candidates:
         if label.id == candidate.id:
             continue
+        if not _same_resolution_context_window(candidate, label):
+            continue
         if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
             continue
         tokens = _candidate_visible_text_tokens(label)
@@ -7761,6 +7782,8 @@ def _same_row_cell_context_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if not _same_cell_context_window_rank(candidate, context):
             continue
         if context.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
@@ -7870,6 +7893,8 @@ def _containing_field_section_label_tokens(
     best_tokens: set[str] = set()
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, context):
             continue
         if context.control_type not in FIELD_SECTION_CONTEXT_CONTROL_TYPES:
             continue
@@ -8099,6 +8124,8 @@ def _option_parent_context_matches_candidate(
         return False
     for parent in candidates:
         if parent.id == child.id or _same_visual_candidate(parent, child):
+            continue
+        if not _same_resolution_context_window(child, parent):
             continue
         if parent.control_type not in OPTION_PARENT_CONTEXT_CONTROL_TYPES:
             continue
@@ -8570,6 +8597,8 @@ def _has_adjacent_spinner(
     for context in candidates:
         if context.id == candidate.id or context.control_type != "spinner":
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if _is_adjacent_spinner_button(candidate, context):
             return True
     return False
@@ -8606,6 +8635,8 @@ def _has_adjacent_combobox(
 ) -> bool:
     for context in candidates:
         if context.id == candidate.id or context.control_type != "combobox":
+            continue
+        if not _same_resolution_context_window(candidate, context):
             continue
         if _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
             return True
@@ -10041,9 +10072,16 @@ def _contained_row_action_context_mismatch(
             return False
         row_objects = _contained_row_context_objects(candidate, candidates)
         if not row_objects:
+            if _contextual_duplicate_request_matches_evidence(
+                instruction_objects,
+                _contextual_duplicate_evidence_tokens(candidate, candidates),
+            ):
+                return False
             missing_row_context_requested = instruction_raw_tokens & {
                 "entries",
                 "entry",
+                "invoice",
+                "invoices",
                 "item",
                 "items",
                 "listitem",
@@ -10307,6 +10345,7 @@ def _contained_row_context_objects(
         item
         for item in candidates
         if item.id != candidate.id
+        and _same_resolution_context_window(candidate, item)
         and _same_cell_context_window_rank(candidate, item)
         and (
             (
@@ -10358,6 +10397,8 @@ def _contained_row_line_label_tokens(
     tokens: set[str] = set()
     for label in candidates:
         if label.id == candidate.id or _same_visual_candidate(label, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, label):
             continue
         if label.id == container.id or _same_visual_candidate(label, container):
             continue
@@ -10417,6 +10458,8 @@ def _same_containing_row_line_label_rect_matches(
     return any(
         row.id != label.id
         and row.id != action.id
+        and _same_resolution_context_window(action, label)
+        and _same_resolution_context_window(action, row)
         and (
             row.control_type in ROW_CONTEXT_CONTROL_TYPES
             or row.control_type in SURFACE_ROW_CONTEXT_CONTROL_TYPES
@@ -10492,6 +10535,8 @@ def _implicit_container_context_evidence_tokens(
     tokens: set[str] = set()
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, context):
             continue
         if context.control_type in ROW_CONTEXT_CONTROL_TYPES:
             if not _row_action_context_rect_matches(context, candidate):
@@ -10854,6 +10899,8 @@ def _segmented_control_context_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if context.control_type not in {"group", "pane", "toolbar"}:
             continue
         if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
@@ -11047,6 +11094,8 @@ def _requested_context_carrier_ids(
             context,
             action,
         ):
+            continue
+        if not _same_resolution_context_window(action, context):
             continue
         if context.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             context,
@@ -11249,6 +11298,8 @@ def _action_candidate_conflicting_context_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if context.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             context,
         ):
@@ -11412,6 +11463,8 @@ def _delimited_context_tokens_match_candidate(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if context.control_type != "menuitem":
             continue
         context_tokens_for_candidate = _object_token_variants(
@@ -11449,6 +11502,8 @@ def _menu_path_parent_for_segment(
 ) -> ControlCandidate | None:
     for context in candidates:
         if context.id == child.id or _same_visual_candidate(context, child):
+            continue
+        if not _same_resolution_context_window(child, context):
             continue
         if not _candidate_matches_menu_path_segment(context, segment_tokens):
             continue
@@ -11985,6 +12040,8 @@ def _contextual_duplicate_evidence_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         context_semantic_tokens = _candidate_semantic_tokens(context)
         context_descriptor_tokens = _tokens_from_text(context.descriptor)
         context_surface_tokens = _surface_context_type_tokens(context.control_type)
@@ -12131,6 +12188,8 @@ def _contextual_duplicate_aligned_header_tokens(
     for header in candidates:
         if header.id == candidate.id or header.control_type != "headeritem":
             continue
+        if not _same_resolution_context_window(candidate, header):
+            continue
         if not _same_cell_context_window_rank(candidate, header):
             continue
         if header.rect[1] > candidate.rect[1]:
@@ -12151,6 +12210,8 @@ def _contained_by_header_exclusion_surface(
     for surface in candidates:
         if surface.id == candidate.id or _same_visual_candidate(surface, candidate):
             continue
+        if not _same_resolution_context_window(candidate, surface):
+            continue
         if surface.control_type not in {"menu", "toolbar"}:
             continue
         if _contains_rect(_expand_rect(surface.rect, 3), candidate.rect):
@@ -12167,6 +12228,8 @@ def _contextual_duplicate_nearby_label_tokens(
     tokens: set[str] = set()
     for label in candidates:
         if label.id == candidate.id:
+            continue
+        if not _same_resolution_context_window(candidate, label):
             continue
         if label.control_type in CLICKABLE_CONTROL_TYPES and not _context_label_candidate(
             label,
@@ -15542,6 +15605,8 @@ def _container_only_request_blocks_contained_candidate(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_resolution_context_window(candidate, context):
+            continue
         if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
             continue
         if _geometry_agreement(context.rect, model_rect) < TARGET_ID_GEOMETRY_FLOOR:
@@ -15568,6 +15633,8 @@ def _contained_control_intent_has_evidence(
     context_tokens: set[str] = set()
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, context):
             continue
         if not _contains_rect(_expand_rect(context.rect, 4), candidate.rect):
             continue
@@ -16260,6 +16327,7 @@ def _menu_item_cross_role_candidate_matches_request(
     return any(
         surface.id != candidate.id
         and surface.control_type == "menu"
+        and _same_resolution_context_window(candidate, surface)
         and _contains_rect(_expand_rect(surface.rect, 4), candidate.rect)
         for surface in candidates
     )

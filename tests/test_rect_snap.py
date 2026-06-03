@@ -32968,6 +32968,199 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.target_id, "page_save")
         self.assertEqual(target.rejected_reason, "target_id semantic mismatch")
 
+    def test_named_field_does_not_borrow_label_from_other_window_rank(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "fg_label",
+                "Email",
+                "text",
+                (20, 102, 80, 24),
+                window_title="Foreground",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "bg_email",
+                "",
+                "edit",
+                (120, 96, 260, 36),
+                window_title="Background",
+                window_rank=2,
+            ),
+        ]
+        instruction = "Click the Email text field."
+
+        target_id = resolve_candidate_target(
+            target_id="bg_email",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "bg_email",
+                    "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "bg_email")
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
+
+    def test_row_action_does_not_borrow_row_context_from_other_window_rank(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate(
+                "pay_top",
+                "Pay",
+                "button",
+                (200, 110, 60, 28),
+                window_title="Foreground Checkout",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "pay_bottom",
+                "Pay",
+                "button",
+                (200, 180, 60, 28),
+                window_title="Foreground Checkout",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "row_bg_acme",
+                "Acme invoice",
+                "dataitem",
+                (20, 100, 260, 48),
+                window_title="Background Billing",
+                window_rank=1,
+            ),
+            ControlCandidate(
+                "row_bg_beta",
+                "Beta invoice",
+                "dataitem",
+                (20, 170, 260, 48),
+                window_title="Background Billing",
+                window_rank=1,
+            ),
+        ]
+        instruction = "Click Pay for Acme invoice."
+
+        target_id = resolve_candidate_target(
+            target_id="pay_top",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 110, 60, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(200, 110, 60, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "pay_top",
+                    "target": {"x": 200, "y": 110, "width": 60, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.target_id, "pay_top")
+        self.assertEqual(help_target.rejected_reason, "target_id semantic mismatch")
+
+    def test_same_label_menu_residue_recovers_requested_input_field(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("edit", "Settings", "edit", (20, 80, 180, 32)),
+            ControlCandidate("check", "Settings", "checkbox", (20, 130, 180, 32)),
+            ControlCandidate("radio", "Settings", "radiobutton", (20, 180, 180, 32)),
+            ControlCandidate("menu", "Settings", "menuitem", (20, 230, 180, 28)),
+        ]
+        instruction = "Click the Settings input field."
+
+        target_id = resolve_candidate_target(
+            target_id="menu",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 230, 180, 28),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 230, 180, 28),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 230, 180, 28),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "menu",
+                    "target": {"x": 20, "y": 230, "width": 180, "height": 28},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id control type mismatch")
+        self.assertIsNone(snap_target)
+        for target in (text_target, help_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.source, "text_match")
+            self.assertEqual(target.target_id, "edit")
+            self.assertFalse(target.rejected_reason)
+            self.assertEqual(target.rect, (20, 80, 180, 32))
+
     def test_state_action_item_words_recover_exact_action_button(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target

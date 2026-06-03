@@ -135,6 +135,10 @@ window title than the cell itself.
 The current pass extends that same stale-context rule to action and state/input
 controls, so row, section, and direct-label evidence cannot prove continuity
 when it belongs to another window rank or incompatible window title.
+The latest resolver hardening applies the same invariant during initial
+target resolution: nearby labels, row context, sections, menu parents, and
+container evidence must come from the same window rank and compatible window
+title before they can make a target ID, text match, or snap look safe.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
