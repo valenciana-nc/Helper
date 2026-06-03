@@ -22880,6 +22880,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_unlabeled_checkbox_state_text_skips_verification",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 80, 32], "label": "Checked"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Checked checkbox.",
+                "target_id": "terms",
+                "target": {"x": 120, "y": 96, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "terms", "text": "Checked", "control_type": "checkbox", "rect": [120, 96, 80, 32]},
+            ],
+            "ocr_result": {"text": "Cancel"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "terms",
+                "rect": [120, 96, 80, 32],
+                "ocr_expected_text": "",
+                "ocr_recognized_text": "",
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "current_value_radio_accepts_nearby_label_evidence",
             "capture": {"width": 1000, "height": 500},
             "draw": [

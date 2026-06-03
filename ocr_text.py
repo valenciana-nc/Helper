@@ -218,6 +218,8 @@ def expected_text_evidence_for_target(
                 if label.text:
                     return label
                 text = str(getattr(candidate, "text", "") or "").strip()
+                if _candidate_has_state_only_text_without_label(candidate, text):
+                    return OcrTextEvidence()
                 if text:
                     return OcrTextEvidence(text=text, rect=_object_rect(candidate))
                 break
@@ -229,6 +231,11 @@ def expected_text_evidence_for_target(
 
 def _state_control_visible_label(candidate: object, candidates: list[object]) -> str:
     return _state_control_visible_label_evidence(candidate, candidates).text
+
+
+def _candidate_has_state_only_text_without_label(candidate: object, text: str) -> bool:
+    control_type = str(getattr(candidate, "control_type", "") or "").strip().lower()
+    return control_type in OCR_STATE_CONTROL_TYPES and _state_control_text_is_state_only(text)
 
 
 def _state_control_visible_label_evidence(

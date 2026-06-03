@@ -255,6 +255,41 @@ class OcrTextTests(unittest.TestCase):
         self.assertEqual(evidence.text, "Weekly")
         self.assertEqual(evidence.rect, (20, 20, 132, 24))
 
+    def test_expected_text_skips_unlabeled_state_only_checkbox_text(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 64, 24),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Checked",
+            target_id="terms",
+        )
+        candidates = [
+            ControlCandidate("terms", "Checked", "checkbox", (20, 20, 64, 24)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "")
+        self.assertIsNone(evidence.rect)
+        self.assertEqual(expected_text_for_target(target, candidates), "")
+
+    def test_expected_text_skips_unlabeled_state_only_radio_text(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 64, 24),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Selected",
+            target_id="weekly",
+        )
+        candidates = [
+            ControlCandidate("weekly", "Selected", "radiobutton", (20, 20, 64, 24)),
+        ]
+
+        evidence = expected_text_evidence_for_target(target, candidates)
+
+        self.assertEqual(evidence.text, "")
+        self.assertIsNone(evidence.rect)
+
     def test_expected_text_keeps_meaningful_checkbox_text(self) -> None:
         target = TargetResolution(
             rect=(20, 20, 160, 32),
