@@ -120,6 +120,13 @@ The current coverage-gate pass includes `row` and `tableitem` as structural
 coverers, runs the same final foreground-cover check in synthetic highlight QA,
 and distinguishes newly appeared covering surfaces from stable parent rows,
 tabs, split buttons, and dialogs that legitimately own the selected child.
+It also refuses a stale background target when a foreground control with the
+same type and exact same rectangle is now above it; same-rectangle duplicate
+controls are ignored only when they share the same foreground rank.
+The next hardening pass refuses current-screen revalidation when a stale
+candidate ID is replaced by a nearby same-label control via fallback text
+matching, and prevents table/grid cells from borrowing row or column context
+evidence from candidates in another window rank.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

@@ -1104,6 +1104,47 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             "",
         )
 
+    def test_final_coverage_gate_rejects_foreground_same_rect_duplicate_control(self) -> None:
+        from help_session import _foreground_candidate_covering_reason
+
+        target = TargetResolution(
+            rect=(100, 100, 80, 32),
+            confidence=1.0,
+            source="target_id",
+            matched_text="Save",
+            target_id="background_save",
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "background_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Page",
+                window_rank=1,
+            ),
+        ]
+        candidates = [
+            ControlCandidate(
+                "foreground_save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Dialog",
+                window_rank=0,
+            ),
+            previous_candidates[0],
+        ]
+
+        self.assertEqual(
+            _foreground_candidate_covering_reason(
+                target,
+                candidates,
+                previous_candidates=previous_candidates,
+            ),
+            "target covered before overlay",
+        )
+
     def test_final_coverage_gate_allows_previous_row_owner_for_floating_menuitem(self) -> None:
         from help_session import _foreground_candidate_covering_reason
 
@@ -2728,6 +2769,52 @@ class HelpSessionEndToEndTests(unittest.TestCase):
 
         self.assertEqual(target.source, "text_match")
         self.assertFalse(target.rejected_reason)
+
+    def test_current_screen_recheck_rejects_stale_target_id_replaced_by_nearby_text_match(self) -> None:
+        app = _qt_app()
+        capture = _button_capture(button_rect=(80, 80, 70, 28))
+        current_candidates = [
+            ControlCandidate("c002", "Details", "button", (80, 80, 70, 28)),
+        ]
+        previous_candidates = [
+            ControlCandidate("c001", "Details", "button", (80, 60, 70, 28)),
+        ]
+        session = HelpSession(
+            agent=_DoneAgent(),  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: current_candidates,
+        )
+        previous_target = TargetResolution(
+            rect=(80, 60, 70, 28),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Details",
+            target_id="c001",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Details.",
+            target_id="c001",
+            target_norm_x=333,
+            target_norm_y=375,
+            target_norm_width=292,
+            target_norm_height=175,
+        )
+
+        try:
+            _capture, _candidates, target = session._revalidate_target_on_current_screen(
+                decision,
+                previous_target=previous_target,
+                previous_candidates=previous_candidates,
+            )
+        finally:
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertEqual(target.source, "text_match")
+        self.assertEqual(target.target_id, "c002")
+        self.assertEqual(target.rejected_reason, "current screen recheck target changed")
 
     def test_current_screen_recheck_rejects_empty_candidates_for_candidate_backed_target(self) -> None:
         app = _qt_app()

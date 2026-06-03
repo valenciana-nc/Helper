@@ -90,6 +90,62 @@ class HelpHighlightQATests(unittest.TestCase):
 
         self.assertTrue(results[0].passed)
 
+    def test_runner_rejects_same_rect_foreground_coverer(self) -> None:
+        from help_highlight_qa import run_scenarios
+
+        scenario = {
+            "name": "same_rect_foreground_coverer",
+            "capture": {"width": 300, "height": 220},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "background_save",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "foreground_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 80, 80, 32],
+                    "window_title": "Dialog",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "background_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 80, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 1,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "background_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [80, 80, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "background_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results = run_scenarios([scenario], artifacts_dir=Path(tmp))
+
+        self.assertTrue(results[0].passed)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25620,6 +25620,48 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (180, 100, 140, 32))
 
+    def test_table_cell_does_not_borrow_foreground_context_from_other_window_rank(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (260, 50, 120, 28), window_rank=0),
+            ControlCandidate("acme_row", "Acme", "rowheader", (20, 106, 140, 30), window_rank=0),
+            ControlCandidate("bg_cell", "Active", "cell", (260, 106, 120, 30), window_rank=2),
+        ]
+        instruction = "Click the Status cell for Acme."
+
+        wrong_target = resolve_candidate_target(
+            target_id="bg_cell",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "bg_cell",
+                    "target": {"x": 260, "y": 106, "width": 120, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
+
     def test_explicit_row_column_cell_request_does_not_choose_row_label_cell(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target

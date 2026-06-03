@@ -1008,6 +1008,8 @@ def _guard_revalidated_target(
         return replace(target, rejected_reason="current screen recheck target changed")
     if _model_only_revalidation_lacks_fresh_evidence(previous_target, target):
         return replace(target, rejected_reason="current screen recheck target changed")
+    if _revalidated_candidate_id_replaced(decision, previous_target, target):
+        return replace(target, rejected_reason="current screen recheck target changed")
     if decision.target_id and target.source == "target_id":
         independent = resolve_help_target(
             replace(decision, target_id=""),
@@ -1032,6 +1034,24 @@ def _guard_revalidated_target(
     if _same_revalidation_geometry(previous_target.rect, target.rect):
         return target
     return replace(target, rejected_reason="current screen recheck target changed")
+
+
+def _revalidated_candidate_id_replaced(
+    decision: "LiveHelpDecision",
+    previous_target: TargetResolution,
+    target: TargetResolution,
+) -> bool:
+    if not decision.target_id:
+        return False
+    if not previous_target.target_id or not target.target_id:
+        return False
+    if previous_target.target_id == target.target_id:
+        return False
+    if previous_target.source not in UIA_BACKED_TARGET_SOURCES:
+        return False
+    if target.source not in UIA_BACKED_TARGET_SOURCES:
+        return False
+    return target.source != "target_id"
 
 
 def _revalidated_row_identity_changed(
@@ -1973,12 +1993,13 @@ def _foreground_candidate_covering_reason(
     for candidate in candidates:
         if candidate.id == selected.id:
             continue
+        if candidate.window_rank > selected_rank:
+            continue
         if (
-            candidate.control_type == selected.control_type
+            candidate.window_rank == selected_rank
+            and candidate.control_type == selected.control_type
             and _rect_iou(candidate.rect, selected.rect) >= 0.98
         ):
-            continue
-        if candidate.window_rank > selected_rank:
             continue
         if candidate.window_rank == selected_rank and not _same_rank_candidate_can_cover_selected(
             candidate,

@@ -7761,6 +7761,8 @@ def _same_row_cell_context_tokens(
     for context in candidates:
         if context.id == candidate.id or _same_visual_candidate(context, candidate):
             continue
+        if not _same_cell_context_window_rank(candidate, context):
+            continue
         if context.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
             continue
         if (
@@ -7804,6 +7806,13 @@ def _same_row_cell_context_rect_matches(
     horizontal_gap = max(cell_x - context_right, context_x - cell_right, 0)
     max_gap = max(260, max(context_width, cell_width) * 6, min(960, cell_width * 10))
     return horizontal_gap <= max_gap
+
+
+def _same_cell_context_window_rank(
+    candidate: ControlCandidate,
+    context: ControlCandidate,
+) -> bool:
+    return candidate.control_type not in CELL_CONTROL_TYPES or context.window_rank == candidate.window_rank
 
 
 def _field_alternative_label_tokens(
@@ -10298,6 +10307,7 @@ def _contained_row_context_objects(
         item
         for item in candidates
         if item.id != candidate.id
+        and _same_cell_context_window_rank(candidate, item)
         and (
             (
                 item.control_type in ROW_CONTEXT_CONTROL_TYPES
@@ -12120,6 +12130,8 @@ def _contextual_duplicate_aligned_header_tokens(
     tokens: set[str] = set()
     for header in candidates:
         if header.id == candidate.id or header.control_type != "headeritem":
+            continue
+        if not _same_cell_context_window_rank(candidate, header):
             continue
         if header.rect[1] > candidate.rect[1]:
             continue

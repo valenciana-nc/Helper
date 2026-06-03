@@ -592,6 +592,31 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "stale_target_id_rejects_nearby_same_label_replacement",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 70, 28], "label": "Details"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Details.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 60, "width": 70, "height": 28},
+            },
+            "previous_candidates": [
+                {"id": "c001", "text": "Details", "control_type": "button", "rect": [80, 60, 70, 28]},
+            ],
+            "candidates": [
+                {"id": "c002", "text": "Details", "control_type": "button", "rect": [80, 80, 70, 28]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "c002",
+                "rejected_reason": "current screen recheck target changed",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "recycled_ephemeral_target_id_losing_window_identity_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -19825,6 +19850,50 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "table_cell_rejects_context_from_different_window_rank",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [260, 50, 120, 28], "label": "Status"},
+                {"rect": [20, 106, 140, 30], "label": "Acme"},
+                {"rect": [260, 106, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Status cell for Acme.",
+                "target_id": "bg_cell",
+                "target": {"x": 260, "y": 106, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {
+                    "id": "status_header",
+                    "text": "Status",
+                    "control_type": "headeritem",
+                    "rect": [260, 50, 120, 28],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "acme_row",
+                    "text": "Acme",
+                    "control_type": "rowheader",
+                    "rect": [20, 106, 140, 30],
+                    "window_rank": 0,
+                },
+                {
+                    "id": "bg_cell",
+                    "text": "Active",
+                    "control_type": "cell",
+                    "rect": [260, 106, 120, 30],
+                    "window_rank": 2,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "bg_cell",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "explicit_row_column_cell_does_not_choose_row_label_cell",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -23077,6 +23146,53 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "expected": {
                 "source": "target_id",
                 "target_id": "page_save",
+                "rejected_reason": "target covered before overlay",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "same_rect_foreground_button_rejects_stale_background_overlay",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "background_save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "foreground_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Dialog",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "background_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 1,
+                },
+            ],
+            "coverage_previous_candidates": [
+                {
+                    "id": "background_save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Page",
+                    "window_rank": 1,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "background_save",
                 "rejected_reason": "target covered before overlay",
                 "overlay_emitted": False,
             },
