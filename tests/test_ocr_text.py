@@ -264,6 +264,37 @@ class OcrTextTests(unittest.TestCase):
         self.assertFalse(result.accepted)
         self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
 
+    def test_rejects_numeric_sign_decimal_and_fraction_mismatches(self) -> None:
+        cases = (
+            ("-5", "5", OCR_PARTIAL_TEXT_REASON),
+            ("1.0", "10", OCR_PARTIAL_TEXT_REASON),
+            ("1/2", "12", OCR_PARTIAL_TEXT_REASON),
+        )
+
+        for expected, recognized, reason in cases:
+            with self.subTest(expected=expected, recognized=recognized):
+                result = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 100, 28),
+                    expected_text=expected,
+                    control_type="cell",
+                    provider=_Provider(OcrTextResult(text=recognized, available=True)),
+                )
+
+                self.assertFalse(result.accepted)
+                self.assertEqual(result.reason, reason)
+
+    def test_allows_numeric_thousands_separator_equivalence(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="$1,234.00",
+            control_type="cell",
+            provider=_Provider(OcrTextResult(text="$1234.00", available=True)),
+        )
+
+        self.assertTrue(result.accepted)
+
     def test_menuitem_generic_label_still_verified(self) -> None:
         result = verify_target_text(
             capture=_capture(),
@@ -275,6 +306,39 @@ class OcrTextTests(unittest.TestCase):
 
         self.assertFalse(result.accepted)
         self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_hyperlink_generic_label_still_verified(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 100, 28),
+            expected_text="Open",
+            control_type="hyperlink",
+            provider=_Provider(OcrTextResult(text="Delete", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_rejects_short_identity_token_mismatch(self) -> None:
+        cases = (
+            ("Plan A", "Plan B", OCR_TEXT_MISMATCH_REASON),
+            ("Option A", "Option B", OCR_TEXT_MISMATCH_REASON),
+            ("Plan 4", "Plan 5", OCR_TEXT_MISMATCH_REASON),
+            ("Plan A", "Plan", OCR_PARTIAL_TEXT_REASON),
+        )
+
+        for expected, recognized, reason in cases:
+            with self.subTest(expected=expected, recognized=recognized):
+                result = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 120, 32),
+                    expected_text=expected,
+                    control_type="button",
+                    provider=_Provider(OcrTextResult(text=recognized, available=True)),
+                )
+
+                self.assertFalse(result.accepted)
+                self.assertEqual(result.reason, reason)
 
     def test_dotted_abbreviation_compact_compare(self) -> None:
         matching = verify_target_text(
@@ -295,6 +359,37 @@ class OcrTextTests(unittest.TestCase):
         self.assertTrue(matching.accepted)
         self.assertFalse(mismatching.accepted)
         self.assertEqual(mismatching.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_rejects_version_like_compact_punctuation_mismatch(self) -> None:
+        cases = (
+            ("v1.0", "v10"),
+            ("A.1", "A1"),
+        )
+
+        for expected, recognized in cases:
+            with self.subTest(expected=expected, recognized=recognized):
+                result = verify_target_text(
+                    capture=_capture(),
+                    rect=(20, 20, 80, 24),
+                    expected_text=expected,
+                    control_type="cell",
+                    provider=_Provider(OcrTextResult(text=recognized, available=True)),
+                )
+
+                self.assertFalse(result.accepted)
+                self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+
+    def test_rejects_near_word_identity_mismatch(self) -> None:
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Cancel",
+            control_type="button",
+            provider=_Provider(OcrTextResult(text="Cancer", available=True)),
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
 
     def test_unavailable_ocr_is_inconclusive_but_available_blank_ocr_rejects(self) -> None:
         unavailable = verify_target_text(

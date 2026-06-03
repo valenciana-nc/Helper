@@ -538,6 +538,16 @@ def verify_target_text(
             available=True,
             elapsed_ms=result.elapsed_ms,
         )
+    punctuated_reason = _punctuated_compact_identity_rejection_reason(expected, recognized)
+    if punctuated_reason:
+        return OcrTextVerification(
+            accepted=False,
+            reason=punctuated_reason,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
 
     recognized_tokens = _meaningful_tokens(
         recognized,
@@ -589,6 +599,21 @@ def verify_target_text(
         return OcrTextVerification(
             accepted=False,
             reason=OCR_EXTRA_TEXT_REASON,
+            expected_text=expected,
+            recognized_text=recognized,
+            available=True,
+            elapsed_ms=result.elapsed_ms,
+        )
+    identity_gap_reason = _short_identity_token_gap_reason(
+        expected,
+        recognized,
+        expected_tokens,
+        recognized_tokens,
+    )
+    if identity_gap_reason:
+        return OcrTextVerification(
+            accepted=False,
+            reason=identity_gap_reason,
             expected_text=expected,
             recognized_text=recognized,
             available=True,
@@ -685,7 +710,11 @@ def _keep_generic_label_tokens(control_type: str) -> bool:
         "cell",
         "datagridcell",
         "gridcell",
+        "hyperlink",
+        "listitem",
         "menuitem",
+        "tabitem",
+        "treeitem",
     }
 
 
@@ -704,7 +733,7 @@ def _similar_token(first: str, second: str) -> bool:
         return False
     if _substring_token_crop_match(first, second):
         return False
-    return SequenceMatcher(None, first, second).ratio() >= 0.74
+    return SequenceMatcher(None, first, second).ratio() >= 0.85
 
 
 def _is_partial_token_crop_match(expected: set[str], recognized: set[str]) -> bool:
@@ -762,6 +791,38 @@ def _has_extra_identity_text(expected: set[str], recognized: set[str]) -> bool:
     return any(not _is_allowed_extra_text_token(token) for token in extra)
 
 
+def _short_identity_token_gap_reason(
+    expected_text: str,
+    recognized_text: str,
+    expected: set[str],
+    recognized: set[str],
+) -> str:
+    expected_raw = _raw_ocr_tokens(expected_text)
+    recognized_raw = _raw_ocr_tokens(recognized_text)
+    expected_short = {token for token in expected_raw if _is_short_identity_token(token)}
+    if not expected_short:
+        return ""
+    shared_context = {
+        token
+        for token in (expected & recognized) | (expected_raw & recognized_raw)
+        if not _is_short_identity_token(token)
+    }
+    if not shared_context:
+        return ""
+    recognized_short = {token for token in recognized_raw if _is_short_identity_token(token)}
+    if expected_short <= recognized_short:
+        return ""
+    return OCR_TEXT_MISMATCH_REASON if recognized_short else OCR_PARTIAL_TEXT_REASON
+
+
+def _raw_ocr_tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def _is_short_identity_token(token: str) -> bool:
+    return bool(re.fullmatch(r"[a-z0-9]", token or ""))
+
+
 def _all_signal_tokens_covered(expected_signal: set[str], recognized_signal: set[str]) -> bool:
     return all(
         _signal_token_matches_any(expected_token, recognized_signal)
@@ -805,10 +866,14 @@ def _numeric_text_rejection_reason(
 ) -> str:
     if (control_type or "").strip().lower() not in OCR_NUMERIC_STRICT_CONTROL_TYPES:
         return ""
+    if _contains_alpha_text(expected) or _contains_alpha_text(recognized):
+        return ""
+    expected_signature = _numeric_signature(expected)
+    recognized_signature = _numeric_signature(recognized)
+    if not expected_signature or not recognized_signature or expected_signature == recognized_signature:
+        return ""
     expected_digits = _compact_digits(expected)
     recognized_digits = _compact_digits(recognized)
-    if not expected_digits or not recognized_digits or expected_digits == recognized_digits:
-        return ""
     if expected_digits in recognized_digits or recognized_digits in expected_digits:
         return OCR_PARTIAL_TEXT_REASON
     return OCR_TEXT_MISMATCH_REASON
@@ -819,9 +884,13 @@ def _numeric_text_matches(expected: str, recognized: str, control_type: str) -> 
         return False
     if _contains_alpha_text(expected) or _contains_alpha_text(recognized):
         return False
-    expected_digits = _compact_digits(expected)
-    recognized_digits = _compact_digits(recognized)
-    return bool(expected_digits and recognized_digits and expected_digits == recognized_digits)
+    expected_signature = _numeric_signature(expected)
+    recognized_signature = _numeric_signature(recognized)
+    return bool(
+        expected_signature
+        and recognized_signature
+        and expected_signature == recognized_signature
+    )
 
 
 def _contains_alpha_text(text: str) -> bool:
@@ -830,6 +899,29 @@ def _contains_alpha_text(text: str) -> bool:
 
 def _compact_digits(text: str) -> str:
     return "".join(re.findall(r"\d+", text or ""))
+
+
+def _numeric_signature(text: str) -> str:
+    tokens = re.findall(r"[-+]?\d+(?:[.,/]\d+)*", text or "")
+    normalized = [_normalize_numeric_token(token) for token in tokens]
+    return "|".join(token for token in normalized if token)
+
+
+def _normalize_numeric_token(token: str) -> str:
+    value = token or ""
+    sign = ""
+    if value.startswith(("-", "+")):
+        sign, value = value[0], value[1:]
+    if "," in value:
+        integer, dot, fraction = value.partition(".")
+        groups = integer.split(",")
+        if (
+            len(groups) > 1
+            and 1 <= len(groups[0]) <= 3
+            and all(len(group) == 3 for group in groups[1:])
+        ):
+            value = "".join(groups) + (dot + fraction if dot else "")
+    return sign + value
 
 
 def _compact_abbreviation_rejection_reason(expected: str, recognized: str) -> str:
@@ -850,9 +942,31 @@ def _compact_abbreviation_matches(expected: str, recognized: str) -> bool:
     return bool(expected_compact and recognized_compact and expected_compact == recognized_compact)
 
 
+def _punctuated_compact_identity_rejection_reason(expected: str, recognized: str) -> str:
+    if "." not in (expected or ""):
+        return ""
+    if _looks_like_compact_abbreviation(expected):
+        return ""
+    expected_compact = _compact_alnum(expected)
+    recognized_compact = _compact_alnum(recognized)
+    if not expected_compact or not recognized_compact:
+        return ""
+    if expected_compact != recognized_compact:
+        return ""
+    if any(char.isdigit() for char in expected_compact):
+        return OCR_TEXT_MISMATCH_REASON
+    return ""
+
+
 def _looks_like_compact_abbreviation(text: str) -> bool:
     compact = _compact_alnum(text)
-    return "." in (text or "") and 2 <= len(compact) <= 4
+    parts = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return (
+        "." in (text or "")
+        and 2 <= len(compact) <= 4
+        and bool(parts)
+        and all(part.isalpha() and len(part) == 1 for part in parts)
+    )
 
 
 def _compact_alnum(text: str) -> str:

@@ -2349,6 +2349,8 @@ def snap_candidate_target(
                 model_rect,
             ):
                 return None
+            if _explicit_row_column_cell_target_unresolved(instruction, contained, candidates):
+                return None
             if _contains_multiple_tight_row_action_candidates(
                 selected=contained,
                 candidates=candidates,
@@ -2480,6 +2482,8 @@ def snap_candidate_target(
                 control_intents,
                 model_rect,
             ):
+                return None
+            if _explicit_row_column_cell_target_unresolved(instruction, contained, candidates):
                 return None
             if _contains_multiple_tight_row_action_candidates(
                 selected=contained,
@@ -2843,6 +2847,8 @@ def _text_match_score(
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
         return 0.0
     if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3488,6 +3494,8 @@ def _context_text_match_score(
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
         return 0.0
     if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
         return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -4715,6 +4723,8 @@ def _target_id_plausibility(
         return False, max(text_score, geometry_score), "target_id ambiguous"
     if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
         return False, max(text_score, geometry_score), "target_id semantic mismatch"
+    if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
+        return False, max(text_score, geometry_score), "target_id ambiguous"
     if _explicit_row_column_cell_target_matches(instruction, candidate, candidates):
         return True, max(0.86, text_score, geometry_score), ""
     if _implicit_cell_target_request_matches(instruction, candidate, candidates):
@@ -5090,12 +5100,14 @@ def _state_control_identity_match_has_duplicate(
 
 
 def _state_only_control_value_tokens(candidate: ControlCandidate) -> set[str]:
-    if candidate.control_type not in {"checkbox", "radiobutton"}:
-        return set()
     tokens = _tokens_from_text(candidate.text)
     if not tokens:
         return set()
-    if tokens <= STATE_ONLY_CONTROL_VALUE_WORDS:
+    if candidate.control_type == "slider":
+        if not any(token.isalpha() for token in tokens):
+            return tokens
+        return set()
+    if candidate.control_type in {"checkbox", "radiobutton"} and tokens <= STATE_ONLY_CONTROL_VALUE_WORDS:
         return tokens
     return set()
 
@@ -7422,6 +7434,24 @@ def _explicit_row_column_cell_target_mismatch(
     return bool(matches) and not any(match.id == candidate.id for match in matches)
 
 
+def _explicit_row_column_cell_target_unresolved(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in CELL_CONTROL_TYPES:
+        return False
+    column_tokens, row_tokens = _explicit_row_column_cell_request_tokens(instruction)
+    if not column_tokens or not row_tokens:
+        return False
+    matches = _explicit_row_column_cell_target_matches_for_request(
+        column_tokens,
+        row_tokens,
+        candidates,
+    )
+    return len(matches) != 1 or matches[0].id != candidate.id
+
+
 def _explicit_row_column_cell_request_tokens(instruction: str) -> tuple[set[str], set[str]]:
     words = _literal_word_sequence(instruction)
     if not words or not any(word in {"cell", "cells", "gridcell", "datagridcell"} for word in words):
@@ -7508,13 +7538,23 @@ def _explicit_row_column_cell_target_matches_for_request(
         header_tokens = _object_token_variants(
             _contextual_duplicate_aligned_header_tokens(candidate, candidates)
         )
+        cell_tokens = _object_token_variants(
+            _candidate_semantic_tokens(candidate) | _tokens_from_text(candidate.descriptor)
+        )
         row_evidence = _object_token_variants(
             _contained_row_context_objects(candidate, candidates)
             | _same_row_cell_context_tokens(candidate, candidates)
         )
-        if _contextual_duplicate_request_matches_evidence(column_tokens, header_tokens) and (
-            _contextual_duplicate_request_matches_evidence(row_tokens, row_evidence)
-        ):
+        header_overlap = column_tokens & header_tokens
+        value_tokens = column_tokens - header_tokens
+        column_matches = _contextual_duplicate_request_matches_evidence(
+            column_tokens,
+            header_tokens,
+        ) or (
+            bool(header_overlap)
+            and _contextual_duplicate_request_matches_evidence(value_tokens, cell_tokens)
+        )
+        if column_matches and _contextual_duplicate_request_matches_evidence(row_tokens, row_evidence):
             matches.append(candidate)
     return matches
 
@@ -13736,6 +13776,8 @@ def _candidate_snap_score(
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
+    if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
+        return 0.0
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return 0.0
     if _explicit_text_field_control_type_mismatch(instruction, candidate):
@@ -15388,6 +15430,8 @@ def _candidate_snap_semantic_mismatch(
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
     if _cell_target_request_mismatch(instruction, candidate, candidates):
+        return True
+    if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
         return True
     if _tab_context_candidate_mismatch(instruction, candidate, candidates):
         return True

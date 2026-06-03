@@ -381,6 +381,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "ocr_decimal_numeric_cell_punctuation_mismatch_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 90, 28], "label": "$100"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Highlight the $1.00 cell.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 90, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "$1.00", "control_type": "cell", "rect": [80, 80, 90, 28]},
+            ],
+            "ocr_result": {"text": "$100"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr partial text match",
+                "ocr_expected_text": "$1.00",
+                "ocr_recognized_text": "$100",
+                "rejected_reason": "ocr partial text match",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "ocr_generic_open_menuitem_mismatch_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -394,6 +420,56 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
             "candidates": [
                 {"id": "c001", "text": "Open", "control_type": "menuitem", "rect": [80, 80, 100, 28]},
+            ],
+            "ocr_result": {"text": "Delete"},
+            "expected": {
+                "source": "text_match",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Delete",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_short_suffix_plan_mismatch_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 100, 28], "label": "Plan B"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Plan A.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 100, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Plan A", "control_type": "button", "rect": [80, 80, 100, 28]},
+            ],
+            "ocr_result": {"text": "Plan B"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Plan B",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "ocr_generic_open_hyperlink_mismatch_rejects_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 100, 28], "label": "Delete"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Open.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 100, "height": 28},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Open", "control_type": "hyperlink", "rect": [80, 80, 100, 28]},
             ],
             "ocr_result": {"text": "Delete"},
             "expected": {
@@ -19579,6 +19655,32 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "explicit_row_column_cell_missing_target_refuses_row_label_cell",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [220, 60, 120, 32], "label": "Status"},
+                {"rect": [20, 160, 600, 40], "label": "Globex"},
+                {"rect": [20, 160, 180, 40], "label": "Globex"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Status cell for Globex.",
+                "target_id": "name_globex",
+                "target": {"x": 20, "y": 160, "width": 180, "height": 40},
+            },
+            "candidates": [
+                {"id": "header_status", "text": "Status", "control_type": "headeritem", "rect": [220, 60, 120, 32]},
+                {"id": "row_globex", "text": "Globex", "control_type": "dataitem", "rect": [20, 160, 600, 40]},
+                {"id": "name_globex", "text": "Globex", "control_type": "cell", "rect": [20, 160, 180, 40]},
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "name_globex",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "duplicate_table_cell_row_only_context_stays_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -23703,6 +23805,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             "candidates": [
                 {"id": "first_checked", "text": "Checked", "control_type": "checkbox", "rect": [120, 96, 80, 32]},
                 {"id": "second_checked", "text": "Checked", "control_type": "checkbox", "rect": [120, 150, 80, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "duplicate_numeric_slider_value_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 80, 24], "label": "Volume"},
+                {"rect": [120, 96, 260, 36], "label": "50"},
+                {"rect": [20, 202, 80, 24], "label": "Volume"},
+                {"rect": [120, 196, 260, 36], "label": "50"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Volume slider.",
+                "target_id": "first_volume",
+                "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "first_label", "text": "Volume", "control_type": "text", "rect": [20, 102, 80, 24]},
+                {"id": "first_volume", "text": "50", "control_type": "slider", "rect": [120, 96, 260, 36]},
+                {"id": "second_label", "text": "Volume", "control_type": "text", "rect": [20, 202, 80, 24]},
+                {"id": "second_volume", "text": "50", "control_type": "slider", "rect": [120, 196, 260, 36]},
             ],
             "expected": {
                 "source": "candidate_snap",

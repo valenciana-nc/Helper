@@ -111,6 +111,11 @@ covers the target, rejects mixed text+numeric OCR crops such as `Quantity 4`
 recognized only as `4`, refuses broad role-only row/cell/header model rectangles
 that only partially expose one child candidate, and keeps duplicate current-value
 dropdowns ambiguous unless section or row context distinguishes them.
+This slice extends the same policy to duplicate numeric slider values, explicit
+row+column cell requests whose intended cell is missing from inventory, OCR
+labels with one-character suffix differences such as `Plan A`/`Plan B`, signed
+or punctuated numeric text such as `$1.00`/`$100`, and over-broad fuzzy matches
+such as `Cancel`/`Cancer`.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

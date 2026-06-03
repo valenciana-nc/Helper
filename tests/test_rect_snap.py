@@ -16705,6 +16705,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ("checkbox", "Off", "checkbox"),
             ("radiobutton", "Selected", "radio button"),
             ("radiobutton", "Unselected", "radio button"),
+            ("slider", "50", "slider"),
         ]
         for control_type, label, request_noun in cases:
             with self.subTest(control_type=control_type, label=label):
@@ -16761,6 +16762,64 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
                 self.assertEqual(help_target.source, "candidate_snap")
                 self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
+    def test_duplicate_numeric_sliders_with_same_label_stay_ambiguous_without_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("first_label", "Volume", "text", (20, 102, 80, 24)),
+            ControlCandidate("first_volume", "50", "slider", (120, 96, 260, 36)),
+            ControlCandidate("second_label", "Volume", "text", (20, 202, 80, 24)),
+            ControlCandidate("second_volume", "50", "slider", (120, 196, 260, 36)),
+        ]
+        instruction = "Click Volume slider."
+
+        first_target = resolve_candidate_target(
+            target_id="first_volume",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        second_target = resolve_candidate_target(
+            target_id="second_volume",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 196, 260, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(120, 96, 260, 36),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "first_volume",
+                    "target": {"x": 120, "y": 96, "width": 260, "height": 36},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        for target in (first_target, second_target):
+            self.assertEqual(target.source, "target_id")
+            self.assertEqual(target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(text_target.source, "text_match")
+        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
     def test_positional_state_only_checkbox_request_can_disambiguate_duplicate(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -25233,7 +25292,7 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(help_target.rect, (180, 100, 140, 32))
 
     def test_explicit_row_column_cell_request_does_not_choose_row_label_cell(self) -> None:
-        from control_inventory import ControlCandidate, resolve_candidate_target
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
         from help_session import resolve_help_target
 
         candidates = [
@@ -25252,6 +25311,11 @@ class HelpTargetHarnessTests(unittest.TestCase):
         )
         text_target = resolve_candidate_target(
             target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 160, 180, 40),
+        )
+        snap_target = snap_candidate_target(
             instruction=instruction,
             candidates=candidates,
             model_rect=(20, 160, 180, 40),
@@ -25275,10 +25339,59 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(text_target.target_id, "status_globex")
         self.assertFalse(text_target.rejected_reason)
         self.assertEqual(text_target.rect, (220, 160, 120, 40))
+        self.assertIsNone(snap_target)
         self.assertEqual(help_target.source, "text_match")
         self.assertEqual(help_target.target_id, "status_globex")
         self.assertFalse(help_target.rejected_reason)
         self.assertEqual(help_target.rect, (220, 160, 120, 40))
+
+    def test_explicit_row_column_cell_missing_target_refuses_row_label_cell(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("header_status", "Status", "headeritem", (220, 60, 120, 32)),
+            ControlCandidate("row_globex", "Globex", "dataitem", (20, 160, 600, 40)),
+            ControlCandidate("name_globex", "Globex", "cell", (20, 160, 180, 40)),
+        ]
+        instruction = "Click the Status cell for Globex."
+
+        wrong_target = resolve_candidate_target(
+            target_id="name_globex",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 160, 180, 40),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 160, 180, 40),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 160, 180, 40),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "name_globex",
+                    "target": {"x": 20, "y": 160, "width": 180, "height": 40},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertIsNone(snap_target)
+        self.assertEqual(help_target.source, "target_id")
+        self.assertEqual(help_target.rejected_reason, "target_id ambiguous")
 
     def test_duplicate_table_cell_uses_explicit_row_and_column_words(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
