@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+import io
+import unittest
+from unittest.mock import patch
+
+from PIL import Image
+
+from control_inventory import ControlCandidate, TargetResolution
+from ocr_text import (
+    OCR_TEXT_MISMATCH_REASON,
+    OcrTextResult,
+    WindowsOcrTextProvider,
+    expected_text_for_target,
+    verify_target_text,
+    _screen_rect_to_image_box,
+)
+from screen import Capture
+
+
+def _capture(
+    *,
+    width: int = 200,
+    height: int = 120,
+    monitor_left: int = 0,
+    monitor_top: int = 0,
+    scale: float = 1.0,
+) -> Capture:
+    image = Image.new("RGB", (width, height), "white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return Capture(
+        png_bytes=buffer.getvalue(),
+        width=width,
+        height=height,
+        monitor_left=monitor_left,
+        monitor_top=monitor_top,
+        scale=scale,
+    )
+
+
+class _Provider:
+    def __init__(self, result: OcrTextResult) -> None:
+        self.result = result
+        self.calls: list[tuple[Capture, tuple[int, int, int, int]]] = []
+
+    def recognize_text(
+        self,
+        capture: Capture,
+        rect: tuple[int, int, int, int],
+    ) -> OcrTextResult:
+        self.calls.append((capture, rect))
+        return self.result
+
+
+class OcrTextTests(unittest.TestCase):
+    def test_rejects_strong_visible_text_mismatch(self) -> None:
+        provider = _Provider(OcrTextResult(text="Cancel", available=True, elapsed_ms=12.5))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 80, 32),
+            expected_text="Save",
+            control_type="button",
+            provider=provider,
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, OCR_TEXT_MISMATCH_REASON)
+        self.assertEqual(result.expected_text, "Save")
+        self.assertEqual(result.recognized_text, "Cancel")
+        self.assertEqual(result.elapsed_ms, 12.5)
+
+    def test_allows_matching_and_fuzzy_ocr_text(self) -> None:
+        provider = _Provider(OcrTextResult(text="Save chanyes", available=True))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save changes",
+            control_type="button",
+            provider=provider,
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.recognized_text, "Save chanyes")
+
+    def test_unavailable_or_blank_ocr_is_inconclusive(self) -> None:
+        unavailable = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save changes",
+            control_type="button",
+            provider=_Provider(OcrTextResult(available=False, error="No OCR")),
+        )
+        blank = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 120, 32),
+            expected_text="Save changes",
+            control_type="button",
+            provider=_Provider(OcrTextResult(text="", available=True)),
+        )
+
+        self.assertTrue(unavailable.accepted)
+        self.assertFalse(unavailable.available)
+        self.assertEqual(unavailable.error, "No OCR")
+        self.assertTrue(blank.accepted)
+
+    def test_skips_small_checkbox_external_label_targets(self) -> None:
+        provider = _Provider(OcrTextResult(text="Cancel", available=True))
+
+        result = verify_target_text(
+            capture=_capture(),
+            rect=(20, 20, 18, 18),
+            expected_text="Remember me",
+            control_type="checkbox",
+            provider=provider,
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(provider.calls, [])
+
+    def test_expected_text_uses_visible_candidate_text_not_automation_id(self) -> None:
+        target = TargetResolution(
+            rect=(20, 20, 120, 32),
+            confidence=0.9,
+            source="target_id",
+            matched_text="Save changes saveButton",
+            target_id="save",
+        )
+        candidates = [
+            ControlCandidate("save", "Save changes", "button", (20, 20, 120, 32), automation_id="saveButton"),
+        ]
+
+        self.assertEqual(expected_text_for_target(target, candidates), "Save changes")
+
+    def test_crop_mapping_respects_monitor_offset_and_scale(self) -> None:
+        capture = _capture(width=100, height=80, monitor_left=-100, monitor_top=50, scale=0.5)
+
+        box = _screen_rect_to_image_box(capture, (-90, 70, 20, 10), padding_px=2)
+
+        self.assertEqual(box, (4, 9, 16, 16))
+
+    def test_windows_provider_import_failure_is_reported_unavailable(self) -> None:
+        async def _missing_ocr(_path):
+            raise ModuleNotFoundError("No module named 'winrt.windows.media.ocr'")
+
+        provider = WindowsOcrTextProvider(timeout_sec=0.1)
+        with patch("ocr_text._recognize_image_path", _missing_ocr):
+            first = provider.recognize_text(_capture(), (20, 20, 80, 32))
+            second = provider.recognize_text(_capture(), (20, 20, 80, 32))
+
+        self.assertFalse(first.available)
+        self.assertIn("winrt.windows.media.ocr", first.error)
+        self.assertFalse(second.available)
+        self.assertEqual(second.error, first.error)
+
+
+if __name__ == "__main__":
+    unittest.main()

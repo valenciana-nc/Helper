@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import threading
 import time
 import unittest
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import QApplication
 from agent import LiveHelpDecision
 from control_inventory import ControlCandidate, TargetResolution
 from help_session import HelpSession
+from ocr_text import OcrTextResult
 from screen import Capture
 
 
@@ -191,7 +193,31 @@ class _OkAgent:
         return LiveHelpDecision(kind="done", message="Done.")
 
 
+class _FakeOcrProvider:
+    def __init__(self, result: OcrTextResult) -> None:
+        self.result = result
+        self.calls: list[tuple[Capture, tuple[int, int, int, int]]] = []
+
+    def recognize_text(
+        self,
+        capture: Capture,
+        rect: tuple[int, int, int, int],
+    ) -> OcrTextResult:
+        self.calls.append((capture, rect))
+        return self.result
+
+
 class HelpSessionEndToEndTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._previous_ocr_env = os.environ.get("HELP_OCR_TEXT_VERIFY")
+        os.environ["HELP_OCR_TEXT_VERIFY"] = "0"
+
+    def tearDown(self) -> None:
+        if self._previous_ocr_env is None:
+            os.environ.pop("HELP_OCR_TEXT_VERIFY", None)
+        else:
+            os.environ["HELP_OCR_TEXT_VERIFY"] = self._previous_ocr_env
+
     def test_click_hit_margin_scales_with_target_size(self) -> None:
         from help_session import click_hit_margin
 
@@ -372,6 +398,126 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         ]
         self.assertTrue(assistant_history)
         self.assertFalse(any("target_id=" in text for text in assistant_history))
+
+    def test_help_session_ocr_unavailable_still_emits_candidate_highlight(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        candidate = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        ocr_provider = _FakeOcrProvider(OcrTextResult(available=False, error="OCR unavailable"))
+        agent = _ScriptedAgent()
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [candidate],
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        click_sent = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if highlights and not click_sent:
+                    x, y, width, height, _label = highlights[0]
+                    session.notify_user_click(x + width // 2, y + height // 2)
+                    click_sent = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [(40, 50, 120, 32, "Click Save changes.")])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertEqual(ocr_provider.calls[0][1], (40, 50, 120, 32))
+        self.assertFalse(diagnostics[0]["ocr"]["available"])
+        self.assertTrue(diagnostics[0]["overlay"]["emitted"])
+
+    def test_help_session_ocr_disagreement_downgrades_before_highlight(self) -> None:
+        app = _qt_app()
+        capture = _button_capture()
+        candidate = ControlCandidate(
+            id="c001",
+            text="Save changes",
+            control_type="button",
+            rect=(40, 50, 120, 32),
+            automation_id="saveButton",
+        )
+        ocr_provider = _FakeOcrProvider(OcrTextResult(text="Cancel", available=True))
+        agent = _ScriptedAgent()
+        session = HelpSession(
+            agent=agent,  # type: ignore[arg-type]
+            controller=_Controller(),  # type: ignore[arg-type]
+            capture_provider=lambda: capture,
+            candidate_provider=lambda _capture: [candidate],
+            ocr_text_provider=ocr_provider,
+        )
+        highlights: list[tuple[int, int, int, int, str]] = []
+        diagnostics: list[dict[str, Any]] = []
+        finished: list[str] = []
+        failed: list[str] = []
+
+        session.highlight_show.connect(
+            lambda x, y, w, h, label: highlights.append((x, y, w, h, label))
+        )
+        session.target_diagnostic.connect(lambda payload: diagnostics.append(payload))
+        session.finished.connect(lambda message: finished.append(message))
+        session.failed.connect(lambda message: failed.append(message))
+
+        advanced = False
+        try:
+            session.start("Help me save this.")
+            deadline = time.monotonic() + 4.0
+            while time.monotonic() < deadline and not finished and not failed:
+                app.processEvents()
+                if diagnostics and not advanced:
+                    session.notify_user_click(5, 5)
+                    advanced = True
+                time.sleep(0.01)
+            app.processEvents()
+        finally:
+            if not finished:
+                session.cancel()
+            thread = session._thread
+            if thread is not None:
+                thread.join(timeout=1.0)
+            session.deleteLater()
+            app.processEvents()
+
+        self.assertFalse(failed)
+        self.assertEqual(finished, ["Saved."])
+        self.assertEqual(highlights, [])
+        self.assertEqual(len(ocr_provider.calls), 1)
+        self.assertFalse(diagnostics[0]["overlay"]["emitted"])
+        self.assertEqual(diagnostics[0]["overlay"]["rejected_reason"], "ocr text mismatch")
+        self.assertEqual(diagnostics[0]["ocr"]["expected_text"], "Save changes")
+        self.assertEqual(diagnostics[0]["ocr"]["recognized_text"], "Cancel")
 
     def test_help_session_retries_transient_empty_candidate_snapshot(self) -> None:
         app = _qt_app()

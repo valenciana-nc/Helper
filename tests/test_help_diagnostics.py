@@ -13,6 +13,7 @@ class HelpTargetDiagnosticTests(unittest.TestCase):
         from agent import _parse_live_help_decision
         from control_inventory import ControlCandidate, TargetResolution
         from help_session import build_target_diagnostic
+        from ocr_text import OcrTextVerification
         from target_quality import TargetQuality
 
         capture = Capture(
@@ -53,6 +54,13 @@ class HelpTargetDiagnosticTests(unittest.TestCase):
                 visible_fraction=1.0,
                 visual_activity=0.25,
             ),
+            ocr=OcrTextVerification(
+                accepted=True,
+                expected_text="Save",
+                recognized_text="Save",
+                available=True,
+                elapsed_ms=8.25,
+            ),
             overlay_rect=target.rect,
         )
 
@@ -63,6 +71,8 @@ class HelpTargetDiagnosticTests(unittest.TestCase):
         self.assertEqual(payload["model"]["screen_rect"], (-1720, 360, 120, 64))
         self.assertTrue(payload["overlay"]["emitted"])
         self.assertEqual(payload["resolution"]["source"], "target_id")
+        self.assertEqual(payload["ocr"]["recognized_text"], "Save")
+        self.assertEqual(payload["ocr"]["elapsed_ms"], 8.25)
         self.assertEqual(payload["candidate_count"], 1)
 
     def test_build_target_diagnostic_records_rejection(self) -> None:

@@ -64,6 +64,20 @@ Useful settings:
 - **Help mode:** walks through a task with a ghost cursor and persistent highlight rectangles while the user does the clicks.
 - **Active mode:** can execute actions. Risky actions, destructive text, purchases, sends, and terminal Enter require confirmation.
 
+## Help Highlight Engine v2
+
+Help mode resolves screen targets through UI Automation candidates, text matching,
+fresh screenshot revalidation, geometry/visual quality checks, and a final OCR
+text check before emitting an overlay. The safety policy is conservative: when
+evidence is stale, ambiguous, visually misaligned, or the final OCR crop clearly
+contradicts the expected visible label, Helper downgrades to narration instead
+of highlighting a likely wrong target.
+
+OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
+`HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
+visual, and stale-target guards active. Target diagnostics include `quality`,
+`ocr`, resolution, candidate, and overlay fields for QA review.
+
 ## Privacy and Safety
 
 - Local `.env` files, logs, screenshots, app data, virtual environments, and assistant state are ignored by git.

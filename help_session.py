@@ -33,6 +33,13 @@ from help_intents import (
     tokens_from_text as _tokens_from_text,
 )
 from history import HistoryManager
+from ocr_text import (
+    OcrTextProvider,
+    OcrTextVerification,
+    default_ocr_text_provider,
+    expected_text_for_target,
+    verify_target_text,
+)
 from rect_snap import SnapResult, snap_to_control
 from screen import capture_active_monitor
 from target_quality import TargetQuality, evaluate_target_quality
@@ -269,6 +276,7 @@ def build_target_diagnostic(
     candidates: list[ControlCandidate],
     target: TargetResolution,
     quality: TargetQuality | None = None,
+    ocr: OcrTextVerification | None = None,
     overlay_rect: tuple[int, int, int, int] | None = None,
     rejected_reason: str = "",
 ) -> dict[str, Any]:
@@ -303,6 +311,7 @@ def build_target_diagnostic(
             "rejected_reason": target.rejected_reason,
         },
         "quality": _quality_payload(quality),
+        "ocr": _ocr_payload(ocr),
         "overlay": {
             "emitted": overlay_rect is not None,
             "rect": overlay_rect,
@@ -333,6 +342,20 @@ def _quality_payload(quality: TargetQuality | None) -> dict[str, Any] | None:
         "visual_activity": round(float(quality.visual_activity), 4),
         "boundary_activity": round(float(quality.boundary_activity), 4),
         "target_area_fraction": round(float(quality.target_area_fraction), 4),
+    }
+
+
+def _ocr_payload(ocr: OcrTextVerification | None) -> dict[str, Any] | None:
+    if ocr is None:
+        return None
+    return {
+        "accepted": ocr.accepted,
+        "reason": ocr.reason,
+        "expected_text": ocr.expected_text,
+        "recognized_text": ocr.recognized_text,
+        "available": ocr.available,
+        "error": ocr.error,
+        "elapsed_ms": round(float(ocr.elapsed_ms), 2),
     }
 
 
@@ -1508,6 +1531,8 @@ class HelpSession(QObject):
         candidate_provider: CandidateProvider = collect_control_candidates,
         snapper: Snapper = snap_to_control,
         overlay_clear_barrier: OverlayClearBarrier | None = None,
+        ocr_text_provider: OcrTextProvider | None = None,
+        enable_ocr_text_verification: bool = True,
     ) -> None:
         super().__init__(parent)
         self._agent = agent
@@ -1516,6 +1541,11 @@ class HelpSession(QObject):
         self._candidate_provider = candidate_provider
         self._snapper = snapper
         self._overlay_clear_barrier = overlay_clear_barrier
+        self._ocr_text_provider = (
+            ocr_text_provider
+            if ocr_text_provider is not None
+            else default_ocr_text_provider() if enable_ocr_text_verification else None
+        )
         self._thread: Thread | None = None
         self._cancelled = Event()
         self._click_inside_event = Event()
@@ -1745,13 +1775,14 @@ class HelpSession(QObject):
                 decision.instruction,
             )
             final_rect = target.rect
+            target_control_type = target_control_type_for_resolution(target, candidates)
             quality = evaluate_target_quality(
                 capture=capture,
                 rect=final_rect,
                 source=target.source,
                 confidence=target.confidence,
                 instruction=decision.instruction,
-                target_control_type=target_control_type_for_resolution(target, candidates),
+                target_control_type=target_control_type,
             )
             if not quality.accepted:
                 self._emit_target_diagnostic(
@@ -1808,6 +1839,44 @@ class HelpSession(QObject):
                 )
                 continue
             final_rect = display_target.rect
+            ocr_verification = verify_target_text(
+                capture=capture,
+                rect=final_rect,
+                expected_text=expected_text_for_target(display_target, candidates),
+                control_type=target_control_type,
+                provider=self._ocr_text_provider,
+            )
+            if not ocr_verification.accepted:
+                self._emit_target_diagnostic(
+                    build_target_diagnostic(
+                        decision=decision,
+                        capture=capture,
+                        candidates=candidates,
+                        target=display_target,
+                        quality=quality,
+                        ocr=ocr_verification,
+                        rejected_reason=ocr_verification.reason,
+                    )
+                )
+                log.info(
+                    "Step downgraded by OCR text gate (%s, expected=%r recognized=%r): %s",
+                    ocr_verification.reason,
+                    ocr_verification.expected_text,
+                    ocr_verification.recognized_text,
+                    decision.instruction,
+                )
+                self._clear_overlays()
+                msg = (decision.instruction or "").strip() or "Take a look at the screen."
+                self.chat_message.emit(msg)
+                self.chat_status.emit(msg)
+                wait_outcome = self._wait_for_progress(rect=None)
+                if wait_outcome == "cancelled":
+                    return
+                outcome_note = self._outcome_after_quality_rejection(
+                    decision,
+                    ocr_verification.reason,
+                )
+                continue
             self._emit_target_diagnostic(
                 build_target_diagnostic(
                     decision=decision,
@@ -1815,6 +1884,7 @@ class HelpSession(QObject):
                     candidates=candidates,
                     target=display_target,
                     quality=quality,
+                    ocr=ocr_verification,
                     overlay_rect=final_rect,
                 )
             )

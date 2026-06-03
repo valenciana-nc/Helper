@@ -19,6 +19,7 @@ from help_session import (
     resolve_help_target,
     target_control_type_for_resolution,
 )
+from ocr_text import OcrTextResult, expected_text_for_target, verify_target_text
 from rect_snap import SnapResult
 from screen import Capture
 from target_quality import TargetQuality, evaluate_target_quality
@@ -50,6 +51,55 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
             ],
             "expected": {"source": "target_id", "rect": [80, 80, 80, 32], "overlay_emitted": True},
+        },
+        {
+            "name": "ocr_text_agreement_allows_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Save"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "ocr_result": {"text": "Save"},
+            "expected": {
+                "source": "target_id",
+                "rect": [80, 80, 80, 32],
+                "ocr_reason": "",
+                "ocr_recognized_text": "Save",
+                "overlay_emitted": True,
+            },
+        },
+        {
+            "name": "ocr_text_disagreement_rejects_candidate_overlay",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [80, 80, 80, 32], "label": "Cancel"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "c001",
+                "target": {"x": 80, "y": 80, "width": 80, "height": 32},
+            },
+            "candidates": [
+                {"id": "c001", "text": "Save", "control_type": "button", "rect": [80, 80, 80, 32]},
+            ],
+            "ocr_result": {"text": "Cancel"},
+            "expected": {
+                "source": "target_id",
+                "target_id": "c001",
+                "ocr_reason": "ocr text mismatch",
+                "ocr_recognized_text": "Cancel",
+                "rejected_reason": "ocr text mismatch",
+                "overlay_emitted": False,
+            },
         },
         {
             "name": "deictic_target_id_accepts_exact_labeled_control",
@@ -23120,17 +23170,19 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
             snapper=_snapper_for_scenario(scenario),
         )
     quality: TargetQuality | None = None
+    ocr_verification = None
     overlay_rect: tuple[int, int, int, int] | None = None
     rejected_reason = target.rejected_reason
     display_target = target
     if not rejected_reason:
+        target_control_type = target_control_type_for_resolution(target, candidates)
         quality = evaluate_target_quality(
             capture=capture,
             rect=target.rect,
             source=target.source,
             confidence=target.confidence,
             instruction=decision.instruction,
-            target_control_type=target_control_type_for_resolution(target, candidates),
+            target_control_type=target_control_type,
         )
         if not quality.accepted:
             rejected_reason = quality.reason
@@ -23138,7 +23190,19 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
             display_target = clip_resolution_to_capture(target, capture)
             rejected_reason = display_target.rejected_reason
             if not rejected_reason:
-                overlay_rect = display_target.rect
+                ocr_provider = _ocr_provider_for_scenario(scenario)
+                if ocr_provider is not None:
+                    ocr_verification = verify_target_text(
+                        capture=capture,
+                        rect=display_target.rect,
+                        expected_text=expected_text_for_target(display_target, candidates),
+                        control_type=target_control_type,
+                        provider=ocr_provider,
+                    )
+                    if not ocr_verification.accepted:
+                        rejected_reason = ocr_verification.reason
+                if not rejected_reason:
+                    overlay_rect = display_target.rect
 
     diagnostic = build_target_diagnostic(
         decision=decision,
@@ -23146,6 +23210,7 @@ def _run_one(scenario: dict[str, Any], artifacts_dir: Path) -> ScenarioResult:
         candidates=candidates,
         target=display_target,
         quality=quality,
+        ocr=ocr_verification,
         overlay_rect=overlay_rect,
         rejected_reason=rejected_reason,
     )
@@ -23171,12 +23236,16 @@ def _check_expectations(expected: dict[str, Any], diagnostic: dict[str, Any]) ->
     resolution = diagnostic["resolution"]
     overlay = diagnostic["overlay"]
     quality = diagnostic.get("quality") or {}
+    ocr = diagnostic.get("ocr") or {}
     checks = {
         "source": resolution.get("source"),
         "target_id": resolution.get("target_id"),
         "matched_text": resolution.get("matched_text"),
         "rejected_reason": overlay.get("rejected_reason"),
         "quality_reason": quality.get("reason"),
+        "ocr_reason": ocr.get("reason"),
+        "ocr_expected_text": ocr.get("expected_text"),
+        "ocr_recognized_text": ocr.get("recognized_text"),
         "overlay_emitted": overlay.get("emitted"),
     }
     for key, actual in checks.items():
@@ -23282,6 +23351,32 @@ def _candidate(item: dict[str, Any]) -> ControlCandidate:
         automation_id=str(item.get("automation_id") or ""),
         window_title=str(item.get("window_title") or ""),
         window_rank=int(item.get("window_rank") or 0),
+    )
+
+
+@dataclass(frozen=True)
+class _ScenarioOcrTextProvider:
+    result: OcrTextResult
+
+    def recognize_text(
+        self,
+        _capture: Capture,
+        _rect: tuple[int, int, int, int],
+    ) -> OcrTextResult:
+        return self.result
+
+
+def _ocr_provider_for_scenario(scenario: dict[str, Any]) -> _ScenarioOcrTextProvider | None:
+    spec = scenario.get("ocr_result")
+    if not isinstance(spec, dict):
+        return None
+    available = bool(spec["available"]) if "available" in spec else True
+    return _ScenarioOcrTextProvider(
+        OcrTextResult(
+            text=str(spec.get("text") or ""),
+            available=available,
+            error=str(spec.get("error") or ""),
+        )
     )
 
 
