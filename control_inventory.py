@@ -1510,6 +1510,7 @@ LABELLED_FIELD_CONTROL_TYPES = frozenset({"combobox", "edit", "spinner"})
 LABELLED_STATE_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
 NEARBY_LABELLED_CONTROL_TYPES = LABELLED_FIELD_CONTROL_TYPES | LABELLED_STATE_CONTROL_TYPES
 OPTION_ROLE_CONTROL_TYPES = frozenset({"checkbox", "listitem", "menuitem", "radiobutton", "treeitem"})
+MENU_ITEM_CROSS_ROLE_CONTROL_TYPES = frozenset({"button", "menuitem", "splitbutton"})
 ROW_LIKE_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem", "edit", "combobox"})
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "dataitem", "treeitem"})
 GENERIC_ROLE_ONLY_SNAP_CONTROL_TYPES = CELL_CONTROL_TYPES | ROW_CONTEXT_CONTROL_TYPES | frozenset(
@@ -4073,6 +4074,18 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id ambiguous",
+        )
+    if _menu_item_cross_role_duplicate_ambiguous(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id semantic mismatch",
         )
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return (
@@ -15787,6 +15800,109 @@ def _generic_shared_prefix_duplicate_ambiguous(
     return False
 
 
+def _menu_item_cross_role_duplicate_ambiguous(
+    instruction: str,
+    instruction_tokens: set[str],
+    selected: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str] | None = None,
+) -> bool:
+    if selected.control_type not in MENU_ITEM_CROSS_ROLE_CONTROL_TYPES:
+        return False
+    if selected.control_type == "menuitem":
+        return False
+    control_intents = control_intents or _instruction_control_intents(instruction)
+    if not _explicit_menu_item_cross_role_request(
+        instruction,
+        instruction_tokens,
+        control_intents,
+    ):
+        return False
+    if not _menu_item_cross_role_label_matches(instruction, instruction_tokens, selected):
+        return False
+    for candidate in candidates:
+        if candidate.id == selected.id:
+            continue
+        if candidate.control_type != "menuitem":
+            continue
+        if not _menu_item_cross_role_label_matches(instruction, instruction_tokens, candidate):
+            continue
+        if _menu_item_cross_role_candidate_matches_request(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+            control_intents,
+        ):
+            return True
+    return False
+
+
+def _menu_item_cross_role_label_matches(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+) -> bool:
+    label_tokens = _candidate_visible_text_tokens(candidate)
+    if not label_tokens:
+        return False
+    request_tokens = _object_token_variants(_tokens_from_text(instruction) | instruction_tokens)
+    return bool(request_tokens & _object_token_variants(label_tokens))
+
+
+def _explicit_menu_item_cross_role_request(
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    tokens = raw_tokens | instruction_tokens
+    if "menuitem" in tokens or {"menu", "item"} <= tokens:
+        return True
+    if {"context", "menu"} <= tokens:
+        return True
+    if (
+        tokens & {"in", "inside", "from", "under", "within"}
+        and tokens & {"menu", "menus"}
+        and not tokens & {"option", "options"}
+    ):
+        return True
+    return False
+
+
+def _menu_item_cross_role_candidate_matches_request(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str],
+) -> bool:
+    raw_tokens = _tokens_from_text(instruction)
+    tokens = raw_tokens | instruction_tokens
+    if "menuitem" in tokens or {"menu", "item"} <= tokens:
+        return True
+    if _contextual_action_candidate_matches_surface_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return True
+    target_tokens, context_tokens = _prepositional_context_action_tokens(instruction)
+    if target_tokens and context_tokens and _prepositional_context_tokens_match_candidate(
+        context_tokens,
+        candidate,
+        candidates,
+    ):
+        return True
+    return any(
+        surface.id != candidate.id
+        and surface.control_type == "menu"
+        and _contains_rect(_expand_rect(surface.rect, 4), candidate.rect)
+        for surface in candidates
+    )
+
+
 def _exact_visible_label_duplicate_ambiguous(
     instruction: str,
     selected: ControlCandidate,
@@ -15837,6 +15953,14 @@ def _candidate_snap_global_ambiguity(
         candidates,
     ):
         return False
+    if _menu_item_cross_role_duplicate_ambiguous(
+        instruction,
+        instruction_tokens,
+        selected,
+        candidates,
+        _instruction_control_intents(instruction),
+    ):
+        return True
     return _has_ambiguous_unlabeled_competitor(
         selected,
         candidates,

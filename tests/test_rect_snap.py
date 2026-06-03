@@ -1154,6 +1154,71 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.source, "uia")
                 self.assertEqual(result.rejected_reason, "state option ambiguous")
 
+    def test_duplicate_list_option_uses_parent_list_context(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Status options", 20, 40, 180, 100, control_type="List"),
+            _make_button("Active", 30, 70, 160, 28, control_type="ListItem"),
+            _make_button("Priority options", 260, 40, 180, 100, control_type="List"),
+            _make_button("Active", 270, 70, 160, 28, control_type="ListItem"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (270, 70, 160, 28),
+            "Click Active in Status options.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (30, 70, 160, 28))
+        self.assertFalse(result.rejected_reason)
+
+    def test_duplicate_list_option_without_parent_context_stays_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Status options", 20, 40, 180, 100, control_type="List"),
+            _make_button("Active", 30, 70, 160, 28, control_type="ListItem"),
+            _make_button("Priority options", 260, 40, 180, 100, control_type="List"),
+            _make_button("Active", 270, 70, 160, 28, control_type="ListItem"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (270, 70, 160, 28),
+            "Click Active option.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
+    def test_context_menu_item_recovers_from_toolbar_duplicate(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Delete", 20, 20, 80, 32),
+            _make_button("Row actions menu", 100, 20, 200, 120, control_type="Menu"),
+            _make_button("Archive", 110, 48, 160, 28, control_type="MenuItem"),
+            _make_button("Delete", 110, 82, 160, 28, control_type="MenuItem"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (20, 20, 80, 32),
+            "Click Delete in the row actions menu.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (110, 82, 160, 28))
+        self.assertFalse(result.rejected_reason)
+
     def test_specific_settings_request_rejects_generic_settings_overlap(self) -> None:
         from rect_snap import snap_to_control
 
@@ -3568,6 +3633,67 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (180, 100, 140, 32))
         self.assertIn("acme_status", result.matched_text)
         self.assertFalse(result.rejected_reason)
+
+    def test_snap_duplicate_table_cell_uses_static_row_label_context(self) -> None:
+        from rect_snap import snap_to_control
+
+        for label_type in ("Text", "StaticText", "Label"):
+            with self.subTest(label_type=label_type):
+                controls = [
+                    _make_button("Status", 180, 40, 140, 32, control_type="HeaderItem"),
+                    _make_button("Plan", 340, 40, 140, 32, control_type="HeaderItem"),
+                    _make_button("Acme", 20, 100, 120, 32, control_type=label_type),
+                    _make_button(
+                        "Active",
+                        180,
+                        100,
+                        140,
+                        32,
+                        control_type="Cell",
+                        automation_id="acme_status",
+                    ),
+                    _make_button(
+                        "Active",
+                        340,
+                        100,
+                        140,
+                        32,
+                        control_type="Cell",
+                        automation_id="acme_plan",
+                    ),
+                    _make_button("Globex", 20, 150, 120, 32, control_type=label_type),
+                    _make_button(
+                        "Active",
+                        180,
+                        150,
+                        140,
+                        32,
+                        control_type="Cell",
+                        automation_id="globex_status",
+                    ),
+                    _make_button(
+                        "Active",
+                        340,
+                        150,
+                        140,
+                        32,
+                        control_type="Cell",
+                        automation_id="globex_plan",
+                    ),
+                ]
+                desktop = _FakeDesktop([_make_window("Grid", 0, 0, 700, 400, controls)])
+
+                result = snap_to_control(
+                    (180, 150, 140, 32),
+                    "Click the Active Status cell for Acme.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (180, 100, 140, 32))
+                self.assertIn("acme_status", result.matched_text)
+                self.assertFalse(result.rejected_reason)
 
     def test_snap_explicit_row_column_cell_does_not_choose_row_label_cell(self) -> None:
         from rect_snap import snap_to_control
@@ -33248,6 +33374,55 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.source, "text_match")
         self.assertEqual(target.target_id, "menu_delete")
         self.assertFalse(target.rejected_reason)
+
+    def test_context_menu_action_rejects_same_rect_toolbar_duplicate(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("toolbar_delete", "Delete", "button", (20, 20, 80, 32)),
+            ControlCandidate("context_menu", "Context menu", "menu", (18, 18, 180, 100)),
+            ControlCandidate("menu_delete", "Delete", "menuitem", (20, 20, 80, 32)),
+        ]
+        instruction = "Click Delete in the context menu."
+
+        target_id = resolve_candidate_target(
+            target_id="toolbar_delete",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+        snap = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+        self.assertEqual(snap.rejected_reason, "ambiguous candidate snap")
+
+    def test_explicit_menuitem_rejects_same_rect_toolbar_button(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target
+
+        candidates = [
+            ControlCandidate("toolbar_delete", "Delete", "button", (20, 20, 80, 32)),
+            ControlCandidate("context_menu", "Context menu", "menu", (18, 18, 180, 100)),
+            ControlCandidate("menu_delete", "Delete", "menuitem", (20, 20, 80, 32)),
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="toolbar_delete",
+            instruction="Click the Delete menu item.",
+            candidates=candidates,
+            model_rect=(20, 20, 80, 32),
+        )
+
+        self.assertIsNotNone(target_id)
+        assert target_id is not None
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
 
     def test_visible_row_actions_menuitem_beats_launcher(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

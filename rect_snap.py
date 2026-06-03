@@ -121,6 +121,51 @@ SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
 )
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "treeitem"})
 TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
+TABLE_CELL_ROW_LABEL_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
+OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem"})
+OPTION_CONTEXT_PARENT_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
+OPTION_PARENT_SURFACE_WORDS = frozenset(
+    {"context", "drop", "down", "dropdown", "list", "menu", "picker", "selector"}
+)
+OPTION_PARENT_CONTEXT_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "below",
+        "choice",
+        "choices",
+        "choose",
+        "click",
+        "entry",
+        "entries",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "item",
+        "items",
+        "listitem",
+        "menuitem",
+        "of",
+        "on",
+        "open",
+        "option",
+        "options",
+        "press",
+        "select",
+        "selected",
+        "tap",
+        "that",
+        "the",
+        "this",
+        "to",
+        "under",
+        "value",
+        "values",
+        "within",
+        "with",
+    }
+)
 SURFACE_CONTEXT_TYPE_WORDS = {
     "datagrid": frozenset({"grid", "table"}),
     "grid": frozenset({"grid", "table"}),
@@ -814,6 +859,8 @@ def snap_to_control(
     table_cell_surface_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     table_cell_row_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     state_option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    option_parent_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -854,12 +901,16 @@ def snap_to_control(
         ctype = _control_type(control)
         if not _is_enabled(control) or not _is_visible(control):
             continue
-        if ctype in ROW_CONTEXT_CONTROL_TYPES:
+        if ctype in ROW_CONTEXT_CONTROL_TYPES or ctype in TABLE_CELL_ROW_LABEL_CONTROL_TYPES:
             table_cell_row_contexts.append((rect, _control_text(control), ctype))
         if ctype == "headeritem":
             table_cell_surface_contexts.append((rect, _control_text(control), ctype))
         if ctype in {"checkbox", "radiobutton"}:
             state_option_contexts.append((rect, _control_text(control), ctype))
+        if ctype in OPTION_CONTEXT_CONTROL_TYPES:
+            option_contexts.append((rect, _control_text(control), ctype))
+        if ctype in OPTION_CONTEXT_PARENT_TYPES:
+            option_parent_contexts.append((rect, _control_text(control), ctype))
 
     for (
         control,
@@ -1342,6 +1393,19 @@ def snap_to_control(
     )
     if table_cell_result is not None:
         return table_cell_result
+
+    option_context_result = _option_parent_context_snap_result(
+        ranked,
+        instruction=instruction,
+        instruction_tokens=instruction_tokens,
+        control_intents=control_intents,
+        option_contexts=option_contexts,
+        parent_contexts=option_parent_contexts,
+        model_rect=model_rect,
+        confidence_floor=confidence_floor,
+    )
+    if option_context_result is not None:
+        return option_context_result
 
     if (
         best_result is not None
@@ -3078,8 +3142,11 @@ def _table_cell_row_context_tokens(
     row_contexts: list[tuple[tuple[int, int, int, int], str, str]],
 ) -> set[str]:
     tokens: set[str] = set()
-    for context_rect, context_text, _context_type in row_contexts:
-        if not _row_context_rect_matches(context_rect, rect):
+    for context_rect, context_text, context_type in row_contexts:
+        if context_type in TABLE_CELL_ROW_LABEL_CONTROL_TYPES:
+            if not _same_row_left_label_rect_matches(context_rect, rect):
+                continue
+        elif not _row_context_rect_matches(context_rect, rect):
             continue
         tokens.update(
             _object_token_variants(
@@ -3103,6 +3170,383 @@ def _table_cell_row_context_tokens(
             )
         )
     return tokens - TABLE_CELL_CONTEXT_STOPWORDS
+
+
+def _option_parent_context_snap_result(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    *,
+    instruction: str,
+    instruction_tokens: set[str],
+    control_intents: set[str],
+    option_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    parent_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    model_rect: tuple[int, int, int, int],
+    confidence_floor: float,
+) -> SnapResult | None:
+    literal_tokens = _object_token_variants(_tokens_from_text(instruction))
+    request_tokens = _object_token_variants(_tokens_from_text(instruction) | instruction_tokens)
+    if not request_tokens:
+        return None
+    option_request = bool(
+        literal_tokens
+        & {
+            "choice",
+            "choices",
+            "context",
+            "drop",
+            "down",
+            "dropdown",
+            "list",
+            "menu",
+            "menuitem",
+            "option",
+            "options",
+            "picker",
+            "selector",
+        }
+        or {"menu", "item"} <= literal_tokens
+    )
+    if not option_request:
+        return None
+
+    option_items = _option_context_snap_items(
+        ranked,
+        option_contexts=option_contexts,
+        confidence_floor=confidence_floor,
+    )
+    if not option_items:
+        return None
+
+    label_matches: list[tuple[float, SnapResult, str, str]] = []
+    for score, result, semantic_text, ctype in option_items:
+        label_tokens = _option_context_label_tokens(semantic_text or result.matched_text)
+        if label_tokens and request_tokens & label_tokens:
+            label_matches.append((score, result, semantic_text, ctype))
+    if not label_matches:
+        return None
+
+    scoped_matches: list[tuple[float, SnapResult, str, str]] = []
+    has_parent_context = False
+    for score, result, semantic_text, ctype in label_matches:
+        label_tokens = _option_context_label_tokens(semantic_text or result.matched_text)
+        parent_request = _option_parent_request_tokens(literal_tokens, label_tokens)
+        if parent_request and _option_parent_request_has_context(
+            parent_request,
+            parent_contexts,
+        ):
+            has_parent_context = True
+            if _option_parent_context_matches(result.rect, parent_request, parent_contexts):
+                scoped_matches.append((score, result, semantic_text, ctype))
+
+    if scoped_matches:
+        return _option_context_match_result(
+            scoped_matches,
+            model_rect=model_rect,
+            confidence_floor=confidence_floor,
+        )
+
+    preferred_type_matches = _option_context_preferred_type_matches(
+        label_matches,
+        literal_tokens,
+    )
+    if preferred_type_matches:
+        return _option_context_match_result(
+            preferred_type_matches,
+            model_rect=model_rect,
+            confidence_floor=confidence_floor,
+        )
+
+    if has_parent_context and _same_label_option_duplicate_exists(label_matches):
+        return _option_context_ambiguous_result(
+            label_matches,
+            model_rect=model_rect,
+            confidence_floor=confidence_floor,
+        )
+
+    explicit_type_matches = [
+        item
+        for item in label_matches
+        if _option_context_explicit_type_match(
+            literal_tokens,
+            control_intents,
+            item[3],
+        )
+    ]
+    if explicit_type_matches:
+        return _option_context_match_result(
+            explicit_type_matches,
+            model_rect=model_rect,
+            confidence_floor=confidence_floor,
+        )
+
+    if _same_label_option_duplicate_exists(label_matches):
+        return _option_context_ambiguous_result(
+            label_matches,
+            model_rect=model_rect,
+            confidence_floor=confidence_floor,
+        )
+    return None
+
+
+def _option_context_snap_items(
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    *,
+    option_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+    confidence_floor: float,
+) -> list[tuple[float, SnapResult, str, str]]:
+    items: list[tuple[float, SnapResult, str, str]] = []
+    seen: set[tuple[tuple[int, int, int, int], str]] = set()
+    for score, result, semantic_text, ctype, _window_rank in ranked:
+        if ctype not in OPTION_CONTEXT_CONTROL_TYPES:
+            continue
+        key = (result.rect, ctype)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append((score, result, semantic_text, ctype))
+    for rect, text, ctype in option_contexts:
+        if ctype not in OPTION_CONTEXT_CONTROL_TYPES:
+            continue
+        key = (rect, ctype)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(
+            (
+                confidence_floor,
+                SnapResult(
+                    rect=rect,
+                    confidence=confidence_floor,
+                    source="uia",
+                    matched_text=text,
+                ),
+                text,
+                ctype,
+            )
+        )
+    return items
+
+
+def _option_context_preferred_type_matches(
+    matches: list[tuple[float, SnapResult, str, str]],
+    raw_tokens: set[str],
+) -> list[tuple[float, SnapResult, str, str]]:
+    if not (
+        raw_tokens & {"choice", "choices", "option", "options"}
+        or "menuitem" in raw_tokens
+        or {"menu", "item"} <= raw_tokens
+    ):
+        return []
+    preferred_types: set[str] = set()
+    if raw_tokens & {"context", "drop", "down", "dropdown", "menu", "picker", "selector"}:
+        preferred_types.add("menuitem")
+    if raw_tokens & {"list"} and not preferred_types:
+        preferred_types.add("listitem")
+    if not preferred_types:
+        return []
+    preferred = [item for item in matches if item[3] in preferred_types]
+    return preferred if preferred else []
+
+
+def _option_context_match_result(
+    matches: list[tuple[float, SnapResult, str, str]],
+    *,
+    model_rect: tuple[int, int, int, int],
+    confidence_floor: float,
+) -> SnapResult:
+    distinct: list[tuple[float, SnapResult]] = []
+    for score, result, _semantic_text, _ctype in matches:
+        if any(existing.rect == result.rect for _existing_score, existing in distinct):
+            continue
+        distinct.append((score, result))
+    if len(distinct) == 1:
+        score, result = distinct[0]
+        return SnapResult(
+            rect=result.rect,
+            confidence=max(confidence_floor, score),
+            source=result.source,
+            matched_text=result.matched_text,
+        )
+    return _option_context_ambiguous_result(
+        matches,
+        model_rect=model_rect,
+        confidence_floor=confidence_floor,
+    )
+
+
+def _option_context_ambiguous_result(
+    matches: list[tuple[float, SnapResult, str, str]],
+    *,
+    model_rect: tuple[int, int, int, int],
+    confidence_floor: float,
+) -> SnapResult:
+    if not matches:
+        return SnapResult(
+            rect=model_rect,
+            confidence=0.0,
+            source="uia",
+            rejected_reason="fresh snap ambiguous",
+        )
+    score, result, _semantic_text, _ctype = max(
+        matches,
+        key=lambda item: (
+            _iou(item[1].rect, model_rect),
+            item[0],
+        ),
+    )
+    return SnapResult(
+        rect=result.rect,
+        confidence=max(confidence_floor, score),
+        source=result.source,
+        matched_text=result.matched_text,
+        rejected_reason="fresh snap ambiguous",
+    )
+
+
+def _same_label_option_duplicate_exists(
+    matches: list[tuple[float, SnapResult, str, str]],
+) -> bool:
+    for index, (_score, result, semantic_text, ctype) in enumerate(matches):
+        label_tokens = _option_context_label_tokens(semantic_text or result.matched_text)
+        if not label_tokens:
+            continue
+        for _other_score, other_result, other_text, other_ctype in matches[index + 1 :]:
+            if result.rect == other_result.rect and ctype == other_ctype:
+                continue
+            other_tokens = _option_context_label_tokens(other_text or other_result.matched_text)
+            if other_tokens and label_tokens & other_tokens:
+                return True
+    return False
+
+
+def _option_context_explicit_type_match(
+    raw_tokens: set[str],
+    control_intents: set[str],
+    ctype: str,
+) -> bool:
+    option_words = raw_tokens & {"choice", "choices", "option", "options"}
+    if ctype == "menuitem":
+        return bool(
+            option_words
+            or "menuitem" in raw_tokens
+            or {"menu", "item"} <= raw_tokens
+            or raw_tokens & {"context", "menu"}
+        )
+    if ctype == "listitem":
+        return bool(
+            option_words
+            or "listitem" in raw_tokens
+            or {"list", "item"} <= raw_tokens
+        )
+    return False
+
+
+def _option_parent_request_tokens(
+    request_tokens: set[str],
+    label_tokens: set[str],
+) -> set[str]:
+    tokens = set(request_tokens)
+    tokens -= label_tokens
+    tokens -= OPTION_PARENT_CONTEXT_STOPWORDS
+    return {token for token in tokens if len(token) > 1 and not token.isdigit()}
+
+
+def _option_parent_context_matches(
+    rect: tuple[int, int, int, int],
+    requested: set[str],
+    parent_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    if not requested:
+        return False
+    requested_surfaces = requested & OPTION_PARENT_SURFACE_WORDS
+    required_identity = requested - requested_surfaces
+    for parent_rect, parent_text, parent_type in parent_contexts:
+        if parent_type not in OPTION_CONTEXT_PARENT_TYPES:
+            continue
+        if not _option_parent_rect_matches(parent_rect, rect, parent_type):
+            continue
+        parent_tokens = _object_token_variants(
+            _tokenize_control(_semantic_text(parent_text))
+            | _tokens_from_text(parent_text)
+            | {parent_type}
+            | set(SURFACE_CONTEXT_TYPE_WORDS.get(parent_type, frozenset()))
+        )
+        if requested_surfaces and not (requested_surfaces & parent_tokens):
+            continue
+        if required_identity and not required_identity <= parent_tokens:
+            continue
+        if requested_surfaces or required_identity:
+            return True
+    return False
+
+
+def _option_parent_request_has_context(
+    requested: set[str],
+    parent_contexts: list[tuple[tuple[int, int, int, int], str, str]],
+) -> bool:
+    if requested - OPTION_PARENT_SURFACE_WORDS:
+        return True
+    requested_surfaces = requested & OPTION_PARENT_SURFACE_WORDS
+    if not requested_surfaces:
+        return False
+    for _parent_rect, parent_text, parent_type in parent_contexts:
+        if parent_type not in {"group", "list", "menu", "pane"}:
+            continue
+        parent_tokens = _object_token_variants(
+            _tokenize_control(_semantic_text(parent_text))
+            | _tokens_from_text(parent_text)
+            | {parent_type}
+            | set(SURFACE_CONTEXT_TYPE_WORDS.get(parent_type, frozenset()))
+        )
+        if requested_surfaces & parent_tokens:
+            return True
+    return False
+
+
+def _option_parent_rect_matches(
+    parent_rect: tuple[int, int, int, int],
+    child_rect: tuple[int, int, int, int],
+    parent_type: str,
+) -> bool:
+    if parent_type == "menuitem":
+        return _menu_path_parent_item_rect_matches(parent_rect, child_rect)
+    return _contains_rect(_expand_rect(parent_rect, 4), child_rect)
+
+
+def _menu_path_parent_item_rect_matches(
+    parent_rect: tuple[int, int, int, int],
+    child_rect: tuple[int, int, int, int],
+) -> bool:
+    parent_x, parent_y, parent_width, parent_height = parent_rect
+    child_x, child_y, child_width, child_height = child_rect
+    if min(parent_width, parent_height, child_width, child_height) <= 0:
+        return False
+    parent_right = parent_x + parent_width
+    child_right = child_x + child_width
+    horizontal_overlap = min(parent_right, child_right) - max(parent_x, child_x)
+    if child_y >= parent_y + parent_height - 2:
+        vertical_gap = child_y - (parent_y + parent_height)
+        if vertical_gap <= max(72, parent_height * 3):
+            left_aligned = abs(parent_x - child_x) <= max(18, parent_width * 0.35)
+            if horizontal_overlap > 0 and left_aligned:
+                return True
+    parent_bottom = parent_y + parent_height
+    child_bottom = child_y + child_height
+    vertical_overlap = min(parent_bottom, child_bottom) - max(parent_y, child_y)
+    if vertical_overlap < min(parent_height, child_height) * 0.45:
+        return False
+    horizontal_gap = child_x - parent_right
+    if horizontal_gap < -4:
+        return False
+    return horizontal_gap <= max(96, parent_width * 0.75)
+
+
+def _option_context_label_tokens(text: str) -> set[str]:
+    return _object_token_variants(
+        (_tokenize_control(_semantic_text(text)) | _tokens_from_text(text))
+        - OPTION_PARENT_CONTEXT_STOPWORDS
+        - OPTION_PARENT_SURFACE_WORDS
+    )
 
 
 def _row_context_rect_matches(
