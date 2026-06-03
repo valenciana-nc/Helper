@@ -1992,6 +1992,85 @@ class HelpSessionEndToEndTests(unittest.TestCase):
         self.assertEqual(target.source, "target_id")
         self.assertFalse(target.rejected_reason)
 
+    def test_current_screen_recheck_rejects_action_context_from_other_window_rank(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        capture = _button_capture(button_rect=(200, 110, 60, 28))
+        rect = (200, 110, 60, 28)
+        previous_candidates = [
+            ControlCandidate(
+                "row",
+                "Acme invoice",
+                "dataitem",
+                (20, 100, 260, 48),
+                window_title="Billing",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "pay",
+                "Pay",
+                "button",
+                rect,
+                window_title="Billing",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "row",
+                "Acme invoice",
+                "dataitem",
+                (20, 100, 260, 48),
+                window_title="Other App",
+                window_rank=1,
+            ),
+            ControlCandidate(
+                "pay",
+                "Pay",
+                "button",
+                rect,
+                window_title="Billing",
+                window_rank=0,
+            ),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Pay",
+            target_id="pay",
+        )
+        target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Pay",
+            target_id="pay",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Pay for Acme invoice.",
+            target_id="pay",
+            target_norm_x=667,
+            target_norm_y=550,
+            target_norm_width=200,
+            target_norm_height=140,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=previous_candidates,
+            target=target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
     def test_current_screen_recheck_allows_generic_action_when_visual_context_stable(self) -> None:
         app = _qt_app()
         rect = (120, 110, 60, 28)
@@ -2640,6 +2719,85 @@ class HelpSessionEndToEndTests(unittest.TestCase):
             target_norm_x=500,
             target_norm_y=688,
             target_norm_width=250,
+            target_norm_height=150,
+        )
+
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=capture,
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_capture=capture,
+            previous_candidates=previous_candidates,
+            target=target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
+    def test_current_screen_recheck_rejects_control_section_context_from_other_window_rank(self) -> None:
+        from help_session import _guard_revalidated_target
+        from rect_snap import SnapResult
+
+        capture = _button_capture(button_rect=(120, 110, 24, 24))
+        rect = (120, 110, 24, 24)
+        previous_candidates = [
+            ControlCandidate(
+                "section",
+                "Billing settings",
+                "group",
+                (90, 90, 180, 80),
+                window_title="Billing",
+                window_rank=0,
+            ),
+            ControlCandidate(
+                "setting",
+                "Enabled",
+                "checkbox",
+                rect,
+                window_title="Billing",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "section",
+                "Billing settings",
+                "group",
+                (90, 90, 180, 80),
+                window_title="Other App",
+                window_rank=1,
+            ),
+            ControlCandidate(
+                "setting",
+                "Enabled",
+                "checkbox",
+                rect,
+                window_title="Billing",
+                window_rank=0,
+            ),
+        ]
+        previous_target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Enabled",
+            target_id="setting",
+        )
+        target = TargetResolution(
+            rect=rect,
+            confidence=0.9,
+            source="target_id",
+            matched_text="Enabled",
+            target_id="setting",
+        )
+        decision = LiveHelpDecision(
+            kind="step",
+            instruction="Click Enabled in Billing settings.",
+            target_id="setting",
+            target_norm_x=500,
+            target_norm_y=688,
+            target_norm_width=100,
             target_norm_height=150,
         )
 

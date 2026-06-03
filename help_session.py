@@ -1365,6 +1365,8 @@ def _control_context_revalidation_tokens(
             continue
         if candidate.control_type.lower() not in CONTROL_CONTEXT_LABEL_TYPES:
             continue
+        if not _same_revalidation_context_window(target, candidate):
+            continue
         tokens = _control_label_context_tokens(candidate)
         if not tokens:
             continue
@@ -1391,6 +1393,8 @@ def _control_section_context_revalidation_tokens(
         if candidate.id == target.id:
             continue
         if candidate.control_type.lower() not in CONTROL_CONTEXT_SECTION_TYPES:
+            continue
+        if not _same_revalidation_context_window(target, candidate):
             continue
         if not _rect_contains(_expand_rect(candidate.rect, 4), target.rect):
             continue
@@ -1890,6 +1894,8 @@ def _action_context_revalidation_tokens(
             continue
         if candidate.control_type not in ACTION_CONTEXT_REVALIDATION_CONTROL_TYPES:
             continue
+        if not _same_revalidation_context_window(target, candidate):
+            continue
         if not _rect_contains(_expand_rect(candidate.rect, 4), target.rect):
             continue
         contexts.append(candidate)
@@ -1919,6 +1925,8 @@ def _contained_action_context_text_tokens(
         if candidate.id == target.id:
             continue
         if candidate.control_type not in ACTION_CONTEXT_TEXT_CONTROL_TYPES:
+            continue
+        if not _same_revalidation_context_window(target, candidate):
             continue
         if not _rect_contains(_expand_rect(context.rect, 4), candidate.rect):
             continue

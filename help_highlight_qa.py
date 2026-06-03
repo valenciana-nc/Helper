@@ -617,6 +617,118 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "revalidation_rejects_control_section_context_from_other_window_rank",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [90, 90, 180, 80], "label": "Billing settings"},
+                {"rect": [120, 110, 24, 24], "kind": "checkbox", "label": "Enabled"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Enabled in Billing settings.",
+                "target_id": "setting",
+                "target": {"x": 120, "y": 110, "width": 24, "height": 24},
+            },
+            "previous_candidates": [
+                {
+                    "id": "section",
+                    "text": "Billing settings",
+                    "control_type": "group",
+                    "rect": [90, 90, 180, 80],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "setting",
+                    "text": "Enabled",
+                    "control_type": "checkbox",
+                    "rect": [120, 110, 24, 24],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "section",
+                    "text": "Billing settings",
+                    "control_type": "group",
+                    "rect": [90, 90, 180, 80],
+                    "window_title": "Other App",
+                    "window_rank": 1,
+                },
+                {
+                    "id": "setting",
+                    "text": "Enabled",
+                    "control_type": "checkbox",
+                    "rect": [120, 110, 24, 24],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "setting",
+                "rejected_reason": "current screen recheck target changed",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "revalidation_rejects_action_row_context_from_other_window_rank",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [20, 100, 260, 48], "label": "Acme invoice"},
+                {"rect": [200, 110, 60, 28], "label": "Pay"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Pay for Acme invoice.",
+                "target_id": "pay",
+                "target": {"x": 200, "y": 110, "width": 60, "height": 28},
+            },
+            "previous_candidates": [
+                {
+                    "id": "row",
+                    "text": "Acme invoice",
+                    "control_type": "dataitem",
+                    "rect": [20, 100, 260, 48],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+                {
+                    "id": "pay",
+                    "text": "Pay",
+                    "control_type": "button",
+                    "rect": [200, 110, 60, 28],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "row",
+                    "text": "Acme invoice",
+                    "control_type": "dataitem",
+                    "rect": [20, 100, 260, 48],
+                    "window_title": "Other App",
+                    "window_rank": 1,
+                },
+                {
+                    "id": "pay",
+                    "text": "Pay",
+                    "control_type": "button",
+                    "rect": [200, 110, 60, 28],
+                    "window_title": "Billing",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "pay",
+                "rejected_reason": "current screen recheck target changed",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "recycled_ephemeral_target_id_losing_window_identity_rejects_overlay",
             "capture": {"width": 500, "height": 320},
             "draw": [

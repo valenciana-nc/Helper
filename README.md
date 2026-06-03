@@ -132,6 +132,9 @@ The latest coverage/revalidation slice also rejects same-rank duplicate controls
 that move onto the selected rectangle between snapshots, and refuses stale cell
 revalidation when row/header context comes from a different window rank or
 window title than the cell itself.
+The current pass extends that same stale-context rule to action and state/input
+controls, so row, section, and direct-label evidence cannot prove continuity
+when it belongs to another window rank or incompatible window title.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
