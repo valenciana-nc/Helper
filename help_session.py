@@ -23,6 +23,7 @@ from control_inventory import (
     ControlCandidate,
     EXCLUSIVE_ACTION_FAMILIES,
     PAY_ACTION_WORDS,
+    SEARCH_ACTION_WORDS,
     TargetResolution,
     collect_control_candidates,
     resolve_candidate_target,
@@ -725,6 +726,8 @@ def _raw_snap_action_mismatch(instruction: str, matched_text: str) -> bool:
 
 
 def _raw_snap_label_mismatch(instruction: str, matched_text: str) -> bool:
+    if _raw_snap_bare_search_filter_mismatch(instruction, matched_text):
+        return True
     if _raw_snap_bare_extended_label_mismatch(instruction, matched_text):
         return True
     instruction_tokens = (
@@ -736,6 +739,14 @@ def _raw_snap_label_mismatch(instruction: str, matched_text: str) -> bool:
     if not instruction_tokens or not control_tokens:
         return False
     return not bool(instruction_tokens & control_tokens)
+
+
+def _raw_snap_bare_search_filter_mismatch(instruction: str, matched_text: str) -> bool:
+    request_words = _raw_snap_literal_label_words(instruction)
+    if len(request_words) != 1 or request_words[0] not in SEARCH_ACTION_WORDS:
+        return False
+    matched_words = set(_raw_snap_literal_label_words(matched_text))
+    return request_words[0] in matched_words and bool(matched_words & {"filter", "filters"})
 
 
 def _raw_snap_bare_extended_label_mismatch(instruction: str, matched_text: str) -> bool:

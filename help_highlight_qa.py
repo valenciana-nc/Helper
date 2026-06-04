@@ -647,6 +647,87 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_search_rejects_lone_search_filters_menuitem",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 80, 160, 32], "label": "Search filters"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Search.",
+                "target_id": "filters",
+                "target": {"x": 40, "y": 80, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "filters",
+                    "text": "Search filters",
+                    "control_type": "menuitem",
+                    "rect": [40, 80, 160, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "filters",
+                "rejected_reason": "target_id semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "partial_weekly_radio_rejects_weekly_digest_without_context",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 80, 180, 32], "kind": "radiobutton", "label": "Weekly digest"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Weekly.",
+                "target_id": "weekly",
+                "target": {"x": 40, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "weekly",
+                    "text": "Weekly digest",
+                    "control_type": "radiobutton",
+                    "rect": [40, 80, 180, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "weekly",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "partial_email_checkbox_rejects_email_alerts_without_context",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 80, 180, 32], "kind": "checkbox", "label": "Email alerts"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Email checkbox.",
+                "target_id": "email",
+                "target": {"x": 40, "y": 80, "width": 180, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "email",
+                    "text": "Email alerts",
+                    "control_type": "checkbox",
+                    "rect": [40, 80, 180, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "email",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "stale_target_id_recovers_then_ocr_rejects_final_text",
             "capture": {"width": 500, "height": 320},
             "draw": [

@@ -1165,6 +1165,75 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(save_as_result.source, "uia")
         self.assertEqual(save_as_result.rejected_reason, "candidate semantic mismatch")
 
+    def test_fresh_snap_rejects_bare_search_filters_menuitem(self) -> None:
+        from rect_snap import snap_to_control
+
+        item = _make_button("Search filters", 100, 100, 160, 32, control_type="MenuItem")
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [item])])
+
+        result = snap_to_control(
+            (100, 100, 160, 32),
+            "Click Search.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        full = snap_to_control(
+            (100, 100, 160, 32),
+            "Click Search filters.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(full.source, "uia")
+        self.assertFalse(full.rejected_reason)
+
+    def test_fresh_snap_rejects_partial_state_option_visible_label(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Select Weekly.", "Weekly digest", "RadioButton", (100, 100, 180, 32)),
+            ("Click Email checkbox.", "Email alerts", "CheckBox", (100, 150, 180, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                control = _make_button(label, *rect, control_type=control_type)
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [control])])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_accepts_exact_and_full_state_option_labels(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            ("Select Weekly.", "Weekly", "RadioButton", (100, 100, 180, 32)),
+            ("Select Weekly digest.", "Weekly digest", "RadioButton", (100, 150, 180, 32)),
+            ("Click Email alerts checkbox.", "Email alerts", "CheckBox", (100, 200, 180, 32)),
+        )
+        for instruction, label, control_type, rect in cases:
+            with self.subTest(instruction=instruction, label=label):
+                control = _make_button(label, *rect, control_type=control_type)
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [control])])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertFalse(result.rejected_reason)
+
     def test_neutral_same_label_state_option_raw_snap_stays_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 
@@ -4750,7 +4819,6 @@ class ControlInventoryTests(unittest.TestCase):
         cases = (
             ("Click Save.", "Save as", "Save"),
             ("Click Cancel.", "Cancel subscription", "Cancel"),
-            ("Click Search.", "Search filters", "Search"),
         )
         for instruction, stale_label, exact_label in cases:
             with self.subTest(instruction=instruction, stale_label=stale_label):
@@ -4822,6 +4890,8 @@ class ControlInventoryTests(unittest.TestCase):
             ("Click Save changes.", "Save changes"),
             ("Cancel subscription.", "Cancel subscription"),
             ("Click Delete account.", "Delete account"),
+            ("Click Search filters.", "Search filters"),
+            ("Click Find filters.", "Find filters"),
         )
         for instruction, label in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -4850,6 +4920,43 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertFalse(text_target.rejected_reason)
                 self.assertEqual(snap_target.source, "candidate_snap")
                 self.assertFalse(snap_target.rejected_reason)
+
+    def test_bare_search_does_not_highlight_search_filters_menuitem(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [ControlCandidate("filters", "Search filters", "menuitem", (100, 100, 160, 32))]
+
+        target_id = resolve_candidate_target(
+            target_id="filters",
+            instruction="Click Search.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Search.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Search.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        full_target = resolve_candidate_target(
+            target_id="filters",
+            instruction="Click Search filters.",
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id semantic mismatch")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(full_target.source, "target_id")
+        self.assertFalse(full_target.rejected_reason)
 
     def test_bare_action_ignores_shortcut_suffix_but_not_extra_action_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -5047,6 +5154,98 @@ class ControlInventoryTests(unittest.TestCase):
             assert target is not None
             self.assertEqual(target.target_id, "billing_email")
             self.assertFalse(target.rejected_reason)
+
+    def test_partial_state_option_label_rejects_extended_visible_label_without_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        harness = HelpTargetHarnessTests()
+        cases = (
+            ("Select Weekly.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
+            ("Select Weekly radio.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
+            ("Click Email checkbox.", ControlCandidate("email", "Email alerts", "checkbox", (100, 100, 180, 32))),
+        )
+        for instruction, candidate in cases:
+            with self.subTest(instruction=instruction, label=candidate.text):
+                candidates = [candidate]
+                target_id = resolve_candidate_target(
+                    target_id=candidate.id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+                help_target = resolve_help_target(
+                    harness._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": candidate.id,
+                            "target": {
+                                "x": candidate.rect[0],
+                                "y": candidate.rect[1],
+                                "width": candidate.rect[2],
+                                "height": candidate.rect[3],
+                            },
+                        }
+                    ),
+                    harness._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_exact_and_full_state_option_labels_still_highlight(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ("Select Weekly.", ControlCandidate("weekly", "Weekly", "radiobutton", (100, 100, 180, 32))),
+            ("Select Weekly digest.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
+            ("Click Email alerts checkbox.", ControlCandidate("email", "Email alerts", "checkbox", (100, 100, 180, 32))),
+            ("Enable notifications checkbox.", ControlCandidate("notifications", "Notifications", "checkbox", (100, 100, 180, 32))),
+        )
+        for instruction, candidate in cases:
+            with self.subTest(instruction=instruction, label=candidate.text):
+                candidates = [candidate]
+                target_id = resolve_candidate_target(
+                    target_id=candidate.id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=candidate.rect,
+                )
+
+                for target in (target_id, text_target, snap_target):
+                    self.assertIsNotNone(target)
+                    assert target is not None
+                    self.assertEqual(target.target_id, candidate.id)
+                    self.assertFalse(target.rejected_reason)
 
     def test_label_only_open_view_verbs_recover_to_exact_visible_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -9358,6 +9557,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
                 confidence=0.92,
                 source="uia",
                 matched_text="Save as",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(full_label.source, "snap")
+        self.assertFalse(full_label.rejected_reason)
+
+    def test_fresh_snap_bare_search_rejects_search_filters_label(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Search.",
+                    "target": {"x": 160, "y": 80, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 140, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Search filters",
+            ),
+        )
+        full_label = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Search filters.",
+                    "target": {"x": 160, "y": 80, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 140, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Search filters",
             ),
         )
 

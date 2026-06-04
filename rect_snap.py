@@ -288,6 +288,7 @@ FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
 TRANSFER_ACTION_WORDS = FILE_EXPORT_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS
 CLIPBOARD_COPY_WORDS = frozenset({"copy"})
 DUPLICATE_ACTION_WORDS = frozenset({"clone", "duplicate"})
+SEARCH_ACTION_WORDS = frozenset({"find", "search"})
 BARE_EXTENDED_ACTION_LABEL_WORDS = (
     CANCEL_ACTION_WORDS
     | REMOVE_ACTION_WORDS
@@ -444,7 +445,60 @@ STATE_LABEL_ACTION_GROUPS = (
 )
 STATE_LABEL_TURN_ON_WORDS = frozenset({"checked", "enabled"})
 STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
-SEARCH_ACTION_WORDS = frozenset({"find", "search"})
+STATE_ACTION_WORDS = frozenset(
+    word for action_words, _state_words in STATE_LABEL_ACTION_GROUPS for word in action_words
+)
+PARTIAL_STATE_LABEL_CONTROL_TYPES = frozenset({"checkbox", "radiobutton"})
+PARTIAL_STATE_LABEL_EXTRA_STOPWORDS = frozenset(
+    {
+        "and",
+        "asterisk",
+        "mandatory",
+        "optional",
+        "or",
+        "required",
+        "star",
+    }
+)
+PARTIAL_STATE_LABEL_REQUEST_STOPWORDS = (
+    ACTION_OBJECT_STOPWORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
+    | STATE_ACTION_WORDS
+    | CHECKBOX_ON_ACTION_WORDS
+    | CHECKBOX_OFF_ACTION_WORDS
+    | frozenset(
+        {
+            "a",
+            "an",
+            "box",
+            "button",
+            "check",
+            "checkbox",
+            "control",
+            "for",
+            "from",
+            "in",
+            "inside",
+            "into",
+            "of",
+            "on",
+            "option",
+            "please",
+            "radio",
+            "radiobutton",
+            "select",
+            "state",
+            "switch",
+            "that",
+            "the",
+            "this",
+            "to",
+            "toggle",
+            "under",
+            "within",
+        }
+    )
+)
 SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
 SORT_ASCENDING_WORDS = frozenset({"ascending"})
 SORT_DESCENDING_WORDS = frozenset({"descending"})
@@ -1186,6 +1240,15 @@ def snap_to_control(
             visible_text,
             ctype,
         )
+        bare_search_filter_action_mismatch = _bare_search_filter_extended_label_mismatch(
+            instruction,
+            visible_text,
+        )
+        state_partial_label_mismatch = _state_control_partial_visible_label_mismatch(
+            instruction,
+            visible_text,
+            ctype,
+        )
         semantic_action_mismatch = (
             start_button_action_mismatch
             or task_view_action_mismatch
@@ -1222,6 +1285,8 @@ def snap_to_control(
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
             or bare_extended_label_action_mismatch
+            or bare_search_filter_action_mismatch
+            or state_partial_label_mismatch
         )
         if not _is_candidate_topmost(top_handle, control_handle, rect, topmost_provider):
             if (
@@ -4601,6 +4666,52 @@ def _bare_action_extended_label_mismatch(
     candidate_tokens = set(candidate_sequence)
     requested_tokens = _literal_words_from_text(instruction)
     return bool(_bare_extended_label_extra_tokens(candidate_tokens, requested_tokens))
+
+
+def _state_control_partial_visible_label_mismatch(
+    instruction: str,
+    visible_text: str,
+    ctype: str,
+) -> bool:
+    if ctype not in PARTIAL_STATE_LABEL_CONTROL_TYPES:
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if raw_tokens & (
+        CHECKBOX_ON_ACTION_WORDS
+        | CHECKBOX_OFF_ACTION_WORDS
+        | GENERIC_VISIBILITY_ACTION_WORDS
+        | {"off", "on", "turn"}
+    ):
+        return False
+    label_words = set(_literal_word_sequence(visible_text)) - PARTIAL_STATE_LABEL_EXTRA_STOPWORDS
+    if len(label_words) <= 1:
+        return False
+    requested_words = _state_control_partial_label_request_words(instruction)
+    if len(requested_words) != 1:
+        return False
+    requested_word = next(iter(requested_words))
+    if requested_word not in label_words:
+        return False
+    return bool(label_words - requested_words)
+
+
+def _state_control_partial_label_request_words(instruction: str) -> set[str]:
+    return {
+        word
+        for word in _literal_word_sequence(instruction)
+        if word not in PARTIAL_STATE_LABEL_REQUEST_STOPWORDS
+    }
+
+
+def _bare_search_filter_extended_label_mismatch(
+    instruction: str,
+    candidate_text: str,
+) -> bool:
+    requested_sequence = _bare_action_request_sequence(instruction)
+    if len(requested_sequence) != 1 or requested_sequence[0] not in SEARCH_ACTION_WORDS:
+        return False
+    candidate_words = set(_literal_word_sequence(candidate_text))
+    return requested_sequence[0] in candidate_words and bool(candidate_words & {"filter", "filters"})
 
 
 def _bare_extended_label_extra_tokens(

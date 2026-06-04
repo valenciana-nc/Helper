@@ -165,6 +165,11 @@ full-label requests, visible shortcut hints such as `Save Ctrl S`, current-value
 dropdowns, and object/title matches out of that refusal path, and applies the
 same rule across target IDs, text matching, candidate snapping, raw UIA
 snapping, and final pre-overlay revalidation.
+The current pass extends the same conservative refusal to partial checkbox and
+radio labels such as `Weekly` versus `Weekly digest` or `Email` versus
+`Email alerts`, while preserving full labels and exact one-word options. It also
+blocks bare `Search`/`Find` from highlighting `Search filters`/`Find filters`
+without breaking Windows Search or other longer taskbar search labels.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
