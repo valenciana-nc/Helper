@@ -270,6 +270,11 @@ GENERIC_OBJECT_REQUEST_WORDS = frozenset(
     }
 )
 FIELD_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "input", "type"})
+FIELD_LABEL_ACTION_WORDS = (
+    FIELD_ENTRY_ACTION_WORDS
+    | OPEN_VIEW_REQUEST_WORDS
+    | frozenset({"choose", "select", "use"})
+)
 CONFIRM_ACTION_WORDS = frozenset(
     {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
 )
@@ -567,6 +572,7 @@ PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS = PARTIAL_STATE_LABEL_REQUEST_STOPWORDS | 
         "box",
         "caret",
         "chevron",
+        "choose",
         "combo",
         "combobox",
         "drop",
@@ -584,6 +590,7 @@ PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS = PARTIAL_STATE_LABEL_REQUEST_STOPWORDS | 
         "textarea",
         "type",
         "url",
+        "use",
         "your",
     }
 )
@@ -2384,8 +2391,7 @@ def _field_label_request_context_words(
     context_words = set(_literal_word_sequence(instruction))
     context_words -= requested_words
     context_words -= PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS
-    context_words -= FIELD_ENTRY_ACTION_WORDS
-    context_words -= OPEN_VIEW_REQUEST_WORDS
+    context_words -= FIELD_LABEL_ACTION_WORDS
     context_words -= GENERIC_OBJECT_REQUEST_WORDS
     context_words -= {
         "a",
@@ -4354,8 +4360,7 @@ def _field_label_duplicate_request_words(instruction: str, control_type: str) ->
         return requested_words
     words = set(_literal_word_sequence(instruction))
     words -= PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS
-    words -= FIELD_ENTRY_ACTION_WORDS
-    words -= OPEN_VIEW_REQUEST_WORDS
+    words -= FIELD_LABEL_ACTION_WORDS
     words -= GENERIC_OBJECT_REQUEST_WORDS
     words -= {
         "a",

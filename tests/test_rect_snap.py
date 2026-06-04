@@ -1318,17 +1318,23 @@ class SnapToControlTests(unittest.TestCase):
         ]
         desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
 
-        result = snap_to_control(
-            (120, 96, 260, 36),
+        for instruction in (
             "Open the Country dropdown.",
-            desktop_factory=lambda: desktop,
-            timeout_ms=2000,
-        )
+            "Choose the Country dropdown.",
+            "Use the Country picker.",
+        ):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    (120, 96, 260, 36),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
 
-        self.assertEqual(result.source, "uia")
-        self.assertEqual(result.rect, (120, 96, 260, 36))
-        self.assertIn("Country", result.matched_text)
-        self.assertFalse(result.rejected_reason)
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (120, 96, 260, 36))
+                self.assertIn("Country", result.matched_text)
+                self.assertFalse(result.rejected_reason)
 
     def test_fresh_snap_does_not_borrow_field_label_from_other_window(self) -> None:
         from rect_snap import snap_to_control
@@ -1410,6 +1416,33 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (120, 76, 260, 36))
         self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
 
+    def test_fresh_snap_duplicate_dropdown_action_words_stay_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Country", 20, 102, 80, 24, control_type="Text"),
+            _make_button("United States", 120, 96, 260, 36, control_type="ComboBox"),
+            _make_button("Country", 20, 152, 80, 24, control_type="Text"),
+            _make_button("Canada", 120, 146, 260, 36, control_type="ComboBox"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        for instruction in (
+            "Choose Country dropdown.",
+            "Use Country picker.",
+        ):
+            with self.subTest(instruction=instruction):
+                result = snap_to_control(
+                    (120, 96, 260, 36),
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (120, 96, 260, 36))
+                self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
     def test_fresh_snap_positional_duplicate_blank_field_label_recovers_target(self) -> None:
         from rect_snap import snap_to_control
 
@@ -1458,6 +1491,12 @@ class SnapToControlTests(unittest.TestCase):
             desktop_factory=lambda: desktop,
             timeout_ms=2000,
         )
+        choose_second = snap_to_control(
+            (120, 96, 260, 36),
+            "Choose the second Country dropdown.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
         first = snap_to_control(
             (120, 146, 260, 36),
             "Open the first Country dropdown.",
@@ -1468,6 +1507,9 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(second.source, "uia")
         self.assertEqual(second.rect, (120, 146, 260, 36))
         self.assertFalse(second.rejected_reason)
+        self.assertEqual(choose_second.source, "uia")
+        self.assertEqual(choose_second.rect, (120, 146, 260, 36))
+        self.assertFalse(choose_second.rejected_reason)
         self.assertEqual(first.source, "uia")
         self.assertEqual(first.rect, (120, 96, 260, 36))
         self.assertFalse(first.rejected_reason)
