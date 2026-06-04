@@ -7413,6 +7413,7 @@ def _named_control_candidate_label_tokens(
     tokens = (
         _field_alternative_label_tokens(candidate, candidates)
         | _nearby_unlabeled_control_label_tokens(candidate, candidates)
+        | _same_row_named_control_context_tokens(candidate, candidates)
     )
     return _object_token_variants(tokens) - NAMED_CONTROL_LABEL_STOPWORDS
 
@@ -7441,6 +7442,59 @@ def _named_control_candidate_context_tokens(
         _named_control_candidate_label_tokens(candidate, candidates)
         - _named_control_candidate_direct_label_tokens(candidate, candidates)
     )
+
+
+def _same_row_named_control_context_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"slider"}):
+        return set()
+    tokens: set[str] = set()
+    for label in candidates:
+        if label.id == candidate.id or _same_visual_candidate(label, candidate):
+            continue
+        if not _same_resolution_context_window(candidate, label):
+            continue
+        if not _same_cell_context_window_rank(candidate, label):
+            continue
+        if label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
+            continue
+        if not _same_row_named_control_label_rect_matches(label, candidate):
+            continue
+        tokens.update(_candidate_semantic_tokens(label))
+        tokens.update(_tokens_from_text(label.descriptor))
+    return _object_token_variants(tokens) - ROW_CONTEXT_OBJECT_STOPWORDS
+
+
+def _same_row_named_control_label_rect_matches(
+    label: ControlCandidate,
+    control: ControlCandidate,
+) -> bool:
+    if control.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"slider"}):
+        return False
+    label_x, label_y, label_width, label_height = label.rect
+    control_x, control_y, control_width, control_height = control.rect
+    if min(label_width, label_height, control_width, control_height) <= 0:
+        return False
+    label_center_y = label_y + label_height / 2
+    control_center_y = control_y + control_height / 2
+    if abs(label_center_y - control_center_y) > max(8.0, min(label_height, control_height) * 0.55):
+        return False
+    vertical_overlap = min(label_y + label_height, control_y + control_height) - max(
+        label_y,
+        control_y,
+    )
+    if vertical_overlap < min(label_height, control_height) * 0.45:
+        return False
+    label_right = label_x + label_width
+    control_right = control_x + control_width
+    horizontal_overlap = min(label_right, control_right) - max(label_x, control_x)
+    if horizontal_overlap > min(label_width, control_width) * 0.25:
+        return False
+    horizontal_gap = max(control_x - label_right, label_x - control_right, 0)
+    max_gap = max(260, max(label_width, control_width) * 6, min(960, control_width * 10))
+    return horizontal_gap <= max_gap
 
 
 def _nearby_unlabeled_control_label_tokens(

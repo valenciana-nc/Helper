@@ -25538,6 +25538,38 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "row_current_value_dropdown_uses_sibling_cell_row_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 70, 180, 24], "label": "Name"},
+                {"rect": [260, 70, 120, 24], "label": "Status"},
+                {"rect": [20, 106, 180, 30], "label": "Acme"},
+                {"rect": [260, 106, 120, 30], "label": "Active"},
+                {"rect": [20, 166, 180, 30], "label": "Globex"},
+                {"rect": [260, 166, 120, 30], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Open Globex Status dropdown.",
+                "target_id": "acme_status",
+                "target": {"x": 260, "y": 106, "width": 120, "height": 30},
+            },
+            "candidates": [
+                {"id": "name_header", "text": "Name", "control_type": "headeritem", "rect": [20, 70, 180, 24]},
+                {"id": "status_header", "text": "Status", "control_type": "headeritem", "rect": [260, 70, 120, 24]},
+                {"id": "acme_name", "text": "Acme", "control_type": "cell", "rect": [20, 106, 180, 30]},
+                {"id": "acme_status", "text": "Active", "control_type": "combobox", "rect": [260, 106, 120, 30]},
+                {"id": "globex_name", "text": "Globex", "control_type": "cell", "rect": [20, 166, 180, 30]},
+                {"id": "globex_status", "text": "Active", "control_type": "combobox", "rect": [260, 166, 120, 30]},
+            ],
+            "expected": {
+                "source": "text_match",
+                "target_id": "globex_status",
+                "rect": [260, 166, 120, 30],
+                "overlay_emitted": True,
+            },
+        },
+        {
             "name": "unknown_target_id_with_rect_recovers_obvious_candidate",
             "capture": {"width": 1000, "height": 500},
             "draw": [

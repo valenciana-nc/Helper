@@ -36879,6 +36879,67 @@ class HelpTargetHarnessTests(unittest.TestCase):
             self.assertFalse(resolved.rejected_reason)
             self.assertEqual(resolved.rect, (260, 106, 120, 30))
 
+    def test_row_current_value_dropdown_uses_sibling_cell_row_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("name_header", "Name", "headeritem", (20, 70, 180, 24)),
+            ControlCandidate("status_header", "Status", "headeritem", (260, 70, 120, 24)),
+            ControlCandidate("acme_name", "Acme", "cell", (20, 106, 180, 30)),
+            ControlCandidate("acme_status", "Active", "combobox", (260, 106, 120, 30)),
+            ControlCandidate("globex_name", "Globex", "cell", (20, 166, 180, 30)),
+            ControlCandidate("globex_status", "Active", "combobox", (260, 166, 120, 30)),
+        ]
+        instruction = "Open Globex Status dropdown."
+
+        wrong_target = resolve_candidate_target(
+            target_id="acme_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        exact_target = resolve_candidate_target(
+            target_id="globex_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 166, 120, 30),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(260, 106, 120, 30),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "acme_status",
+                    "target": {"x": 260, "y": 106, "width": 120, "height": 30},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.target_id, "acme_status")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(snap_target)
+        for resolved in (exact_target, text_target, help_target):
+            self.assertIsNotNone(resolved)
+            assert resolved is not None
+            self.assertEqual(resolved.target_id, "globex_status")
+            self.assertFalse(resolved.rejected_reason)
+            self.assertEqual(resolved.rect, (260, 166, 120, 30))
+
     def test_repeated_unlabeled_checkbox_recovers_direct_label_context(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target
         from help_session import resolve_help_target
