@@ -1113,6 +1113,58 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.rect, (100, 120, 240, 40))
                 self.assertFalse(result.rejected_reason)
 
+    def test_fresh_snap_rejects_bare_action_partial_row_label(self) -> None:
+        from rect_snap import snap_to_control
+
+        for control_type in ("ListItem", "DataItem", "Row", "TableItem"):
+            with self.subTest(control_type=control_type):
+                row = _make_button(
+                    "Archive Save status",
+                    100,
+                    100,
+                    520,
+                    64,
+                    control_type=control_type,
+                )
+                window = _make_window("App", 0, 0, 800, 600, [row])
+                desktop = _FakeDesktop([window])
+
+                result = snap_to_control(
+                    (100, 100, 520, 64),
+                    "Click Save.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_bare_action_allows_shortcut_suffix_and_rejects_filler_bypass(self) -> None:
+        from rect_snap import snap_to_control
+
+        shortcut = _make_button("Save Ctrl S", 100, 100, 120, 32)
+        shortcut_desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [shortcut])])
+        save_as = _make_button("Save as", 100, 160, 120, 32)
+        save_as_desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, [save_as])])
+
+        shortcut_result = snap_to_control(
+            (100, 100, 120, 32),
+            "Click Save.",
+            desktop_factory=lambda: shortcut_desktop,
+            timeout_ms=2000,
+        )
+        save_as_result = snap_to_control(
+            (100, 160, 120, 32),
+            "Click Save now.",
+            desktop_factory=lambda: save_as_desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(shortcut_result.source, "uia")
+        self.assertFalse(shortcut_result.rejected_reason)
+        self.assertEqual(save_as_result.source, "uia")
+        self.assertEqual(save_as_result.rejected_reason, "candidate semantic mismatch")
+
     def test_neutral_same_label_state_option_raw_snap_stays_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 
@@ -4725,6 +4777,276 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(text_target.target_id, "exact")
                 self.assertFalse(text_target.rejected_reason)
                 self.assertEqual(text_target.rect, (10, 60, 100, 32))
+
+    def test_bare_action_does_not_highlight_extended_label_without_exact_or_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ("Click Save.", "Save as"),
+            ("Click Open.", "Open recent"),
+            ("Click Delete.", "Delete account"),
+            ("Click Print.", "Print preview"),
+            ("Click Cancel.", "Cancel subscription"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [ControlCandidate("only", label, "button", (100, 100, 160, 32))]
+                target_id = resolve_candidate_target(
+                    target_id="only",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_full_action_label_still_highlights_matching_extended_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            ("Click Save changes.", "Save changes"),
+            ("Cancel subscription.", "Cancel subscription"),
+            ("Click Delete account.", "Delete account"),
+        )
+        for instruction, label in cases:
+            with self.subTest(instruction=instruction, label=label):
+                candidates = [ControlCandidate("only", label, "button", (100, 100, 160, 32))]
+                target_id = resolve_candidate_target(
+                    target_id="only",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(100, 100, 160, 32),
+                )
+
+                self.assertEqual(target_id.source, "target_id")
+                self.assertFalse(target_id.rejected_reason)
+                self.assertEqual(text_target.source, "text_match")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertFalse(snap_target.rejected_reason)
+
+    def test_bare_action_ignores_shortcut_suffix_but_not_extra_action_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [ControlCandidate("save", "Save Ctrl S", "button", (100, 100, 120, 32))]
+
+        target_id = resolve_candidate_target(
+            target_id="save",
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Save.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+
+        for target in (target_id, text_target, snap_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "save")
+            self.assertFalse(target.rejected_reason)
+
+    def test_bare_action_filler_words_do_not_bypass_extended_label_guard(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [ControlCandidate("save_as", "Save as", "button", (100, 100, 120, 32))]
+
+        target_id = resolve_candidate_target(
+            target_id="save_as",
+            instruction="Click Save now.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Save now.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Save now.",
+            candidates=candidates,
+            model_rect=(100, 100, 120, 32),
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_bare_action_does_not_highlight_broad_row_partial_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        for control_type in ("listitem", "dataitem", "row", "tableitem"):
+            with self.subTest(control_type=control_type):
+                candidates = [
+                    ControlCandidate(
+                        "row1",
+                        "Archive Save status",
+                        control_type,
+                        (100, 100, 520, 64),
+                    )
+                ]
+                target_id = resolve_candidate_target(
+                    target_id="row1",
+                    instruction="Click Save.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 520, 64),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction="Click Save.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 520, 64),
+                )
+                snap_target = snap_candidate_target(
+                    instruction="Click Save.",
+                    candidates=candidates,
+                    model_rect=(100, 100, 520, 64),
+                )
+
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+                self.assertIsNone(text_target)
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_full_row_label_still_highlights_matching_row_request(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate(
+                "row1",
+                "Archive Save status",
+                "listitem",
+                (100, 100, 520, 64),
+            )
+        ]
+
+        target_id = resolve_candidate_target(
+            target_id="row1",
+            instruction="Click Archive Save status row.",
+            candidates=candidates,
+            model_rect=(100, 100, 520, 64),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction="Click Archive Save status row.",
+            candidates=candidates,
+            model_rect=(100, 100, 520, 64),
+        )
+        snap_target = snap_candidate_target(
+            instruction="Click Archive Save status row.",
+            candidates=candidates,
+            model_rect=(100, 100, 520, 64),
+        )
+
+        for target in (target_id, text_target, snap_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "row1")
+            self.assertFalse(target.rejected_reason)
+
+    def test_partial_blank_textbox_label_rejects_extended_nearby_label_without_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("billing_label", "Billing Email", "text", (100, 102, 100, 24)),
+            ControlCandidate("billing_email", "", "edit", (220, 100, 240, 32)),
+        ]
+        instruction = "Type into Email text box."
+
+        target_id = resolve_candidate_target(
+            target_id="billing_email",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_full_blank_textbox_label_still_highlights_matching_nearby_label(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("billing_label", "Billing Email", "text", (100, 102, 100, 24)),
+            ControlCandidate("billing_email", "", "edit", (220, 100, 240, 32)),
+        ]
+        instruction = "Type into Billing Email text box."
+
+        target_id = resolve_candidate_target(
+            target_id="billing_email",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(220, 100, 240, 32),
+        )
+
+        for target in (target_id, text_target, snap_target):
+            self.assertIsNotNone(target)
+            assert target is not None
+            self.assertEqual(target.target_id, "billing_email")
+            self.assertFalse(target.rejected_reason)
 
     def test_label_only_open_view_verbs_recover_to_exact_visible_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -9000,6 +9322,50 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
         self.assertEqual(target.rect, (100, 100, 100, 40))
 
+    def test_fresh_snap_bare_action_rejects_extended_visible_label(self) -> None:
+        from help_session import resolve_help_target
+        from rect_snap import SnapResult
+
+        target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save.",
+                    "target": {"x": 160, "y": 80, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 100, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Save as",
+            ),
+        )
+        full_label = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": "Click Save as.",
+                    "target": {"x": 160, "y": 80, "width": 100, "height": 32},
+                }
+            ),
+            self._capture(),
+            [],
+            snapper=lambda _rect, _instruction: SnapResult(
+                rect=(160, 80, 100, 32),
+                confidence=0.92,
+                source="uia",
+                matched_text="Save as",
+            ),
+        )
+
+        self.assertEqual(target.source, "snap")
+        self.assertEqual(target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(full_label.source, "snap")
+        self.assertFalse(full_label.rejected_reason)
+
     def test_wrong_target_id_recovers_by_text_match(self) -> None:
         from control_inventory import ControlCandidate
         from help_session import resolve_help_target
@@ -11467,8 +11833,9 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(previous_target.target_id, "save")
         self.assertFalse(previous_target.rejected_reason)
         self.assertEqual(current_target.target_id, "save")
-        self.assertFalse(current_target.rejected_reason)
-        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+        self.assertEqual(current_target.source, "candidate_snap")
+        self.assertEqual(current_target.rejected_reason, "candidate semantic mismatch")
+        self.assertEqual(guarded.rejected_reason, "candidate semantic mismatch")
 
     def test_revalidation_rejects_control_moved_to_background_window(self) -> None:
         from control_inventory import ControlCandidate, TargetResolution

@@ -157,6 +157,14 @@ Stale text-box revalidation also refuses same-rectangle foreground partial
 matches, such as a foreground `Email` field replacing a background
 `Billing Email` field, and rejects long-label swaps when a requested
 discriminator such as `Billing` disappears from the current field label.
+The newest resolver pass refuses one-word action requests such as `Click Save.`
+when the only evidence is a longer action label such as `Save as`, a broad
+row/container label such as `Archive Save status`, or a blank text field whose
+nearby label has unrequested identity tokens such as `Billing Email`. It keeps
+full-label requests, visible shortcut hints such as `Save Ctrl S`, current-value
+dropdowns, and object/title matches out of that refusal path, and applies the
+same rule across target IDs, text matching, candidate snapping, raw UIA
+snapping, and final pre-overlay revalidation.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

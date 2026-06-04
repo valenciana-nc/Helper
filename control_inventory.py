@@ -401,6 +401,31 @@ FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
 TRANSFER_ACTION_WORDS = FILE_EXPORT_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS
 CLIPBOARD_COPY_WORDS = frozenset({"copy"})
 DUPLICATE_ACTION_WORDS = frozenset({"clone", "duplicate"})
+BARE_EXTENDED_ACTION_LABEL_WORDS = (
+    CANCEL_ACTION_WORDS
+    | REMOVE_ACTION_WORDS
+    | FILE_OPEN_ACTION_WORDS
+    | FILE_SAVE_ACTION_WORDS
+    | FILE_EXPORT_ACTION_WORDS
+    | EDIT_ACTION_WORDS
+    | frozenset({"print"})
+)
+BARE_EXTENDED_ACTION_LABEL_HINT_WORDS = frozenset(
+    {
+        "alt",
+        "cmd",
+        "command",
+        "control",
+        "ctrl",
+        "keyboard",
+        "meta",
+        "option",
+        "shortcut",
+        "shift",
+        "win",
+        "windows",
+    }
+)
 CLIPBOARD_COPY_EXACT_CONTEXT_WORDS = frozenset(
     {"address", "link", "links", "selected", "selection", "text", "url", "urls"}
 )
@@ -517,6 +542,15 @@ NAMED_CONTROL_LABEL_STOPWORDS = NAMED_CONTROL_ROLE_WORDS | frozenset(
         "button",
         "control",
         "option",
+    }
+)
+PARTIAL_NAMED_CONTROL_LABEL_EXTRA_STOPWORDS = frozenset(
+    {
+        "asterisk",
+        "mandatory",
+        "optional",
+        "required",
+        "star",
     }
 )
 RECORD_TARGET_WORDS = frozenset(
@@ -2679,6 +2713,19 @@ def snap_candidate_target(
             target_id=candidate.id,
             rejected_reason="ambiguous candidate snap",
         )
+    if _candidate_snap_hard_mismatch(
+        candidate=candidate,
+        candidates=candidates,
+        instruction=instruction,
+    ):
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=best_score,
+            source="candidate_snap",
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason="candidate semantic mismatch",
+        )
     return TargetResolution(
         rect=candidate.rect,
         confidence=best_score,
@@ -2958,6 +3005,8 @@ def _text_match_score(
         return 0.0
     if _exact_visible_label_order_mismatch(instruction, candidate):
         return 0.0
+    if _bare_visible_action_extended_label_mismatch(instruction, candidate):
+        return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
@@ -2971,6 +3020,10 @@ def _text_match_score(
     if _named_control_label_missing(instruction, candidate, candidates):
         return 0.0
     if _named_control_label_context_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _named_control_single_label_partial_context_ambiguous(instruction, candidate, candidates):
+        return 0.0
+    if _bare_action_container_extended_label_mismatch(instruction, candidate):
         return 0.0
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -3933,6 +3986,8 @@ def _single_dialog_dismiss_candidate(
         candidate_tokens = _candidate_visible_text_tokens(candidate)
         if not (candidate_tokens & {"cancel", "close", "dismiss", "x"}):
             continue
+        if _bare_visible_action_extended_label_mismatch(instruction, candidate):
+            continue
         dismiss_candidates.append(candidate)
         if (
             ("cancel" in raw_tokens and "cancel" in candidate_tokens)
@@ -4160,6 +4215,12 @@ def _target_id_plausibility(
             text_score,
             "target_id semantic mismatch",
         )
+    if _bare_visible_action_extended_label_mismatch(instruction, candidate):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -4185,6 +4246,22 @@ def _target_id_plausibility(
             "target_id semantic mismatch",
         )
     if _named_control_label_context_mismatch(instruction, candidate, candidates):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
+    if _named_control_single_label_partial_context_ambiguous(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
+    if _bare_action_container_extended_label_mismatch(instruction, candidate):
         return (
             False,
             text_score,
@@ -6781,6 +6858,8 @@ def _single_strict_text_entry_candidate(
             continue
         if _named_control_label_context_mismatch(instruction, candidate, candidates):
             continue
+        if _named_control_single_label_partial_context_ambiguous(instruction, candidate, candidates):
+            continue
         if selected is not None and not _same_visual_candidate(selected, candidate):
             return None
         selected = candidate
@@ -6840,6 +6919,35 @@ def _named_control_label_context_mismatch(
         )
         for other in candidates
     )
+
+
+def _named_control_single_label_partial_context_ambiguous(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in LABELLED_FIELD_CONTROL_TYPES:
+        return False
+    if _candidate_visible_text_tokens(candidate) or candidate.automation_id.strip():
+        return False
+    requested_label, requested_context = _named_control_effective_label_context_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
+    requested_variants = _object_token_variants(requested_label) | _tokenize_control(
+        " ".join(sorted(requested_label))
+    )
+    effective_context = requested_context - requested_variants
+    if len(requested_label) != 1 or effective_context:
+        return False
+    if _named_control_requested_literal_context_tokens(instruction, requested_label):
+        return False
+    direct_label = _named_control_candidate_direct_label_tokens(candidate, candidates)
+    if not (requested_label & direct_label):
+        return False
+    extra_tokens = direct_label - requested_variants - PARTIAL_NAMED_CONTROL_LABEL_EXTRA_STOPWORDS
+    return bool(extra_tokens)
 
 
 def _duplicate_labelled_field_control_ambiguous(
@@ -12862,6 +12970,71 @@ def _exact_visible_label_order_mismatch(
     ) == sorted(requested_sequence)
 
 
+def _bare_visible_action_extended_label_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in TIGHT_ACTION_CONTROL_TYPES:
+        return False
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if len(requested_sequence) != 1:
+        return False
+    candidate_sequence = tuple(_literal_word_sequence(candidate.text))
+    if len(candidate_sequence) <= 1:
+        return False
+    requested_word = requested_sequence[0]
+    if requested_word not in BARE_EXTENDED_ACTION_LABEL_WORDS:
+        return False
+    if requested_word not in candidate_sequence:
+        return False
+    candidate_tokens = set(candidate_sequence)
+    requested_tokens = _literal_words_from_text(instruction)
+    added_tokens = _bare_extended_label_extra_tokens(candidate_tokens, requested_tokens)
+    if not added_tokens:
+        return False
+    return bool(requested_word in candidate_tokens)
+
+
+def _bare_action_container_extended_label_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+) -> bool:
+    if candidate.control_type not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    if _explicit_container_target_request(
+        instruction,
+        _instruction_control_intents(instruction),
+        candidate.control_type,
+    ):
+        return False
+    if _instruction_requests_contained_row_action(instruction):
+        return False
+    requested_sequence = _exact_visible_label_request_sequence(instruction)
+    if len(requested_sequence) != 1:
+        return False
+    candidate_sequence = tuple(_literal_word_sequence(candidate.text))
+    if len(candidate_sequence) <= 1:
+        return False
+    requested_word = requested_sequence[0]
+    if requested_word not in BARE_EXTENDED_ACTION_LABEL_WORDS:
+        return False
+    if requested_word not in candidate_sequence:
+        return False
+    candidate_tokens = set(candidate_sequence)
+    requested_tokens = _literal_words_from_text(instruction)
+    return bool(_bare_extended_label_extra_tokens(candidate_tokens, requested_tokens))
+
+
+def _bare_extended_label_extra_tokens(
+    candidate_tokens: set[str],
+    requested_tokens: set[str],
+) -> set[str]:
+    extra_tokens = candidate_tokens - requested_tokens - BARE_EXTENDED_ACTION_LABEL_HINT_WORDS
+    if candidate_tokens & BARE_EXTENDED_ACTION_LABEL_HINT_WORDS:
+        extra_tokens = {token for token in extra_tokens if len(token) > 1}
+    return extra_tokens
+
+
 def _exact_visible_label_requested_alternative_mismatch(
     instruction: str,
     candidate: ControlCandidate,
@@ -12917,6 +13090,8 @@ def _exact_visible_label_request_sequence(instruction: str) -> tuple[str, ...]:
                 "inside",
                 "of",
                 "on",
+                "now",
+                "please",
                 "the",
                 "this",
                 "that",
@@ -15977,6 +16152,23 @@ def _same_snap_intent(
     return second_score >= first_score - TEXT_MATCH_GAP
 
 
+def _candidate_snap_hard_mismatch(
+    *,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    instruction: str,
+) -> bool:
+    return (
+        _bare_visible_action_extended_label_mismatch(instruction, candidate)
+        or _bare_action_container_extended_label_mismatch(instruction, candidate)
+        or _named_control_single_label_partial_context_ambiguous(
+            instruction,
+            candidate,
+            candidates,
+        )
+    )
+
+
 def _candidate_snap_semantic_mismatch(
     *,
     candidate: ControlCandidate,
@@ -15991,6 +16183,8 @@ def _candidate_snap_semantic_mismatch(
     )
     if _browser_menu_button_action_mismatch(instruction, candidate):
         return True
+    if _bare_visible_action_extended_label_mismatch(instruction, candidate):
+        return True
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return True
     if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
@@ -16002,6 +16196,10 @@ def _candidate_snap_semantic_mismatch(
     if _named_control_label_missing(instruction, candidate, candidates):
         return True
     if _named_control_label_context_mismatch(instruction, candidate, candidates):
+        return True
+    if _named_control_single_label_partial_context_ambiguous(instruction, candidate, candidates):
+        return True
+    if _bare_action_container_extended_label_mismatch(instruction, candidate):
         return True
     if _record_target_alternative_mismatch(instruction, candidate, candidates):
         return True

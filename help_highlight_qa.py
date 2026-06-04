@@ -564,6 +564,89 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "bare_save_rejects_lone_save_as_button",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [10, 10, 100, 32], "label": "Save as"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save_as",
+                "target": {"x": 10, "y": 10, "width": 100, "height": 32},
+            },
+            "candidates": [
+                {"id": "save_as", "text": "Save as", "control_type": "button", "rect": [10, 10, 100, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "save_as",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "bare_save_rejects_lone_row_partial_label",
+            "capture": {"width": 800, "height": 360},
+            "draw": [
+                {"rect": [100, 100, 520, 64], "label": "Archive Save status"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "row1",
+                "target": {"x": 100, "y": 100, "width": 520, "height": 64},
+            },
+            "candidates": [
+                {
+                    "id": "row1",
+                    "text": "Archive Save status",
+                    "control_type": "listitem",
+                    "rect": [100, 100, 520, 64],
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "row1",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "partial_email_textbox_rejects_billing_email_without_context",
+            "capture": {"width": 800, "height": 360},
+            "draw": [
+                {"rect": [100, 102, 100, 24], "label": "Billing Email"},
+                {"rect": [220, 100, 240, 32], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Type into Email text box.",
+                "target_id": "billing_email",
+                "target": {"x": 220, "y": 100, "width": 240, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "billing_label",
+                    "text": "Billing Email",
+                    "control_type": "text",
+                    "rect": [100, 102, 100, 24],
+                },
+                {
+                    "id": "billing_email",
+                    "text": "",
+                    "control_type": "edit",
+                    "rect": [220, 100, 240, 32],
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "billing_email",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "stale_target_id_recovers_then_ocr_rejects_final_text",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -761,9 +844,9 @@ def builtin_scenarios() -> list[dict[str, Any]]:
                 },
             ],
             "expected": {
-                "source": "target_id",
+                "source": "candidate_snap",
                 "target_id": "save",
-                "rejected_reason": "current screen recheck target changed",
+                "rejected_reason": "candidate semantic mismatch",
                 "overlay_emitted": False,
             },
         },

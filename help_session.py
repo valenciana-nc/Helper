@@ -17,6 +17,7 @@ from PIL import Image, ImageChops, ImageStat
 
 from control_inventory import (
     ADD_ACTION_WORDS,
+    BARE_EXTENDED_ACTION_LABEL_WORDS,
     CLEAR_CLOSE_WORDS,
     CONFIRM_ACTION_WORDS,
     ControlCandidate,
@@ -724,6 +725,8 @@ def _raw_snap_action_mismatch(instruction: str, matched_text: str) -> bool:
 
 
 def _raw_snap_label_mismatch(instruction: str, matched_text: str) -> bool:
+    if _raw_snap_bare_extended_label_mismatch(instruction, matched_text):
+        return True
     instruction_tokens = (
         _tokens_from_text(instruction) | _tokenize_instruction(instruction)
     ) - RAW_SNAP_LABEL_GENERIC_WORDS
@@ -733,6 +736,80 @@ def _raw_snap_label_mismatch(instruction: str, matched_text: str) -> bool:
     if not instruction_tokens or not control_tokens:
         return False
     return not bool(instruction_tokens & control_tokens)
+
+
+def _raw_snap_bare_extended_label_mismatch(instruction: str, matched_text: str) -> bool:
+    request_words = _raw_snap_literal_label_words(instruction)
+    if len(request_words) != 1:
+        return False
+    matched_words = _raw_snap_literal_label_words(matched_text)
+    if len(matched_words) <= 1:
+        return False
+    requested = request_words[0]
+    if requested not in BARE_EXTENDED_ACTION_LABEL_WORDS:
+        return False
+    if requested not in matched_words:
+        return False
+    return bool(_raw_snap_bare_extended_label_extra_words(set(matched_words), set(request_words)))
+
+
+def _raw_snap_bare_extended_label_extra_words(
+    matched_words: set[str],
+    request_words: set[str],
+) -> set[str]:
+    extra_words = matched_words - request_words - {
+        "alt",
+        "cmd",
+        "command",
+        "control",
+        "ctrl",
+        "keyboard",
+        "meta",
+        "option",
+        "shortcut",
+        "shift",
+        "win",
+        "windows",
+    }
+    if matched_words & {
+        "alt",
+        "cmd",
+        "command",
+        "control",
+        "ctrl",
+        "meta",
+        "option",
+        "shift",
+        "win",
+        "windows",
+    }:
+        extra_words = {word for word in extra_words if len(word) > 1}
+    return extra_words
+
+
+def _raw_snap_literal_label_words(text: str) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    excluded = {
+        "a",
+        "an",
+        "at",
+        "button",
+        "choose",
+        "click",
+        "control",
+        "focus",
+        "hit",
+        "now",
+        "please",
+        "press",
+        "select",
+        "tap",
+        "the",
+        "this",
+        "that",
+        "use",
+    }
+    return [word for word in words if word not in excluded]
 
 
 def _instruction_has_dialog_resolution_context(instruction: str) -> bool:

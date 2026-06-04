@@ -288,6 +288,31 @@ FILE_IMPORT_ACTION_WORDS = frozenset({"import", "upload"})
 TRANSFER_ACTION_WORDS = FILE_EXPORT_ACTION_WORDS | FILE_IMPORT_ACTION_WORDS
 CLIPBOARD_COPY_WORDS = frozenset({"copy"})
 DUPLICATE_ACTION_WORDS = frozenset({"clone", "duplicate"})
+BARE_EXTENDED_ACTION_LABEL_WORDS = (
+    CANCEL_ACTION_WORDS
+    | REMOVE_ACTION_WORDS
+    | FILE_OPEN_ACTION_WORDS
+    | FILE_SAVE_ACTION_WORDS
+    | FILE_EXPORT_ACTION_WORDS
+    | EDIT_ACTION_WORDS
+    | frozenset({"print"})
+)
+BARE_EXTENDED_ACTION_LABEL_HINT_WORDS = frozenset(
+    {
+        "alt",
+        "cmd",
+        "command",
+        "control",
+        "ctrl",
+        "keyboard",
+        "meta",
+        "option",
+        "shortcut",
+        "shift",
+        "win",
+        "windows",
+    }
+)
 CLIPBOARD_COPY_EXACT_CONTEXT_WORDS = frozenset(
     {"address", "link", "links", "selected", "selection", "text", "url", "urls"}
 )
@@ -795,6 +820,9 @@ CLICKABLE_CONTROL_TYPES = frozenset(
         "gridcell",
     }
 )
+TIGHT_ACTION_SNAP_CONTROL_TYPES = frozenset(
+    {"button", "hyperlink", "menuitem", "option", "splitbutton", "tabitem"}
+)
 
 _MAX_BFS_DEPTH = 8
 
@@ -1153,6 +1181,11 @@ def snap_to_control(
             semantic_text,
             ctype,
         )
+        bare_extended_label_action_mismatch = _bare_action_extended_label_mismatch(
+            instruction,
+            visible_text,
+            ctype,
+        )
         semantic_action_mismatch = (
             start_button_action_mismatch
             or task_view_action_mismatch
@@ -1188,6 +1221,7 @@ def snap_to_control(
             or unparsed_visible_text_action_mismatch
             or browser_about_blank_title_info_mismatch
             or site_information_action_mismatch
+            or bare_extended_label_action_mismatch
         )
         if not _is_candidate_topmost(top_handle, control_handle, rect, topmost_provider):
             if (
@@ -4544,6 +4578,109 @@ def _specific_settings_context_mismatch(
         return False
     candidate_specific = candidate_tokens - SETTINGS_CONTEXT_WORDS
     return not requested_specific <= candidate_specific
+
+
+def _bare_action_extended_label_mismatch(
+    instruction: str,
+    candidate_text: str,
+    ctype: str,
+) -> bool:
+    if ctype not in TIGHT_ACTION_SNAP_CONTROL_TYPES and ctype not in ROW_CONTEXT_CONTROL_TYPES:
+        return False
+    requested_sequence = _bare_action_request_sequence(instruction)
+    if len(requested_sequence) != 1:
+        return False
+    candidate_sequence = tuple(_literal_word_sequence(candidate_text))
+    if len(candidate_sequence) <= 1:
+        return False
+    requested_word = requested_sequence[0]
+    if requested_word not in BARE_EXTENDED_ACTION_LABEL_WORDS:
+        return False
+    if requested_word not in candidate_sequence:
+        return False
+    candidate_tokens = set(candidate_sequence)
+    requested_tokens = _literal_words_from_text(instruction)
+    return bool(_bare_extended_label_extra_tokens(candidate_tokens, requested_tokens))
+
+
+def _bare_extended_label_extra_tokens(
+    candidate_tokens: set[str],
+    requested_tokens: set[str],
+) -> set[str]:
+    extra_tokens = candidate_tokens - requested_tokens - BARE_EXTENDED_ACTION_LABEL_HINT_WORDS
+    if candidate_tokens & BARE_EXTENDED_ACTION_LABEL_HINT_WORDS:
+        extra_tokens = {token for token in extra_tokens if len(token) > 1}
+    return extra_tokens
+
+
+def _bare_action_request_sequence(instruction: str) -> tuple[str, ...]:
+    excluded_words = (
+        OPEN_VIEW_REQUEST_WORDS
+        | (GENERIC_OBJECT_REQUEST_WORDS - frozenset({"find", "go", "search"}))
+        | frozenset(
+            {
+                "a",
+                "an",
+                "at",
+                "button",
+                "by",
+                "control",
+                "for",
+                "from",
+                "in",
+                "inside",
+                "of",
+                "on",
+                "now",
+                "please",
+                "the",
+                "this",
+                "that",
+                "to",
+                "with",
+                "within",
+            }
+        )
+    )
+    requested_words = tuple(
+        word for word in _literal_word_sequence(instruction) if word not in excluded_words
+    )
+    if requested_words:
+        return requested_words
+    fallback_words = [
+        word
+        for word in _literal_word_sequence(instruction)
+        if word
+        not in {
+            "a",
+            "an",
+            "at",
+            "button",
+            "control",
+            "hyperlink",
+            "icon",
+            "link",
+            "menu",
+            "menuitem",
+            "the",
+            "this",
+            "that",
+        }
+    ]
+    while fallback_words and fallback_words[0] in {
+        "choose",
+        "click",
+        "focus",
+        "hit",
+        "press",
+        "select",
+        "tap",
+        "use",
+    }:
+        fallback_words.pop(0)
+    if len(fallback_words) == 1 and fallback_words[0] in OPEN_VIEW_REQUEST_WORDS:
+        return (fallback_words[0],)
+    return ()
 
 
 def _literal_words_from_text(text: str) -> set[str]:
