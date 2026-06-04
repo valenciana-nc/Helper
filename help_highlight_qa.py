@@ -24990,6 +24990,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "current_value_slider_rejects_partial_nearby_label_without_context",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [20, 102, 120, 24], "label": "Volume level"},
+                {"rect": [160, 96, 260, 36], "label": "50"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Volume slider.",
+                "target_id": "volume",
+                "target": {"x": 160, "y": 96, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "volume_label", "text": "Volume level", "control_type": "text", "rect": [20, 102, 120, 24]},
+                {"id": "volume", "text": "50", "control_type": "slider", "rect": [160, 96, 260, 36]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "volume",
+                "rejected_reason": "candidate semantic mismatch",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "current_value_slider_label_mismatch_rejects_overlay",
             "capture": {"width": 1000, "height": 500},
             "draw": [

@@ -3078,7 +3078,7 @@ def _text_match_score(
         return 0.0
     if _named_control_single_label_partial_context_ambiguous(instruction, candidate, candidates):
         return 0.0
-    if _state_control_partial_visible_label_ambiguous(instruction, candidate):
+    if _state_control_partial_visible_label_ambiguous(instruction, candidate, candidates):
         return 0.0
     if _bare_action_container_extended_label_mismatch(instruction, candidate):
         return 0.0
@@ -4324,7 +4324,7 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
-    if _state_control_partial_visible_label_ambiguous(instruction, candidate):
+    if _state_control_partial_visible_label_ambiguous(instruction, candidate, candidates):
         return (
             False,
             text_score,
@@ -5429,6 +5429,7 @@ def _duplicate_same_label_state_control_ambiguous(
 def _state_control_partial_visible_label_ambiguous(
     instruction: str,
     candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None = None,
 ) -> bool:
     if candidate.control_type not in PARTIAL_STATE_LABEL_CONTROL_TYPES:
         return False
@@ -5440,7 +5441,7 @@ def _state_control_partial_visible_label_ambiguous(
         | {"off", "on", "turn"}
     ):
         return False
-    label_words = set(_literal_word_sequence(candidate.text)) - PARTIAL_STATE_LABEL_EXTRA_STOPWORDS
+    label_words = _state_control_partial_label_words(candidate, candidates)
     if len(label_words) <= 1:
         return False
     requested_words = _state_control_partial_label_request_words(instruction)
@@ -5450,6 +5451,56 @@ def _state_control_partial_visible_label_ambiguous(
     if requested_word not in label_words:
         return False
     return bool(label_words - requested_words)
+
+
+def _state_control_partial_label_words(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate] | None,
+) -> set[str]:
+    if candidates is not None and _state_control_visible_value_needs_nearby_label(candidate):
+        words = _nearby_field_context_label_literal_words(candidate, candidates)
+    else:
+        words = set(_literal_word_sequence(candidate.text))
+    return {
+        word
+        for word in words - PARTIAL_STATE_LABEL_EXTRA_STOPWORDS
+        if word and not word.isdigit()
+    }
+
+
+def _nearby_field_context_label_literal_words(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+        return set()
+    best_score = 0.0
+    best_words: set[str] = set()
+    field_area = max(1, candidate.rect[2] * candidate.rect[3])
+    for label in candidates:
+        if label.id == candidate.id:
+            continue
+        if not _same_resolution_context_window(candidate, label):
+            continue
+        if label.control_type not in NON_ACTIONABLE_CONTROL_TYPES:
+            continue
+        words = set(_literal_word_sequence(_candidate_visible_semantic_text(label)))
+        if not words or len(words) > 8:
+            continue
+        label_area = max(1, label.rect[2] * label.rect[3])
+        if label_area > field_area * 4:
+            continue
+        score = (
+            _nearby_option_label_score(candidate.rect, label.rect)
+            if candidate.control_type in {"checkbox", "radiobutton"}
+            else _nearby_field_label_score(candidate.rect, label.rect)
+        )
+        if score > best_score:
+            best_score = score
+            best_words = words
+    if best_score < 0.5:
+        return set()
+    return best_words
 
 
 def _state_control_partial_label_request_words(instruction: str) -> set[str]:
@@ -16276,7 +16327,7 @@ def _candidate_snap_hard_mismatch(
         _bare_visible_action_extended_label_mismatch(instruction, candidate)
         or _bare_action_container_extended_label_mismatch(instruction, candidate)
         or _bare_search_filter_extended_label_mismatch(instruction, candidate)
-        or _state_control_partial_visible_label_ambiguous(instruction, candidate)
+        or _state_control_partial_visible_label_ambiguous(instruction, candidate, candidates)
         or _named_control_single_label_partial_context_ambiguous(
             instruction,
             candidate,

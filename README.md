@@ -171,6 +171,13 @@ versus `Email alerts`, or `Volume` versus `Volume level`, while preserving full
 labels and exact one-word options. It also blocks bare `Search`/`Find` from
 highlighting `Search filters`/`Find filters` without breaking Windows Search or
 other longer taskbar search labels.
+Fresh UIA snapping now gives blank and current-value text fields/dropdowns the
+same visible nearby-label evidence used by the inventory resolver. Named field
+requests refuse unlabeled geometry-only snaps, do not borrow labels across
+different top-level windows, and reject partial nearby labels such as `Email`
+against `Billing Email`. Numeric/current-value sliders also apply that
+partial-label policy to borrowed nearby labels, so `Volume` no longer matches
+`Volume level` just because the slider itself only exposes `50`.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

@@ -1239,6 +1239,131 @@ class SnapToControlTests(unittest.TestCase):
                 self.assertEqual(result.source, "uia")
                 self.assertFalse(result.rejected_reason)
 
+    def test_fresh_snap_uses_nearby_label_for_blank_edit(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Shipping Email", 80, 82, 120, 24, control_type="Text"),
+            _make_button("", 220, 76, 240, 32, control_type="Edit"),
+            _make_button("Billing Email", 80, 142, 120, 24, control_type="Text"),
+            _make_button("", 220, 136, 240, 32, control_type="Edit"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (220, 76, 240, 32),
+            "Type into Billing Email text box.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (220, 136, 240, 32))
+        self.assertIn("Billing Email", result.matched_text)
+        self.assertFalse(result.rejected_reason)
+
+    def test_fresh_snap_rejects_partial_nearby_label_for_blank_edit(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Billing Email", 80, 102, 120, 24, control_type="Text"),
+            _make_button("", 220, 100, 240, 32, control_type="Edit"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (220, 100, 240, 32),
+            "Type into Email text box.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (220, 100, 240, 32))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_rejects_named_blank_edit_without_visible_label_evidence(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            [
+                _make_button("Email", 20, 20, 80, 24, control_type="Text"),
+                _make_button("", 220, 100, 240, 32, control_type="Edit"),
+            ],
+            [
+                _make_button("", 220, 100, 240, 32, control_type="Edit", automation_id="email"),
+            ],
+        )
+        for controls in cases:
+            with self.subTest(control_count=len(controls)):
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+                result = snap_to_control(
+                    (220, 100, 240, 32),
+                    "Click the Email text field.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, (220, 100, 240, 32))
+                self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
+    def test_fresh_snap_uses_nearby_label_for_current_value_combobox(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Country", 20, 102, 80, 24, control_type="Text"),
+            _make_button("United States", 120, 96, 260, 36, control_type="ComboBox"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (120, 96, 260, 36),
+            "Open the Country dropdown.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (120, 96, 260, 36))
+        self.assertIn("Country", result.matched_text)
+        self.assertFalse(result.rejected_reason)
+
+    def test_fresh_snap_does_not_borrow_field_label_from_other_window(self) -> None:
+        from rect_snap import snap_to_control
+
+        label_window = _make_window(
+            "Labels",
+            0,
+            0,
+            800,
+            600,
+            [_make_button("Email", 120, 102, 80, 24, control_type="Text")],
+            handle=101,
+        )
+        field_window = _make_window(
+            "Form",
+            0,
+            0,
+            800,
+            600,
+            [_make_button("", 220, 100, 240, 32, control_type="Edit")],
+            handle=202,
+        )
+        desktop = _FakeDesktop([label_window, field_window])
+
+        result = snap_to_control(
+            (220, 100, 240, 32),
+            "Click the Email text field.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (220, 100, 240, 32))
+        self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
+
     def test_neutral_same_label_state_option_raw_snap_stays_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 
@@ -5217,6 +5342,50 @@ class ControlInventoryTests(unittest.TestCase):
                 self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
                 self.assertEqual(help_target.source, "candidate_snap")
                 self.assertEqual(help_target.rejected_reason, "candidate semantic mismatch")
+
+    def test_current_value_slider_rejects_partial_nearby_label_without_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        candidates = [
+            ControlCandidate("volume_label", "Volume level", "text", (20, 102, 120, 24)),
+            ControlCandidate("volume", "50", "slider", (160, 96, 260, 36)),
+        ]
+        partial_instruction = "Click Volume slider."
+        full_instruction = "Click Volume level slider."
+
+        target_id = resolve_candidate_target(
+            target_id="volume",
+            instruction=partial_instruction,
+            candidates=candidates,
+            model_rect=(160, 96, 260, 36),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=partial_instruction,
+            candidates=candidates,
+            model_rect=(160, 96, 260, 36),
+        )
+        snap_target = snap_candidate_target(
+            instruction=partial_instruction,
+            candidates=candidates,
+            model_rect=(160, 96, 260, 36),
+        )
+        full_target = resolve_candidate_target(
+            target_id="volume",
+            instruction=full_instruction,
+            candidates=candidates,
+            model_rect=(160, 96, 260, 36),
+        )
+
+        self.assertEqual(target_id.source, "target_id")
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertIsNone(text_target)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.rejected_reason, "candidate semantic mismatch")
+        self.assertIsNotNone(full_target)
+        assert full_target is not None
+        self.assertEqual(full_target.target_id, "volume")
+        self.assertFalse(full_target.rejected_reason)
 
     def test_exact_and_full_state_option_labels_still_highlight(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

@@ -122,6 +122,8 @@ SURFACE_CONTEXT_CONTROL_TYPES = frozenset(
 ROW_CONTEXT_CONTROL_TYPES = frozenset({"dataitem", "listitem", "row", "tableitem", "treeitem"})
 TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 TABLE_CELL_ROW_LABEL_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
+FIELD_LABEL_CONTEXT_CONTROL_TYPES = TABLE_CELL_ROW_LABEL_CONTROL_TYPES
+BLANK_FIELD_LABEL_CONTROL_TYPES = frozenset({"edit", "combobox"})
 OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
 OPTION_CONTEXT_PARENT_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
 OPTION_PARENT_SURFACE_WORDS = frozenset(
@@ -214,6 +216,7 @@ GENERIC_OBJECT_REQUEST_WORDS = frozenset(
         "visit",
     }
 )
+FIELD_ENTRY_ACTION_WORDS = frozenset({"enter", "fill", "input", "type"})
 CONFIRM_ACTION_WORDS = frozenset(
     {"apply", "checkmark", "complete", "confirm", "done", "finish", "ok", "okay", "tick"}
 )
@@ -499,6 +502,37 @@ PARTIAL_STATE_LABEL_REQUEST_STOPWORDS = (
             "within",
         }
     )
+)
+PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS = PARTIAL_STATE_LABEL_EXTRA_STOPWORDS | frozenset(
+    {"address", "number", "value"}
+)
+PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS = PARTIAL_STATE_LABEL_REQUEST_STOPWORDS | frozenset(
+    {
+        "address",
+        "arrow",
+        "bar",
+        "box",
+        "caret",
+        "chevron",
+        "combo",
+        "combobox",
+        "drop",
+        "dropdown",
+        "field",
+        "fill",
+        "form",
+        "forms",
+        "input",
+        "into",
+        "picker",
+        "please",
+        "selector",
+        "text",
+        "textarea",
+        "type",
+        "url",
+        "your",
+    }
 )
 SEARCH_RESULTS_LABEL_WORDS = frozenset({"result", "results"})
 SORT_ASCENDING_WORDS = frozenset({"ascending"})
@@ -947,6 +981,7 @@ def snap_to_control(
     state_option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     option_parent_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
+    field_label_contexts: list[tuple[tuple[int, int, int, int], str, int, int | None, str]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -980,9 +1015,9 @@ def snap_to_control(
         _is_own_process,
         _window_rank,
         _foreground_known,
-        _top_handle,
+        label_top_handle,
         _control_handle,
-        _window_title,
+        label_window_title,
     ) in context_candidates:
         ctype = _control_type(control)
         if not _is_enabled(control) or not _is_visible(control):
@@ -997,6 +1032,12 @@ def snap_to_control(
             option_contexts.append((rect, _control_text(control), ctype))
         if ctype in OPTION_CONTEXT_PARENT_TYPES:
             option_parent_contexts.append((rect, _control_text(control), ctype))
+        if ctype in FIELD_LABEL_CONTEXT_CONTROL_TYPES:
+            label_text = _control_visible_text(control) or _control_text(control)
+            if label_text:
+                field_label_contexts.append(
+                    (rect, label_text, _window_rank, label_top_handle, label_window_title)
+                )
 
     for (
         control,
@@ -1034,7 +1075,21 @@ def snap_to_control(
             surface_contexts.append((rect, text, ctype))
         if ctype not in CLICKABLE_CONTROL_TYPES:
             continue
+        nearby_field_label_text = _nearby_field_label_text(
+            rect=rect,
+            ctype=ctype,
+            visible_text=visible_text,
+            window_rank=window_rank,
+            top_handle=top_handle,
+            window_title=window_title,
+            field_label_contexts=field_label_contexts,
+        )
         semantic_text = visible_text or automation_id
+        scoring_semantic_text = _field_label_scoring_semantic_text(
+            semantic_text,
+            nearby_field_label_text,
+        )
+        matched_text = _field_label_matched_text(text, nearby_field_label_text)
         start_button_action_mismatch = _start_button_action_mismatch(
             instruction_tokens,
             visible_text,
@@ -1193,14 +1248,14 @@ def snap_to_control(
         surface_context_action_mismatch = _surface_context_action_mismatch(
             instruction,
             instruction_tokens,
-            semantic_text,
+            scoring_semantic_text,
             rect,
             surface_contexts,
         )
         row_context_action_mismatch = _row_context_action_mismatch(
             instruction,
             instruction_tokens,
-            semantic_text,
+            scoring_semantic_text,
             rect,
             row_contexts,
         )
@@ -1226,7 +1281,7 @@ def snap_to_control(
             _browser_about_blank_title_info_mismatch(
                 instruction,
                 instruction_tokens,
-                semantic_text,
+                scoring_semantic_text,
                 ctype,
                 window_title,
             )
@@ -1249,6 +1304,13 @@ def snap_to_control(
             instruction,
             visible_text,
             ctype,
+        )
+        blank_field_label_mismatch = _blank_field_nearby_label_mismatch(
+            instruction,
+            ctype,
+            visible_text,
+            automation_id,
+            nearby_field_label_text,
         )
         semantic_action_mismatch = (
             start_button_action_mismatch
@@ -1288,6 +1350,7 @@ def snap_to_control(
             or bare_extended_label_action_mismatch
             or bare_search_filter_action_mismatch
             or state_partial_label_mismatch
+            or blank_field_label_mismatch
         )
         if not _is_candidate_topmost(top_handle, control_handle, rect, topmost_provider):
             if (
@@ -1298,7 +1361,7 @@ def snap_to_control(
                     rect=rect,
                     confidence=0.0,
                     source="uia",
-                    matched_text=text,
+                    matched_text=matched_text,
                     rejected_reason="occluded target",
                 )
             continue
@@ -1311,7 +1374,7 @@ def snap_to_control(
                     rect=rect,
                     confidence=0.0,
                     source="uia",
-                    matched_text=text,
+                    matched_text=matched_text,
                     rejected_reason="own process target",
                 )
             continue
@@ -1329,10 +1392,10 @@ def snap_to_control(
         ):
             if (
                 instruction_tokens
-                and semantic_text
+                and scoring_semantic_text
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
             ):
-                control_intent_contexts.append((rect, semantic_text))
+                control_intent_contexts.append((rect, scoring_semantic_text))
             if (
                 control_type_mismatch_result is None
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
@@ -1341,7 +1404,7 @@ def snap_to_control(
                     rect=rect,
                     confidence=0.0,
                     source="uia",
-                    matched_text=text,
+                    matched_text=matched_text,
                     rejected_reason="control type mismatch",
                 )
             continue
@@ -1354,10 +1417,10 @@ def snap_to_control(
         ):
             if (
                 instruction_tokens
-                and semantic_text
+                and scoring_semantic_text
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
             ):
-                control_intent_contexts.append((rect, semantic_text))
+                control_intent_contexts.append((rect, scoring_semantic_text))
             if (
                 control_type_mismatch_result is None
                 and _semantic_mismatch_targets_model_rect(rect, model_rect)
@@ -1366,20 +1429,20 @@ def snap_to_control(
                     rect=rect,
                     confidence=0.0,
                     source="uia",
-                    matched_text=text,
+                    matched_text=matched_text,
                     rejected_reason="control type mismatch",
                 )
             continue
         surface_scoped_action = _surface_scoped_action_match(
             instruction,
             instruction_tokens,
-            semantic_text,
+            scoring_semantic_text,
             rect,
             surface_contexts,
         )
         score = _score(
             rect=rect,
-            semantic_text=semantic_text,
+            semantic_text=scoring_semantic_text,
             ctype=ctype,
             model_rect=model_rect,
             model_center=model_center,
@@ -1399,7 +1462,7 @@ def snap_to_control(
                 rect=rect,
                 confidence=score,
                 source="uia",
-                matched_text=text,
+                matched_text=matched_text,
                 rejected_reason="candidate semantic mismatch",
             )
         if foreground_known and window_rank == 0:
@@ -1414,14 +1477,14 @@ def snap_to_control(
                     rect=rect,
                     confidence=score,
                     source="uia",
-                    matched_text=text,
+                    matched_text=matched_text,
                     rejected_reason="compound target ambiguous",
                 )
         result = SnapResult(
             rect=rect,
             confidence=score,
             source="uia",
-            matched_text=text,
+            matched_text=matched_text,
         )
         if (
             control_intents
@@ -1430,8 +1493,8 @@ def snap_to_control(
             and not semantic_action_mismatch
             and not any(item.rect == result.rect for item, _text in contained_control_intent_results)
         ):
-            contained_control_intent_results.append((result, semantic_text))
-        ranked.append((score, result, semantic_text, ctype, window_rank))
+            contained_control_intent_results.append((result, scoring_semantic_text))
+        ranked.append((score, result, scoring_semantic_text, ctype, window_rank))
         if (
             visible_text
             and _semantic_overlap(visible_text, instruction_tokens)
@@ -1441,10 +1504,12 @@ def snap_to_control(
             best_visible_result = result
         if score > best_score:
             best_score = score
-            best_semantic_text = semantic_text
+            best_semantic_text = scoring_semantic_text
             best_ctype = ctype
             best_window_rank = window_rank
-            best_is_automation_only = bool(not visible_text and automation_id)
+            best_is_automation_only = bool(
+                not visible_text and automation_id and not nearby_field_label_text
+            )
             best_result = result
 
     if (
@@ -1956,6 +2021,241 @@ def _control_automation_id(control) -> str:
         return (getattr(control.element_info, "automation_id", "") or "").strip()
     except Exception:
         return ""
+
+
+def _nearby_field_label_text(
+    *,
+    rect: tuple[int, int, int, int],
+    ctype: str,
+    visible_text: str,
+    window_rank: int,
+    top_handle: int | None,
+    window_title: str,
+    field_label_contexts: list[tuple[tuple[int, int, int, int], str, int, int | None, str]],
+) -> str:
+    if ctype not in BLANK_FIELD_LABEL_CONTROL_TYPES:
+        return ""
+    best_score = 0.0
+    best_text = ""
+    field_area = max(1, rect[2] * rect[3])
+    for (
+        label_rect,
+        label_text,
+        label_window_rank,
+        label_top_handle,
+        label_window_title,
+    ) in field_label_contexts:
+        if label_window_rank != window_rank:
+            continue
+        if not _same_fresh_label_window(
+            top_handle,
+            window_title,
+            label_top_handle,
+            label_window_title,
+        ):
+            continue
+        words = _literal_word_sequence(label_text)
+        if not words or len(words) > 8:
+            continue
+        label_area = max(1, label_rect[2] * label_rect[3])
+        if label_area > field_area * 4:
+            continue
+        score = _nearby_field_label_score(rect, label_rect)
+        if score > best_score:
+            best_score = score
+            best_text = label_text
+    if best_score < 0.5:
+        return ""
+    return best_text
+
+
+def _same_fresh_label_window(
+    top_handle: int | None,
+    window_title: str,
+    label_top_handle: int | None,
+    label_window_title: str,
+) -> bool:
+    if top_handle is not None or label_top_handle is not None:
+        return top_handle == label_top_handle
+    if window_title and label_window_title:
+        return window_title == label_window_title
+    return False
+
+
+def _nearby_field_label_score(
+    field_rect: tuple[int, int, int, int],
+    label_rect: tuple[int, int, int, int],
+) -> float:
+    field_left, field_top, field_width, field_height = field_rect
+    field_right = field_left + field_width
+    field_bottom = field_top + field_height
+    label_left, label_top, label_width, label_height = label_rect
+    label_right = label_left + label_width
+    label_bottom = label_top + label_height
+
+    y_overlap = max(0, min(field_bottom, label_bottom) - max(field_top, label_top))
+    y_ratio = y_overlap / max(1, min(field_height, label_height))
+    left_gap = field_left - label_right
+    if y_ratio >= 0.45 and -8 <= left_gap <= 180 and label_left <= field_left:
+        return 0.75 + 0.25 * (1.0 - min(1.0, max(0, left_gap) / 180.0))
+
+    x_overlap = max(0, min(field_right, label_right) - max(field_left, label_left))
+    x_ratio = x_overlap / max(1, min(field_width, label_width))
+    above_gap = field_top - label_bottom
+    label_center_x, _label_center_y = _center(label_rect)
+    field_center_x, _field_center_y = _center(field_rect)
+    center_aligned = abs(label_center_x - field_center_x) <= max(60, field_width * 0.45)
+    if 0 <= above_gap <= 64 and (x_ratio >= 0.25 or center_aligned):
+        return 0.65 + 0.20 * (1.0 - min(1.0, above_gap / 64.0))
+
+    return 0.0
+
+
+def _field_label_scoring_semantic_text(
+    semantic_text: str,
+    nearby_field_label_text: str,
+) -> str:
+    return " | ".join(
+        part for part in (semantic_text, nearby_field_label_text) if part
+    )
+
+
+def _field_label_matched_text(text: str, nearby_field_label_text: str) -> str:
+    parts: list[str] = []
+    for part in (text, nearby_field_label_text):
+        value = (part or "").strip()
+        if value and value not in parts:
+            parts.append(value)
+    return " | ".join(parts)
+
+
+def _blank_field_nearby_label_mismatch(
+    instruction: str,
+    ctype: str,
+    visible_text: str,
+    automation_id: str,
+    nearby_field_label_text: str,
+) -> bool:
+    if ctype not in BLANK_FIELD_LABEL_CONTROL_TYPES:
+        return False
+    requested_words = _field_label_request_words(instruction, ctype)
+    if not requested_words:
+        return False
+    own_visible_words = set(_literal_word_sequence(visible_text))
+    if own_visible_words and requested_words & _object_token_variants(own_visible_words):
+        return False
+    label_words = set(_literal_word_sequence(nearby_field_label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
+    if not label_words:
+        return True
+    label_variants = _object_token_variants(label_words) | _tokenize_control(
+        " ".join(sorted(label_words))
+    )
+    requested_variants = _object_token_variants(requested_words) | _tokenize_control(
+        " ".join(sorted(requested_words))
+    )
+    if not (requested_variants & label_variants):
+        return True
+    request_context = _field_label_request_context_words(instruction, requested_words)
+    if len(requested_words) == 1:
+        extra_label_words = label_words - requested_variants - request_context
+        return bool(extra_label_words)
+    return not requested_variants <= label_variants
+
+
+def _field_label_request_words(instruction: str, control_type: str) -> set[str]:
+    words = _literal_word_sequence(instruction)
+    for index, _word in enumerate(words):
+        role_prefix = _field_label_role_prefix_width(words, index, control_type)
+        if role_prefix is None:
+            continue
+        trailing = _field_label_trailing_request_words(words, index + 1)
+        if trailing:
+            return trailing
+        cursor = index - role_prefix
+        label_words: list[str] = []
+        while cursor >= 0:
+            current = words[cursor]
+            if current in PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS:
+                break
+            label_words.append(current)
+            cursor -= 1
+        if label_words:
+            return _object_token_variants(set(label_words))
+    return set()
+
+
+def _field_label_trailing_request_words(words: list[str], start_index: int) -> set[str]:
+    cursor = start_index
+    while cursor < len(words):
+        marker = words[cursor]
+        if marker not in {"called", "for", "labelled", "labeled", "named", "with"}:
+            cursor += 1
+            continue
+        cursor += 1
+        label_words: list[str] = []
+        while cursor < len(words):
+            current = words[cursor]
+            if current in PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS:
+                break
+            label_words.append(current)
+            cursor += 1
+        if label_words:
+            return _object_token_variants(set(label_words))
+    return set()
+
+
+def _field_label_role_prefix_width(
+    words: list[str],
+    index: int,
+    control_type: str,
+) -> int | None:
+    word = words[index]
+    previous = words[index - 1] if index > 0 else ""
+    if control_type == "edit":
+        if word in {"textbox", "textarea", "field", "input"}:
+            return 2 if word in {"field", "input"} and previous == "text" else 1
+        if word == "box" and previous == "text":
+            return 2
+        return None
+    if control_type == "combobox":
+        if word in {"combo", "combobox", "dropdown", "picker", "selector"}:
+            return 1
+        if word == "down" and previous == "drop":
+            return 2
+        return None
+    return None
+
+
+def _field_label_request_context_words(
+    instruction: str,
+    requested_words: set[str],
+) -> set[str]:
+    context_words = set(_literal_word_sequence(instruction))
+    context_words -= requested_words
+    context_words -= PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS
+    context_words -= FIELD_ENTRY_ACTION_WORDS
+    context_words -= OPEN_VIEW_REQUEST_WORDS
+    context_words -= GENERIC_OBJECT_REQUEST_WORDS
+    context_words -= {
+        "a",
+        "an",
+        "below",
+        "beneath",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "of",
+        "on",
+        "the",
+        "to",
+        "under",
+        "underneath",
+        "within",
+        "with",
+    }
+    return _object_token_variants(context_words)
 
 
 def _is_enabled(control) -> bool:
