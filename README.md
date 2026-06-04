@@ -175,9 +175,14 @@ Fresh UIA snapping now gives blank and current-value text fields/dropdowns the
 same visible nearby-label evidence used by the inventory resolver. Named field
 requests refuse unlabeled geometry-only snaps, do not borrow labels across
 different top-level windows, and reject partial nearby labels such as `Email`
-against `Billing Email`. Numeric/current-value sliders also apply that
-partial-label policy to borrowed nearby labels, so `Volume` no longer matches
-`Volume level` just because the slider itself only exposes `50`.
+against `Billing Email`. Fresh snaps also refuse same-label duplicate blank
+fields or current-value dropdowns when the request lacks section/context
+evidence, rather than trusting whichever duplicate sits under the model
+rectangle. The inventory resolver applies the same caution when duplicates
+share the requested context, such as two `Email` fields inside the same
+`Billing` group. Numeric/current-value sliders also apply that partial-label
+policy to borrowed nearby labels, so `Volume` no longer matches `Volume level`
+just because the slider itself only exposes `50`.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

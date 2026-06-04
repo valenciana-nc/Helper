@@ -982,6 +982,8 @@ def snap_to_control(
     option_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     option_parent_contexts: list[tuple[tuple[int, int, int, int], str, str]] = []
     field_label_contexts: list[tuple[tuple[int, int, int, int], str, int, int | None, str]] = []
+    field_control_contexts: list[tuple[tuple[int, int, int, int], str, str, int, int | None, str]] = []
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]] = []
     surface_scoped_action_rects: list[tuple[int, int, int, int]] = []
     foreground_handle = _safe_foreground_handle(
         foreground_handle_provider or _foreground_window_handle
@@ -1038,6 +1040,39 @@ def snap_to_control(
                 field_label_contexts.append(
                     (rect, label_text, _window_rank, label_top_handle, label_window_title)
                 )
+        if ctype in BLANK_FIELD_LABEL_CONTROL_TYPES:
+            field_control_contexts.append(
+                (
+                    rect,
+                    ctype,
+                    _control_visible_text(control),
+                    _window_rank,
+                    label_top_handle,
+                    label_window_title,
+                )
+            )
+
+    for (
+        rect,
+        ctype,
+        visible_text,
+        window_rank,
+        top_handle,
+        window_title,
+    ) in field_control_contexts:
+        nearby_field_label_text = _nearby_field_label_text(
+            rect=rect,
+            ctype=ctype,
+            visible_text=visible_text,
+            window_rank=window_rank,
+            top_handle=top_handle,
+            window_title=window_title,
+            field_label_contexts=field_label_contexts,
+        )
+        if nearby_field_label_text:
+            snapped_field_label_contexts.append(
+                (rect, nearby_field_label_text, ctype, window_rank)
+            )
 
     for (
         control,
@@ -1591,6 +1626,23 @@ def snap_to_control(
             source="uia",
             matched_text=best_result.matched_text,
             rejected_reason="state option ambiguous",
+        )
+
+    if (
+        best_result is not None
+        and _duplicate_labelled_field_snap_ambiguous(
+            instruction,
+            selected=best_result,
+            selected_ctype=best_ctype,
+            snapped_field_label_contexts=snapped_field_label_contexts,
+        )
+    ):
+        return SnapResult(
+            rect=best_result.rect,
+            confidence=best_score,
+            source="uia",
+            matched_text=best_result.matched_text,
+            rejected_reason="fresh snap ambiguous",
         )
 
     if best_result is not None and best_score >= confidence_floor:
@@ -4074,6 +4126,93 @@ def _same_type_state_option_duplicate_exists(
         if tokens and selected_tokens & tokens:
             return True
     return False
+
+
+def _duplicate_labelled_field_snap_ambiguous(
+    instruction: str,
+    *,
+    selected: SnapResult,
+    selected_ctype: str,
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+) -> bool:
+    if selected_ctype not in BLANK_FIELD_LABEL_CONTROL_TYPES:
+        return False
+    requested_words = _field_label_duplicate_request_words(instruction, selected_ctype)
+    if not requested_words:
+        return False
+    requested_variants = _object_token_variants(requested_words) | _tokenize_control(
+        " ".join(sorted(requested_words))
+    )
+    selected_label_words = _snap_field_direct_label_words(
+        selected,
+        selected_ctype,
+        snapped_field_label_contexts,
+    )
+    if not selected_label_words:
+        return False
+    selected_variants = _object_token_variants(selected_label_words) | _tokenize_control(
+        " ".join(sorted(selected_label_words))
+    )
+    if not requested_variants <= selected_variants:
+        return False
+    for rect, label_text, ctype, _window_rank in snapped_field_label_contexts:
+        if ctype != selected_ctype or rect == selected.rect:
+            continue
+        label_words = set(_literal_word_sequence(label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
+        if not label_words:
+            continue
+        label_variants = _object_token_variants(label_words) | _tokenize_control(
+            " ".join(sorted(label_words))
+        )
+        if requested_variants <= label_variants:
+            return True
+    return False
+
+
+def _field_label_duplicate_request_words(instruction: str, control_type: str) -> set[str]:
+    requested_words = _field_label_request_words(instruction, control_type)
+    if requested_words:
+        return requested_words
+    words = set(_literal_word_sequence(instruction))
+    words -= PARTIAL_FIELD_LABEL_REQUEST_STOPWORDS
+    words -= FIELD_ENTRY_ACTION_WORDS
+    words -= OPEN_VIEW_REQUEST_WORDS
+    words -= GENERIC_OBJECT_REQUEST_WORDS
+    words -= {
+        "a",
+        "an",
+        "below",
+        "beneath",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "of",
+        "on",
+        "the",
+        "to",
+        "under",
+        "underneath",
+        "within",
+        "with",
+    }
+    return _object_token_variants(words)
+
+
+def _snap_field_direct_label_words(
+    selected: SnapResult,
+    selected_ctype: str,
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+) -> set[str]:
+    best_words: set[str] = set()
+    for rect, label_text, ctype, _window_rank in snapped_field_label_contexts:
+        if ctype != selected_ctype or rect != selected.rect:
+            continue
+        words = set(_literal_word_sequence(label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
+        if len(words) > len(best_words):
+            best_words = words
+    return best_words
 
 
 def _snap_state_option_label_tokens(text: str) -> set[str]:

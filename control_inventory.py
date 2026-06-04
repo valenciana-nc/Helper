@@ -7116,20 +7116,47 @@ def _duplicate_labelled_field_control_ambiguous(
         candidate,
         candidates,
     )
-    if not requested_label or requested_context:
+    if candidate.control_type in {"slider", "spinner"}:
+        requested_label = requested_label - ADJUSTABLE_CONTROL_ACTION_WORDS
+    if not requested_label:
         return False
     candidate_evidence = _named_control_candidate_label_tokens(candidate, candidates)
-    if not (requested_label & candidate_evidence):
+    if not _named_control_requested_label_matches_evidence(
+        requested_label,
+        candidate_evidence,
+    ):
+        return False
+    if requested_context and not requested_context <= candidate_evidence:
         return False
     for other in candidates:
         if other.id == candidate.id or _same_visual_candidate(other, candidate):
             continue
+        if not _same_resolution_context_window(candidate, other):
+            continue
         if other.control_type != candidate.control_type:
             continue
         other_evidence = _named_control_candidate_label_tokens(other, candidates)
-        if requested_label & other_evidence:
-            return True
+        if not _named_control_requested_label_matches_evidence(
+            requested_label,
+            other_evidence,
+        ):
+            continue
+        if requested_context and not requested_context <= other_evidence:
+            continue
+        return True
     return False
+
+
+def _named_control_requested_label_matches_evidence(
+    requested_label: set[str],
+    evidence: set[str],
+) -> bool:
+    if not requested_label or not evidence:
+        return False
+    evidence_variants = _object_token_variants(evidence) | _tokenize_control(
+        " ".join(sorted(evidence))
+    )
+    return requested_label <= evidence_variants
 
 
 def _named_control_matches_label_context(

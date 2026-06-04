@@ -24840,6 +24840,36 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "same_context_duplicate_named_field_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [10, 30, 430, 180], "label": "Billing"},
+                {"rect": [20, 82, 80, 24], "label": "Email"},
+                {"rect": [120, 76, 260, 36], "label": ""},
+                {"rect": [20, 142, 80, 24], "label": "Email"},
+                {"rect": [120, 136, 260, 36], "label": ""},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Email text field in Billing.",
+                "target_id": "email1",
+                "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+            },
+            "candidates": [
+                {"id": "billing_group", "text": "Billing", "control_type": "group", "rect": [10, 30, 430, 180]},
+                {"id": "label1", "text": "Email", "control_type": "text", "rect": [20, 82, 80, 24]},
+                {"id": "email1", "text": "", "control_type": "edit", "rect": [120, 76, 260, 36]},
+                {"id": "label2", "text": "Email", "control_type": "text", "rect": [20, 142, 80, 24]},
+                {"id": "email2", "text": "", "control_type": "edit", "rect": [120, 136, 260, 36]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "email1",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "repeated_field_label_uses_structural_section_context",
             "capture": {"width": 1000, "height": 500},
             "draw": [

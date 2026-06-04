@@ -1364,6 +1364,103 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (220, 100, 240, 32))
         self.assertEqual(result.rejected_reason, "candidate semantic mismatch")
 
+    def test_fresh_snap_duplicate_blank_field_labels_stay_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Email", 20, 82, 80, 24, control_type="Text"),
+            _make_button("", 120, 76, 260, 36, control_type="Edit"),
+            _make_button("Email", 20, 202, 80, 24, control_type="Text"),
+            _make_button("", 120, 196, 260, 36, control_type="Edit"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        for rect in ((120, 76, 260, 36), (120, 196, 260, 36)):
+            with self.subTest(rect=rect):
+                result = snap_to_control(
+                    rect,
+                    "Click Email text field.",
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
+    def test_fresh_snap_duplicate_current_value_dropdown_labels_stay_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Country", 20, 82, 80, 24, control_type="Text"),
+            _make_button("United States", 120, 76, 260, 36, control_type="ComboBox"),
+            _make_button("Country", 20, 202, 80, 24, control_type="Text"),
+            _make_button("Canada", 120, 196, 260, 36, control_type="ComboBox"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (120, 76, 260, 36),
+            "Open Country dropdown.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (120, 76, 260, 36))
+        self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
+    def test_fresh_snap_duplicate_labelled_fields_without_role_stay_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        cases = (
+            (
+                "Click Email.",
+                [
+                    _make_button("Email", 20, 102, 80, 24, control_type="Text"),
+                    _make_button("", 120, 96, 260, 36, control_type="Edit"),
+                    _make_button("Email", 20, 152, 80, 24, control_type="Text"),
+                    _make_button("", 120, 146, 260, 36, control_type="Edit"),
+                ],
+                (120, 96, 260, 36),
+            ),
+            (
+                "Click Email.",
+                [
+                    _make_button("Email", 20, 102, 80, 24, control_type="Text"),
+                    _make_button("alice@example.com", 120, 96, 260, 36, control_type="Edit"),
+                    _make_button("Email", 20, 152, 80, 24, control_type="Text"),
+                    _make_button("bob@example.com", 120, 146, 260, 36, control_type="Edit"),
+                ],
+                (120, 96, 260, 36),
+            ),
+            (
+                "Open Country.",
+                [
+                    _make_button("Country", 20, 102, 80, 24, control_type="Text"),
+                    _make_button("United States", 120, 96, 260, 36, control_type="ComboBox"),
+                    _make_button("Country", 20, 152, 80, 24, control_type="Text"),
+                    _make_button("Canada", 120, 146, 260, 36, control_type="ComboBox"),
+                ],
+                (120, 96, 260, 36),
+            ),
+        )
+
+        for instruction, controls, rect in cases:
+            with self.subTest(instruction=instruction):
+                desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+                result = snap_to_control(
+                    rect,
+                    instruction,
+                    desktop_factory=lambda: desktop,
+                    timeout_ms=2000,
+                )
+
+                self.assertEqual(result.source, "uia")
+                self.assertEqual(result.rect, rect)
+                self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
     def test_neutral_same_label_state_option_raw_snap_stays_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 
@@ -5386,6 +5483,67 @@ class ControlInventoryTests(unittest.TestCase):
         assert full_target is not None
         self.assertEqual(full_target.target_id, "volume")
         self.assertFalse(full_target.rejected_reason)
+
+    def test_same_context_duplicate_named_fields_stay_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+
+        cases = (
+            (
+                "Click Email text field in Billing.",
+                "email1",
+                (120, 76, 260, 36),
+                [
+                    ControlCandidate("billing_group", "Billing", "group", (10, 30, 430, 180)),
+                    ControlCandidate("label1", "Email", "text", (20, 82, 80, 24)),
+                    ControlCandidate("email1", "", "edit", (120, 76, 260, 36)),
+                    ControlCandidate("label2", "Email", "text", (20, 142, 80, 24)),
+                    ControlCandidate("email2", "", "edit", (120, 136, 260, 36)),
+                ],
+            ),
+            (
+                "Open Country dropdown in Billing.",
+                "country1",
+                (120, 76, 260, 36),
+                [
+                    ControlCandidate("billing_group", "Billing", "group", (10, 30, 430, 200)),
+                    ControlCandidate("label1", "Country", "text", (20, 82, 80, 24)),
+                    ControlCandidate("country1", "United States", "combobox", (120, 76, 260, 36)),
+                    ControlCandidate("label2", "Country", "text", (20, 142, 80, 24)),
+                    ControlCandidate("country2", "Canada", "combobox", (120, 136, 260, 36)),
+                ],
+            ),
+            (
+                "Adjust Age spinner in Billing.",
+                "age1",
+                (120, 76, 120, 32),
+                [
+                    ControlCandidate("billing_group", "Billing", "group", (10, 30, 300, 180)),
+                    ControlCandidate("label1", "Age", "text", (20, 80, 60, 24)),
+                    ControlCandidate("age1", "42", "spinner", (120, 76, 120, 32)),
+                    ControlCandidate("label2", "Age", "text", (20, 140, 60, 24)),
+                    ControlCandidate("age2", "43", "spinner", (120, 136, 120, 32)),
+                ],
+            ),
+        )
+
+        for instruction, target_id, rect, candidates in cases:
+            with self.subTest(instruction=instruction):
+                target = resolve_candidate_target(
+                    target_id=target_id,
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+
+                self.assertEqual(target.source, "target_id")
+                self.assertEqual(target.rejected_reason, "target_id ambiguous")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
 
     def test_exact_and_full_state_option_labels_still_highlight(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
