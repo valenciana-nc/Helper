@@ -124,6 +124,59 @@ TABLE_CELL_CONTROL_TYPES = frozenset({"cell", "datagridcell", "gridcell"})
 TABLE_CELL_ROW_LABEL_CONTROL_TYPES = frozenset({"label", "statictext", "text"})
 FIELD_LABEL_CONTEXT_CONTROL_TYPES = TABLE_CELL_ROW_LABEL_CONTROL_TYPES
 BLANK_FIELD_LABEL_CONTROL_TYPES = frozenset({"edit", "combobox"})
+FIELD_LABEL_POSITION_WORDS = frozenset(
+    {
+        "1",
+        "1st",
+        "2",
+        "2nd",
+        "3",
+        "3rd",
+        "4",
+        "4th",
+        "5",
+        "5th",
+        "6",
+        "6th",
+        "7",
+        "7th",
+        "8",
+        "8th",
+        "9",
+        "9th",
+        "10",
+        "10th",
+        "bottom",
+        "eighth",
+        "fifth",
+        "first",
+        "fourth",
+        "last",
+        "left",
+        "lower",
+        "ninth",
+        "right",
+        "second",
+        "seventh",
+        "sixth",
+        "tenth",
+        "third",
+        "top",
+        "upper",
+    }
+)
+FIELD_LABEL_ORDINAL_WORDS = (
+    frozenset({"1", "1st", "first"}),
+    frozenset({"2", "2nd", "second"}),
+    frozenset({"3", "3rd", "third"}),
+    frozenset({"4", "4th", "fourth"}),
+    frozenset({"5", "5th", "fifth"}),
+    frozenset({"6", "6th", "sixth"}),
+    frozenset({"7", "7th", "seventh"}),
+    frozenset({"8", "8th", "eighth"}),
+    frozenset({"9", "9th", "ninth"}),
+    frozenset({"10", "10th", "tenth"}),
+)
 OPTION_CONTEXT_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
 OPTION_CONTEXT_PARENT_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
 OPTION_PARENT_SURFACE_WORDS = frozenset(
@@ -1346,6 +1399,8 @@ def snap_to_control(
             visible_text,
             automation_id,
             nearby_field_label_text,
+            window_rank=window_rank,
+            snapped_field_label_contexts=snapped_field_label_contexts,
         )
         semantic_action_mismatch = (
             start_button_action_mismatch
@@ -1627,6 +1682,20 @@ def snap_to_control(
             matched_text=best_result.matched_text,
             rejected_reason="state option ambiguous",
         )
+
+    if best_result is not None:
+        positional_field_result = _positional_labelled_field_snap_result(
+            instruction,
+            selected=best_result,
+            selected_ctype=best_ctype,
+            selected_window_rank=best_window_rank,
+            selected_score=best_score,
+            ranked=ranked,
+            snapped_field_label_contexts=snapped_field_label_contexts,
+            confidence_floor=confidence_floor,
+        )
+        if positional_field_result is not None:
+            return positional_field_result
 
     if (
         best_result is not None
@@ -2187,6 +2256,9 @@ def _blank_field_nearby_label_mismatch(
     visible_text: str,
     automation_id: str,
     nearby_field_label_text: str,
+    *,
+    window_rank: int,
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
 ) -> bool:
     if ctype not in BLANK_FIELD_LABEL_CONTROL_TYPES:
         return False
@@ -2205,6 +2277,33 @@ def _blank_field_nearby_label_mismatch(
     requested_variants = _object_token_variants(requested_words) | _tokenize_control(
         " ".join(sorted(requested_words))
     )
+    positional_request_options = _field_label_positional_request_options(
+        instruction,
+        requested_words,
+    )
+    if (
+        positional_request_options
+        and not _full_field_label_request_exists(
+            requested_words,
+            ctype,
+            window_rank,
+            snapped_field_label_contexts,
+        )
+        and any(
+            _field_label_words_exactly_match_request(label_words, positional_label_words)
+            and len(
+                _matching_labelled_field_snap_contexts(
+                    positional_label_words,
+                    ctype,
+                    window_rank,
+                    snapped_field_label_contexts,
+                )
+            )
+            >= 2
+            for _requested_positions, positional_label_words in positional_request_options
+        )
+    ):
+        return False
     if not (requested_variants & label_variants):
         return True
     request_context = _field_label_request_context_words(instruction, requested_words)
@@ -4128,6 +4227,86 @@ def _same_type_state_option_duplicate_exists(
     return False
 
 
+def _positional_labelled_field_snap_result(
+    instruction: str,
+    *,
+    selected: SnapResult,
+    selected_ctype: str,
+    selected_window_rank: int,
+    selected_score: float,
+    ranked: list[tuple[float, SnapResult, str, str, int]],
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+    confidence_floor: float,
+) -> SnapResult | None:
+    if selected_ctype not in BLANK_FIELD_LABEL_CONTROL_TYPES:
+        return None
+    requested_words = _field_label_duplicate_request_words(instruction, selected_ctype)
+    positional_request_options = _field_label_positional_request_options(
+        instruction,
+        requested_words,
+    )
+    if not positional_request_options:
+        return None
+    if _full_field_label_request_exists(
+        requested_words,
+        selected_ctype,
+        selected_window_rank,
+        snapped_field_label_contexts,
+    ):
+        return None
+
+    saw_duplicate_option = False
+    target_contexts: list[tuple[tuple[int, int, int, int], str, str, int]] = []
+    for requested_positions, requested_label_words in positional_request_options:
+        duplicate_contexts = _matching_labelled_field_snap_contexts(
+            requested_label_words,
+            selected_ctype,
+            selected_window_rank,
+            snapped_field_label_contexts,
+        )
+        if len(duplicate_contexts) < 2:
+            continue
+        saw_duplicate_option = True
+        option_targets = [
+            context
+            for context in duplicate_contexts
+            if requested_positions
+            <= _field_label_context_position_tokens(context[0], duplicate_contexts)
+        ]
+        target_contexts.extend(option_targets)
+
+    if not saw_duplicate_option:
+        return None
+    distinct_targets = {
+        (context[0], context[2], context[3]): context for context in target_contexts
+    }
+    target_contexts = list(distinct_targets.values())
+    if len(target_contexts) != 1:
+        return SnapResult(
+            rect=selected.rect,
+            confidence=selected_score,
+            source="uia",
+            matched_text=selected.matched_text,
+            rejected_reason="fresh snap ambiguous",
+        )
+
+    target_rect, target_label, _target_ctype, target_window_rank = target_contexts[0]
+    for score, result, _semantic_text, ctype, window_rank in ranked:
+        if ctype == selected_ctype and window_rank == target_window_rank and result.rect == target_rect:
+            return SnapResult(
+                rect=result.rect,
+                confidence=max(score, confidence_floor + 0.12),
+                source="uia",
+                matched_text=result.matched_text or target_label,
+            )
+    return SnapResult(
+        rect=target_rect,
+        confidence=confidence_floor + 0.12,
+        source="uia",
+        matched_text=target_label,
+    )
+
+
 def _duplicate_labelled_field_snap_ambiguous(
     instruction: str,
     *,
@@ -4213,6 +4392,154 @@ def _snap_field_direct_label_words(
         if len(words) > len(best_words):
             best_words = words
     return best_words
+
+
+def _field_label_position_request_tokens(instruction: str) -> set[str]:
+    raw_tokens = _tokens_from_text(instruction)
+    requested = set(raw_tokens & FIELD_LABEL_POSITION_WORDS)
+    words = _literal_word_sequence(instruction)
+    if words:
+        if words[-1] in {"below", "beneath"}:
+            requested.add("lower")
+        elif words[-1] in {"above", "over"}:
+            requested.add("upper")
+    if raw_tokens & {"arrow", "caret", "chevron"}:
+        requested -= {"left", "right"}
+    return requested
+
+
+def _field_label_positional_request_options(
+    instruction: str,
+    requested_words: set[str],
+) -> list[tuple[set[str], set[str]]]:
+    requested_positions = _field_label_position_request_tokens(instruction)
+    if not requested_positions or not requested_words:
+        return []
+    options: list[tuple[set[str], set[str]]] = []
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+
+    def add_option(position_words: set[str], label_words: set[str]) -> None:
+        if not position_words or not label_words:
+            return
+        key = (tuple(sorted(position_words)), tuple(sorted(label_words)))
+        if key in seen:
+            return
+        seen.add(key)
+        options.append((position_words, label_words))
+
+    for ordinal_words in FIELD_LABEL_ORDINAL_WORDS:
+        position_words = set(requested_positions & requested_words & ordinal_words)
+        if position_words:
+            add_option(position_words, requested_words - ordinal_words)
+
+    for position_word in ("last", "left", "right", "top", "upper", "bottom", "lower"):
+        if position_word in requested_positions and position_word in requested_words:
+            add_option({position_word}, requested_words - {position_word})
+
+    terminal_positions = requested_positions - requested_words
+    if terminal_positions & {"lower", "upper"}:
+        add_option(set(terminal_positions & {"lower", "upper"}), set(requested_words))
+
+    return options
+
+
+def _matching_labelled_field_snap_contexts(
+    requested_label_words: set[str],
+    selected_ctype: str,
+    selected_window_rank: int,
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+) -> list[tuple[tuple[int, int, int, int], str, str, int]]:
+    matches: list[tuple[tuple[int, int, int, int], str, str, int]] = []
+    seen: set[tuple[tuple[int, int, int, int], str, int]] = set()
+    for rect, label_text, ctype, window_rank in snapped_field_label_contexts:
+        if ctype != selected_ctype or window_rank != selected_window_rank:
+            continue
+        key = (rect, ctype, window_rank)
+        if key in seen:
+            continue
+        seen.add(key)
+        label_words = set(_literal_word_sequence(label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
+        if _field_label_words_exactly_match_request(label_words, requested_label_words):
+            matches.append((rect, label_text, ctype, window_rank))
+    return matches
+
+
+def _full_field_label_request_exists(
+    requested_words: set[str],
+    selected_ctype: str,
+    selected_window_rank: int,
+    snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+) -> bool:
+    for rect, label_text, ctype, window_rank in snapped_field_label_contexts:
+        if ctype != selected_ctype or window_rank != selected_window_rank:
+            continue
+        label_words = set(_literal_word_sequence(label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
+        if _field_label_words_exactly_match_request(label_words, requested_words):
+            return True
+    return False
+
+
+def _field_label_words_exactly_match_request(
+    label_words: set[str],
+    requested_words: set[str],
+) -> bool:
+    if not label_words or not requested_words:
+        return False
+    label_variants = _object_token_variants(label_words) | _tokenize_control(
+        " ".join(sorted(label_words))
+    )
+    requested_variants = _object_token_variants(requested_words) | _tokenize_control(
+        " ".join(sorted(requested_words))
+    )
+    if not requested_variants <= label_variants:
+        return False
+    for word in label_words:
+        if not (_object_token_variants({word}) & requested_variants):
+            return False
+    return True
+
+
+def _field_label_context_position_tokens(
+    rect: tuple[int, int, int, int],
+    contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
+) -> set[str]:
+    if len(contexts) < 2:
+        return set()
+    ordered = sorted(
+        contexts,
+        key=lambda item: (
+            item[3],
+            item[0][1],
+            item[0][0],
+            item[0][2],
+            item[0][3],
+        ),
+    )
+    try:
+        index = next(index for index, item in enumerate(ordered) if item[0] == rect)
+    except StopIteration:
+        return set()
+    tokens: set[str] = set()
+    if index < len(FIELD_LABEL_ORDINAL_WORDS):
+        tokens.update(FIELD_LABEL_ORDINAL_WORDS[index])
+    if index == len(ordered) - 1:
+        tokens.add("last")
+
+    centers = [(item[0], _center(item[0])) for item in ordered]
+    xs = [center[0] for _item_rect, center in centers]
+    ys = [center[1] for _item_rect, center in centers]
+    cx, cy = _center(rect)
+    if max(xs) - min(xs) >= max(8, rect[2] // 4):
+        if cx == min(xs):
+            tokens.add("left")
+        if cx == max(xs):
+            tokens.add("right")
+    if max(ys) - min(ys) >= max(8, rect[3] // 4):
+        if cy == min(ys):
+            tokens.update({"top", "upper"})
+        if cy == max(ys):
+            tokens.update({"bottom", "lower"})
+    return tokens
 
 
 def _snap_state_option_label_tokens(text: str) -> set[str]:

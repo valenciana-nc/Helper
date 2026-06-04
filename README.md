@@ -178,11 +178,14 @@ different top-level windows, and reject partial nearby labels such as `Email`
 against `Billing Email`. Fresh snaps also refuse same-label duplicate blank
 fields or current-value dropdowns when the request lacks section/context
 evidence, rather than trusting whichever duplicate sits under the model
-rectangle. The inventory resolver applies the same caution when duplicates
-share the requested context, such as two `Email` fields inside the same
-`Billing` group. Numeric/current-value sliders also apply that partial-label
-policy to borrowed nearby labels, so `Volume` no longer matches `Volume level`
-just because the slider itself only exposes `50`.
+rectangle. Explicit positional requests such as the first/second same-label
+field or dropdown can recover the requested duplicate by stable UIA ordering,
+but out-of-range or otherwise non-unique positions still refuse instead of
+guessing. The inventory resolver applies the same caution when duplicates share
+the requested context, such as two `Email` fields inside the same `Billing`
+group. Numeric/current-value sliders also apply that partial-label policy to
+borrowed nearby labels, so `Volume` no longer matches `Volume level` just
+because the slider itself only exposes `50`.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

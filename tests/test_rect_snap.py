@@ -1410,6 +1410,130 @@ class SnapToControlTests(unittest.TestCase):
         self.assertEqual(result.rect, (120, 76, 260, 36))
         self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
 
+    def test_fresh_snap_positional_duplicate_blank_field_label_recovers_target(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Email", 20, 102, 80, 24, control_type="Text"),
+            _make_button("", 120, 96, 260, 36, control_type="Edit"),
+            _make_button("Email", 20, 152, 80, 24, control_type="Text"),
+            _make_button("", 120, 146, 260, 36, control_type="Edit"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        second = snap_to_control(
+            (120, 96, 260, 36),
+            "Click the second Email field.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        first = snap_to_control(
+            (120, 146, 260, 36),
+            "Click the first Email field.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(second.source, "uia")
+        self.assertEqual(second.rect, (120, 146, 260, 36))
+        self.assertFalse(second.rejected_reason)
+        self.assertEqual(first.source, "uia")
+        self.assertEqual(first.rect, (120, 96, 260, 36))
+        self.assertFalse(first.rejected_reason)
+
+    def test_fresh_snap_positional_duplicate_dropdown_label_recovers_target(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Country", 20, 102, 80, 24, control_type="Text"),
+            _make_button("United States", 120, 96, 260, 36, control_type="ComboBox"),
+            _make_button("Country", 20, 152, 80, 24, control_type="Text"),
+            _make_button("Canada", 120, 146, 260, 36, control_type="ComboBox"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        second = snap_to_control(
+            (120, 96, 260, 36),
+            "Open the second Country dropdown.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+        first = snap_to_control(
+            (120, 146, 260, 36),
+            "Open the first Country dropdown.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(second.source, "uia")
+        self.assertEqual(second.rect, (120, 146, 260, 36))
+        self.assertFalse(second.rejected_reason)
+        self.assertEqual(first.source, "uia")
+        self.assertEqual(first.rect, (120, 96, 260, 36))
+        self.assertFalse(first.rejected_reason)
+
+    def test_fresh_snap_missing_positional_duplicate_field_stays_ambiguous(self) -> None:
+        from rect_snap import snap_to_control
+
+        controls = [
+            _make_button("Email", 20, 102, 80, 24, control_type="Text"),
+            _make_button("", 120, 96, 260, 36, control_type="Edit"),
+            _make_button("Email", 20, 152, 80, 24, control_type="Text"),
+            _make_button("", 120, 146, 260, 36, control_type="Edit"),
+        ]
+        desktop = _FakeDesktop([_make_window("App", 0, 0, 800, 600, controls)])
+
+        result = snap_to_control(
+            (120, 96, 260, 36),
+            "Click the third Email field.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (120, 96, 260, 36))
+        self.assertEqual(result.rejected_reason, "fresh snap ambiguous")
+
+    def test_fresh_snap_positional_words_keep_literal_field_labels(self) -> None:
+        from rect_snap import snap_to_control
+
+        literal_controls = [
+            _make_button("First Name", 20, 102, 90, 24, control_type="Text"),
+            _make_button("", 120, 96, 260, 36, control_type="Edit"),
+        ]
+        literal_desktop = _FakeDesktop(
+            [_make_window("App", 0, 0, 800, 600, literal_controls)]
+        )
+        literal = snap_to_control(
+            (120, 96, 260, 36),
+            "Click the First Name field.",
+            desktop_factory=lambda: literal_desktop,
+            timeout_ms=2000,
+        )
+
+        duplicate_controls = [
+            _make_button("First Name", 20, 102, 90, 24, control_type="Text"),
+            _make_button("", 120, 96, 260, 36, control_type="Edit"),
+            _make_button("First Name", 20, 152, 90, 24, control_type="Text"),
+            _make_button("", 120, 146, 260, 36, control_type="Edit"),
+        ]
+        duplicate_desktop = _FakeDesktop(
+            [_make_window("App", 0, 0, 800, 600, duplicate_controls)]
+        )
+        positional = snap_to_control(
+            (120, 96, 260, 36),
+            "Click the second First Name field.",
+            desktop_factory=lambda: duplicate_desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(literal.source, "uia")
+        self.assertEqual(literal.rect, (120, 96, 260, 36))
+        self.assertFalse(literal.rejected_reason)
+        self.assertEqual(positional.source, "uia")
+        self.assertEqual(positional.rect, (120, 146, 260, 36))
+        self.assertFalse(positional.rejected_reason)
+
     def test_fresh_snap_duplicate_labelled_fields_without_role_stay_ambiguous(self) -> None:
         from rect_snap import snap_to_control
 
