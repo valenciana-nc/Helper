@@ -1611,6 +1611,9 @@ OPTION_ROLE_CONTROL_TYPES = frozenset(
 )
 SELECTABLE_POPUP_OPTION_CONTROL_TYPES = frozenset({"menuitem", "option"})
 PARENT_SCOPED_OPTION_CONTROL_TYPES = frozenset({"listitem", "menuitem", "option"})
+SIBLING_ROW_CONTEXT_CONTROL_TYPES = (
+    NEARBY_LABELLED_CONTROL_TYPES | PARENT_SCOPED_OPTION_CONTROL_TYPES
+)
 OPTION_PARENT_CONTEXT_CONTROL_TYPES = frozenset({"group", "list", "menu", "menuitem", "pane"})
 OPTION_PARENT_SURFACE_WORDS = frozenset(
     {"context", "drop", "down", "dropdown", "list", "menu", "picker", "selector"}
@@ -1706,6 +1709,7 @@ SURFACE_CONTEXT_TYPE_WORDS = {
     "headeritem": frozenset({"column", "header", "heading"}),
     "list": frozenset({"list"}),
     "menu": frozenset({"menu"}),
+    "menuitem": frozenset({"menu", "menuitem"}),
     "pane": frozenset({"card", "pane"}),
     "toolbar": frozenset({"toolbar"}),
     "window": frozenset({"window"}),
@@ -2542,6 +2546,19 @@ def snap_candidate_target(
                 return None
             if _explicit_row_column_cell_target_unresolved(instruction, contained, candidates):
                 return None
+            if _parent_scoped_option_context_duplicate_ambiguous(
+                instruction,
+                contained,
+                candidates,
+            ):
+                return TargetResolution(
+                    rect=contained.rect,
+                    confidence=confidence_floor,
+                    source="candidate_snap",
+                    matched_text=contained.descriptor,
+                    target_id=contained.id,
+                    rejected_reason="ambiguous candidate snap",
+                )
             if _contains_multiple_tight_row_action_candidates(
                 selected=contained,
                 candidates=candidates,
@@ -3072,6 +3089,12 @@ def _text_match_score(
     if _cell_target_request_mismatch(instruction, candidate, candidates):
         return 0.0
     if _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates):
+        return 0.0
+    if _parent_scoped_option_context_duplicate_ambiguous(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _explicit_row_column_cell_target_mismatch(instruction, candidate, candidates):
         return 0.0
@@ -4337,6 +4360,16 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _parent_scoped_option_context_duplicate_ambiguous(
+        instruction,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
     if _bare_action_container_extended_label_mismatch(instruction, candidate):
         return (
             False,
@@ -4779,6 +4812,17 @@ def _target_id_plausibility(
             False,
             text_score,
             "target_id semantic mismatch",
+        )
+    if _option_like_launcher_control_type_mismatch(
+        instruction,
+        candidate,
+        candidates,
+        control_intents,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id control type mismatch",
         )
     if _contextual_surface_action_alternative_mismatch(
         instruction,
@@ -6889,6 +6933,39 @@ def _dropdown_item_request_launcher_mismatch(
     return False
 
 
+def _option_like_launcher_control_type_mismatch(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+    control_intents: set[str],
+) -> bool:
+    if candidate.control_type != "button":
+        return False
+    if not (control_intents & {"menuitem", "option"}):
+        return False
+    raw_tokens = _tokens_from_text(instruction)
+    if not (raw_tokens & {"menu", "menuitem", "option", "options"}):
+        return False
+    candidate_tokens = _option_context_label_tokens(candidate)
+    if not candidate_tokens:
+        return False
+    for other in candidates:
+        if other.id == candidate.id or _same_visual_candidate(other, candidate):
+            continue
+        if other.control_type not in {"menuitem", "option"}:
+            continue
+        if not _candidate_matches_control_intent(
+            other,
+            control_intents,
+            instruction=instruction,
+        ):
+            continue
+        other_tokens = _option_context_label_tokens(other)
+        if other_tokens and candidate_tokens & other_tokens:
+            return True
+    return False
+
+
 def _dropdown_launcher_requested(instruction: str) -> bool:
     raw_tokens = _tokens_from_text(instruction)
     return (
@@ -7450,6 +7527,15 @@ def _same_row_named_control_context_tokens(
 ) -> set[str]:
     if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
         return set()
+    return _same_row_sibling_cell_context_tokens(candidate, candidates)
+
+
+def _same_row_sibling_cell_context_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in SIBLING_ROW_CONTEXT_CONTROL_TYPES:
+        return set()
     tokens: set[str] = set()
     for label in candidates:
         if label.id == candidate.id or _same_visual_candidate(label, candidate):
@@ -7460,18 +7546,18 @@ def _same_row_named_control_context_tokens(
             continue
         if label.control_type not in NEARBY_ROW_LABEL_CONTROL_TYPES:
             continue
-        if not _same_row_named_control_label_rect_matches(label, candidate):
+        if not _same_row_sibling_cell_label_rect_matches(label, candidate):
             continue
         tokens.update(_candidate_semantic_tokens(label))
         tokens.update(_tokens_from_text(label.descriptor))
     return _object_token_variants(tokens) - ROW_CONTEXT_OBJECT_STOPWORDS
 
 
-def _same_row_named_control_label_rect_matches(
+def _same_row_sibling_cell_label_rect_matches(
     label: ControlCandidate,
     control: ControlCandidate,
 ) -> bool:
-    if control.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
+    if control.control_type not in SIBLING_ROW_CONTEXT_CONTROL_TYPES:
         return False
     label_x, label_y, label_width, label_height = label.rect
     control_x, control_y, control_width, control_height = control.rect
@@ -8495,6 +8581,38 @@ def _option_parent_context_resolution(
     if not label_matches:
         return None
 
+    contextual_matches = [
+        candidate
+        for candidate in label_matches
+        if _same_row_sibling_cell_context_tokens(candidate, candidates)
+        if _candidate_satisfies_contextual_duplicate_request(
+            instruction,
+            candidate,
+            candidates,
+        )
+    ]
+    if contextual_matches:
+        preferred = _preferred_option_context_candidates(contextual_matches, raw_tokens)
+        matches = _distinct_option_context_candidates(preferred or contextual_matches)
+        if len(matches) == 1:
+            candidate = matches[0]
+            return TargetResolution(
+                rect=candidate.rect,
+                confidence=confidence,
+                source=source,
+                matched_text=candidate.descriptor,
+                target_id=candidate.id,
+            )
+        candidate = _option_context_anchor(matches)
+        return TargetResolution(
+            rect=candidate.rect,
+            confidence=confidence,
+            source=source,
+            matched_text=candidate.descriptor,
+            target_id=candidate.id,
+            rejected_reason=rejected_reason,
+        )
+
     scoped_matches: list[ControlCandidate] = []
     has_parent_context = False
     for candidate in label_matches:
@@ -8716,6 +8834,76 @@ def _same_label_same_type_option_like_duplicate_exists(
             if other_tokens and candidate_tokens & other_tokens:
                 return True
     return False
+
+
+def _parent_scoped_option_context_duplicate_ambiguous(
+    instruction: str,
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in PARENT_SCOPED_OPTION_CONTROL_TYPES:
+        return False
+    sibling_context_tokens = _same_row_sibling_cell_context_tokens(candidate, candidates)
+    if candidate.control_type == "listitem" and not sibling_context_tokens:
+        return False
+    if not sibling_context_tokens and ">" in (instruction or ""):
+        return False
+    duplicate_key = _contextual_duplicate_key(candidate)
+    if not duplicate_key:
+        return False
+    peers = [
+        peer
+        for peer in candidates
+        if peer.control_type == candidate.control_type
+        and _contextual_duplicate_key(peer) == duplicate_key
+        and not (
+            peer.id != candidate.id
+            and _same_visual_and_context_candidate(peer, candidate)
+        )
+    ]
+    if len({peer.id for peer in peers}) < 2:
+        return False
+    instruction_tokens = _tokenize_instruction(instruction)
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False
+    raw_tokens = _object_token_variants(_tokens_from_text(instruction))
+    parent_request = _option_parent_context_request_tokens(
+        raw_tokens,
+        _option_context_label_tokens(candidate),
+    )
+    if parent_request and _option_parent_context_has_evidence(parent_request, candidates):
+        parent_matches = [
+            peer
+            for peer in peers
+            if _option_parent_context_matches_candidate(peer, parent_request, candidates)
+        ]
+        if parent_matches:
+            if not any(peer.id == candidate.id for peer in parent_matches):
+                return True
+            return len({peer.id for peer in parent_matches}) != 1
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
+    if not requested_context:
+        return bool(_same_row_sibling_cell_context_tokens(candidate, candidates))
+    matching = [
+        peer
+        for peer in peers
+        if _contextual_duplicate_request_matches_evidence(
+            requested_context,
+            _contextual_duplicate_evidence_tokens(peer, candidates),
+        )
+    ]
+    if not any(peer.id == candidate.id for peer in matching):
+        return True
+    return len({peer.id for peer in matching}) != 1
 
 
 def _option_context_anchor(candidates: list[ControlCandidate]) -> ControlCandidate:
@@ -12363,8 +12551,11 @@ def _contextual_duplicate_request_tokens(
     request_tokens = _object_token_variants(
         (instruction_tokens | raw_tokens | surface_tokens)
         - candidate_tokens
+        - OPEN_VIEW_REQUEST_WORDS
         - (CONTEXTUAL_DUPLICATE_STOPWORDS - CONTEXTUAL_DUPLICATE_SURFACE_WORDS)
     )
+    if candidate.control_type in PARENT_SCOPED_OPTION_CONTROL_TYPES:
+        request_tokens -= {"choose", "select", "use"}
     request_tokens |= _prepositional_list_surface_request_tokens(instruction)
     if matched_action_tokens & CLEAR_CLOSE_WORDS and raw_tokens & {
         "modal",
@@ -12464,14 +12655,24 @@ def _implicit_contextual_duplicate_request_tokens(
     if not request_tokens:
         return set()
     positional_request = bool(request_tokens & CONTEXTUAL_DUPLICATE_POSITION_WORDS)
-    for other in candidates:
+    duplicate_candidates = [candidate]
+    duplicate_candidates.extend(
+        other
+        for other in candidates
+        if other.id != candidate.id
+    )
+    for other in duplicate_candidates:
         if other.id != candidate.id and _same_visual_and_context_candidate(other, candidate):
             continue
         if other.control_type != candidate.control_type:
             continue
         if _contextual_duplicate_key(other) != duplicate_key:
             continue
-        if positional_request or other.control_type in LABELLED_FIELD_CONTROL_TYPES:
+        if (
+            positional_request
+            or other.control_type in LABELLED_FIELD_CONTROL_TYPES
+            or other.control_type in PARENT_SCOPED_OPTION_CONTROL_TYPES
+        ):
             evidence_tokens = _contextual_duplicate_evidence_tokens(other, candidates)
         else:
             evidence_tokens = _object_token_variants(
@@ -12528,6 +12729,7 @@ def _contextual_duplicate_evidence_tokens(
     tokens.update(_contextual_duplicate_aligned_header_tokens(candidate, candidates))
     tokens.update(_contextual_duplicate_nearby_label_tokens(candidate, candidates))
     tokens.update(_nearby_field_context_label_tokens(candidate, candidates))
+    tokens.update(_same_row_sibling_cell_context_tokens(candidate, candidates))
     if _candidate_has_foreground_unnamed_transient_surface_evidence(candidate, candidates):
         tokens.update(_expand_token_aliases(set(UNNAMED_FOREGROUND_TRANSIENT_SURFACE_WORDS)))
     if _candidate_has_foreground_rank_evidence(candidate, candidates):
@@ -14763,6 +14965,12 @@ def _candidate_snap_score(
     if _exact_visible_label_order_mismatch(instruction, candidate):
         return 0.0
     if _cell_target_request_mismatch(instruction, candidate, candidates):
+        return 0.0
+    if _parent_scoped_option_context_duplicate_ambiguous(
+        instruction,
+        candidate,
+        candidates,
+    ):
         return 0.0
     if _explicit_row_column_cell_target_unresolved(instruction, candidate, candidates):
         return 0.0
