@@ -448,7 +448,7 @@ STATE_LABEL_TURN_OFF_WORDS = frozenset({"disabled", "unchecked"})
 STATE_ACTION_WORDS = frozenset(
     word for action_words, _state_words in STATE_LABEL_ACTION_GROUPS for word in action_words
 )
-PARTIAL_STATE_LABEL_CONTROL_TYPES = frozenset({"checkbox", "radiobutton"})
+PARTIAL_STATE_LABEL_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
 PARTIAL_STATE_LABEL_EXTRA_STOPWORDS = frozenset(
     {
         "and",
@@ -487,6 +487,7 @@ PARTIAL_STATE_LABEL_REQUEST_STOPWORDS = (
             "radio",
             "radiobutton",
             "select",
+            "slider",
             "state",
             "switch",
             "that",

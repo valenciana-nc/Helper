@@ -964,7 +964,7 @@ STATE_ONLY_CONTROL_VALUE_WORDS = frozenset(
         "unselected",
     }
 )
-PARTIAL_STATE_LABEL_CONTROL_TYPES = frozenset({"checkbox", "radiobutton"})
+PARTIAL_STATE_LABEL_CONTROL_TYPES = frozenset({"checkbox", "radiobutton", "slider"})
 PARTIAL_STATE_LABEL_EXTRA_STOPWORDS = frozenset(
     {
         "and",
@@ -1004,6 +1004,7 @@ PARTIAL_STATE_LABEL_REQUEST_STOPWORDS = (
             "radio",
             "radiobutton",
             "select",
+            "slider",
             "state",
             "switch",
             "that",

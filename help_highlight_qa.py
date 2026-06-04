@@ -728,6 +728,33 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "partial_volume_slider_rejects_volume_level_without_context",
+            "capture": {"width": 500, "height": 320},
+            "draw": [
+                {"rect": [40, 80, 220, 32], "label": "Volume level"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Volume slider.",
+                "target_id": "volume",
+                "target": {"x": 40, "y": 80, "width": 220, "height": 32},
+            },
+            "candidates": [
+                {
+                    "id": "volume",
+                    "text": "Volume level",
+                    "control_type": "slider",
+                    "rect": [40, 80, 220, 32],
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "volume",
+                "rejected_reason": "target_id ambiguous",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "stale_target_id_recovers_then_ocr_rejects_final_text",
             "capture": {"width": 500, "height": 320},
             "draw": [

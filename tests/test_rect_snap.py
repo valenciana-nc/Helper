@@ -1195,6 +1195,8 @@ class SnapToControlTests(unittest.TestCase):
         cases = (
             ("Select Weekly.", "Weekly digest", "RadioButton", (100, 100, 180, 32)),
             ("Click Email checkbox.", "Email alerts", "CheckBox", (100, 150, 180, 32)),
+            ("Click Volume.", "Volume level", "Slider", (100, 200, 220, 32)),
+            ("Click Volume slider.", "Volume level", "Slider", (100, 250, 220, 32)),
         )
         for instruction, label, control_type, rect in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -1218,6 +1220,9 @@ class SnapToControlTests(unittest.TestCase):
             ("Select Weekly.", "Weekly", "RadioButton", (100, 100, 180, 32)),
             ("Select Weekly digest.", "Weekly digest", "RadioButton", (100, 150, 180, 32)),
             ("Click Email alerts checkbox.", "Email alerts", "CheckBox", (100, 200, 180, 32)),
+            ("Click Volume level.", "Volume level", "Slider", (100, 250, 220, 32)),
+            ("Click Volume level slider.", "Volume level", "Slider", (100, 300, 220, 32)),
+            ("Adjust this slider.", "Volume level", "Slider", (100, 350, 220, 32)),
         )
         for instruction, label, control_type, rect in cases:
             with self.subTest(instruction=instruction, label=label):
@@ -5164,6 +5169,8 @@ class ControlInventoryTests(unittest.TestCase):
             ("Select Weekly.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
             ("Select Weekly radio.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
             ("Click Email checkbox.", ControlCandidate("email", "Email alerts", "checkbox", (100, 100, 180, 32))),
+            ("Click Volume.", ControlCandidate("volume", "Volume level", "slider", (100, 100, 220, 32))),
+            ("Click Volume slider.", ControlCandidate("volume", "Volume level", "slider", (100, 100, 220, 32))),
         )
         for instruction, candidate in cases:
             with self.subTest(instruction=instruction, label=candidate.text):
@@ -5215,12 +5222,15 @@ class ControlInventoryTests(unittest.TestCase):
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
 
         cases = (
-            ("Select Weekly.", ControlCandidate("weekly", "Weekly", "radiobutton", (100, 100, 180, 32))),
-            ("Select Weekly digest.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32))),
-            ("Click Email alerts checkbox.", ControlCandidate("email", "Email alerts", "checkbox", (100, 100, 180, 32))),
-            ("Enable notifications checkbox.", ControlCandidate("notifications", "Notifications", "checkbox", (100, 100, 180, 32))),
+            ("Select Weekly.", ControlCandidate("weekly", "Weekly", "radiobutton", (100, 100, 180, 32)), True),
+            ("Select Weekly digest.", ControlCandidate("weekly", "Weekly digest", "radiobutton", (100, 100, 180, 32)), True),
+            ("Click Email alerts checkbox.", ControlCandidate("email", "Email alerts", "checkbox", (100, 100, 180, 32)), True),
+            ("Enable notifications checkbox.", ControlCandidate("notifications", "Notifications", "checkbox", (100, 100, 180, 32)), True),
+            ("Click Volume level.", ControlCandidate("volume", "Volume level", "slider", (100, 100, 220, 32)), True),
+            ("Click Volume level slider.", ControlCandidate("volume", "Volume level", "slider", (100, 100, 220, 32)), True),
+            ("Adjust this slider.", ControlCandidate("volume", "Volume level", "slider", (100, 100, 220, 32)), False),
         )
-        for instruction, candidate in cases:
+        for instruction, candidate, expect_text_target in cases:
             with self.subTest(instruction=instruction, label=candidate.text):
                 candidates = [candidate]
                 target_id = resolve_candidate_target(
@@ -5241,11 +5251,18 @@ class ControlInventoryTests(unittest.TestCase):
                     model_rect=candidate.rect,
                 )
 
-                for target in (target_id, text_target, snap_target):
+                for target in (target_id, snap_target):
                     self.assertIsNotNone(target)
                     assert target is not None
                     self.assertEqual(target.target_id, candidate.id)
                     self.assertFalse(target.rejected_reason)
+                if expect_text_target:
+                    self.assertIsNotNone(text_target)
+                    assert text_target is not None
+                    self.assertEqual(text_target.target_id, candidate.id)
+                    self.assertFalse(text_target.rejected_reason)
+                else:
+                    self.assertIsNone(text_target)
 
     def test_label_only_open_view_verbs_recover_to_exact_visible_label(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
