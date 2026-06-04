@@ -729,6 +729,45 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "revalidation_rejects_reused_action_id_same_rect_longer_label",
+            "capture": {"width": 800, "height": 520},
+            "draw": [
+                {"rect": [100, 100, 100, 32], "label": "Save draft"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            },
+            "previous_candidates": [
+                {
+                    "id": "save",
+                    "text": "Save",
+                    "control_type": "button",
+                    "rect": [100, 100, 80, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "candidates": [
+                {
+                    "id": "save",
+                    "text": "Save draft",
+                    "control_type": "button",
+                    "rect": [100, 100, 100, 32],
+                    "window_title": "Editor",
+                    "window_rank": 0,
+                },
+            ],
+            "expected": {
+                "source": "target_id",
+                "target_id": "save",
+                "rejected_reason": "current screen recheck target changed",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "revalidation_rejects_control_section_context_from_other_window_rank",
             "capture": {"width": 500, "height": 320},
             "draw": [
@@ -20248,6 +20287,58 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "duplicate_table_cell_mixed_text_and_automation_row_only_context_stays_ambiguous",
+            "capture": {"width": 1000, "height": 1000},
+            "draw": [
+                {"rect": [180, 40, 140, 32], "label": "Status"},
+                {"rect": [340, 40, 140, 32], "label": "Plan"},
+                {"rect": [20, 100, 500, 32], "label": "Acme"},
+                {"rect": [20, 100, 140, 32], "label": "Acme"},
+                {"rect": [180, 100, 140, 32], "label": "Active"},
+                {"rect": [340, 100, 140, 32], "label": "Active"},
+                {"rect": [20, 150, 500, 32], "label": "Globex"},
+                {"rect": [20, 150, 140, 32], "label": "Globex"},
+                {"rect": [180, 150, 140, 32], "label": "Active"},
+                {"rect": [340, 150, 140, 32], "label": "Active"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Click the Active cell in the Acme row.",
+                "target_id": "acme_status",
+                "target": {"x": 180, "y": 100, "width": 140, "height": 32},
+            },
+            "candidates": [
+                {"id": "status_header", "text": "Status", "control_type": "headeritem", "rect": [180, 40, 140, 32]},
+                {"id": "plan_header", "text": "Plan", "control_type": "headeritem", "rect": [340, 40, 140, 32]},
+                {"id": "acme_row", "text": "Acme", "control_type": "dataitem", "rect": [20, 100, 500, 32]},
+                {"id": "acme_name", "text": "Acme", "control_type": "rowheader", "rect": [20, 100, 140, 32]},
+                {"id": "acme_status", "text": "Active", "control_type": "cell", "rect": [180, 100, 140, 32]},
+                {
+                    "id": "acme_plan",
+                    "text": "",
+                    "automation_id": "Active",
+                    "control_type": "cell",
+                    "rect": [340, 100, 140, 32],
+                },
+                {"id": "globex_row", "text": "Globex", "control_type": "dataitem", "rect": [20, 150, 500, 32]},
+                {"id": "globex_name", "text": "Globex", "control_type": "rowheader", "rect": [20, 150, 140, 32]},
+                {"id": "globex_status", "text": "Active", "control_type": "cell", "rect": [180, 150, 140, 32]},
+                {
+                    "id": "globex_plan",
+                    "text": "",
+                    "automation_id": "Active",
+                    "control_type": "cell",
+                    "rect": [340, 150, 140, 32],
+                },
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "acme_status",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
             "name": "duplicate_table_cell_without_context_stays_ambiguous",
             "capture": {"width": 1000, "height": 1000},
             "draw": [
@@ -24778,6 +24869,30 @@ def builtin_scenarios() -> list[dict[str, Any]]:
             ],
             "expected": {
                 "source": "candidate_snap",
+                "rejected_reason": "ambiguous candidate snap",
+                "overlay_emitted": False,
+            },
+        },
+        {
+            "name": "duplicate_same_label_checkbox_target_id_with_geometry_rejects_overlay",
+            "capture": {"width": 1000, "height": 500},
+            "draw": [
+                {"rect": [120, 96, 160, 32], "label": "Subscribe"},
+                {"rect": [120, 150, 160, 32], "label": "Subscribe"},
+            ],
+            "decision": {
+                "kind": "step",
+                "instruction": "Select Subscribe checkbox.",
+                "target_id": "first_subscribe",
+                "target": {"x": 120, "y": 96, "width": 160, "height": 32},
+            },
+            "candidates": [
+                {"id": "first_subscribe", "text": "Subscribe", "control_type": "checkbox", "rect": [120, 96, 160, 32]},
+                {"id": "second_subscribe", "text": "Subscribe", "control_type": "checkbox", "rect": [120, 150, 160, 32]},
+            ],
+            "expected": {
+                "source": "candidate_snap",
+                "target_id": "first_subscribe",
                 "rejected_reason": "ambiguous candidate snap",
                 "overlay_emitted": False,
             },

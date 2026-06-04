@@ -11418,6 +11418,58 @@ class HelpTargetHarnessTests(unittest.TestCase):
 
         self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
 
+    def test_revalidation_rejects_reused_action_id_same_rect_longer_label(self) -> None:
+        from control_inventory import ControlCandidate
+        from help_session import _guard_revalidated_target, resolve_help_target
+        from rect_snap import SnapResult
+
+        decision = self._decision(
+            {
+                "kind": "step",
+                "instruction": "Click Save.",
+                "target_id": "save",
+                "target": {"x": 100, "y": 100, "width": 80, "height": 32},
+            }
+        )
+        previous_candidates = [
+            ControlCandidate(
+                "save",
+                "Save",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Editor",
+                window_rank=0,
+            ),
+        ]
+        current_candidates = [
+            ControlCandidate(
+                "save",
+                "Save draft",
+                "button",
+                (100, 100, 80, 32),
+                window_title="Editor",
+                window_rank=0,
+            ),
+        ]
+
+        previous_target = resolve_help_target(decision, self._capture(), previous_candidates)
+        current_target = resolve_help_target(decision, self._capture(), current_candidates)
+        guarded = _guard_revalidated_target(
+            decision=decision,
+            capture=self._capture(),
+            candidates=current_candidates,
+            previous_target=previous_target,
+            previous_candidates=previous_candidates,
+            target=current_target,
+            snapper=lambda rect, _instruction: SnapResult(rect=rect, confidence=0.0, source="model"),
+        )
+
+        self.assertEqual(previous_target.target_id, "save")
+        self.assertFalse(previous_target.rejected_reason)
+        self.assertEqual(current_target.target_id, "save")
+        self.assertFalse(current_target.rejected_reason)
+        self.assertEqual(guarded.rejected_reason, "current screen recheck target changed")
+
     def test_revalidation_rejects_control_moved_to_background_window(self) -> None:
         from control_inventory import ControlCandidate, TargetResolution
         from help_session import _guard_revalidated_target
@@ -17237,6 +17289,151 @@ class HelpTargetHarnessTests(unittest.TestCase):
         self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
         self.assertEqual(help_target.source, "candidate_snap")
         self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
+    def test_duplicate_same_label_state_controls_target_id_with_geometry_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        cases = (
+            (
+                "visible_checkbox",
+                "checkbox",
+                "Select Subscribe checkbox.",
+                "Subscribe",
+                [
+                    ControlCandidate("a", "Subscribe", "checkbox", (100, 100, 160, 32)),
+                    ControlCandidate("b", "Subscribe", "checkbox", (100, 150, 160, 32)),
+                ],
+                (100, 100, 160, 32),
+            ),
+            (
+                "visible_radio",
+                "radiobutton",
+                "Select Weekly radio.",
+                "Weekly",
+                [
+                    ControlCandidate("a", "Weekly", "radiobutton", (100, 100, 160, 32)),
+                    ControlCandidate("b", "Weekly", "radiobutton", (100, 150, 160, 32)),
+                ],
+                (100, 100, 160, 32),
+            ),
+            (
+                "nearby_label_checkbox",
+                "checkbox",
+                "Select Subscribe checkbox.",
+                "",
+                [
+                    ControlCandidate("label_a", "Subscribe", "text", (132, 100, 120, 32)),
+                    ControlCandidate("a", "", "checkbox", (100, 104, 24, 24)),
+                    ControlCandidate("label_b", "Subscribe", "text", (132, 150, 120, 32)),
+                    ControlCandidate("b", "", "checkbox", (100, 154, 24, 24)),
+                ],
+                (100, 104, 24, 24),
+            ),
+            (
+                "nearby_label_radio",
+                "radiobutton",
+                "Select Subscribe radio.",
+                "",
+                [
+                    ControlCandidate("label_a", "Subscribe", "text", (132, 100, 120, 32)),
+                    ControlCandidate("a", "", "radiobutton", (100, 104, 24, 24)),
+                    ControlCandidate("label_b", "Subscribe", "text", (132, 150, 120, 32)),
+                    ControlCandidate("b", "", "radiobutton", (100, 154, 24, 24)),
+                ],
+                (100, 104, 24, 24),
+            ),
+        )
+        for name, _control_type, instruction, _label, candidates, rect in cases:
+            with self.subTest(name=name):
+                target_id = resolve_candidate_target(
+                    target_id="a",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=rect,
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "a",
+                            "target": {
+                                "x": rect[0],
+                                "y": rect[1],
+                                "width": rect[2],
+                                "height": rect[3],
+                            },
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertEqual(target_id.source, "target_id")
+                self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+
+    def test_duplicate_same_label_state_control_uses_requested_section_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("ship_group", "Shipping", "group", (80, 80, 280, 70)),
+            ControlCandidate("ship", "Subscribe", "checkbox", (100, 100, 160, 32)),
+            ControlCandidate("bill_group", "Billing", "group", (80, 150, 280, 70)),
+            ControlCandidate("bill", "Subscribe", "checkbox", (100, 170, 160, 32)),
+        ]
+        instruction = "Select Subscribe checkbox in Billing."
+
+        wrong_target = resolve_candidate_target(
+            target_id="ship",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 100, 160, 32),
+        )
+        right_target = resolve_candidate_target(
+            target_id="bill",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 170, 160, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(100, 170, 160, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "ship",
+                    "target": {"x": 100, "y": 100, "width": 160, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(wrong_target.source, "target_id")
+        self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+        self.assertEqual(right_target.source, "target_id")
+        self.assertFalse(right_target.rejected_reason)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "bill")
+        self.assertFalse(snap_target.rejected_reason)
+        self.assertEqual(help_target.source, "text_match")
+        self.assertEqual(help_target.target_id, "bill")
+        self.assertFalse(help_target.rejected_reason)
 
     def test_duplicate_state_only_radios_and_values_stay_ambiguous_without_identity(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
@@ -26088,6 +26285,63 @@ class HelpTargetHarnessTests(unittest.TestCase):
             help_target.rejected_reason,
             {"target_id ambiguous", "ambiguous candidate snap", "candidate snapshot no match"},
         )
+
+    def test_duplicate_table_cell_mixed_text_and_automation_row_only_context_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("status_header", "Status", "headeritem", (180, 40, 140, 32)),
+            ControlCandidate("plan_header", "Plan", "headeritem", (340, 40, 140, 32)),
+            ControlCandidate("acme_row", "Acme", "dataitem", (20, 100, 500, 32)),
+            ControlCandidate("acme_name", "Acme", "rowheader", (20, 100, 140, 32)),
+            ControlCandidate("acme_status", "Active", "cell", (180, 100, 140, 32)),
+            ControlCandidate("acme_plan", "", "cell", (340, 100, 140, 32), automation_id="Active"),
+            ControlCandidate("globex_row", "Globex", "dataitem", (20, 150, 500, 32)),
+            ControlCandidate("globex_name", "Globex", "rowheader", (20, 150, 140, 32)),
+            ControlCandidate("globex_status", "Active", "cell", (180, 150, 140, 32)),
+            ControlCandidate("globex_plan", "", "cell", (340, 150, 140, 32), automation_id="Active"),
+        ]
+        instruction = "Click the Active cell in the Acme row."
+
+        target_id = resolve_candidate_target(
+            target_id="acme_status",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        text_target = resolve_candidate_target(
+            target_id="",
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        snap_target = snap_candidate_target(
+            instruction=instruction,
+            candidates=candidates,
+            model_rect=(180, 100, 140, 32),
+        )
+        help_target = resolve_help_target(
+            self._decision(
+                {
+                    "kind": "step",
+                    "instruction": instruction,
+                    "target_id": "acme_status",
+                    "target": {"x": 180, "y": 100, "width": 140, "height": 32},
+                }
+            ),
+            self._capture(),
+            candidates,
+        )
+
+        self.assertEqual(target_id.rejected_reason, "target_id ambiguous")
+        self.assertTrue(text_target is None or text_target.rejected_reason)
+        self.assertEqual(snap_target.source, "candidate_snap")
+        self.assertEqual(snap_target.target_id, "acme_status")
+        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+        self.assertEqual(help_target.source, "candidate_snap")
+        self.assertEqual(help_target.target_id, "acme_status")
+        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
     def test_duplicate_table_cell_without_context_stays_ambiguous(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target

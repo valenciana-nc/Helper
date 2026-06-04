@@ -938,6 +938,7 @@ def _guard_revalidated_target(
     ):
         return replace(target, rejected_reason="current screen recheck target changed")
     if _revalidated_action_identity_changed(
+        decision.instruction,
         previous_target,
         target,
         previous_candidates or [],
@@ -1189,6 +1190,7 @@ def _tabular_identity_tokens(text: str) -> set[str]:
 
 
 def _revalidated_action_identity_changed(
+    instruction: str,
     previous_target: TargetResolution,
     target: TargetResolution,
     previous_candidates: list[ControlCandidate],
@@ -1217,8 +1219,29 @@ def _revalidated_action_identity_changed(
     if not current_tokens:
         return True
     overlap = previous_tokens & current_tokens
+    if _revalidated_action_label_gained_unrequested_tokens(
+        instruction,
+        previous_tokens,
+        current_tokens,
+    ):
+        return True
     similarity = len(overlap) / max(1, max(len(previous_tokens), len(current_tokens)))
     return similarity < 0.5
+
+
+def _revalidated_action_label_gained_unrequested_tokens(
+    instruction: str,
+    previous_tokens: set[str],
+    current_tokens: set[str],
+) -> bool:
+    added_tokens = current_tokens - previous_tokens
+    if not added_tokens:
+        return False
+    requested_tokens = (
+        _tokens_from_text(instruction or "")
+        | _tokenize_instruction(instruction or "")
+    ) - ACTION_IDENTITY_REVALIDATION_GENERIC_WORDS
+    return not added_tokens <= requested_tokens
 
 
 def _revalidation_candidate_for_target(

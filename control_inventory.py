@@ -2507,6 +2507,12 @@ def snap_candidate_target(
         )
     if (
         _neutral_same_label_state_option_ambiguous(instruction, candidate, candidates)
+        or _duplicate_same_label_state_control_ambiguous(
+            instruction,
+            instruction_tokens,
+            candidate,
+            candidates,
+        )
         or _duplicate_cell_context_target_ambiguous(instruction, candidate, candidates)
         or _duplicate_labelled_field_control_ambiguous(instruction, candidate, candidates)
         or (
@@ -4280,6 +4286,17 @@ def _target_id_plausibility(
             text_score,
             "target_id ambiguous",
         )
+    if _duplicate_same_label_state_control_ambiguous(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return (
+            False,
+            text_score,
+            "target_id ambiguous",
+        )
     if _explicit_subtype_alternative_mismatch(instruction, candidate, candidates):
         return (
             False,
@@ -5187,6 +5204,130 @@ def _duplicate_state_only_control_ambiguous(
             continue
         return True
     return False
+
+
+def _duplicate_same_label_state_control_ambiguous(
+    instruction: str,
+    instruction_tokens: set[str],
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> bool:
+    if candidate.control_type not in {"checkbox", "radiobutton"}:
+        return False
+    if _candidate_satisfies_positional_action_duplicate_request(
+        instruction,
+        instruction_tokens,
+        candidate,
+        candidates,
+    ):
+        return False
+    label_tokens = _state_control_duplicate_label_tokens(candidate, candidates)
+    if not label_tokens:
+        return False
+    request_tokens = _object_token_variants(
+        _tokens_from_text(instruction) | instruction_tokens
+    ) - _state_control_duplicate_label_stopwords(candidate.control_type)
+    if request_tokens and not (request_tokens & label_tokens):
+        return False
+    peer_label_tokens = [
+        _state_control_duplicate_label_tokens(other, candidates)
+        for other in candidates
+        if other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+    ]
+    peers = [
+        other
+        for other in candidates
+        if other.id != candidate.id
+        and not _same_visual_candidate(other, candidate)
+        and other.control_type == candidate.control_type
+        and label_tokens & _state_control_duplicate_label_tokens(other, candidates)
+    ]
+    if not peers:
+        return False
+    if (
+        request_tokens
+        and request_tokens <= label_tokens
+        and not any(request_tokens <= tokens for tokens in peer_label_tokens)
+    ):
+        return False
+    requested_context = _contextual_duplicate_request_tokens(
+        instruction,
+        candidate,
+        candidates,
+    )
+    if not requested_context:
+        return True
+    selected_evidence = _contextual_duplicate_evidence_tokens(candidate, candidates)
+    if not _contextual_duplicate_request_matches_evidence(
+        requested_context,
+        selected_evidence,
+    ):
+        return True
+    return any(
+        _contextual_duplicate_request_matches_evidence(
+            requested_context,
+            _contextual_duplicate_evidence_tokens(other, candidates),
+        )
+        and _candidates_have_requested_context_carriers(
+            requested_context,
+            candidate,
+            other,
+            candidates,
+        )
+        for other in peers
+    )
+
+
+def _state_control_duplicate_label_tokens(
+    candidate: ControlCandidate,
+    candidates: list[ControlCandidate],
+) -> set[str]:
+    if candidate.control_type not in {"checkbox", "radiobutton"}:
+        return set()
+    tokens = _field_alternative_label_tokens(
+        candidate,
+        candidates,
+    ) | _nearby_unlabeled_control_label_tokens(candidate, candidates)
+    return _object_token_variants(tokens) - _state_control_duplicate_label_stopwords(
+        candidate.control_type
+    )
+
+
+def _state_control_duplicate_label_stopwords(control_type: str) -> set[str]:
+    words = {
+        "a",
+        "an",
+        "button",
+        "buttons",
+        "click",
+        "control",
+        "controls",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "of",
+        "on",
+        "option",
+        "options",
+        "select",
+        "selected",
+        "state",
+        "the",
+        "this",
+        "that",
+        "to",
+        "under",
+        "within",
+    }
+    if control_type == "checkbox":
+        words.update({"box", "check", "checked", "checkbox", "switch", "toggle"})
+    elif control_type == "radiobutton":
+        words.update({"radio", "radiobutton"})
+    return words
 
 
 def _state_control_identity_match_has_duplicate(
@@ -7756,10 +7897,10 @@ def _duplicate_cell_context_key(candidate: ControlCandidate) -> str:
         return ""
     visible = _candidate_text_key(candidate.text)
     if visible:
-        return f"text:{visible}"
+        return visible
     automation = _candidate_text_key(candidate.automation_id)
     if automation:
-        return f"automation:{automation}"
+        return automation
     return ""
 
 
