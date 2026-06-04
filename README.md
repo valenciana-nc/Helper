@@ -185,7 +185,10 @@ guessing. The inventory resolver applies the same caution when duplicates share
 the requested context, such as two `Email` fields inside the same `Billing`
 group. Numeric/current-value sliders also apply that partial-label policy to
 borrowed nearby labels, so `Volume` no longer matches `Volume level` just
-because the slider itself only exposes `50`.
+because the slider itself only exposes `50`. Named-control action verbs such
+as `choose`, `use`, `adjust`, and `set` are treated as command words rather
+than label/context evidence, so duplicate dropdowns and spinners still need a
+real section, row, position, or label discriminator before Helper highlights.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,

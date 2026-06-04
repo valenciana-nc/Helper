@@ -36502,6 +36502,8 @@ class HelpTargetHarnessTests(unittest.TestCase):
         for instruction in (
             "Open Country dropdown in Billing.",
             "Open Billing Country dropdown.",
+            "Choose Billing Country dropdown.",
+            "Use Billing Country picker.",
         ):
             with self.subTest(instruction=instruction):
                 wrong_target = resolve_candidate_target(
@@ -36557,57 +36559,189 @@ class HelpTargetHarnessTests(unittest.TestCase):
             ControlCandidate("bill_country_label", "Country", "text", (20, 202, 80, 24)),
             ControlCandidate("bill_country", "Canada", "combobox", (120, 196, 260, 36)),
         ]
-        instruction = "Open Country dropdown."
+        for instruction in (
+            "Open Country dropdown.",
+            "Choose Country dropdown.",
+            "Use Country picker.",
+        ):
+            with self.subTest(instruction=instruction):
+                ship_target = resolve_candidate_target(
+                    target_id="ship_country",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                bill_target = resolve_candidate_target(
+                    target_id="bill_country",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 196, 260, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 260, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "ship_country",
+                            "target": {"x": 120, "y": 76, "width": 260, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
 
-        ship_target = resolve_candidate_target(
-            target_id="ship_country",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 76, 260, 36),
-        )
-        bill_target = resolve_candidate_target(
-            target_id="bill_country",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 196, 260, 36),
-        )
-        text_target = resolve_candidate_target(
-            target_id="",
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 76, 260, 36),
-        )
-        snap_target = snap_candidate_target(
-            instruction=instruction,
-            candidates=candidates,
-            model_rect=(120, 76, 260, 36),
-        )
-        help_target = resolve_help_target(
-            self._decision(
-                {
-                    "kind": "step",
-                    "instruction": instruction,
-                    "target_id": "ship_country",
-                    "target": {"x": 120, "y": 76, "width": 260, "height": 36},
-                }
-            ),
-            self._capture(),
-            candidates,
-        )
+                for target in (ship_target, bill_target):
+                    self.assertIsNotNone(target)
+                    assert target is not None
+                    self.assertEqual(target.source, "target_id")
+                    self.assertEqual(target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
-        for target in (ship_target, bill_target):
-            self.assertIsNotNone(target)
-            assert target is not None
-            self.assertEqual(target.source, "target_id")
-            self.assertEqual(target.rejected_reason, "target_id ambiguous")
-        self.assertIsNotNone(text_target)
-        assert text_target is not None
-        self.assertEqual(text_target.source, "text_match")
-        self.assertEqual(text_target.rejected_reason, "ambiguous text match")
-        self.assertEqual(snap_target.source, "candidate_snap")
-        self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
-        self.assertEqual(help_target.source, "candidate_snap")
-        self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
+    def test_repeated_current_value_spinner_action_words_use_section_context(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_header", "Billing", "text", (20, 30, 120, 24)),
+            ControlCandidate("billing_label", "Retries", "text", (20, 82, 80, 24)),
+            ControlCandidate("billing_retries", "3", "spinner", (120, 76, 120, 36)),
+            ControlCandidate("shipping_header", "Shipping", "text", (20, 150, 120, 24)),
+            ControlCandidate("shipping_label", "Retries", "text", (20, 202, 80, 24)),
+            ControlCandidate("shipping_retries", "3", "spinner", (120, 196, 120, 36)),
+        ]
+
+        for instruction in (
+            "Adjust Retries spinner in Shipping.",
+            "Set Shipping Retries spinner.",
+        ):
+            with self.subTest(instruction=instruction):
+                wrong_target = resolve_candidate_target(
+                    target_id="billing_retries",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "billing_retries",
+                            "target": {"x": 120, "y": 76, "width": 120, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                self.assertIsNotNone(wrong_target)
+                assert wrong_target is not None
+                self.assertEqual(wrong_target.source, "target_id")
+                self.assertEqual(wrong_target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.target_id, "shipping_retries")
+                self.assertFalse(text_target.rejected_reason)
+                self.assertIsNone(snap_target)
+                self.assertEqual(help_target.source, "text_match")
+                self.assertEqual(help_target.target_id, "shipping_retries")
+                self.assertFalse(help_target.rejected_reason)
+                self.assertEqual(help_target.rect, (120, 196, 120, 36))
+
+    def test_repeated_current_value_spinner_without_context_stays_ambiguous(self) -> None:
+        from control_inventory import ControlCandidate, resolve_candidate_target, snap_candidate_target
+        from help_session import resolve_help_target
+
+        candidates = [
+            ControlCandidate("billing_label", "Retries", "text", (20, 82, 80, 24)),
+            ControlCandidate("billing_retries", "3", "spinner", (120, 76, 120, 36)),
+            ControlCandidate("shipping_label", "Retries", "text", (20, 202, 80, 24)),
+            ControlCandidate("shipping_retries", "3", "spinner", (120, 196, 120, 36)),
+        ]
+
+        for instruction in (
+            "Adjust Retries spinner.",
+            "Set Retries spinner.",
+        ):
+            with self.subTest(instruction=instruction):
+                billing_target = resolve_candidate_target(
+                    target_id="billing_retries",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                shipping_target = resolve_candidate_target(
+                    target_id="shipping_retries",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 196, 120, 36),
+                )
+                text_target = resolve_candidate_target(
+                    target_id="",
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                snap_target = snap_candidate_target(
+                    instruction=instruction,
+                    candidates=candidates,
+                    model_rect=(120, 76, 120, 36),
+                )
+                help_target = resolve_help_target(
+                    self._decision(
+                        {
+                            "kind": "step",
+                            "instruction": instruction,
+                            "target_id": "billing_retries",
+                            "target": {"x": 120, "y": 76, "width": 120, "height": 36},
+                        }
+                    ),
+                    self._capture(),
+                    candidates,
+                )
+
+                for target in (billing_target, shipping_target):
+                    self.assertIsNotNone(target)
+                    assert target is not None
+                    self.assertEqual(target.source, "target_id")
+                    self.assertEqual(target.rejected_reason, "target_id ambiguous")
+                self.assertIsNotNone(text_target)
+                assert text_target is not None
+                self.assertEqual(text_target.source, "text_match")
+                self.assertEqual(text_target.rejected_reason, "ambiguous text match")
+                self.assertEqual(snap_target.source, "candidate_snap")
+                self.assertEqual(snap_target.rejected_reason, "ambiguous candidate snap")
+                self.assertEqual(help_target.source, "candidate_snap")
+                self.assertEqual(help_target.rejected_reason, "ambiguous candidate snap")
 
     def test_named_field_rejects_when_requested_context_disappears(self) -> None:
         from control_inventory import ControlCandidate, resolve_candidate_target

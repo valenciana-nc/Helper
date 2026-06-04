@@ -504,12 +504,19 @@ NAMED_CONTROL_ROLE_WORDS = TEXT_ENTRY_FIELD_WORDS | frozenset(
         "toggle",
     }
 )
-NAMED_CONTROL_LABEL_BOUNDARY_WORDS = (
-    OPEN_VIEW_REQUEST_WORDS
-    | GENERIC_OBJECT_REQUEST_WORDS
+NAMED_CONTROL_ACTION_WORDS = (
+    ADJUSTABLE_CONTROL_ACTION_WORDS
     | FIELD_ENTRY_ACTION_WORDS
+    | FILE_PICKER_ACTION_WORDS
+    | OPEN_VIEW_REQUEST_WORDS
     | CHECKBOX_ON_ACTION_WORDS
     | CHECKBOX_OFF_ACTION_WORDS
+    | frozenset({"choose", "select", "use"})
+)
+NAMED_CONTROL_LABEL_BOUNDARY_WORDS = (
+    NAMED_CONTROL_ACTION_WORDS
+    | OPEN_VIEW_REQUEST_WORDS
+    | GENERIC_OBJECT_REQUEST_WORDS
     | NAMED_CONTROL_ROLE_WORDS
     | CONTEXTUAL_DUPLICATE_CONTAINER_WORDS
     | CONTEXTUAL_DUPLICATE_POSITION_WORDS
@@ -7220,6 +7227,7 @@ def _named_control_requested_literal_context_tokens(
     context_tokens = _tokens_from_text(instruction)
     context_tokens -= requested_label
     context_tokens -= NAMED_CONTROL_LABEL_STOPWORDS
+    context_tokens -= NAMED_CONTROL_ACTION_WORDS
     context_tokens -= OPEN_VIEW_REQUEST_WORDS
     context_tokens -= GENERIC_OBJECT_REQUEST_WORDS
     context_tokens -= FIELD_ENTRY_ACTION_WORDS
@@ -7256,6 +7264,7 @@ def _named_control_requested_context_tokens(
     context_tokens = _object_token_variants(raw_tokens | _tokenize_instruction(instruction))
     context_tokens -= requested_label
     context_tokens -= NAMED_CONTROL_LABEL_STOPWORDS
+    context_tokens -= NAMED_CONTROL_ACTION_WORDS
     context_tokens -= OPEN_VIEW_REQUEST_WORDS
     context_tokens -= GENERIC_OBJECT_REQUEST_WORDS
     context_tokens -= FIELD_ENTRY_ACTION_WORDS
