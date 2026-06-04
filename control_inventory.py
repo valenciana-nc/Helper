@@ -7448,7 +7448,7 @@ def _same_row_named_control_context_tokens(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
 ) -> set[str]:
-    if candidate.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"slider"}):
+    if candidate.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
         return set()
     tokens: set[str] = set()
     for label in candidates:
@@ -7471,7 +7471,7 @@ def _same_row_named_control_label_rect_matches(
     label: ControlCandidate,
     control: ControlCandidate,
 ) -> bool:
-    if control.control_type not in (LABELLED_FIELD_CONTROL_TYPES | {"slider"}):
+    if control.control_type not in NEARBY_LABELLED_CONTROL_TYPES:
         return False
     label_x, label_y, label_width, label_height = label.rect
     control_x, control_y, control_width, control_height = control.rect

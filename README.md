@@ -192,11 +192,11 @@ only exposes `50`. Named-control action verbs such as `choose`, `use`,
 `adjust`, and `set` are treated as command words rather than label/context
 evidence, so duplicate dropdowns and spinners still need a real section, row,
 position, or label discriminator before Helper highlights.
-For table-style UIs, current-value dropdowns and similar named controls also
-borrow same-line sibling cell text as row context, so a request like
-`Globex Status` cannot silently highlight the `Status` dropdown on the Acme row
-when the row identity is exposed as a neighboring cell instead of a row
-container.
+For table-style UIs, current-value dropdowns, checkboxes, radio buttons, and
+similar named controls also borrow same-line sibling cell text as row context,
+so a request like `Globex Status` cannot silently highlight the `Status`
+dropdown or checkbox on the Acme row when the row identity is exposed as a
+neighboring cell instead of a row container.
 
 OCR uses native Windows OCR through PyWinRT and is optional at runtime. Set
 `HELP_OCR_TEXT_VERIFY=0` to disable the OCR text gate while keeping the UIA,
