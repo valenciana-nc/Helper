@@ -37,6 +37,21 @@ log = logging.getLogger("helper.anthropic")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# Sampling parameters were removed from these model families; sending
+# `temperature` returns HTTP 400. Matched by prefix so dated and future
+# point-release IDs are covered. Extend when Anthropic ships new families.
+SAMPLING_UNSUPPORTED_MODEL_PREFIXES = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-fable",
+    "claude-mythos",
+)
+
+
+def model_accepts_temperature(model: str) -> bool:
+    normalized = (model or "").strip().lower()
+    return not normalized.startswith(SAMPLING_UNSUPPORTED_MODEL_PREFIXES)
+
 
 class AnthropicProvider:
     def __init__(
@@ -133,7 +148,7 @@ class AnthropicProvider:
         }
         if system_text:
             body["system"] = system_text
-        if temperature is not None:
+        if temperature is not None and model_accepts_temperature(model):
             body["temperature"] = float(temperature)
         return body
 

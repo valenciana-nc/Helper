@@ -176,6 +176,48 @@ class FastActionTests(unittest.TestCase):
         self.assertEqual(action.raw_args["label"], "save")
 
 
+class AnthropicProviderTests(unittest.TestCase):
+    def _body(self, model: str) -> dict:
+        from anthropic_client import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="test-key")
+        return provider._body(
+            [{"role": "user", "parts": [{"text": "hi"}]}],
+            model=model,
+            system_prompt=None,
+            temperature=0.7,
+            max_tokens=256,
+        )
+
+    def test_temperature_sent_to_models_that_accept_it(self) -> None:
+        self.assertEqual(self._body("claude-sonnet-4-6").get("temperature"), 0.7)
+        self.assertEqual(self._body("claude-haiku-4-5").get("temperature"), 0.7)
+
+    def test_temperature_omitted_for_sampling_removed_models(self) -> None:
+        # Opus 4.7+ and the Fable/Mythos families reject sampling params with
+        # HTTP 400, so the body must not include temperature for them.
+        for model in (
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-fable-5",
+            "claude-mythos-5",
+        ):
+            with self.subTest(model=model):
+                self.assertNotIn("temperature", self._body(model))
+
+    def test_curated_anthropic_menu_models_build_valid_bodies(self) -> None:
+        import config
+        from anthropic_client import model_accepts_temperature
+
+        for model in config.PROVIDER_MODELS["anthropic"]:
+            with self.subTest(model=model):
+                body = self._body(model)
+                self.assertEqual(body["model"], model)
+                self.assertEqual(
+                    "temperature" in body, model_accepts_temperature(model)
+                )
+
+
 class ProviderTests(unittest.TestCase):
     def test_parse_response_reads_text_and_tool_calls(self) -> None:
         result = _parse_response(

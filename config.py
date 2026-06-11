@@ -239,9 +239,9 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "codex": ["gpt-5.5", "gpt-5", "gpt-4.1", "o3", "o3-mini"],
     "openai_compat": [],
     "anthropic": [
-        "claude-opus-4-7",
+        "claude-opus-4-8",
         "claude-sonnet-4-6",
-        "claude-haiku-4-5-20251001",
+        "claude-haiku-4-5",
     ],
     "gemini": [
         "gemini-2.5-pro",
