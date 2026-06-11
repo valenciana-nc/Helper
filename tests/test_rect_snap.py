@@ -37878,5 +37878,57 @@ class LooksOversizedTests(unittest.TestCase):
         self.assertTrue(looks_oversized(self._make_decision(40, 450)))
 
 
+class GroupStateLabelIdentityTests(unittest.TestCase):
+    """Regression: candidates whose text contains 'group' must not crash the snap.
+
+    rect_snap once referenced BROWSER_GROUP_STATE_WORDS without defining it
+    (the function was copied from control_inventory without its constant), so
+    any snap that scored a 'group'-labelled control raised NameError.
+    """
+
+    def test_group_state_candidate_snaps_without_error(self) -> None:
+        from rect_snap import snap_to_control
+
+        group_row = _make_button("Work group collapsed", 100, 100, 220, 36)
+        window = _make_window("Browser", 0, 0, 800, 600, [group_row])
+        desktop = _FakeDesktop([window])
+
+        result = snap_to_control(
+            (96, 96, 230, 44),
+            "Expand the Work group.",
+            desktop_factory=lambda: desktop,
+            timeout_ms=2000,
+        )
+
+        self.assertEqual(result.source, "uia")
+        self.assertEqual(result.rect, (100, 100, 220, 36))
+        self.assertFalse(result.rejected_reason)
+
+    def test_group_state_identity_helper_handles_group_tokens(self) -> None:
+        from rect_snap import _state_label_is_target_identity
+
+        self.assertTrue(
+            _state_label_is_target_identity(
+                {"expand", "work", "group"},
+                {"work", "group", "collapsed"},
+            )
+        )
+        self.assertFalse(
+            _state_label_is_target_identity(
+                {"open", "settings"},
+                {"notifications", "group", "collapsed"},
+            )
+        )
+
+    def test_group_state_words_match_control_inventory(self) -> None:
+        import control_inventory
+        import rect_snap
+
+        self.assertEqual(
+            rect_snap.BROWSER_GROUP_STATE_WORDS,
+            control_inventory.BROWSER_GROUP_STATE_WORDS,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -394,6 +394,9 @@ ACTION_OBJECT_ALIAS_CONTEXT_WORDS = FILE_IDENTITY_WORDS | frozenset(
 )
 BROWSER_TAB_WORDS = frozenset({"tab", "tabs", "tabitem"})
 BROWSER_WINDOW_WORDS = frozenset({"window", "windows"})
+# Keep in sync with control_inventory.BROWSER_GROUP_STATE_WORDS (rect_snap stays
+# import-independent from control_inventory; tests assert the copies match).
+BROWSER_GROUP_STATE_WORDS = frozenset({"closed", "collapsed", "expanded", "open"})
 CONTEXTUAL_NAV_ITEM_CONTAINER_WORDS = frozenset({"drawer", "nav", "navigation", "rail", "rails", "sidebar"})
 GENERIC_VISIBILITY_SHOW_WORDS = frozenset({"show"})
 GENERIC_VISIBILITY_HIDE_WORDS = frozenset({"hide"})
@@ -4475,7 +4478,7 @@ def _full_field_label_request_exists(
     selected_window_rank: int,
     snapped_field_label_contexts: list[tuple[tuple[int, int, int, int], str, str, int]],
 ) -> bool:
-    for rect, label_text, ctype, window_rank in snapped_field_label_contexts:
+    for _rect, label_text, ctype, window_rank in snapped_field_label_contexts:
         if ctype != selected_ctype or window_rank != selected_window_rank:
             continue
         label_words = set(_literal_word_sequence(label_text)) - PARTIAL_FIELD_LABEL_EXTRA_STOPWORDS
