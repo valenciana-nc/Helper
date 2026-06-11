@@ -2586,7 +2586,7 @@ class HelpSession(QObject):
                     previous_capture=capture,
                     previous_candidates=candidates,
                 )
-            except Exception as exc:
+            except Exception:
                 reason = "current screen recheck failed"
                 log.exception("Pre-overlay target recheck failed")
                 rejected = replace(target, rejected_reason=reason)

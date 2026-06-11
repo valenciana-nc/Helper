@@ -7377,7 +7377,7 @@ def _strict_text_entry_requested_label_tokens(instruction: str) -> set[str]:
 
 def _named_control_requested_label_tokens(instruction: str, control_type: str) -> set[str]:
     words = _literal_word_sequence(instruction)
-    for index, word in enumerate(words):
+    for index in range(len(words)):
         role_prefix = _named_control_role_prefix_width(words, index, control_type)
         if role_prefix is None:
             continue
@@ -11308,7 +11308,6 @@ def _surface_row_action_rect_matches(
     vertical_overlap = min(row_y + row_height, action_y + action_height) - max(row_y, action_y)
     if vertical_overlap < min(row_height, action_height) * 0.45:
         return False
-    row_left = row_x
     row_right = row_x + row_width
     action_left = action_x
     if action_left < row_right - 2:

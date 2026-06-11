@@ -1035,6 +1035,8 @@ def _clip_box(
 
 
 async def _recognize_image_path(path: Path) -> str:
+    # Side-effect imports: register the WinRT projection modules that the
+    # OCR API depends on before BitmapDecoder/OcrEngine are touched.
     import winrt.windows.foundation.collections as _foundation_collections  # noqa: F401
     import winrt.windows.globalization as _globalization  # noqa: F401
     from winrt.windows.graphics.imaging import BitmapDecoder

@@ -47,7 +47,7 @@ log = logging.getLogger("helper")
 if TYPE_CHECKING:
     from agent import GuideAction, GuideSession, GuideTurn, HelplerAgent
     from audio_handler import AudioHandler
-    from computer_control import AbortRequested, ConfirmationRequest, ComputerController
+    from computer_control import ConfirmationRequest, ComputerController
     from help_session import HelpSession
 
 
@@ -142,9 +142,9 @@ def run_active_continuation_loop(
                 try:
                     sleep_fn(abort, backoffs[attempt])
                 except Exception:
-                    raise last_exc
+                    raise last_exc from None
                 if abort.is_aborted():
-                    raise last_exc
+                    raise last_exc from None
                 attempt += 1
 
     def _emit_wrapup(message: str) -> "GuideTurn":
@@ -1133,7 +1133,7 @@ class HelplerDesktopApp(QObject):
                 [sys.executable, *sys.argv],
                 close_fds=True,
             )
-        except Exception as exc:
+        except Exception:
             log.exception("Restart failed")
             return
         self._handle_quit_requested()

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import QEasingCurve, QObject, QPointF, QRectF, QTimer, Qt
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QFont,
     QFontMetrics,

@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import patch
 
 from agent import HelplerAgent
-from openai_client import ChatResult
 
 
 class FakeClient:

@@ -475,7 +475,6 @@ class FloatingCircle(QWidget):
             col_base = QColor(75, 200, 180, 250)
 
         col_white = QColor(230, 245, 255)
-        col_deep = mix_color(col_base, QColor(0, 10, 40), 0.55)
 
         level = 0.0
         bass = 0.0

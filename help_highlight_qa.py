@@ -11,7 +11,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from agent import _parse_live_help_decision
-from control_inventory import ControlCandidate, TargetResolution
+from control_inventory import ControlCandidate
 from help_session import (
     _foreground_candidate_covering_reason,
     _guard_revalidated_target,

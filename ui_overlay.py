@@ -17,9 +17,9 @@ def _set_dpi_aware() -> None:
 
 _set_dpi_aware()
 
-from PyQt6.QtCore import QObject, QPointF, QRect, QTimer, Qt
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtCore import QObject, QPointF, QRect, QTimer, Qt  # noqa: E402
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 
 user32 = ctypes.windll.user32
