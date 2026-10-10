@@ -46,6 +46,17 @@ TERMINAL_TITLE_KEYWORDS = (
     "python",
 )
 
+# Key combos that are destructive even with an innocent description.
+# Normalized as frozensets of lowercase key names to match _normalize_keys.
+DESTRUCTIVE_KEY_COMBOS = frozenset(
+    {
+        frozenset({"shift", "delete"}),  # permanent delete, bypasses Recycle Bin
+        frozenset({"alt", "f4"}),  # kills the foreground app
+        frozenset({"ctrl", "shift", "delete"}),
+        frozenset({"ctrl", "alt", "delete"}),
+    }
+)
+
 
 class AbortRequested(RuntimeError):
     """Raised when Esc or the PyAutoGUI fail-safe aborts the current action."""
@@ -458,6 +469,15 @@ class ComputerController:
             text = str(payload.get("text") or "").strip()
             if text:
                 candidates.append(text)
+
+        if action == "key":
+            # The description is model-generated and not a safety boundary;
+            # inspect the actual combo for destructive keys.
+            keys = payload.get("keys")
+            if isinstance(keys, (list, tuple)):
+                normalized = frozenset(str(k).strip().lower() for k in keys)
+                if normalized in DESTRUCTIVE_KEY_COMBOS:
+                    return f"key combination {'+'.join(sorted(normalized))}"
 
         for candidate in candidates:
             normalized = f" {candidate.lower()} "

@@ -411,6 +411,9 @@ HELP_BLOCKED_ACTIONS = frozenset(
         "click_control",
         "type_text_at",
         "drag_and_drop",
+        # Fast-action hotkeys (key_combination) also mutate state — a Help-mode
+        # "close tab" must not close the user's real tab.
+        "key_combination",
     }
 )
 
@@ -747,10 +750,12 @@ class HelplerDesktopApp(QObject):
         int, int, int, int, str, int, int, int
     )
     overlay_clear_requested = pyqtSignal()
+    ghost_clear_requested = pyqtSignal()
     help_overlay_clear_sync_requested = pyqtSignal(object)
     agent_message_received = pyqtSignal(str)
     user_message_received = pyqtSignal(str)
     chat_toggle_requested = pyqtSignal()
+    chat_window_toggle_requested = pyqtSignal()
     chat_show_requested = pyqtSignal()
     chat_status_changed = pyqtSignal(str)
 
@@ -818,9 +823,11 @@ class HelplerDesktopApp(QObject):
         self.caption_changed.connect(self._widget.set_caption)
         self.overlay_highlight_requested.connect(self._overlay.show_highlight)
         self.overlay_clear_requested.connect(self._overlay.clear)
+        self.ghost_clear_requested.connect(self._ghost_cursor.clear)
         self.agent_message_received.connect(self._handle_agent_message)
         self.user_message_received.connect(self._handle_user_message)
         self.chat_toggle_requested.connect(self._toggle_widget_chat)
+        self.chat_window_toggle_requested.connect(self._toggle_chat_window_if_visible)
         self.chat_show_requested.connect(self._show_chat_window)
         self.chat_status_changed.connect(self._on_chat_status_changed)
 
@@ -1056,6 +1063,15 @@ class HelplerDesktopApp(QObject):
     def _toggle_chat_window(self) -> None:
         self._chat_window.toggle_visibility()
         self._sync_tray_actions()
+
+    def _toggle_chat_window_if_visible(self) -> None:
+        # GUI-thread slot for the Esc hotkey: never touch QWidget from the
+        # pynput listener thread.
+        if self._chat_window.isVisible():
+            self._toggle_chat_window()
+        else:
+            self._audio.stop_playback()
+            self._controller.abort_controller.request_abort("Escape pressed.")
 
     def _show_chat_window(self) -> None:
         self._chat_window.show_chat()
@@ -1305,11 +1321,10 @@ class HelplerDesktopApp(QObject):
                 self.caption_changed.emit("")
                 self.widget_state_requested.emit(FloatingCircle.IDLE)
                 log.info("Recording canceled.")
-            elif self._chat_window.isVisible():
-                self._toggle_chat_window()
             else:
-                self._audio.stop_playback()
-                self._controller.abort_controller.request_abort("Escape pressed.")
+                # Never touch QWidget from the pynput thread; the signal
+                # queues the toggle/abort to the GUI thread.
+                self.chat_window_toggle_requested.emit()
                 log.info("Abort requested.")
             return None
 
@@ -1548,7 +1563,10 @@ class HelplerDesktopApp(QObject):
         self._help_session = HelpSession(
             self._agent,
             self._controller,
-            parent=self,
+            # parent=None: this may run on the voice worker thread, and a
+            # QObject cannot have a parent in a different thread. Lifetime
+            # is managed by the self._help_session reference.
+            parent=None,
             overlay_clear_barrier=self._clear_help_overlays_sync,
         )
         self._help_session.ghost_clear.connect(self._ghost_cursor.clear)
@@ -1583,8 +1601,10 @@ class HelplerDesktopApp(QObject):
         if not self._ensure_help_session() or self._help_session is None:
             self.agent_message_received.emit(self._backend_status_message())
             return
-        self._ghost_cursor.clear()
-        self._overlay.clear()
+        # Route via signals: this runs on the voice worker thread, and
+        # QTimer/QWidget calls are not allowed off the GUI thread.
+        self.ghost_clear_requested.emit()
+        self.overlay_clear_requested.emit()
         log.info("[HELP] %s", message)
         self.widget_state_requested.emit(FloatingCircle.THINKING)
         self.chat_status_changed.emit("Planning your walkthrough...")
