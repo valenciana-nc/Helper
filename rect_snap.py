@@ -1881,6 +1881,9 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
         is_own_process = (
             top_handle is not None and _is_own_process_window(top_handle)
         )
+        # Hoisted: identical for every descendant of this window; was 2 COM
+        # calls per yielded control.
+        top_visible_text = _control_visible_text(top)
         queue: list[tuple[object, tuple[int, int, int, int]]] = [(top, top_rect)]
         depth = 0
         while queue and depth < _MAX_BFS_DEPTH:
@@ -1897,7 +1900,7 @@ def _iter_candidates(desktop, search_rect, deadline, foreground_handle=None):
                     foreground_known,
                     top_handle,
                     control_handle,
-                    _control_visible_text(top),
+                    top_visible_text,
                 )
                 if time.monotonic() >= deadline:
                     return

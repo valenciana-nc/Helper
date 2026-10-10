@@ -43,6 +43,9 @@ ANTHROPIC_VERSION = "2023-06-01"
 SAMPLING_UNSUPPORTED_MODEL_PREFIXES = (
     "claude-opus-4-7",
     "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-5",
     "claude-fable",
     "claude-mythos",
 )
@@ -149,7 +152,9 @@ class AnthropicProvider:
         if system_text:
             body["system"] = system_text
         if temperature is not None and model_accepts_temperature(model):
-            body["temperature"] = float(temperature)
+            # Anthropic's valid range is 0-1 (the shared HELPER_TEMPERATURE
+            # setting allows up to 2.0 for other providers).
+            body["temperature"] = min(1.0, max(0.0, float(temperature)))
         return body
 
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -159,6 +164,7 @@ class AnthropicProvider:
             "content-type": "application/json",
         }
         last_error: ProviderError | None = None
+        retried_without_temperature = False
 
         for attempt in range(MAX_RETRIES + 1):
             try:
@@ -193,6 +199,22 @@ class AnthropicProvider:
                     last_error = RateLimited(message)
                 elif resp.status_code in RETRYABLE_STATUS_CODES:
                     last_error = ProviderUnavailable(message)
+                elif (
+                    resp.status_code == 400
+                    and not retried_without_temperature
+                    and "temperature" in body
+                    and "temperature" in (resp.text or "").lower()
+                ):
+                    # A model family newer than the prefix list above can
+                    # still reject sampling params. Retry once without
+                    # temperature instead of failing every call.
+                    retried_without_temperature = True
+                    body = {k: v for k, v in body.items() if k != "temperature"}
+                    log.warning(
+                        "Anthropic rejected temperature for model %s; retrying without it",
+                        body.get("model"),
+                    )
+                    continue
                 else:
                     raise ProviderError(message)
 

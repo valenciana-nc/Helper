@@ -186,7 +186,20 @@ def evaluate_target_quality(
             target_area_fraction=target_area_fraction,
         )
 
-    visual_activity, boundary_activity = _visual_activity(capture.png_bytes, clipped)
+    # Decode once: the helpers below previously re-decoded the full PNG
+    # ~11 times per call.
+    try:
+        with Image.open(io.BytesIO(capture.png_bytes)) as _img:
+            gray = _img.convert("L")
+    except Exception:
+        return TargetQuality(
+            accepted=False,
+            reason="could not decode capture",
+            visible_fraction=visible_fraction,
+            target_area_fraction=target_area_fraction,
+        )
+
+    visual_activity, boundary_activity = _visual_activity(gray, clipped)
     if (
         source != "model"
         and visual_activity < CANDIDATE_EMPTY_VISUAL_FLOOR
@@ -203,7 +216,7 @@ def evaluate_target_quality(
     if (
         source != "model"
         and _candidate_multiple_selection_indicators(
-            capture.png_bytes,
+            gray,
             clipped,
             target_control_type,
         )
@@ -220,7 +233,7 @@ def evaluate_target_quality(
         source != "model"
         and _candidate_tabular_cell_target(target_control_type)
         and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+        and not _model_boundary_aligned(gray, clipped, require_all_sides=True)
     ):
         return TargetQuality(
             accepted=False,
@@ -235,8 +248,8 @@ def evaluate_target_quality(
         and _candidate_tabular_cell_target(target_control_type)
         and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
         and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
-        and _has_visible_enclosing_boundary_outside(capture.png_bytes, clipped)
+        and not _model_boundary_aligned(gray, clipped, require_all_sides=True)
+        and _has_visible_enclosing_boundary_outside(gray, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -249,7 +262,7 @@ def evaluate_target_quality(
     if (
         source != "model"
         and _candidate_tabular_cell_target(target_control_type)
-        and _has_tabular_cell_internal_separators(capture.png_bytes, clipped)
+        and _has_tabular_cell_internal_separators(gray, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -264,11 +277,11 @@ def evaluate_target_quality(
         and _candidate_compound_action_request(instruction)
         and _candidate_compound_rect_large_enough(image_rect)
         and (
-            _has_compound_control_vertical_separators(capture.png_bytes, clipped)
-            or _has_segmented_control_separator(capture.png_bytes, clipped)
+            _has_compound_control_vertical_separators(gray, clipped)
+            or _has_segmented_control_separator(gray, clipped)
         )
         and not _candidate_single_selection_row(
-            capture.png_bytes,
+            gray,
             clipped,
             target_control_type,
         )
@@ -285,7 +298,7 @@ def evaluate_target_quality(
         source != "model"
         and _candidate_action_container_target(target_control_type, image_rect)
         and _candidate_compound_action_request(instruction)
-        and _has_internal_control_vertical_edges(capture.png_bytes, clipped)
+        and _has_internal_control_vertical_edges(gray, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -299,7 +312,7 @@ def evaluate_target_quality(
         source != "model"
         and _candidate_container_boundary_alignment_target(target_control_type)
         and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
+        and not _model_boundary_aligned(gray, clipped, require_all_sides=True)
     ):
         return TargetQuality(
             accepted=False,
@@ -325,7 +338,7 @@ def evaluate_target_quality(
     if (
         source != "model"
         and _candidate_row_container_target(target_control_type, image_rect)
-        and _has_internal_control_horizontal_edges(capture.png_bytes, clipped)
+        and _has_internal_control_horizontal_edges(gray, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -339,7 +352,7 @@ def evaluate_target_quality(
         _candidate_boundary_alignment_target(source, target_control_type)
         and boundary_activity >= MODEL_BOUNDARY_ACTIVITY_FLOOR
         and not _model_boundary_aligned(
-            capture.png_bytes,
+            gray,
             clipped,
             require_all_sides=not _candidate_allows_edge_flush_boundary(
                 source,
@@ -360,8 +373,8 @@ def evaluate_target_quality(
         _candidate_boundary_alignment_target(source, target_control_type)
         and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
         and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
-        and _has_adjacent_selection_indicator(capture.png_bytes, clipped, target_control_type)
+        and not _model_boundary_aligned(gray, clipped, require_all_sides=True)
+        and _has_adjacent_selection_indicator(gray, clipped, target_control_type)
     ):
         return TargetQuality(
             accepted=False,
@@ -375,8 +388,8 @@ def evaluate_target_quality(
         _candidate_boundary_alignment_target(source, target_control_type)
         and boundary_activity < MODEL_BOUNDARY_ACTIVITY_FLOOR
         and visual_activity >= CANDIDATE_EMPTY_VISUAL_FLOOR
-        and not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True)
-        and _has_visible_enclosing_boundary_outside(capture.png_bytes, clipped)
+        and not _model_boundary_aligned(gray, clipped, require_all_sides=True)
+        and _has_visible_enclosing_boundary_outside(gray, clipped)
     ):
         return TargetQuality(
             accepted=False,
@@ -390,11 +403,11 @@ def evaluate_target_quality(
         source != "model"
         and _candidate_leaf_action_target(target_control_type, image_rect)
         and (
-            _has_compound_control_vertical_separators(capture.png_bytes, clipped)
-            or _has_segmented_control_separator(capture.png_bytes, clipped)
+            _has_compound_control_vertical_separators(gray, clipped)
+            or _has_segmented_control_separator(gray, clipped)
         )
         and not _candidate_single_selection_row(
-            capture.png_bytes,
+            gray,
             clipped,
             target_control_type,
         )
@@ -438,7 +451,7 @@ def evaluate_target_quality(
                 boundary_activity=boundary_activity,
                 target_area_fraction=target_area_fraction,
             )
-        if not _model_boundary_aligned(capture.png_bytes, clipped, require_all_sides=True):
+        if not _model_boundary_aligned(gray, clipped, require_all_sides=True):
             return TargetQuality(
                 accepted=False,
                 reason="target boundary misaligned",
@@ -447,7 +460,7 @@ def evaluate_target_quality(
                 boundary_activity=boundary_activity,
                 target_area_fraction=target_area_fraction,
             )
-        if _has_compound_control_separators(capture.png_bytes, clipped, min_groups=1):
+        if _has_compound_control_separators(gray, clipped, min_groups=1):
             return TargetQuality(
                 accepted=False,
                 reason="target appears to contain multiple controls",
@@ -512,33 +525,33 @@ def _candidate_tabular_cell_target(target_control_type: str) -> bool:
 
 
 def _has_tabular_cell_internal_separators(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
 ) -> bool:
-    return _has_compound_control_separators(png_bytes, rect, min_groups=1)
+    return _has_compound_control_separators(gray, rect, min_groups=1)
 
 
 def _candidate_single_selection_row(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> bool:
     if not _candidate_selection_row_target(target_control_type):
         return False
-    matches = _selection_indicator_matches_inside(png_bytes, rect, target_control_type)
+    matches = _selection_indicator_matches_inside(gray, rect, target_control_type)
     if len(matches) != 1:
         return False
-    return not _has_selection_row_extra_separators(png_bytes, rect, matches[0])
+    return not _has_selection_row_extra_separators(gray, rect, matches[0])
 
 
 def _candidate_multiple_selection_indicators(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> bool:
     if not _candidate_selection_row_target(target_control_type):
         return False
-    matches = _selection_indicator_matches_inside(png_bytes, rect, target_control_type)
+    matches = _selection_indicator_matches_inside(gray, rect, target_control_type)
     for index, first in enumerate(matches):
         for second in matches[index + 1 :]:
             first_x, first_y, first_size = first
@@ -615,23 +628,22 @@ def _clip_rect(
     return (ix1, iy1, ix2 - ix1, iy2 - iy1)
 
 
-def _visual_activity(png_bytes: bytes, rect: tuple[int, int, int, int]) -> tuple[float, float]:
+def _visual_activity(gray: Image.Image, rect: tuple[int, int, int, int]) -> tuple[float, float]:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width <= 0 or crop.height <= 0:
-                return 0.0, 0.0
-            stats = ImageStat.Stat(crop)
-            contrast = (stats.stddev[0] if stats.stddev else 0.0) / 255.0
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            if edges.width > 2 and edges.height > 2:
-                edges = edges.crop((1, 1, edges.width - 1, edges.height - 1))
-                edge_mean = ImageStat.Stat(edges).mean[0] / 255.0
-            else:
-                edge_mean = 0.0
-            boundary_activity = _boundary_activity(crop)
-            return min(1.0, 0.65 * contrast + 0.35 * edge_mean), boundary_activity
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width <= 0 or crop.height <= 0:
+            return 0.0, 0.0
+        stats = ImageStat.Stat(crop)
+        contrast = (stats.stddev[0] if stats.stddev else 0.0) / 255.0
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        if edges.width > 2 and edges.height > 2:
+            edges = edges.crop((1, 1, edges.width - 1, edges.height - 1))
+            edge_mean = ImageStat.Stat(edges).mean[0] / 255.0
+        else:
+            edge_mean = 0.0
+        boundary_activity = _boundary_activity(crop)
+        return min(1.0, 0.65 * contrast + 0.35 * edge_mean), boundary_activity
     except Exception:
         return 0.0, 0.0
 
@@ -655,18 +667,17 @@ def _boundary_activity(crop: Image.Image) -> float:
 
 
 def _model_boundary_aligned(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     *,
     require_all_sides: bool = False,
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            image = img.convert("L")
-            scores = _boundary_crossing_scores(image, rect)
-            if len(scores) < 4:
-                return not require_all_sides
-            return all(score >= MODEL_BOUNDARY_ALIGNMENT_FLOOR for score in scores)
+        image = gray
+        scores = _boundary_crossing_scores(image, rect)
+        if len(scores) < 4:
+            return not require_all_sides
+        return all(score >= MODEL_BOUNDARY_ALIGNMENT_FLOOR for score in scores)
     except Exception:
         return True
 
@@ -748,170 +759,166 @@ def _average_boundary_difference(
 
 
 def _has_visible_enclosing_boundary_outside(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            image = img.convert("L").filter(ImageFilter.FIND_EDGES)
-            x, y, width, height = rect
-            if width < 16 or height < 8:
-                return False
-            image_width, image_height = image.size
-            x2 = x + width
-            y2 = y + height
-            max_x_margin = max(32, min(160, width * 2))
-            max_y_margin = max(16, min(96, height * 3))
-            left = _strongest_vertical_edge_line(
-                image,
-                range(max(4, x - max_x_margin), max(4, x - 4)),
-                y,
-                y2,
-            )
-            right = _strongest_vertical_edge_line(
-                image,
-                range(
-                    min(image_width - 4, x2 + 4),
-                    min(image_width - 4, x2 + max_x_margin),
-                ),
-                y,
-                y2,
-            )
-            top = _strongest_horizontal_edge_line(
-                image,
-                range(max(4, y - max_y_margin), max(4, y - 4)),
-                x,
-                x2,
-            )
-            bottom = _strongest_horizontal_edge_line(
-                image,
-                range(
-                    min(image_height - 4, y2 + 4),
-                    min(image_height - 4, y2 + max_y_margin),
-                ),
-                x,
-                x2,
-            )
-            if min(left[0], right[0], top[0], bottom[0]) < CANDIDATE_ENCLOSING_EDGE_FLOOR:
-                return False
-            if (
-                _vertical_edge_groups_between(image, left[1] + 4, x - 4, y, y2) >= 2
-                or _vertical_edge_groups_between(image, x2 + 4, right[1] - 4, y, y2) >= 2
-            ):
-                return False
-            return True
+        image = gray.filter(ImageFilter.FIND_EDGES)
+        x, y, width, height = rect
+        if width < 16 or height < 8:
+            return False
+        image_width, image_height = image.size
+        x2 = x + width
+        y2 = y + height
+        max_x_margin = max(32, min(160, width * 2))
+        max_y_margin = max(16, min(96, height * 3))
+        left = _strongest_vertical_edge_line(
+            image,
+            range(max(4, x - max_x_margin), max(4, x - 4)),
+            y,
+            y2,
+        )
+        right = _strongest_vertical_edge_line(
+            image,
+            range(
+                min(image_width - 4, x2 + 4),
+                min(image_width - 4, x2 + max_x_margin),
+            ),
+            y,
+            y2,
+        )
+        top = _strongest_horizontal_edge_line(
+            image,
+            range(max(4, y - max_y_margin), max(4, y - 4)),
+            x,
+            x2,
+        )
+        bottom = _strongest_horizontal_edge_line(
+            image,
+            range(
+                min(image_height - 4, y2 + 4),
+                min(image_height - 4, y2 + max_y_margin),
+            ),
+            x,
+            x2,
+        )
+        if min(left[0], right[0], top[0], bottom[0]) < CANDIDATE_ENCLOSING_EDGE_FLOOR:
+            return False
+        if (
+            _vertical_edge_groups_between(image, left[1] + 4, x - 4, y, y2) >= 2
+            or _vertical_edge_groups_between(image, x2 + 4, right[1] - 4, y, y2) >= 2
+        ):
+            return False
+        return True
     except Exception:
         return False
 
 
 def _has_adjacent_selection_indicator(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> bool:
     if not _candidate_selection_row_target(target_control_type):
         return False
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            image = img.convert("L")
-            x, y, width, height = rect
-            if width < 16 or height < 8:
-                return False
-            center_y = y + height // 2
-            max_size = max(12, min(32, height + 8))
-            min_size = max(10, min(18, height))
-            for size in range(min_size, max_size + 1, 2):
-                top_start = center_y - size // 2 - 6
-                top_stop = center_y - size // 2 + 7
-                for top in range(top_start, top_stop):
-                    for gap in range(2, 25):
-                        left_rect = (x - gap - size, top, size, size)
-                        right_rect = (x + width + gap, top, size, size)
-                        if _selection_indicator_rect_matches(image, left_rect):
-                            return True
-                        if _selection_indicator_rect_matches(image, right_rect):
-                            return True
+        image = gray
+        x, y, width, height = rect
+        if width < 16 or height < 8:
             return False
+        center_y = y + height // 2
+        max_size = max(12, min(32, height + 8))
+        min_size = max(10, min(18, height))
+        for size in range(min_size, max_size + 1, 2):
+            top_start = center_y - size // 2 - 6
+            top_stop = center_y - size // 2 + 7
+            for top in range(top_start, top_stop):
+                for gap in range(2, 25):
+                    left_rect = (x - gap - size, top, size, size)
+                    right_rect = (x + width + gap, top, size, size)
+                    if _selection_indicator_rect_matches(image, left_rect):
+                        return True
+                    if _selection_indicator_rect_matches(image, right_rect):
+                        return True
+        return False
     except Exception:
         return False
 
 
 def _selection_indicator_matches_inside(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     target_control_type: str,
 ) -> list[tuple[int, int, int]]:
     if not _candidate_selection_row_target(target_control_type):
         return []
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            image = img.convert("L")
-            x, y, width, height = rect
-            if width < 16 or height < 8:
-                return []
-            x2 = x + width
-            y2 = y + height
-            max_size = max(12, min(32, height + 8))
-            min_size = max(10, min(18, height))
-            matches: list[tuple[int, int, int]] = []
-            for size in range(min_size, max_size + 1, 2):
-                scan_width = min(width, max(48, size * 4))
-                left_ranges = [(x, min(x2 - size + 1, x + scan_width))]
-                right_start = max(x, x2 - scan_width)
-                right_stop = x2 - size + 1
-                if right_start < right_stop:
-                    left_ranges.append((right_start, right_stop))
-                for top in range(y, y2 - size + 1):
-                    for left_start, left_stop in left_ranges:
-                        if left_start >= left_stop:
+        image = gray
+        x, y, width, height = rect
+        if width < 16 or height < 8:
+            return []
+        x2 = x + width
+        y2 = y + height
+        max_size = max(12, min(32, height + 8))
+        min_size = max(10, min(18, height))
+        matches: list[tuple[int, int, int]] = []
+        for size in range(min_size, max_size + 1, 2):
+            scan_width = min(width, max(48, size * 4))
+            left_ranges = [(x, min(x2 - size + 1, x + scan_width))]
+            right_start = max(x, x2 - scan_width)
+            right_stop = x2 - size + 1
+            if right_start < right_stop:
+                left_ranges.append((right_start, right_stop))
+            for top in range(y, y2 - size + 1):
+                for left_start, left_stop in left_ranges:
+                    if left_start >= left_stop:
+                        continue
+                    for left in range(left_start, left_stop):
+                        candidate = (left, top, size, size)
+                        if not _selection_indicator_rect_matches(image, candidate):
                             continue
-                        for left in range(left_start, left_stop):
-                            candidate = (left, top, size, size)
-                            if not _selection_indicator_rect_matches(image, candidate):
-                                continue
-                            center = (left + size // 2, top + size // 2)
-                            merge_x_radius = max(12, size * 2)
-                            merge_y_radius = max(8, size)
-                            if any(
-                                abs(center[0] - seen_x) <= merge_x_radius
-                                and abs(center[1] - seen_y) <= merge_y_radius
-                                for seen_x, seen_y, _seen_size in matches
-                            ):
-                                continue
-                            matches.append((center[0], center[1], size))
-                            if len(matches) > 1:
-                                return matches
-            return matches
+                        center = (left + size // 2, top + size // 2)
+                        merge_x_radius = max(12, size * 2)
+                        merge_y_radius = max(8, size)
+                        if any(
+                            abs(center[0] - seen_x) <= merge_x_radius
+                            and abs(center[1] - seen_y) <= merge_y_radius
+                            for seen_x, seen_y, _seen_size in matches
+                        ):
+                            continue
+                        matches.append((center[0], center[1], size))
+                        if len(matches) > 1:
+                            return matches
+        return matches
     except Exception:
         return []
 
 
 def _has_selection_row_extra_separators(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     match: tuple[int, int, int],
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 24 or crop.height < 16:
-                return False
-            center_x, center_y, size = match
-            left = max(0, center_x - size // 2 - x - 3)
-            top = max(0, center_y - size // 2 - y - 3)
-            right = min(crop.width, center_x + size // 2 - x + 3)
-            bottom = min(crop.height, center_y + size // 2 - y + 3)
-            pixels = crop.load()
-            for erase_y in range(top, bottom):
-                for erase_x in range(left, right):
-                    pixels[erase_x, erase_y] = 255
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return (
-                _strong_internal_separator_groups(edges, vertical=True)
-                >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
-                or _strong_center_vertical_separator_groups(edges) >= 1
-            )
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 24 or crop.height < 16:
+            return False
+        center_x, center_y, size = match
+        left = max(0, center_x - size // 2 - x - 3)
+        top = max(0, center_y - size // 2 - y - 3)
+        right = min(crop.width, center_x + size // 2 - x + 3)
+        bottom = min(crop.height, center_y + size // 2 - y + 3)
+        pixels = crop.load()
+        for erase_y in range(top, bottom):
+            for erase_x in range(left, right):
+                pixels[erase_x, erase_y] = 255
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return (
+            _strong_internal_separator_groups(edges, vertical=True)
+            >= MODEL_COMPOUND_MIN_SEPARATOR_GROUPS
+            or _strong_center_vertical_separator_groups(edges) >= 1
+        )
     except Exception:
         return True
 
@@ -1006,90 +1013,85 @@ def _vertical_edge_groups_between(
 
 
 def _has_compound_control_separators(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     *,
     min_groups: int = MODEL_COMPOUND_MIN_SEPARATOR_GROUPS,
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 24 or crop.height < 16:
-                return False
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return (
-                _strong_internal_separator_groups(edges, vertical=True)
-                >= min_groups
-                or _strong_internal_separator_groups(edges, vertical=False)
-                >= min_groups
-            )
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 24 or crop.height < 16:
+            return False
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return (
+            _strong_internal_separator_groups(edges, vertical=True)
+            >= min_groups
+            or _strong_internal_separator_groups(edges, vertical=False)
+            >= min_groups
+        )
     except Exception:
         return False
 
 
 def _has_compound_control_vertical_separators(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
     *,
     min_groups: int = MODEL_COMPOUND_MIN_SEPARATOR_GROUPS,
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 24 or crop.height < 16:
-                return False
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return _strong_internal_separator_groups(edges, vertical=True) >= min_groups
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 24 or crop.height < 16:
+            return False
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return _strong_internal_separator_groups(edges, vertical=True) >= min_groups
     except Exception:
         return False
 
 
 def _has_segmented_control_separator(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 48 or crop.height < 20:
-                return False
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return _strong_center_vertical_separator_groups(edges) >= 1
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 48 or crop.height < 20:
+            return False
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return _strong_center_vertical_separator_groups(edges) >= 1
     except Exception:
         return False
 
 
 def _has_internal_control_vertical_edges(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 80 or crop.height < 36:
-                return False
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return _internal_vertical_edge_groups(edges) >= 2
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 80 or crop.height < 36:
+            return False
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return _internal_vertical_edge_groups(edges) >= 2
     except Exception:
         return False
 
 
 def _has_internal_control_horizontal_edges(
-    png_bytes: bytes,
+    gray: Image.Image,
     rect: tuple[int, int, int, int],
 ) -> bool:
     try:
-        with Image.open(io.BytesIO(png_bytes)) as img:
-            x, y, width, height = rect
-            crop = img.convert("L").crop((x, y, x + width, y + height))
-            if crop.width < 80 or crop.height < 36:
-                return False
-            edges = crop.filter(ImageFilter.FIND_EDGES)
-            return _internal_horizontal_edge_groups(edges) >= 1
+        x, y, width, height = rect
+        crop = gray.crop((x, y, x + width, y + height))
+        if crop.width < 80 or crop.height < 36:
+            return False
+        edges = crop.filter(ImageFilter.FIND_EDGES)
+        return _internal_horizontal_edge_groups(edges) >= 1
     except Exception:
         return False
 

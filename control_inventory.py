@@ -8,6 +8,7 @@ import re
 import time
 from dataclasses import dataclass
 from ctypes import wintypes
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -1908,22 +1909,34 @@ def collect_control_candidates(
         if top_rect is None or not _intersects(top_rect, capture_rect):
             continue
         window_title = _control_text(top)
-        queue: list[tuple[object, tuple[int, int, int, int], int]] = [(top, top_rect, 0)]
+        # Hoisted per window: _root_window_handle is one Win32 call that only
+        # depends on the window, not the candidate.
+        _window_expected_root = (
+            _root_window_handle(top_handle) if top_handle is not None else None
+        )
+        # deque: pop(0) on a list is O(n) per pop (O(n^2) for the walk).
+        queue: deque[tuple[object, tuple[int, int, int, int], int]] = deque(
+            [(top, top_rect, 0)]
+        )
         while queue:
             if time.monotonic() >= deadline:
                 break
-            control, rect, depth = queue.pop(0)
+            control, rect, depth = queue.popleft()
             ctype = _control_type(control)
             if (
                 ctype in CLICKABLE_CONTROL_TYPES
+                # Cheap local checks first: skip the UIA COM round-trips for
+                # controls that fail bounds anyway.
+                and _acceptable_bounds(rect, capture_rect, ctype)
                 and _is_enabled(control)
                 and _is_visible(control)
-                and _acceptable_bounds(rect, capture_rect, ctype)
                 and _is_candidate_topmost(
                     top_handle,
                     _window_handle(control),
                     rect,
                     topmost_provider,
+                    expected_root=_window_expected_root,
+                    _expected_root_known=True,
                 )
             ):
                 raw.append(
@@ -2052,16 +2065,17 @@ def _is_candidate_topmost(
     control_handle: int | None,
     rect: tuple[int, int, int, int],
     topmost_handle_provider: TopmostHandleProvider | None,
+    expected_root: int | None = None,
+    _expected_root_known: bool = False,
 ) -> bool:
     if top_handle is None or topmost_handle_provider is None:
         return True
-    expected_root = _root_window_handle(top_handle)
+    if not _expected_root_known:
+        expected_root = _root_window_handle(top_handle)
     if expected_root is None:
         return True
     matches = 0
     checked = 0
-    center_checked = False
-    center_matched = False
     for index, (x, y) in enumerate(_sample_points(rect)):
         actual = _safe_topmost_handle(topmost_handle_provider, x, y)
         if actual is None:
@@ -2074,14 +2088,12 @@ def _is_candidate_topmost(
             control_handle,
         ):
             matches += 1
-            if index == 0:
-                center_matched = True
-        if index == 0:
-            center_checked = True
+        elif index == 0:
+            # Center sample missed: the control is occluded. Skip the
+            # corner samples instead of burning more Win32 calls.
+            return False
     if checked == 0:
         return True
-    if center_checked and not center_matched:
-        return False
     return (matches / checked) >= MIN_TOPMOST_SAMPLE_FRACTION
 
 
@@ -2317,7 +2329,14 @@ def resolve_candidate_target(
                 model_rect,
             )
         else:
-            score = _text_match_score(instruction, candidate, candidates, model_rect)
+            score = _text_match_score(
+                instruction,
+                candidate,
+                candidates,
+                model_rect,
+                instruction_tokens=instruction_tokens,
+                control_intents=control_intents,
+            )
         score += _foreground_rank_bonus(candidate, candidates, model_rect=model_rect)
         if score > 0:
             if not matches_control_intent:
@@ -3041,9 +3060,15 @@ def _text_match_score(
     candidate: ControlCandidate,
     candidates: list[ControlCandidate],
     model_rect: tuple[int, int, int, int] | None,
+    instruction_tokens: set[str] | None = None,
+    control_intents: set[str] | None = None,
 ) -> float:
-    instruction_tokens = _tokenize_instruction(instruction)
-    control_intents = _instruction_control_intents(instruction)
+    # Accept precomputed values: the caller scores every candidate against
+    # the same instruction, so recomputing these per candidate is pure waste.
+    if instruction_tokens is None:
+        instruction_tokens = _tokenize_instruction(instruction)
+    if control_intents is None:
+        control_intents = _instruction_control_intents(instruction)
     visible_tokens = _candidate_visible_text_tokens(candidate)
     literal_match_tokens = _literal_stopword_name_match_tokens(instruction, visible_tokens)
     exact_visible_label_match = _exact_visible_label_matches_request(instruction, candidate)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -47,7 +48,17 @@ def write_env(path: Path, updates: dict[str, str]) -> None:
     text = "\n".join(out_lines)
     if not text.endswith("\n"):
         text += "\n"
-    path.write_text(text, encoding="utf-8")
+    # Write atomically: a crash or concurrent writer must never leave a
+    # truncated .env behind. os.replace is atomic on Windows and POSIX.
+    tmp_path = path.with_name(path.name + ".tmp")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, path)
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _strip_quotes(value: str) -> str:

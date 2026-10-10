@@ -313,6 +313,8 @@ class OpenAIClient:
             "instructions": system_prompt or "",
             "input": _to_responses_input(messages, None),
         }
+        if max_tokens is not None:
+            body["max_output_tokens"] = int(max_tokens)
         payload = self._codex.post_response(body)
         return _parse_response(payload)
 
@@ -818,6 +820,7 @@ class ChatCompletionsProvider:
             "Content-Type": "application/json",
         }
         last_error: ProviderError | None = None
+        retried_without_temperature = False
 
         for attempt in range(MAX_RETRIES + 1):
             try:
@@ -852,6 +855,22 @@ class ChatCompletionsProvider:
                     last_error = RateLimited(message)
                 elif resp.status_code in RETRYABLE_STATUS_CODES:
                     last_error = ProviderUnavailable(message)
+                elif (
+                    resp.status_code == 400
+                    and not retried_without_temperature
+                    and "temperature" in body
+                    and "temperature" in (resp.text or "").lower()
+                ):
+                    # Reasoning-style models on custom endpoints reject
+                    # non-default temperature. Retry once without it instead
+                    # of failing every call.
+                    retried_without_temperature = True
+                    body = {k: v for k, v in body.items() if k != "temperature"}
+                    log.warning(
+                        "Custom API rejected temperature for model %s; retrying without it",
+                        body.get("model"),
+                    )
+                    continue
                 else:
                     raise ProviderError(message)
 
@@ -1059,7 +1078,10 @@ def make_openai_client(
             return OpenAIClient(
                 optional_api_key=optional_api_key,
                 custom_provider=AnthropicProvider(config.ANTHROPIC_API_KEY),
-                custom_model=config.API_MODEL or None,
+                # NB: API_MODEL belongs to the openai_compat provider only.
+                # A stale HELPER_API_MODEL must not override the model the
+                # user picked for Anthropic.
+                custom_model=None,
             )
 
     if provider_name == "gemini":
@@ -1074,7 +1096,8 @@ def make_openai_client(
             return OpenAIClient(
                 optional_api_key=optional_api_key,
                 custom_provider=GeminiProvider(config.GEMINI_API_KEY),
-                custom_model=config.API_MODEL or None,
+                # NB: API_MODEL belongs to the openai_compat provider only.
+                custom_model=None,
             )
 
     log.info("Chat provider: codex (ChatGPT OAuth)")
