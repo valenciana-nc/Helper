@@ -200,6 +200,29 @@ class HistoryManager:
             removed_entry = selected_entries.pop(0)
             total_tokens -= removed_entry.estimated_tokens
             dropped_turns += 1
+            # Pair-aware eviction: dropping a function_call while keeping its
+            # function_response would orphan the response, which breaks
+            # Anthropic/Gemini call/response pairing validation on the next
+            # API call. Evict the matching responses together with the call.
+            evicted_call_ids = {
+                part.function_call_id
+                for part in removed_entry.parts
+                if part.function_call_id is not None
+            }
+            if evicted_call_ids:
+                kept_entries: list[_StoredContent] = []
+                for entry in selected_entries:
+                    response_ids = {
+                        part.function_response_call_id
+                        for part in entry.parts
+                        if part.function_response_call_id is not None
+                    }
+                    if response_ids & evicted_call_ids:
+                        total_tokens -= entry.estimated_tokens
+                        dropped_turns += 1
+                    else:
+                        kept_entries.append(entry)
+                selected_entries = kept_entries
 
         messages = [entry.to_message() for entry in selected_entries]
         return HistorySnapshot(

@@ -299,7 +299,18 @@ def _to_anthropic_messages(
             out.append({"role": "user", "content": blocks})
 
     system_text = "\n\n".join(s for s in system_chunks if s) or None
-    return out, system_text
+
+    # Merge consecutive same-role messages. History stores assistant text and
+    # each function call as separate entries, which this translator emits as
+    # separate messages — Anthropic requires strict user/assistant alternation
+    # and rejects consecutive same-role messages with a 400.
+    merged: list[dict[str, Any]] = []
+    for msg in out:
+        if merged and merged[-1]["role"] == msg["role"]:
+            merged[-1]["content"].extend(msg["content"])
+        else:
+            merged.append(msg)
+    return merged, system_text
 
 
 def _anthropic_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
