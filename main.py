@@ -11,10 +11,17 @@ from pathlib import Path
 from threading import Event, Lock, Thread, get_ident
 from typing import TYPE_CHECKING
 
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except Exception:
-    ctypes.windll.user32.SetProcessDPIAware()
+# DPI awareness is a Windows-only concept — ctypes.windll doesn't exist on
+# other platforms, so guard the whole block instead of relying on try/except
+# (the old fallback also touched ctypes.windll and crashed at import time).
+if sys.platform == "win32":
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon

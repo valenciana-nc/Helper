@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import sys
 import time
 from dataclasses import dataclass
 from threading import Event, Lock
@@ -21,7 +22,10 @@ ConfirmationCallback = Callable[["ConfirmationRequest"], bool]
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.0
 
-user32 = ctypes.windll.user32
+# user32 only exists on Windows; keep the import working everywhere so the
+# module (and its tests) can load on any platform. Windows-only call sites
+# below assume a real user32 handle.
+user32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
 TERMINAL_CLASS_NAMES = {
     "consolewindowclass",

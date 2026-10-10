@@ -1,6 +1,7 @@
 import ctypes
 import io
 import os
+import sys
 from ctypes import wintypes
 from dataclasses import dataclass
 
@@ -13,10 +14,18 @@ _LAST_FOREGROUND_MONITOR: dict[str, int] | None = None
 
 
 def set_dpi_aware() -> None:
+    # DPI awareness is a Windows-only concept — ctypes.windll doesn't exist on
+    # other platforms. (The old try/except fallback also touched windll and
+    # would crash if the first call raised.)
+    if sys.platform != "win32":
+        return
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
-        ctypes.windll.user32.SetProcessDPIAware()
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 
 @dataclass(frozen=True)

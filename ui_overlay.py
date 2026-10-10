@@ -3,16 +3,27 @@ from __future__ import annotations
 import ctypes
 import math
 import sys
-import winreg
+try:
+    import winreg
+except ImportError:
+    winreg = None  # Windows-only; the registry helpers below need it
 from ctypes import wintypes
 from dataclasses import dataclass
 
 
 def _set_dpi_aware() -> None:
+    # DPI awareness is a Windows-only concept — ctypes.windll doesn't exist on
+    # other platforms. (The old try/except fallback also touched windll and
+    # crashed at import time.)
+    if sys.platform != "win32":
+        return
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
-        ctypes.windll.user32.SetProcessDPIAware()
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 
 _set_dpi_aware()
@@ -22,7 +33,9 @@ from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen  # noqa: E40
 from PyQt6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 
-user32 = ctypes.windll.user32
+# user32 only exists on Windows; keep the import working everywhere so the
+# module (and its tests) can load on any platform.
+user32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
 CCHDEVICENAME = 32
 
