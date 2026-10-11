@@ -783,6 +783,21 @@ class HelplerDesktopApp(QObject):
         # credential-manager round-trip. Refreshed on auth transitions via
         # _handle_auth_changed().
         self._cached_signed_in: bool | None = None
+        # v2 engine: enabled via --v2 flag. When on, chat + voice goals run
+        # through the v2 stack (world model, set-of-marks, closed-loop).
+        self._v2_enabled = "--v2" in {a.strip().lower() for a in sys.argv[1:]}
+        self._v2_runner = None
+        if self._v2_enabled:
+            from v2_bridge import V2Runner
+
+            self._v2_runner = V2Runner(self)
+            self._v2_runner.v2_message.connect(self._handle_agent_message)
+            self._v2_runner.v2_status.connect(self._on_chat_status_changed)
+            self._v2_runner.v2_state.connect(self.widget_state_requested.emit)
+            self._v2_runner.v2_highlight.connect(self._on_v2_highlight)
+            self._v2_runner.v2_speak.connect(self._speak_v2)
+            self._v2_runner.v2_finished.connect(self._on_v2_finished)
+            log.info("v2 engine enabled (--v2)")
         if DEFAULT_MODE == FloatingCircle.ACTIVE:
             self._selected_mode = FloatingCircle.ACTIVE
         else:
@@ -1139,6 +1154,10 @@ class HelplerDesktopApp(QObject):
             "mode": self._selected_mode,
             "hotkey": self._hotkey_label,
             "log_path": STARTUP_LOG,
+            "v2_enabled": self._v2_enabled,
+            "v2_running": self._v2_runner.is_running()
+            if self._v2_runner is not None
+            else False,
         }
 
     def _handle_auth_changed(self, signed_in: bool) -> None:
@@ -1442,8 +1461,19 @@ class HelplerDesktopApp(QObject):
         try:
             recording = self._audio.stop_recording()
             log.info("Captured %.2fs. Transcribing...", recording.duration_sec)
-            transcript = self._audio.transcribe(recording).strip()
+            if self._v2_enabled:
+                from v2_bridge import transcribe_v2
+
+                transcript = transcribe_v2(recording.wav_bytes).strip()
+            else:
+                transcript = self._audio.transcribe(recording).strip()
             log.info("[%s] Transcript: %s", self._controller.mode.upper(), transcript)
+            if self._v2_enabled:
+                if transcript:
+                    self._start_v2_goal(transcript)
+                else:
+                    self._reset_busy_state(clear_caption=True)
+                return
             if transcript:
                 if not self._ensure_agent(show_errors=True):
                     self.agent_message_received.emit(self._backend_status_message())
@@ -1478,6 +1508,10 @@ class HelplerDesktopApp(QObject):
             if self._busy:
                 return
             self._busy = True
+
+        if self._v2_enabled:
+            self._start_v2_goal(message)
+            return
 
         if self._selected_mode == FloatingCircle.HELP:
             self.user_message_received.emit(message)
@@ -1657,6 +1691,54 @@ class HelplerDesktopApp(QObject):
         self.chat_status_changed.emit("")
         self._ghost_cursor.clear()
         self._overlay.clear()
+
+    # -- v2 engine ------------------------------------------------------
+
+    def _on_v2_highlight(
+        self, x: int, y: int, width: int, height: int, label: str
+    ) -> None:
+        anchor_x = x + width // 2
+        anchor_y = y + height // 2
+        self._ghost_cursor.animate_to(anchor_x, anchor_y, label)
+        self._overlay.show_highlight(
+            x, y, width, height, label,
+            duration_ms=1200, anchor_x=anchor_x, anchor_y=anchor_y,
+        )
+
+    def _on_v2_finished(self, ok: bool) -> None:
+        self._reset_busy_state()
+        self.widget_state_requested.emit(FloatingCircle.IDLE)
+        self.chat_status_changed.emit("")
+        log.info("v2 goal finished ok=%s", ok)
+
+    def _speak_v2(self, text: str) -> None:
+        """Speak via v2's streaming TTS (sentence-chunked, barge-in capable)."""
+        message = (text or "").strip()
+        if not message or self._controller is None or self._audio is None:
+            return
+        if self._controller.abort_controller.is_aborted():
+            return
+        self.widget_state_requested.emit(FloatingCircle.SPEAKING)
+        try:
+            from v2.voice import TtsStreamer
+
+            tts = TtsStreamer()
+            # Stream one chunk; the worker synthesizes sentence-by-sentence.
+            tts.speak([message])
+        except Exception as exc:
+            log.exception("v2 TTS failed: %s", exc)
+            # Fall back to v1 speech.
+            self._speak(message)
+
+    def _start_v2_goal(self, goal: str) -> None:
+        if self._v2_runner is None:
+            return
+        self.user_message_received.emit(goal)
+        self._controller.reset_abort()
+        if not self._v2_runner.start_goal(goal):
+            self.agent_message_received.emit(
+                "v2 is already working on a goal — wait for it to finish.")
+            self._reset_busy_state()
 
     def _run_guide_until_done(self, transcript: str, *, speak: bool) -> None:
         if self._agent is None or self._controller is None:
