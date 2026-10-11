@@ -1,24 +1,33 @@
 <div align="center">
   <img src="assets/helper_logo.png" alt="Orb Helper logo" width="180" />
   <h1>HELPER</h1>
-  <p><strong>A floating Windows assistant with chat, voice, screen awareness, and guided computer help.</strong></p>
+  <p><strong>A floating Windows assistant with chat, voice, screen awareness, and autonomous computer use.</strong></p>
 </div>
 
 ## What We Are Building
 
-Orb Helper is a desktop assistant that lives as a small floating orb on Windows. It can open a chat window, listen for voice input, understand the current screen, guide the user with overlays, and optionally control the mouse and keyboard after confirmation.
+Orb Helper is a desktop assistant that lives as a small floating orb on Windows. It can open a chat window, listen for voice input, understand the current screen, and carry out multi-step computer tasks on its own — planning once, grounding every action to real UI elements, and verifying each step before moving on.
 
 The goal is a helper that feels always available but stays out of the way: quick to summon, clear about what it is doing, and careful around risky actions.
+
+## Architecture (v2)
+
+One engine serves every goal, typed or spoken:
+
+- **World model** (`v2/world.py`): a persistent, live UI tree — refreshed from OS accessibility events on Windows (polling fallback) — with frame diffing, so the agent re-observes in ~300ms instead of re-walking the tree every step.
+- **Set-of-marks grounding** (`v2/observe.py`, `v2/ground.py`): the model picks numbered marks on the annotated screenshot; targets resolve to real UI elements. No coordinate guessing.
+- **Plan-once planner** (`v2/plan.py`): a single LLM call produces a subgoal checklist with success criteria; one replan is allowed per goal.
+- **Closed-loop executor** (`v2/execute.py`): actuate via UI patterns first (silent, DPI-proof), re-observe, verify, retry up to 3× per step before reporting failure.
+- **Local-first voice** (`v2/voice.py`): streaming speech-to-text (faster-whisper + VAD) and sentence-chunked TTS with barge-in.
+- **Qt bridge** (`v2_bridge.py`): runs the engine off the GUI thread; ghost cursor + highlight overlay track every action, chat shows ✓/✗ per step, Escape aborts the goal.
 
 ## Core Pieces
 
 - **Floating orb:** a PyQt6 widget that stays on top and acts as the main entry point.
 - **Dashboard:** account, voice, model, and behavior settings.
-- **Chat:** typed conversations backed by ChatGPT sign-in.
-- **Voice:** transcription and spoken replies through `OPENAI_API_KEY`.
-- **Screen capture:** lets the assistant reason about what is visible.
-- **Help mode:** shows ghost cursor guidance and highlight rectangles while the user clicks.
-- **Active mode:** can execute actions, with confirmation for risky steps.
+- **Chat:** typed goals backed by ChatGPT sign-in.
+- **Voice:** hold the hotkey to speak a goal; replies are spoken back.
+- **Screen awareness:** the world model keeps a live picture of what's visible.
 
 ## Setup
 

@@ -48,13 +48,18 @@ def do_subgoal(
     marks: list | None = None,
     max_attempts: int = 3,
     verify_wait_s: float = 0.3,
+    should_abort=None,
 ) -> ActionResult:
     """Execute one subgoal with verify-and-retry. Never raises for grounding
     or actuation failures — returns ActionResult(ok=False) instead."""
     from .observe import crop_png
 
+    aborted = should_abort or (lambda: False)
     last_detail = "not attempted"
     for attempt in range(1, max_attempts + 1):
+        if aborted():
+            return ActionResult(ok=False, detail="aborted by user",
+                                attempts=attempt)
         frame = world.current_frame()
         target = _ground(subgoal, frame, world, marks)
         if target is None:

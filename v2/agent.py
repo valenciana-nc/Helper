@@ -59,8 +59,10 @@ class HelperV2:
         goal: str,
         *,
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
+        should_abort: Callable[[], bool] | None = None,
     ) -> RunReport:
         emit = on_event or (lambda _n, _p: None)
+        aborted = should_abort or (lambda: False)
         report = RunReport(goal=goal)
         self._world.start()
         try:
@@ -70,12 +72,17 @@ class HelperV2:
                 return report
 
             for subgoal in plan.subgoals:
+                if aborted():
+                    emit("finished", {"report": _report_dict(report)})
+                    report.failed.append(subgoal.id)
+                    break
                 emit("subgoal_start", {"id": subgoal.id,
                                       "description": subgoal.description})
                 result = do_subgoal(
                     subgoal, self._world, self._actuator, self._llm,
                     marks=self._last_marks,
                     max_attempts=self._max_attempts,
+                    should_abort=aborted,
                 )
                 emit("attempt", {"id": subgoal.id, "ok": result.ok,
                                  "detail": result.detail,

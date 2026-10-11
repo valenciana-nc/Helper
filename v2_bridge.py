@@ -102,11 +102,13 @@ class V2Runner(QObject):
     v2_finished = pyqtSignal(bool)                  # overall ok
     v2_busy = pyqtSignal(bool)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, parent: QObject | None = None,
+                 should_abort: Callable[[], bool] | None = None) -> None:
         super().__init__(parent)
         self._lock = threading.Lock()
         self._running = False
         self._agent = None  # lazy HelperV2
+        self._should_abort = should_abort or (lambda: False)
 
     def is_running(self) -> bool:
         with self._lock:
@@ -147,7 +149,8 @@ class V2Runner(QObject):
         ok = False
         try:
             agent = self._get_agent()
-            report = agent.run_goal(goal, on_event=self._on_v2_event)
+            report = agent.run_goal(goal, on_event=self._on_v2_event,
+                                   should_abort=self._should_abort)
             ok = report.ok
             summary = self._summarize(report)
             self.v2_message.emit(summary)

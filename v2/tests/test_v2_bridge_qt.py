@@ -33,7 +33,7 @@ class FakeAgent:
     def __init__(self):
         self.events = []
 
-    def run_goal(self, goal, on_event=None):
+    def run_goal(self, goal, on_event=None, should_abort=None):
         on_event("plan", {"subgoals": ["a"]})
         on_event("subgoal_start", {"id": "sg1", "description": "a"})
         on_event("subgoal_done", {"id": "sg1"})
