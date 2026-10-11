@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QEasingCurve, QObject, QPointF, QRectF, QTimer, Qt
+from PyQt6.QtCore import QEasingCurve, QElapsedTimer, QObject, QPointF, QRectF, QTimer, Qt
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -229,7 +229,7 @@ class GhostCursorManager(QObject):
 
         self._from = QPointF(0.0, 0.0)
         self._to = QPointF(0.0, 0.0)
-        self._elapsed_ms = 0
+        self._clock = QElapsedTimer()
         self._duration_ms = 0
         self._caption = ""
         self._easing = QEasingCurve(QEasingCurve.Type.OutCubic)
@@ -269,7 +269,7 @@ class GhostCursorManager(QObject):
         self._from = QPointF(self._current.x, self._current.y)
         self._to = target
         self._caption = caption
-        self._elapsed_ms = 0
+        self._clock.start()
         self._duration_ms = max(60, duration_ms or self.DEFAULT_DURATION_MS)
         self._animation_timer.start()
 
@@ -288,8 +288,10 @@ class GhostCursorManager(QObject):
             window.set_state(None)
 
     def _tick(self) -> None:
-        self._elapsed_ms += self.ANIMATION_INTERVAL_MS
-        t = min(1.0, self._elapsed_ms / self._duration_ms)
+        # Use wall-clock elapsed time, not nominal timer intervals — QTimer
+        # at 16ms is not precise, and under load each tick arrives late,
+        # which would stretch the animation and distort the easing curve.
+        t = min(1.0, self._clock.elapsed() / self._duration_ms)
         eased = self._easing.valueForProgress(t)
         x = self._from.x() + (self._to.x() - self._from.x()) * eased
         y = self._from.y() + (self._to.y() - self._from.y()) * eased

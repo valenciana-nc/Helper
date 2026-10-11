@@ -778,6 +778,11 @@ class HelplerDesktopApp(QObject):
         self._backend_ready = False
         self._backend_initializing = False
         self._backend_error: str | None = None
+        # Cache the keyring-backed sign-in state: _status_snapshot() runs on
+        # the dashboard's 2s timer, and each is_signed_in() call is a
+        # credential-manager round-trip. Refreshed on auth transitions via
+        # _handle_auth_changed().
+        self._cached_signed_in: bool | None = None
         if DEFAULT_MODE == FloatingCircle.ACTIVE:
             self._selected_mode = FloatingCircle.ACTIVE
         else:
@@ -1122,11 +1127,13 @@ class HelplerDesktopApp(QObject):
         self._dashboard.toggle_visibility()
 
     def _status_snapshot(self) -> dict[str, object]:
+        if self._cached_signed_in is None:
+            self._cached_signed_in = oauth_codex.is_signed_in()
         return {
             "backend_ready": self._backend_ready,
             "backend_initializing": self._backend_initializing,
             "backend_error": self._backend_error,
-            "signed_in": oauth_codex.is_signed_in(),
+            "signed_in": self._cached_signed_in,
             "agent_ready": getattr(self, "_agent", None) is not None,
             "agent_error": getattr(self, "_agent_error", None),
             "mode": self._selected_mode,
@@ -1135,6 +1142,7 @@ class HelplerDesktopApp(QObject):
         }
 
     def _handle_auth_changed(self, signed_in: bool) -> None:
+        self._cached_signed_in = signed_in
         if signed_in:
             if self._ensure_agent(show_errors=True):
                 self.agent_message_received.emit("Signed in. Helper is ready.")
@@ -1178,7 +1186,10 @@ class HelplerDesktopApp(QObject):
         self._app.quit()
 
     def _handle_main_window_close_requested(self) -> None:
-        self._handle_quit_requested()
+        # X button minimizes the chat window instead of quitting the entire
+        # app (orb, tray icon, hotkeys). Quitting is via the tray/widget
+        # "Quit Helper" actions.
+        self._chat_window.hide_window()
 
     def _handle_restart_requested(self) -> None:
         log.info("Restart requested. Launching a fresh instance...")
@@ -1463,16 +1474,16 @@ class HelplerDesktopApp(QObject):
             log.info(status)
             return
 
+        with self._lock:
+            if self._busy:
+                return
+            self._busy = True
+
         if self._selected_mode == FloatingCircle.HELP:
             self.user_message_received.emit(message)
             self._controller.reset_abort()
             self._start_help_walkthrough(message)
             return
-
-        with self._lock:
-            if self._busy:
-                return
-            self._busy = True
 
         self.user_message_received.emit(message)
         self._controller.reset_abort()
@@ -1554,30 +1565,32 @@ class HelplerDesktopApp(QObject):
                 self.caption_changed.emit(text)
 
     def _ensure_help_session(self) -> bool:
-        if self._help_session is not None:
-            return True
-        if self._agent is None or self._controller is None:
-            return False
-        from help_session import HelpSession
+        with self._lock:
+            if self._help_session is not None:
+                return True
+            if self._agent is None or self._controller is None:
+                return False
+            from help_session import HelpSession
 
-        self._help_session = HelpSession(
-            self._agent,
-            self._controller,
-            # parent=None: this may run on the voice worker thread, and a
-            # QObject cannot have a parent in a different thread. Lifetime
-            # is managed by the self._help_session reference.
-            parent=None,
-            overlay_clear_barrier=self._clear_help_overlays_sync,
-        )
-        self._help_session.ghost_clear.connect(self._ghost_cursor.clear)
-        self._help_session.highlight_show.connect(self._on_help_highlight_show)
-        self._help_session.highlight_clear.connect(self._overlay.clear)
-        self._help_session.target_diagnostic.connect(self._help_target_diagnostics.write)
-        self._help_session.chat_message.connect(self._handle_agent_message)
-        self._help_session.chat_status.connect(self._on_chat_status_changed)
-        self._help_session.finished.connect(self._on_help_session_finished)
-        self._help_session.failed.connect(self._on_help_session_failed)
-        self._help_session.step_skipped.connect(self._on_help_step_skipped)
+            session = HelpSession(
+                self._agent,
+                self._controller,
+                # parent=None: this may run on the voice worker thread, and a
+                # QObject cannot have a parent in a different thread. Lifetime
+                # is managed by the self._help_session reference.
+                parent=None,
+                overlay_clear_barrier=self._clear_help_overlays_sync,
+            )
+            self._help_session = session
+        session.ghost_clear.connect(self._ghost_cursor.clear)
+        session.highlight_show.connect(self._on_help_highlight_show)
+        session.highlight_clear.connect(self._overlay.clear)
+        session.target_diagnostic.connect(self._help_target_diagnostics.write)
+        session.chat_message.connect(self._handle_agent_message)
+        session.chat_status.connect(self._on_chat_status_changed)
+        session.finished.connect(self._on_help_session_finished)
+        session.failed.connect(self._on_help_session_failed)
+        session.step_skipped.connect(self._on_help_step_skipped)
         return True
 
     def _clear_help_overlays_sync(self) -> None:
@@ -1633,10 +1646,12 @@ class HelplerDesktopApp(QObject):
         )
 
     def _on_help_session_finished(self, _summary: str) -> None:
+        self._reset_busy_state()
         self.widget_state_requested.emit(FloatingCircle.IDLE)
         self.chat_status_changed.emit("")
 
     def _on_help_session_failed(self, message: str) -> None:
+        self._reset_busy_state()
         self.agent_message_received.emit(message)
         self.widget_state_requested.emit(FloatingCircle.IDLE)
         self.chat_status_changed.emit("")

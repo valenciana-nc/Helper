@@ -122,7 +122,6 @@ class FloatingCircle(QWidget):
         self._hold_timer.timeout.connect(self._on_hold_threshold_reached)
 
         self._frame_interval_active = 16
-        self._frame_interval_idle = 33
         self._frame_timer = QTimer(self)
         self._frame_timer.setInterval(self._frame_interval_active)
         self._frame_timer.timeout.connect(self.update)
@@ -183,6 +182,17 @@ class FloatingCircle(QWidget):
             target.update(w)
             return target
         return w
+
+    def _wake_frame_timer(self) -> None:
+        """Restart the frame timer after an idle sleep.
+
+        The timer is stopped when the widget is fully idle (see paintEvent)
+        to save battery. Any user interaction or state change that could
+        start an animation must call this first.
+        """
+        if not self._frame_timer.isActive():
+            self._frame_timer.setInterval(self._frame_interval_active)
+            self._frame_timer.start()
 
     def set_state(self, state: str) -> None:
         normalized = state.lower()
@@ -281,11 +291,13 @@ class FloatingCircle(QWidget):
         self.set_muted(not self.muted)
 
     def _spawn_ripple(self, point: QPointF) -> None:
+        self._wake_frame_timer()
         self._ripples.append({'cx': point.x(), 'cy': point.y(), 't': 0.0, 'max_t': 0.7})
         if len(self._ripples) > 5:
             self._ripples = self._ripples[-5:]
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        self._wake_frame_timer()
         if event.button() == Qt.MouseButton.LeftButton:
             local = event.position()
             zone = self._hit_zone(local)
@@ -330,10 +342,12 @@ class FloatingCircle(QWidget):
         return None
 
     def enterEvent(self, event) -> None:  # type: ignore[override]
+        self._wake_frame_timer()
         self._update_hover(event.position())
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # type: ignore[override]
+        self._wake_frame_timer()
         self._hover_target = 0.0
         super().leaveEvent(event)
 
@@ -371,6 +385,7 @@ class FloatingCircle(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        self._wake_frame_timer()
         if event.button() == Qt.MouseButton.LeftButton:
             self._hold_timer.stop()
             if self._voice_hold_active:
@@ -447,9 +462,16 @@ class FloatingCircle(QWidget):
             or abs(self._hover_amt - self._hover_target) > 0.005
             or abs(self._open_amt - self._open_target) > 0.005
         )
-        target_interval = self._frame_interval_active if animating else self._frame_interval_idle
-        if self._frame_timer.interval() != target_interval:
-            self._frame_timer.setInterval(target_interval)
+        if animating:
+            if self._frame_timer.interval() != self._frame_interval_active:
+                self._frame_timer.setInterval(self._frame_interval_active)
+            if not self._frame_timer.isActive():
+                self._frame_timer.start()
+        elif self._frame_timer.isActive():
+            # Fully idle: stop the timer instead of repainting at 30fps
+            # forever. _wake_frame_timer() restarts it on the next
+            # interaction or state change.
+            self._frame_timer.stop()
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -906,6 +928,7 @@ class FloatingCircle(QWidget):
         menu.addAction(quit_action)
 
         menu.exec(global_pos)
+        menu.deleteLater()
 
     def _handle_restart_requested(self) -> None:
         self.restart_requested.emit()

@@ -125,6 +125,33 @@ class HistoryManager:
         self.max_tokens = max_tokens
         self.screenshot_max_edge = screenshot_max_edge
         self._entries: list[_StoredContent] = []
+        # Bound in-memory growth: _entries is pruned to this many entries on
+        # each append (pair-aware, so call/response pairs aren't split).
+        self._max_retained_entries = max_turns * 4
+
+    def _prune_entries(self) -> None:
+        """Trim old entries so _entries can't grow without bound."""
+        overflow = len(self._entries) - self._max_retained_entries
+        if overflow <= 0:
+            return
+        # Collect call_ids of function_calls being dropped so their responses
+        # are dropped too (never orphan a response).
+        dropped_call_ids: set[str] = set()
+        for entry in self._entries[:overflow]:
+            for part in entry.parts:
+                if part.function_call_id is not None:
+                    dropped_call_ids.add(part.function_call_id)
+        kept = self._entries[overflow:]
+        if dropped_call_ids:
+            kept = [
+                e for e in kept
+                if not any(
+                    p.function_response_call_id in dropped_call_ids
+                    for p in e.parts
+                    if p.function_response_call_id is not None
+                )
+            ]
+        self._entries = kept
 
     def clear(self) -> None:
         self._entries.clear()
@@ -153,6 +180,7 @@ class HistoryManager:
         if not built:
             raise ValueError("A history turn requires text, screenshot, or extra_parts.")
         self._entries.append(_StoredContent(role=role, parts=tuple(built)))
+        self._prune_entries()
 
     def add_function_call(self, name: str, args: dict[str, Any] | None = None, call_id: str | None = None) -> None:
         part = _StoredPart(
@@ -164,6 +192,7 @@ class HistoryManager:
             + self._estimate_json_tokens(args or {}),
         )
         self._entries.append(_StoredContent(role="assistant", parts=(part,)))
+        self._prune_entries()
 
     def add_function_response(self, name: str, response: dict[str, Any] | None = None, call_id: str | None = None) -> None:
         part = _StoredPart(
@@ -175,6 +204,7 @@ class HistoryManager:
             + self._estimate_json_tokens(response or {}),
         )
         self._entries.append(_StoredContent(role="tool", parts=(part,)))
+        self._prune_entries()
 
     def snapshot(self) -> HistorySnapshot:
         selected_entries = list(self._entries[-self.max_turns :])

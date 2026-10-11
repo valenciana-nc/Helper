@@ -528,6 +528,8 @@ class ComputerController:
 
     @staticmethod
     def _foreground_window() -> ForegroundWindow | None:
+        if user32 is None:
+            return None
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return None

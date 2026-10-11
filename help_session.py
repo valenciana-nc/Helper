@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 import time
+import weakref
 from dataclasses import dataclass, field, replace
 from threading import Event, Thread
 from collections.abc import Callable
@@ -1125,11 +1126,8 @@ def _guard_revalidated_target(
         >= MIN_REVALIDATION_OVERLAP_FRACTION
     ):
         return target
-    if not decision.target_id or target.source != "target_id":
-        return replace(target, rejected_reason="current screen recheck target changed")
-
-    if _same_revalidation_geometry(previous_target.rect, target.rect):
-        return target
+    # If we reach here, geometry changed beyond drift tolerance and there's
+    # no target_id to independently verify against.
     return replace(target, rejected_reason="current screen recheck target changed")
 
 
@@ -1990,12 +1988,33 @@ def _capture_rect_image(
     if clipped is None:
         return None
     try:
+        image = _decoded_capture_image(capture)
+    except Exception:
+        return None
+    if image is None:
+        return None
+    x, y, width, height = clipped
+    return image.convert("RGB").crop((x, y, x + width, y + height))
+
+
+# Cache decoded PNGs per capture: _capture_rect_image() is called up to 4x
+# per walkthrough step, and each call was decoding the full PNG (~100-300ms
+# for 4K). WeakKeyDictionary so captures are freed when no longer referenced.
+_decoded_image_cache: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _decoded_capture_image(capture: "Capture") -> Image.Image | None:
+    """Decode a capture's PNG once, caching the result per capture object."""
+    cached = _decoded_image_cache.get(capture)
+    if cached is not None:
+        return cached
+    try:
         image = Image.open(io.BytesIO(capture.png_bytes))
         image.load()
     except Exception:
         return None
-    x, y, width, height = clipped
-    return image.convert("RGB").crop((x, y, x + width, y + height))
+    _decoded_image_cache[capture] = image
+    return image
 
 
 def _screen_rect_to_image_rect(

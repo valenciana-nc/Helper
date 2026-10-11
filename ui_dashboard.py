@@ -480,6 +480,10 @@ class DashboardWindow(QWidget):
         self._nav_buttons: dict[str, QPushButton] = {}
         self._page_index: dict[str, int] = {}
         self._last_rendered_signature: tuple[Any, ...] | None = None
+        # Cache the keyring-backed account email: _refresh_status() runs every
+        # 2s and account_email() is a credential-manager round-trip. Refreshed
+        # in _refresh_account_card() on auth transitions.
+        self._cached_account_email: str | None = None
 
         self._build_window()
         self._build_ui()
@@ -1187,6 +1191,11 @@ class DashboardWindow(QWidget):
         return pill
 
     def _set_pill(self, pill: QLabel, text: str, kind: str) -> None:
+        # Skip the full QSS reparse when nothing changed — this runs on a
+        # 2s status tick and setStyleSheet forces a repolish every time.
+        if pill.text() == text and pill.property("kind") == kind:
+            pill.setVisible(bool(text))
+            return
         pill.setText(text)
         pill.setProperty("kind", kind)
         # Re-apply the stylesheet so the new "kind" property selector takes effect.
@@ -1600,9 +1609,11 @@ class DashboardWindow(QWidget):
 
         if hasattr(self, "_sidebar_foot_pill"):
             if snapshot.get("signed_in"):
-                email = oauth_codex.account_email() or "ChatGPT"
-                self._set_pill(self._sidebar_foot_pill, f"Signed in · {email}", "success")
+                if self._cached_account_email is None:
+                    self._cached_account_email = oauth_codex.account_email() or "ChatGPT"
+                self._set_pill(self._sidebar_foot_pill, f"Signed in · {self._cached_account_email}", "success")
             else:
+                self._cached_account_email = None
                 self._set_pill(
                     self._sidebar_foot_pill,
                     "Not signed in — open Account to sign in",
@@ -1898,10 +1909,12 @@ class DashboardWindow(QWidget):
         signed_in = oauth_codex.is_signed_in()
         if signed_in:
             email = oauth_codex.account_email() or "unknown account"
+            self._cached_account_email = email
             self._account_status_label.setText(f"Signed in as <b>{email}</b>")
             self._sign_in_button.setText("Re-authenticate")
             self._sign_out_button.setVisible(True)
         else:
+            self._cached_account_email = None
             self._account_status_label.setText("Not signed in.")
             self._sign_in_button.setText("Sign in with ChatGPT")
             self._sign_out_button.setVisible(False)
