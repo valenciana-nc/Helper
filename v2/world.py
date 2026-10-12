@@ -342,7 +342,11 @@ class WorldModel:
         elements = _snapshot_tree()
         with self._lock:
             changed = _diff_elements(self._frame.elements, elements)
-            if not changed and self._seq > 0:
+            # On platforms without UIA the tree is always empty; without the
+            # screenshot check no frame would ever publish after the first
+            # and consumers would verify against a frozen image.
+            png_changed = png != self._frame.png
+            if not changed and not png_changed and self._seq > 0:
                 return False
             self._seq += 1
             self._frame = ScreenFrame(
