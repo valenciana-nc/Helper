@@ -264,6 +264,30 @@ def test_do_subgoal_typing_uses_set_value():
     assert res.ok is False  # crops identical → not verified
 
 
+class _ExplodingActuator(FakeActuator):
+    """Synthetic input unavailable (e.g. headless): raises on use."""
+
+    def click_element(self, el) -> bool:
+        self.clicked_elements.append(el.id)
+        return False  # force the synthetic fallback
+
+    def click_at(self, x, y):
+        raise RuntimeError("no display for synthetic input")
+
+
+def test_do_subgoal_actuation_failure_does_not_raise():
+    # Docstring contract: do_subgoal never raises for actuation failures.
+    world = _world_with_save()
+    act = _ExplodingActuator()
+    llm = FakeLlm([])
+    sg = Subgoal(id="sg1", description='Click the "Save" button',
+                 success_criteria="dialog visible", target_hint="Save")
+    res = do_subgoal(sg, world, act, llm, max_attempts=2)
+    assert res.ok is False
+    assert res.attempts == 2
+    assert "actuation failed" in res.detail
+
+
 # ---------------------------------------------------------------- agent
 
 _AGENT_PLAN = (

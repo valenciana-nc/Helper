@@ -69,7 +69,17 @@ def do_subgoal(
             continue
 
         before_crop = _crop_frame(frame, target, crop_png)
-        _actuate(subgoal, target, world, actuator)
+        try:
+            _actuate(subgoal, target, world, actuator)
+        except Exception as exc:
+            # Actuator failure (e.g. synthetic input unavailable headless)
+            # fails the attempt, never the run: the docstring contract is
+            # that do_subgoal never raises for actuation failures.
+            log.warning("subgoal %s attempt %d: actuation raised: %r",
+                        subgoal.id, attempt, exc)
+            last_detail = f"actuation failed on attempt {attempt}: {exc}"
+            _settle(world, verify_wait_s)
+            continue
         after_frame = _settle(world, verify_wait_s)
         after_crop = _crop_frame(after_frame, target, crop_png)
 
