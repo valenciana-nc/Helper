@@ -316,3 +316,47 @@ def test_agent_empty_plan_finishes():
                      world=world)
     report = agent.run_goal("already done")
     assert report.ok is True and report.done == []
+
+
+def _replan_agent(monkeypatch, abort):
+    """Drive run_goal into the replan branch with do_subgoal stubbed out."""
+    import v2.agent as agent_mod
+    from v2.execute import ActionResult
+
+    seen = []
+
+    def fake_do_subgoal(subgoal, world, actuator, llm, **kw):
+        seen.append(kw.get("should_abort"))
+        return ActionResult(ok=False, detail="nope", attempts=1)
+
+    monkeypatch.setattr(agent_mod, "do_subgoal", fake_do_subgoal)
+    plan_json = ('[{"description": "Click \\"Save\\"", '
+                 '"success_criteria": "x", "target_hint": "Save"}]')
+    world = _world_with_save()
+    agent = HelperV2(llm=FakeLlm([plan_json, plan_json]),
+                     actuator=FakeActuator(), world=world, max_attempts=1)
+    report = agent.run_goal("save", should_abort=abort)
+    return agent, report, seen
+
+
+def test_agent_replan_passes_abort_to_subgoals(monkeypatch):
+    # Replanned subgoals must receive should_abort (Escape/abort used to be
+    # silently ignored once the agent replanned).
+    abort = lambda: False  # noqa: E731
+    _, report, seen = _replan_agent(monkeypatch, abort)
+    # Outer subgoal + one replanned subgoal, both wired to the abort flag.
+    assert seen == [abort, abort]
+    assert report.replanned is True
+    assert report.failed == ["sg1"]
+
+
+def test_agent_replan_honors_abort(monkeypatch):
+    abort_calls = {"n": 0}
+
+    def abort():
+        abort_calls["n"] += 1
+        return abort_calls["n"] >= 2  # abort as soon as replanning starts
+
+    _, report, seen = _replan_agent(monkeypatch, abort)
+    assert [s for s in seen] == [abort]  # inner subgoal never executed
+    assert report.failed == ["sg1"]  # replanned subgoal recorded as failed

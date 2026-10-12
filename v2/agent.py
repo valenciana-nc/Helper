@@ -108,12 +108,16 @@ class HelperV2:
                     )
                     # Execute the fresh plan's subgoals inline.
                     for sg in plan.subgoals:
+                        if aborted():
+                            report.failed.append(sg.id)
+                            break
                         emit("subgoal_start", {"id": sg.id,
                                               "description": sg.description})
                         r2 = do_subgoal(
                             sg, self._world, self._actuator, self._llm,
                             marks=self._last_marks,
                             max_attempts=self._max_attempts,
+                            should_abort=aborted,
                         )
                         if r2.ok:
                             sg.done = True
