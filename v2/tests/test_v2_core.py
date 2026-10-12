@@ -13,6 +13,7 @@ from v2.ground import (
     Target,
     center,
     find_by_text,
+    is_typable,
     resolve_mark,
     vision_fallback,
 )
@@ -115,6 +116,22 @@ def test_find_by_text_prefers_exact_and_actionable():
     w = FakeWorld({
         "a": _el("a", name="Save As...", ctype="menuitem", rect=(0, 0, 200, 30)),
         "b": _el("b", name="Save", ctype="button", rect=(0, 0, 80, 30)),
+    })
+    t = find_by_text(w, "Save")
+    assert t is not None and t.element_id == "b" and t.source == "uia-direct"
+
+
+def test_is_typable_case_insensitive():
+    # Real UIA trees report capitalized types ("Edit", "Button").
+    assert is_typable(_el("t", ctype="Edit")) is True
+    assert is_typable(_el("t", ctype="TEXTBOX")) is True
+    assert is_typable(_el("b", ctype="Button")) is False
+
+
+def test_find_by_text_ranks_capitalized_types():
+    w = FakeWorld({
+        "a": _el("a", name="Save As...", ctype="MenuItem", rect=(0, 0, 200, 30)),
+        "b": _el("b", name="Save", ctype="Button", rect=(0, 0, 80, 30)),
     })
     t = find_by_text(w, "Save")
     assert t is not None and t.element_id == "b" and t.source == "uia-direct"
