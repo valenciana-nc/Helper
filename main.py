@@ -376,9 +376,6 @@ class HelplerDesktopApp(QObject):
         self._tray_icon = tray_icon
         self._sync_tray_actions()
 
-    def _position_chat_window(self) -> None:
-        return
-
     def _sync_tray_actions(self) -> None:
         if self._tray_toggle_action is None:
             return
@@ -787,26 +784,6 @@ class HelplerDesktopApp(QObject):
             self.agent_message_received.emit(
                 "v2 is already working on a goal — wait for it to finish.")
             self._reset_busy_state()
-
-    def _handle_overlay_action(self, action: str, payload: dict[str, object]) -> None:
-        screen_x = payload.get("screen_x")
-        screen_y = payload.get("screen_y")
-        if not isinstance(screen_x, int) or not isinstance(screen_y, int):
-            return
-
-        label = str(payload.get("description") or action).strip() or action
-        duration = 1500
-        self.overlay_highlight_requested.emit(
-            screen_x - 24,
-            screen_y - 24,
-            48,
-            48,
-            label,
-            duration,
-            screen_x,
-            screen_y,
-        )
-
 
 def _startup_surface(argv: list[str]) -> str:
     args = {arg.strip().lower() for arg in argv[1:]}
