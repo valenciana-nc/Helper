@@ -384,10 +384,15 @@ class WorldModel:
             self._frame_event.wait(remaining)
             with self._lock:
                 frame = self._frame
-            if frame.seq != start_seq:
-                return frame
-            # Stale signal from an older publish; clear and keep waiting.
-            self._frame_event.clear()
+                if frame.seq != start_seq:
+                    return frame
+                # Stale signal from an older publish. Clear it while holding
+                # the lock so a publish racing this read can neither be
+                # missed (a publish landing after the clear re-sets the
+                # event and wakes the next wait) nor double-counted (a
+                # publish landing before the clear shows up in the seq
+                # check above).
+                self._frame_event.clear()
 
     def element(self, element_id: str) -> Element | None:
         """Look up an element in the current frame. Never blocks."""

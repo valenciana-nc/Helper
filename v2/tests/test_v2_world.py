@@ -199,6 +199,66 @@ def test_wait_for_change_timeout_when_static(monkeypatch):
         wm.stop()
 
 
+def test_wait_for_change_never_misses_racing_publish(monkeypatch):
+    """Regression: a frame published between the waiter's stale-signal read
+    and its event clear must wake the waiter promptly (no lost wakeup).
+
+    A lock wrapper publishes one frame when the waiter's seq-read block
+    releases (the 2nd lock release) — the exact interleaving where a frame
+    used to land between the read and the event clear, wiping its signal
+    and leaving the waiter asleep until the full timeout.
+    """
+    monkeypatch.setattr(world_mod, "_snapshot_tree", lambda: {})
+    monkeypatch.setattr(world_mod, "_capture_png", _fake_png)
+
+    wm = WorldModel(poll_interval_s=3600)  # no background publishes
+    wm.start()
+    real_lock = wm._lock
+    try:
+        start_seq = wm.current_frame().seq
+        wm._frame_event.clear()  # drain the initial publish signal
+        wm._frame_event.set()    # stale signal: event set, seq unchanged
+
+        def publish_frame():
+            png, w, h = _fake_png()
+            wm._seq += 1
+            wm._frame = ScreenFrame(
+                seq=wm._seq, png=png, width=w, height=h,
+                elements={}, changed_ids={"x"},
+            )
+            wm._frame_event.set()
+
+        published = {"releases": 0}
+
+        class _RacingLock:
+            """Publishes one frame when the waiter's seq-read block
+            releases (the 2nd lock release)."""
+            def __enter__(self):
+                return real_lock.__enter__()
+
+            def __exit__(self, *exc):
+                try:
+                    published["releases"] += 1
+                    if published["releases"] == 2:
+                        publish_frame()
+                finally:
+                    return real_lock.__exit__(*exc)
+
+        wm._lock = _RacingLock()
+        t0 = time.monotonic()
+        frame = wm.wait_for_change(2.0)
+        elapsed = time.monotonic() - t0
+        assert frame is not None, "waiter timed out entirely"
+        assert frame.seq == start_seq + 1
+        assert "x" in frame.changed_ids
+        # The racing frame must wake the waiter — not leave it asleep
+        # until the timeout expires (the lost-wakeup symptom).
+        assert elapsed < 1.0, f"waiter slept {elapsed:.2f}s on a live frame"
+    finally:
+        wm._lock = real_lock
+        wm.stop()
+
+
 def test_wait_for_change_returns_zero_timeout_immediately(monkeypatch):
     monkeypatch.setattr(world_mod, "_snapshot_tree", lambda: {"a": _el("a")})
     monkeypatch.setattr(world_mod, "_capture_png", _fake_png)
