@@ -169,7 +169,7 @@ def _extract_text(description: str) -> str | None:
 def _extract_key(description: str) -> str:
     m = re.search(r"\b(esc(?:ape)?|enter|tab|space|delete|backspace|f\d{1,2})\b",
                   description, re.I)
-    return (m.group(1) or "enter").lower()
+    return (m.group(1) if m else "enter").lower()
 
 
 def _crop_frame(frame, target: Target, crop_png) -> bytes:
