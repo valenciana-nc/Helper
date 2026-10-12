@@ -459,7 +459,9 @@ class TtsStreamer:
         self._stop.set()
         try:
             import sounddevice as sd
-        except ImportError:
+        except (ImportError, OSError):
+            # OSError: PortAudio system library missing (not just the
+            # Python package) — same graceful degradation.
             return
         try:
             sd.stop()
@@ -537,7 +539,8 @@ class TtsStreamer:
         """Play WAV bytes via sounddevice; without it, dump to temp dir + log."""
         try:
             import sounddevice as sd
-        except ImportError:
+        except (ImportError, OSError):
+            # OSError: PortAudio system library missing — dump instead.
             path = self._dump_wav(wav)
             log.info("sounddevice not installed; wrote TTS audio to %s (no playback)", path)
             return
