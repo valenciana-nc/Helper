@@ -41,17 +41,11 @@ def transcribe_v2(wav_bytes: bytes, *, prefer_local: bool = True) -> str:
     pcm = wav_to_pcm16(wav_bytes)
     stt = SttStreamer(prefer_local=prefer_local)
     stt.start()
-    try:
-        # Feed in ~1s chunks so partials stream even for recorded audio.
-        chunk = 32000  # 16000 Hz * 2 bytes
-        for i in range(0, len(pcm), chunk):
-            stt.feed(pcm[i : i + chunk])
-        return stt.finish().strip()
-    finally:
-        try:
-            stt.finish()
-        except Exception:
-            pass
+    # Feed in ~1s chunks so partials stream even for recorded audio.
+    chunk = 32000  # 16000 Hz * 2 bytes
+    for i in range(0, len(pcm), chunk):
+        stt.feed(pcm[i : i + chunk])
+    return stt.finish().strip()
 
 
 class _HighlightActuator:
