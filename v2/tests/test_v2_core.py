@@ -177,6 +177,21 @@ def test_make_plan_tolerates_fences():
     assert len(plan.subgoals) == 2
 
 
+def test_make_plan_tolerates_prose_around_json():
+    llm = FakeLlm([
+        "Here is the plan:\n" + _PLAN_JSON + "\nLet me know if that works."
+    ])
+    plan = make_plan("g", llm, _png(), [])
+    assert len(plan.subgoals) == 2
+    assert plan.subgoals[0].target_hint == "mark 3"
+
+
+def test_make_plan_tolerates_object_wrapped_array():
+    llm = FakeLlm(['{"subgoals": ' + _PLAN_JSON + "}"])
+    plan = make_plan("g", llm, _png(), [])
+    assert len(plan.subgoals) == 2
+
+
 def test_make_plan_bad_json_raises():
     llm = FakeLlm(["not json at all"])
     with pytest.raises(PlanError):

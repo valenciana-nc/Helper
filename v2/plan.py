@@ -101,18 +101,32 @@ def make_plan(
     return Plan(goal=goal, subgoals=subgoals)
 
 
+def _loads_array(text: str) -> list | None:
+    """json.loads, but only when the result is a list; None otherwise."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, list) else None
+
+
 def _parse_json_array(raw: str) -> list[dict]:
     text = raw.strip()
     # Tolerate code fences.
     m = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", text, re.S)
     if m:
         text = m.group(1)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise PlanError(f"planner returned unparseable JSON: {exc}") from exc
-    if not isinstance(data, list):
-        raise PlanError("planner JSON was not an array")
+    data = _loads_array(text)
+    if data is None:
+        # Last resort: the model chatted around the JSON ("Here is the
+        # plan: [...]"). Parse the outermost [...] span.
+        start, end = text.find("["), text.rfind("]")
+        if 0 <= start < end:
+            data = _loads_array(text[start : end + 1])
+    if data is None:
+        raise PlanError(
+            f"planner returned unparseable JSON: {raw.strip()[:160]!r}"
+        )
     return [it for it in data if isinstance(it, dict)]
 
 
