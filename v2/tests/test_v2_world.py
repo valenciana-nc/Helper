@@ -342,6 +342,107 @@ def test_capture_failure_degrades_to_placeholder(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# lifecycle / error paths
+# ---------------------------------------------------------------------------
+
+
+def test_world_model_rejects_nonpositive_poll_interval():
+    with pytest.raises(ValueError):
+        WorldModel(poll_interval_s=0)
+    with pytest.raises(ValueError):
+        WorldModel(poll_interval_s=-1)
+
+
+def test_start_and_run_survive_refresh_failure(monkeypatch):
+    # A refresh that always raises must never escape start() or kill the
+    # poll loop: both call sites swallow it into a debug log.
+    def boom(self):
+        raise RuntimeError("capture exploded")
+
+    monkeypatch.setattr(WorldModel, "_refresh_once", boom)
+    wm = WorldModel(poll_interval_s=0.01)
+    wm.start()
+    try:
+        time.sleep(0.05)
+        assert wm._thread is not None and wm._thread.is_alive()
+    finally:
+        wm.stop()
+
+
+def test_run_uses_available_uia_source(monkeypatch):
+    created = []
+
+    class FakeSource:
+        def __init__(self):
+            self.available = True
+            self.waits = 0
+            self.clears = 0
+            self.closed = False
+            created.append(self)
+
+        def wait(self, timeout_s):
+            self.waits += 1
+            return False
+
+        def clear(self):
+            self.clears += 1
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(world_mod, "_UiaEventSource", FakeSource)
+    wm = WorldModel(poll_interval_s=0.01)
+    wm.start()
+    try:
+        time.sleep(0.05)
+    finally:
+        wm.stop()
+    assert len(created) == 1
+    assert created[0].waits >= 1 and created[0].clears >= 1
+    assert created[0].closed is True
+
+
+def test_uia_event_source_wait_clear_close():
+    src = world_mod._UiaEventSource.__new__(world_mod._UiaEventSource)
+    src._fired = threading.Event()
+    src._uia = src._handler = src._root = None
+    src.available = False
+    assert src.wait(0.01) is False  # unavailable → never blocks on events
+    src.available = True
+    src._fired.set()
+    assert src.wait(0.01) is True
+    src.clear()
+    assert not src._fired.is_set()
+    src.close()
+    assert src.available is False
+
+
+def test_uia_event_source_teardown_swallows_remove_error():
+    src = world_mod._UiaEventSource.__new__(world_mod._UiaEventSource)
+    src._fired = threading.Event()
+    src._uia = _RaisingUia()
+    src._handler = object()
+    src._root = object()
+    src.available = True
+    src.close()  # RemoveStructureChangedEventHandler raises → swallowed
+    assert src.available is False
+    assert src._uia is None and src._handler is None and src._root is None
+
+
+class _RaisingUia:
+    def RemoveStructureChangedEventHandler(self, root, handler):
+        raise RuntimeError("COM gone")
+
+
+def test_uia_event_source_subscribe_failure_degrades(monkeypatch):
+    # On "Windows" without comtypes, _subscribe raises ImportError and the
+    # source degrades to polling (available stays False) instead of raising.
+    monkeypatch.setattr(sys, "platform", "win32")
+    src = world_mod._UiaEventSource()
+    assert src.available is False
+
+
+# ---------------------------------------------------------------------------
 # graceful degradation on non-Windows (this Linux box)
 # ---------------------------------------------------------------------------
 
@@ -359,6 +460,12 @@ def test_empty_tree_graceful_on_linux():
         assert frame.changed_ids == set()
         assert wm.element("123:4.5") is None
         assert frame.png and frame.width >= 1 and frame.height >= 1
-        assert wm.wait_for_change(0.15) is None  # nothing ever changes
+        # The tree never changes — but a real display's screenshot bytes
+        # are NOT stable across captures (e.g. under xvfb-run), so the
+        # poll loop may legitimately publish a new frame with an empty
+        # tree. Assert the actual invariant: any published frame still
+        # has an empty tree and a valid PNG, never phantom elements.
+        got = wm.wait_for_change(0.15)
+        assert got is None or (got.elements == {} and got.png)
     finally:
         wm.stop()

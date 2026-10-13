@@ -30,12 +30,16 @@ class FakeReport:
 
 
 class FakeAgent:
-    def __init__(self):
-        self.events = []
+    def __init__(self, release: threading.Event):
+        self._release = release
 
     def run_goal(self, goal, on_event=None, should_abort=None):
         on_event("plan", {"subgoals": ["a"]})
         on_event("subgoal_start", {"id": "sg1", "description": "a"})
+        # Hold the "running" state until the test releases us: the old
+        # instant-return fake let the worker finish before the test's
+        # second start_goal, making the refuse-while-running assert racy.
+        self._release.wait(timeout=10)
         on_event("subgoal_done", {"id": "sg1"})
         on_event("finished", {"report": {"ok": True, "done": ["sg1"],
                                          "failed": []}})
@@ -44,7 +48,8 @@ class FakeAgent:
 
 def test_runner_emits_signals(qapp, monkeypatch):
     runner = V2Runner()
-    monkeypatch.setattr(runner, "_get_agent", lambda: FakeAgent())
+    release = threading.Event()
+    monkeypatch.setattr(runner, "_get_agent", lambda: FakeAgent(release))
 
     got = {"messages": [], "states": [], "finished": [], "busy": []}
     runner.v2_message.connect(lambda m: got["messages"].append(m))
@@ -53,8 +58,9 @@ def test_runner_emits_signals(qapp, monkeypatch):
     runner.v2_busy.connect(lambda b: got["busy"].append(b))
 
     assert runner.start_goal("do thing") is True
-    # Second start while running must refuse.
+    # Second start while running must refuse (first goal is blocked).
     assert runner.start_goal("other") is False
+    release.set()
 
     deadline = time.time() + 10
     while not got["finished"] and time.time() < deadline:
