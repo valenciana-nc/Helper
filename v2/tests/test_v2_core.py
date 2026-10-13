@@ -8,7 +8,13 @@ import pytest
 from PIL import Image
 
 from v2.agent import HelperV2
-from v2.execute import do_subgoal
+from v2.execute import (
+    _actuate,
+    _crop_frame,
+    _extract_key,
+    _strip_verbs,
+    do_subgoal,
+)
 from v2.ground import (
     Target,
     center,
@@ -318,6 +324,151 @@ def test_do_subgoal_actuation_failure_does_not_raise():
     assert res.ok is False
     assert res.attempts == 2
     assert "actuation failed" in res.detail
+
+
+# ----------------------------------------------------------------
+# execute — branches previously only reachable in production
+# ----------------------------------------------------------------
+
+class TogglingWorld(FakeWorld):
+    """current_frame() returns a distinct PNG on every call (the color
+    encodes the call counter), so before/after verify crops always differ
+    and the VLM verifier is actually consulted — no matter how many
+    current_frame() calls grounding interleaves between the two crops."""
+
+    def __init__(self, elements: dict | None = None):
+        super().__init__(elements)
+        self._n = 0
+
+    def current_frame(self):
+        self._n += 1
+        color = ((self._n * 53) % 256, (self._n * 97) % 256,
+                 (self._n * 149) % 256)
+        return _frame(self._frame.elements, png=_png(color))
+
+
+class RecordingActuator(FakeActuator):
+    def __init__(self, fail_invoke: bool = False):
+        super().__init__()
+        self.fail_invoke = fail_invoke
+        self.typed: list[str] = []
+        self.keys: list[str] = []
+
+    def type_text(self, text):
+        self.typed.append(text)
+
+    def press_key(self, key):
+        self.keys.append(key)
+
+
+def test_do_subgoal_abort_before_first_attempt():
+    world = _world_with_save()
+    act = FakeActuator()
+    sg = Subgoal(id="sg1", description='Click the "Save" button',
+                 success_criteria="dialog visible", target_hint="Save")
+    res = do_subgoal(sg, world, act, FakeLlm([]),
+                     should_abort=lambda: True)
+    assert res.ok is False
+    assert res.detail == "aborted by user"
+    assert res.attempts == 1
+    assert act.clicked_elements == []  # nothing actuated
+
+
+def test_do_subgoal_verifier_raises_is_not_failure_proof():
+    # The VLM verifier raising (here: FakeLlm out of replies) must fail
+    # the attempt and retry, never propagate out of do_subgoal.
+    world = TogglingWorld({"1:42": _el()})
+    act = FakeActuator()
+    sg = Subgoal(id="sg1", description='Click the "Save" button',
+                 success_criteria="dialog visible", target_hint="Save")
+    res = do_subgoal(sg, world, act, FakeLlm([]), max_attempts=2)
+    assert res.ok is False
+    assert res.attempts == 2
+    assert "verification failed" in res.detail
+
+
+def test_do_subgoal_mark_hint_resolves():
+    world = TogglingWorld({"1:42": _el()})
+    act = FakeActuator()
+    sg = Subgoal(id="sg1", description="Click Save",
+                 success_criteria="dialog visible", target_hint="mark 1")
+    res = do_subgoal(sg, world, act, FakeLlm(["yes"]),
+                     marks=[FakeMark(1, "1:42")], max_attempts=1)
+    assert res.ok is True and res.attempts == 1
+    assert act.clicked_elements == ["1:42"]
+
+
+def test_do_subgoal_type_branch_clicks_then_types():
+    # Non-typable element: no SetValue path — focus-click then type_text.
+    el = _el("b1", name="Name", ctype="button", rect=(0, 0, 100, 30))
+    world = TogglingWorld({"b1": el})
+    act = RecordingActuator()
+    sg = Subgoal(id="sg1", description='Type "hello" into the Name field',
+                 success_criteria="hello visible", target_hint="Name")
+    res = do_subgoal(sg, world, act, FakeLlm(["yes"]), max_attempts=1)
+    assert res.ok is True
+    assert act.clicked_elements == ["b1"]  # focus click
+    assert act.typed == ["hello"]
+
+
+def test_do_subgoal_key_branch():
+    # UIA click fails (pattern unsupported) → key branch via "press esc".
+    world = TogglingWorld({"1:42": _el()})
+    act = RecordingActuator(fail_invoke=True)
+    sg = Subgoal(id="sg1", description="Press Escape to close the dialog",
+                 success_criteria="dialog closed", target_hint="Save")
+    res = do_subgoal(sg, world, act, FakeLlm(["yes"]), max_attempts=1)
+    assert res.ok is True
+    assert act.keys == ["escape"]
+
+
+def test_do_subgoal_default_click():
+    # Description with no verb keywords falls through to the default click.
+    world = TogglingWorld({"1:42": _el()})
+    act = FakeActuator()
+    sg = Subgoal(id="sg1", description="Do the Save thing",
+                 success_criteria="done", target_hint="Save")
+    res = do_subgoal(sg, world, act, FakeLlm(["yes"]), max_attempts=1)
+    assert res.ok is True
+    assert act.clicked_elements == ["1:42"]
+
+
+def test_actuate_type_with_no_element_clicks_at_center():
+    # Vision-fallback target (no element id): click at rect center, then type.
+    world = FakeWorld({})
+    act = RecordingActuator()
+    target = Target(element_id=None, rect=(0, 0, 100, 40),
+                    source="vision-fallback", confidence=0.6)
+    sg = Subgoal(id="sg1", description='Type "hi"',
+                 success_criteria="hi visible")
+    _actuate(sg, target, world, act)
+    assert act.clicked_at == [(50, 20)]
+    assert act.typed == ["hi"]
+
+
+def test_strip_verbs():
+    assert _strip_verbs('Click the "Save" button') == "Save"
+    assert _strip_verbs("Click the Save button") == "Save"
+    assert _strip_verbs("Press the Cancel link") == "Cancel"
+    assert _strip_verbs("Open the File menu") == "File"
+    assert _strip_verbs("Save the file") == "Save the file"  # no verb
+
+
+def test_extract_key():
+    assert _extract_key("Press Escape to close") == "escape"
+    assert _extract_key("Press F5 to refresh") == "f5"
+    assert _extract_key("Do something") == "enter"  # default
+
+
+def test_crop_frame_falls_back_to_full_frame():
+    frame = _frame()
+    target = Target(element_id=None, rect=(0, 0, 10, 10),
+                    source="vision-fallback", confidence=0.6)
+
+    def boom(png, rect, pad=0):
+        raise RuntimeError("no crop")
+
+    assert _crop_frame(frame, target, boom) == frame.png
 
 
 # ---------------------------------------------------------------- agent
