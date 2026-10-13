@@ -172,6 +172,31 @@ def test_vision_fallback_grounder_raises():
     assert vision_fallback(_png(), "x", boom) is None
 
 
+def test_find_by_text_skips_nonmatching_and_unnamed():
+    w = FakeWorld({
+        "a": _el("a", name="Cancel"),
+        "b": _el("b", name="Save"),
+        "c": _el("c", name=""),
+    })
+    t = find_by_text(w, "Save")
+    assert t is not None and t.element_id == "b"
+    assert find_by_text(FakeWorld({"a": _el("a", name="Cancel")}),
+                        "Save") is None
+    assert find_by_text(FakeWorld({"c": _el("c", name="")}),
+                        "Save") is None
+
+
+def test_vision_fallback_grounder_returns_none():
+    assert vision_fallback(_png(), "x", lambda png, instr: None) is None
+
+
+def test_vision_fallback_zero_size_box_returns_none():
+    assert vision_fallback(_png(), "x",
+                           lambda png, instr: (5, 5, 0, 10)) is None
+    assert vision_fallback(_png(), "x",
+                           lambda png, instr: (5, 5, 10, -1)) is None
+
+
 def test_center():
     assert center((10, 20, 80, 40)) == (50, 40)
 
@@ -256,6 +281,19 @@ def test_verify_subgoal_no():
     llm = FakeLlm(["no"])
     sg = Subgoal(id="sg1", description="d", success_criteria="c")
     assert verify_subgoal(sg, _png((255, 0, 0)), _png((0, 0, 255)), llm) is False
+
+
+def test_regions_differ_undecodable_counts_as_change():
+    # Undecodable crops must never be reported as "no change" — that
+    # would silently skip verification.
+    assert regions_differ(b"not a png", b"not a png") is True
+    assert regions_differ(_png(), b"not a png") is True
+
+
+def test_regions_differ_resizes_mismatched():
+    same = _png((255, 0, 0), (64, 64))
+    assert regions_differ(same, _png((255, 0, 0), (32, 32))) is False
+    assert regions_differ(same, _png((0, 0, 255), (32, 32))) is True
 
 
 # ---------------------------------------------------------------- execute

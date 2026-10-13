@@ -7,7 +7,7 @@ import io
 import pytest
 from PIL import Image
 
-from v2.observe import Mark, annotate, crop_png
+from v2.observe import Mark, _badge_font, annotate, crop_png
 from v2.world import Element, ScreenFrame
 
 W, H = 800, 600
@@ -165,6 +165,22 @@ def test_crop_png_clamps_to_image_edges():
     # Pad would extend past the edges; must clamp, not crash.
     assert Image.open(io.BytesIO(crop_png(png, (0, 0, 10, 10), pad=20))).size == (30, 30)
     assert Image.open(io.BytesIO(crop_png(png, (790, 590, 50, 50)))).size == (10, 10)
+
+
+def test_badge_font_falls_back_without_size_support(monkeypatch):
+    # Very old Pillow: load_default() takes no size= kwarg (TypeError) —
+    # _badge_font must fall back to the bare call instead of crashing.
+    from PIL import ImageFont
+
+    real_load_default = ImageFont.load_default
+
+    def fake_load_default(*args, **kwargs):
+        if "size" in kwargs:
+            raise TypeError("load_default() got an unexpected keyword 'size'")
+        return real_load_default()
+
+    monkeypatch.setattr(ImageFont, "load_default", fake_load_default)
+    assert _badge_font() is not None
 
 
 def test_crop_png_empty_rect_raises():
