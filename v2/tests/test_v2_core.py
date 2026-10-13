@@ -543,3 +543,64 @@ def test_agent_replan_honors_abort(monkeypatch):
     _, report, seen = _replan_agent(monkeypatch, abort)
     assert [s for s in seen] == [abort]  # inner subgoal never executed
     assert report.failed == ["sg1"]  # replanned subgoal recorded as failed
+
+
+def test_agent_happy_path_all_verified():
+    # The success path (done, no replan) previously had no test: every
+    # agent test drove failures. TogglingWorld makes the crops differ so
+    # the verifier says yes on the first attempt.
+    world = TogglingWorld({"1:42": _el()})
+    act = FakeActuator()
+    llm = FakeLlm([_AGENT_PLAN, "yes"])
+    agent = HelperV2(llm=llm, actuator=act, world=world, max_attempts=1)
+    report = agent.run_goal("save")
+    assert report.ok is True
+    assert report.done == ["sg1"]
+    assert report.replanned is False
+
+
+def test_agent_replan_then_success():
+    # First subgoal fails verification ("no") → replan → the fresh
+    # plan's subgoal verifies ("yes") → run succeeds.
+    plan2 = (
+        '[{"description": "Click the \\"Save\\" button", '
+        '"success_criteria": "dialog visible", "target_hint": "Save"}]'
+    )
+    world = TogglingWorld({"1:42": _el()})
+    act = FakeActuator()
+    llm = FakeLlm([_AGENT_PLAN, "no", plan2, "yes"])
+    agent = HelperV2(llm=llm, actuator=act, world=world, max_attempts=1)
+    report = agent.run_goal("save")
+    assert report.ok is True
+    assert report.done == ["sg1"]
+    assert report.failed == []
+    assert report.replanned is True
+
+
+def test_agent_plan_error_falls_back_to_empty_plan():
+    # A planner that returns garbage raises PlanError inside make_plan;
+    # the agent must swallow it into an empty plan, not crash.
+    world = FakeWorld({})
+    agent = HelperV2(llm=FakeLlm(["not json at all"]),
+                     actuator=FakeActuator(), world=world)
+    report = agent.run_goal("save")
+    assert report.ok is True and report.done == [] and report.failed == []
+
+
+def test_agent_abort_before_first_subgoal():
+    # Abort already set when the loop starts: the subgoal is recorded as
+    # failed and do_subgoal is never entered.
+    world = _world_with_save()
+    agent = HelperV2(llm=FakeLlm([_AGENT_PLAN]), actuator=FakeActuator(),
+                     world=world)
+    report = agent.run_goal("save", should_abort=lambda: True)
+    assert report.ok is False
+    assert report.failed == ["sg1"]
+
+
+def test_agent_default_world_is_constructed():
+    # world=None builds a real WorldModel (no start — just construction).
+    from v2.world import WorldModel
+
+    agent = HelperV2(llm=FakeLlm([]), actuator=FakeActuator())
+    assert isinstance(agent._world, WorldModel)
