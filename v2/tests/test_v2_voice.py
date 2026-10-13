@@ -6,6 +6,7 @@ monkeypatched in TTS tests).
 """
 
 import io
+import struct
 import sys
 import threading
 import types
@@ -64,6 +65,9 @@ def test_energy_vad_speech_vs_silence():
 def test_energy_vad_empty_input():
     vad = vm.EnergyVad()
     assert vad.is_speech(b"") is False
+
+
+
 
 
 def test_energy_vad_hangover():
@@ -161,6 +165,86 @@ def test_stt_cloud_fallback(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# STT — diffing, failure paths, backend selection helpers
+# ---------------------------------------------------------------------------
+
+def test_stt_diff_locked_empty_and_revision():
+    s = vm.SttStreamer()
+    assert s._diff_locked("") is None
+    assert s._diff_locked("hello") == "hello"
+    assert s._diff_locked("hello world") == " world"  # suffix only
+    # The model revised earlier words: emit the corrected full text.
+    s._emitted = "hello world"
+    assert s._diff_locked("hello there") == "hello there"
+    assert s._emitted == "hello there"
+
+
+def test_stt_start_is_idempotent(monkeypatch):
+    created = _install_fake_faster_whisper(monkeypatch)
+    s = vm.SttStreamer(prefer_local=True)
+    s.start()
+    s.start()
+    assert len(created) == 1
+    assert s._started is True
+
+
+def test_stt_finish_final_transcription_failure(monkeypatch):
+    # Backend raises on the final transcribe → finish() swallows it and
+    # returns whatever was emitted so far (here: nothing).
+    created = _install_fake_faster_whisper(monkeypatch)
+    s = vm.SttStreamer(prefer_local=True)
+    s.start()
+
+    def boom(audio, **k):
+        raise RuntimeError("model exploded")
+
+    created[0].transcribe = boom
+    s.feed(b"\x00\x00" * 3200)
+    assert s.finish() == ""
+
+
+def test_stt_partial_transcription_failure_puts_empty(monkeypatch):
+    created = _install_fake_faster_whisper(monkeypatch)
+    s = vm.SttStreamer(prefer_local=True)
+    s.start()
+
+    def boom(audio, **k):
+        raise RuntimeError("model exploded")
+
+    created[0].transcribe = boom
+    s._transcribe_partial(b"\x00\x00" * 3200)
+    assert s._pending.get(timeout=1) == ""
+
+
+def test_openai_api_key_env_and_config(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "  env-key  ")
+    assert vm._openai_api_key() == "env-key"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setitem(
+        sys.modules, "config", SimpleNamespace(OPENAI_API_KEY=" cfg-key ")
+    )
+    assert vm._openai_api_key() == "cfg-key"
+    monkeypatch.setitem(sys.modules, "config", None)  # import fails
+    assert vm._openai_api_key() is None
+
+
+def test_v1_openai_client_missing_module_raises(monkeypatch):
+    monkeypatch.setitem(sys.modules, "openai_client", None)
+    with pytest.raises(RuntimeError, match="openai_client"):
+        vm._v1_openai_client("k")
+
+
+def test_try_cloud_returns_none_when_client_build_fails(monkeypatch):
+    monkeypatch.setattr(vm, "_openai_api_key", lambda: "k")
+
+    def boom(key):
+        raise RuntimeError("no client")
+
+    monkeypatch.setattr(vm, "_v1_openai_client", boom)
+    assert vm.SttStreamer()._try_cloud() is None
+
+
+# ---------------------------------------------------------------------------
 # TTS
 # ---------------------------------------------------------------------------
 
@@ -228,6 +312,171 @@ def test_tts_no_playback_without_sounddevice(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# TTS — worker, synthesis, playback error paths
+# ---------------------------------------------------------------------------
+
+def test_tts_worker_stops_before_first_chunk(monkeypatch):
+    t = vm.TtsStreamer()
+    synth_calls = []
+    monkeypatch.setattr(t, "_synthesize",
+                        lambda text: synth_calls.append(text))
+    t._stop.set()
+    t._run(["Hello."])
+    assert synth_calls == []
+
+
+def test_tts_worker_exception_does_not_propagate(monkeypatch):
+    t = vm.TtsStreamer()
+    monkeypatch.setattr(t, "_speak_sentence", lambda text: None)
+
+    def bad_stream():
+        raise RuntimeError("stream exploded")
+        yield "never"
+
+    t._run(bad_stream())  # must not raise
+
+
+def test_speak_sentence_stop_and_empty(monkeypatch):
+    t = vm.TtsStreamer()
+    synth_calls = []
+    monkeypatch.setattr(t, "_synthesize",
+                        lambda text: synth_calls.append(text))
+    t._stop.set()
+    t._speak_sentence("hi")
+    t._stop.clear()
+    t._speak_sentence("")
+    assert synth_calls == []
+
+
+def test_speak_sentence_synth_failure_swallowed(monkeypatch):
+    t = vm.TtsStreamer()
+    monkeypatch.setattr(t, "_synthesize",
+                        lambda text: (_ for _ in ()).throw(RuntimeError("boom")))
+    t._speak_sentence("hi")  # must not raise
+
+
+def test_speak_sentence_none_synth_skips_playback(monkeypatch):
+    t = vm.TtsStreamer()
+    monkeypatch.setattr(t, "_synthesize", lambda text: None)
+    play_calls = []
+    monkeypatch.setattr(t, "_play_wav", lambda wav: play_calls.append(wav))
+    t._speak_sentence("hi")
+    assert play_calls == []
+
+
+def test_speak_sentence_playback_failure_swallowed(monkeypatch):
+    t = vm.TtsStreamer()
+    monkeypatch.setattr(t, "_synthesize", lambda text: _canned_wav())
+    monkeypatch.setattr(t, "_play_wav",
+                        lambda wav: (_ for _ in ()).throw(RuntimeError("boom")))
+    t._speak_sentence("hi")  # must not raise
+
+
+def test_tts_stop_swallows_sounddevice_stop_error(monkeypatch):
+    fake_sd = SimpleNamespace(stop=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    vm.TtsStreamer().stop()  # must not raise
+
+
+def test_synthesize_prefers_local_then_cloud(monkeypatch):
+    t = vm.TtsStreamer()
+    monkeypatch.setattr(t, "_local_synthesize", lambda text: _canned_wav())
+    monkeypatch.setattr(t, "_cloud_synthesize",
+                        lambda text: (_ for _ in ()).throw(AssertionError("cloud must not run")))
+    assert t._synthesize("hi") == _canned_wav()
+    monkeypatch.setattr(t, "_local_synthesize", lambda text: None)
+    monkeypatch.setattr(t, "_cloud_synthesize", lambda text: b"cloud-wav")
+    assert t._synthesize("hi") == b"cloud-wav"
+
+
+def test_local_synthesize_default_is_none():
+    assert vm.TtsStreamer()._local_synthesize("hi") is None
+
+
+def test_cloud_synthesize_uses_client():
+    t = vm.TtsStreamer()
+    t._cloud_client = SimpleNamespace(
+        synthesize=lambda text, *, model, voice: (b"wav-bytes", "audio/wav"))
+    assert t._cloud_synthesize("hi") == b"wav-bytes"
+
+
+def test_ensure_cloud_client_cached_no_key_and_create(monkeypatch):
+    t = vm.TtsStreamer()
+    sentinel = object()
+    t._cloud_client = sentinel
+    assert t._ensure_cloud_client() is sentinel
+    t._cloud_client = None
+    monkeypatch.setattr(vm, "_openai_api_key", lambda: None)
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        t._ensure_cloud_client()
+    fake_client = object()
+    monkeypatch.setattr(vm, "_openai_api_key", lambda: "k")
+    monkeypatch.setattr(vm, "_v1_openai_client", lambda key: fake_client)
+    assert t._ensure_cloud_client() is fake_client
+    assert t._cloud_client is fake_client
+
+
+def _fake_sounddevice():
+    played, stopped = [], []
+
+    def play(data, sample_rate):
+        played.append((data, sample_rate))
+
+    def stop():
+        stopped.append(True)
+
+    return SimpleNamespace(play=play, stop=stop), played, stopped
+
+
+def test_play_wav_with_fake_sounddevice(monkeypatch):
+    fake_sd, played, _ = _fake_sounddevice()
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    vm.TtsStreamer()._play_wav(_canned_wav())
+    assert len(played) == 1
+    assert played[0][1] == 16000
+
+
+def test_play_wav_empty_audio_skips_playback(monkeypatch):
+    fake_sd, played, _ = _fake_sounddevice()
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    vm.TtsStreamer()._play_wav(vm.pcm16_to_wav(b""))
+    assert played == []
+
+
+def test_play_wav_stop_during_playback(monkeypatch):
+    t = vm.TtsStreamer()
+    played, stopped = [], []
+
+    def play(data, sample_rate):
+        played.append((data, sample_rate))
+        t.stop()  # barge-in from the playback callback
+
+    def stop():
+        stopped.append(True)
+        raise RuntimeError("stop failed")  # both callers must swallow this
+
+    fake_sd = SimpleNamespace(play=play, stop=stop)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    t._play_wav(_canned_wav())
+    assert len(played) == 1
+    assert stopped  # wait loop called sd.stop() on barge-in
+
+
+def test_speak_twice_joins_old_worker(monkeypatch):
+    t = vm.TtsStreamer()
+    synth_calls = []
+    monkeypatch.setattr(
+        t, "_synthesize",
+        lambda text: (synth_calls.append(text), _canned_wav())[1],
+    )
+    monkeypatch.setattr(t, "_play_wav", lambda wav: None)
+    t.speak(["One."])
+    t.speak(["Two."])  # joins the first worker before starting the second
+    t._worker.join(timeout=5)
+    assert synth_calls == ["One.", "Two."]
+
+
+# ---------------------------------------------------------------------------
 # WAV helpers
 # ---------------------------------------------------------------------------
 
@@ -240,3 +489,34 @@ def test_pcm16_to_wav_roundtrip():
         assert w.getsampwidth() == 2
         assert w.getframerate() == 16000
         assert w.getnframes() == len(pcm) // 2
+
+
+def _make_wav(frames: bytes, *, sampwidth=2, nchannels=1, framerate=16000):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(nchannels)
+        w.setsampwidth(sampwidth)
+        w.setframerate(framerate)
+        w.writeframes(frames)
+    return buf.getvalue()
+
+
+def test_wav_to_float32_widths_and_stereo():
+    # 8-bit: unsigned bytes read as int8, scaled by 2**7.
+    arr, rate = vm._wav_to_float32(_make_wav(bytes([0, 128, 255]),
+                                             sampwidth=1))
+    assert rate == 16000
+    assert arr.dtype == np.float32 and len(arr) == 3
+    assert arr[0] == 0.0 and arr[1] == -1.0
+    # 16-bit mono.
+    pcm = struct.pack("<2h", 16384, -16384)
+    arr, _ = vm._wav_to_float32(_make_wav(pcm, sampwidth=2))
+    assert list(arr) == [0.5, -0.5]
+    # 32-bit mono.
+    pcm32 = struct.pack("<2i", 2 ** 30, -(2 ** 30))
+    arr, _ = vm._wav_to_float32(_make_wav(pcm32, sampwidth=4))
+    assert list(arr) == [0.5, -0.5]
+    # Stereo is mixed down to mono by averaging channels.
+    stereo = struct.pack("<4h", 1000, -1000, 1000, -1000)
+    arr, _ = vm._wav_to_float32(_make_wav(stereo, sampwidth=2, nchannels=2))
+    assert list(arr) == [0.0, 0.0]
