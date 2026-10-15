@@ -658,3 +658,13 @@ def test_agent_planner_transport_error_falls_back_to_empty_plan():
     assert report.ok is True and report.done == [] and report.failed == []
     assert events == ["plan", "finished"]
     assert world.stopped
+
+
+def test_agent_last_marks_is_per_instance():
+    # _last_marks must be instance state, not a shared class-level list:
+    # mutating one agent's marks must not leak into another.
+    a = HelperV2(llm=FakeLlm([]), actuator=FakeActuator(), world=FakeWorld({}))
+    b = HelperV2(llm=FakeLlm([]), actuator=FakeActuator(), world=FakeWorld({}))
+    assert a._last_marks is not b._last_marks
+    a._last_marks.append("mark-1")
+    assert b._last_marks == []

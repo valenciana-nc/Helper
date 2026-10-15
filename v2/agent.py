@@ -53,6 +53,7 @@ class HelperV2:
             world = _WM()
         self._world = world
         self._max_attempts = max_attempts
+        self._last_marks: list = []
 
     def run_goal(
         self,
@@ -136,8 +137,6 @@ class HelperV2:
             self._world.stop()
 
     # -- internals ------------------------------------------------------
-
-    _last_marks: list = []
 
     def _observe_and_plan(self, goal: str, emit) -> Plan:
         frame = self._world.current_frame()
