@@ -520,3 +520,29 @@ def test_wav_to_float32_widths_and_stereo():
     stereo = struct.pack("<4h", 1000, -1000, 1000, -1000)
     arr, _ = vm._wav_to_float32(_make_wav(stereo, sampwidth=2, nchannels=2))
     assert list(arr) == [0.0, 0.0]
+
+
+def test_stt_local_load_failure_falls_back_to_cloud(monkeypatch):
+    # faster-whisper installed but the model fails to load (e.g. download
+    # failure raising OSError, not RuntimeError): the cloud fallback must
+    # kick in instead of start() raising.
+    fake = types.ModuleType("faster_whisper")
+
+    class ExplodingWhisperModel:
+        def __init__(self, *a, **k):
+            raise OSError("model download failed")
+
+    fake.WhisperModel = ExplodingWhisperModel
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake)
+
+    class FakeBackend:
+        def transcribe(self, pcm: bytes) -> str:
+            return "cloud fallback"
+
+    monkeypatch.setattr(vm.SttStreamer, "_try_cloud",
+                        lambda self: FakeBackend())
+    s = vm.SttStreamer(prefer_local=True)
+    s.start()  # must not raise
+    assert s._is_local is False
+    s.feed(b"\x00\x00" * 1600)
+    assert s.finish() == "cloud fallback"

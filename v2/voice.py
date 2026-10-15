@@ -278,7 +278,7 @@ class SttStreamer:
 
     def _select_backend(self):
         order = ("local", "cloud") if self._prefer_local else ("cloud", "local")
-        first_err: RuntimeError | None = None
+        first_err: Exception | None = None
         for kind in order:
             try:
                 if kind == "local":
@@ -286,7 +286,11 @@ class SttStreamer:
                 cloud = self._try_cloud()
                 if cloud is not None:
                     return cloud, False
-            except RuntimeError as exc:
+            except Exception as exc:
+                # Broader than RuntimeError on purpose: a faster-whisper model
+                # download/load failure (OSError, huggingface_hub HTTP error)
+                # is exactly the offline case where the cloud fallback should
+                # kick in, not crash start().
                 if first_err is None:
                     first_err = exc
                 log.warning("%s STT backend unavailable: %s", kind, exc)
