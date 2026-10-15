@@ -642,3 +642,19 @@ def test_agent_default_world_is_constructed():
 
     agent = HelperV2(llm=FakeLlm([]), actuator=FakeActuator())
     assert isinstance(agent._world, WorldModel)
+
+
+def test_agent_planner_transport_error_falls_back_to_empty_plan():
+    # An LLM transport failure (network/API) during planning must degrade
+    # like PlanError — empty plan, no crash, goal finishes cleanly.
+    class BoomLlm:
+        def chat(self, messages, *, system=None, max_tokens=1024) -> str:
+            raise ConnectionError("transient network failure")
+
+    world = FakeWorld({})
+    events: list[str] = []
+    agent = HelperV2(llm=BoomLlm(), actuator=FakeActuator(), world=world)
+    report = agent.run_goal("save", on_event=lambda n, p: events.append(n))
+    assert report.ok is True and report.done == [] and report.failed == []
+    assert events == ["plan", "finished"]
+    assert world.stopped

@@ -151,6 +151,9 @@ class HelperV2:
         except PlanError as exc:
             log.warning("planner failed: %s", exc)
             plan = Plan(goal=goal, subgoals=[])
+        except Exception as exc:  # LLM transport/API failure ≠ crash the goal:
+            log.warning("planner LLM call failed: %r", exc)  # degrade like
+            plan = Plan(goal=goal, subgoals=[])  # PlanError — no plan, keep going
         emit("plan", {"goal": goal,
                       "subgoals": [s.description for s in plan.subgoals]})
         return plan
