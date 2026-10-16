@@ -216,6 +216,54 @@ def test_stt_partial_transcription_failure_puts_empty(monkeypatch):
     assert s._pending.get(timeout=1) == ""
 
 
+def test_stt_finish_skips_redundant_final_transcription(monkeypatch):
+    # The last partial already covered every fed byte: finish() must not run
+    # the model over byte-identical input a second time.
+    created = _install_fake_faster_whisper(monkeypatch)
+    s = vm.SttStreamer(prefer_local=True, partial_every_s=0.05)
+    s.start()
+    created[0].script = ["hello world"]
+
+    pcm = b"\x00\x00" * 3200  # 0.2 s of PCM
+    s.feed(pcm)
+    assert _poll(lambda: s.feed(b"")) == "hello world"
+    calls = [0]
+
+    orig = created[0].transcribe
+
+    def counting(audio, **k):
+        calls[0] += 1
+        return orig(audio, **k)
+
+    created[0].transcribe = counting
+    assert s.finish() == "hello world"
+    assert calls[0] == 0  # no second model pass over the same bytes
+
+
+def test_stt_finish_retranscribes_after_failed_partial(monkeypatch):
+    # The covering partial failed → finish() must still do the final pass.
+    created = _install_fake_faster_whisper(monkeypatch)
+    s = vm.SttStreamer(prefer_local=True, partial_every_s=0.05)
+    s.start()
+    pcm = b"\x00\x00" * 3200
+    s.feed(pcm)
+    _poll(lambda: s._pending.empty() is False)
+    s.feed(b"")  # drain the (failed) partial without scheduling a new one
+
+    attempts = []
+
+    def boom_then_ok(audio, **k):
+        attempts.append(audio)
+        if len(attempts) == 1:
+            raise RuntimeError("transient model failure")
+        return ([SimpleNamespace(text="recovered")], None)
+
+    created[0].transcribe = boom_then_ok
+    s.feed(pcm)  # schedule a fresh partial; it fails in the worker
+    _poll(lambda: s._pending.empty() is False)
+    assert s.finish() == "recovered"
+
+
 def test_openai_api_key_env_and_config(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "  env-key  ")
     assert vm._openai_api_key() == "env-key"

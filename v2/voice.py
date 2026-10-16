@@ -253,6 +253,7 @@ class SttStreamer:
         self._emitted = ""
         self._pending: queue.Queue[str] = queue.Queue()
         self._inflight = False
+        self._partial_ok = False  # last scheduled partial transcribed cleanly
         self._last_partial_len = 0
         self._backend = None
         self._is_local = False
@@ -353,7 +354,10 @@ class SttStreamer:
     def finish(self) -> str:
         """Block until the final transcript for all fed audio is ready."""
         self._require_started()
-        # Wait for any in-flight partial, then do one final full transcription.
+        # Wait for any in-flight partial, then do one final full
+        # transcription — unless the last partial already transcribed every
+        # fed byte cleanly, in which case the final pass would run the
+        # model over byte-identical input a second time.
         deadline = time.monotonic() + 60
         while self._inflight and time.monotonic() < deadline:
             try:
@@ -365,7 +369,14 @@ class SttStreamer:
                 self._diff_locked(full)
         with self._lock:
             audio = bytes(self._audio)
-        if audio:
+            redundant = (
+                self._is_local
+                and not self._inflight
+                and self._partial_ok
+                and audio
+                and self._last_partial_len == len(audio)
+            )
+        if audio and not redundant:
             try:
                 full = self._backend.transcribe(audio)
             except Exception:
@@ -384,6 +395,11 @@ class SttStreamer:
         except Exception:
             log.exception("Partial STT transcription failed")
             full = ""
+            self._partial_ok = False
+        else:
+            self._partial_ok = True
+        # Written before put(); the queue's lock makes it visible to the
+        # consumer that drains this result.
         self._pending.put(full)
 
     def _untranscribed_s_locked(self) -> float:
