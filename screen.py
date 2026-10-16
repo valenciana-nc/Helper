@@ -58,7 +58,12 @@ def _capture_monitor(monitor: dict[str, int], max_edge: int) -> Capture:
         img = Image.frombytes("RGB", raw.size, raw.rgb)
     scaled, ratio = _downscale(img, max_edge)
     buf = io.BytesIO()
-    scaled.save(buf, format="PNG", optimize=True)
+    # No optimize=True: the world loop encodes a full frame every poll
+    # cycle for change detection, and optimize's extra zlib pass costs
+    # ~20% encode time for negligible size gain on screenshots. The
+    # stored frame is decoded + re-encoded downstream anyway (annotate,
+    # crop_png), so wire size is unaffected.
+    scaled.save(buf, format="PNG")
     return Capture(
         png_bytes=buf.getvalue(),
         width=scaled.width,
