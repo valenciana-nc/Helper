@@ -23,17 +23,14 @@ from ui_dashboard import DashboardWindow
 from ui_widget import FloatingCircle
 from openai_client import (
     BadProviderResponse,
-    ChatResult,
     CodexProvider,
     OpenAIClient,
     RateLimited,
-    ToolCall,
     UnsupportedModel,
     _parse_chat_completions,
     _parse_response,
     _parse_stream_response,
 )
-from screen import Capture
 
 
 def _png_bytes(width: int = 10, height: int = 10) -> bytes:

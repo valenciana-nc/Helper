@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pytest
 from PIL import Image
@@ -23,7 +23,7 @@ from v2.ground import (
     resolve_mark,
     vision_fallback,
 )
-from v2.plan import Plan, PlanError, Subgoal, make_plan
+from v2.plan import PlanError, Subgoal, make_plan
 from v2.verify import regions_differ, verify_subgoal
 from v2.world import Element, ScreenFrame
 

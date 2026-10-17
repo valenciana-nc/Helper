@@ -7,8 +7,6 @@ import sys
 import types
 import wave
 
-import pytest
-
 from v2.actuator import V2Actuator
 
 
