@@ -12,9 +12,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, TYPE_CHECKING
 
-from .execute import ActionResult, Actuator, do_subgoal
+from .execute import Actuator, do_subgoal
 from .observe import annotate
-from .plan import LlmPort, Plan, PlanError, Subgoal, make_plan
+from .plan import LlmPort, Plan, PlanError, make_plan
 
 if TYPE_CHECKING:
     from .world import WorldModel

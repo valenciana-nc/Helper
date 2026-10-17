@@ -25,7 +25,6 @@ if sys.platform == "win32":
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
-import re
 
 from config import (
     DEFAULT_MODE,
