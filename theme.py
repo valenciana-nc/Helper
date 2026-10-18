@@ -8,8 +8,10 @@ palette, or theme.value(token) to look up a single color string.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QColor, QFont, QPalette
 
 
 # ---------------------------------------------------------------------------
@@ -51,112 +53,102 @@ def font(size: int, weight: QFont.Weight | None = None) -> QFont:
 # either dict into the same template.
 
 PALETTE_LIGHT: dict[str, str] = {
-    # Surfaces
-    "bg_window": "rgb(255, 255, 255)",
-    "bg_sidebar": "rgb(248, 249, 251)",
-    "bg_topbar": "rgb(252, 252, 253)",
-    "bg_card": "rgb(255, 255, 255)",
-    "bg_subtle": "rgb(248, 250, 252)",
-    "bg_hover": "rgb(243, 244, 246)",
-    "bg_nav_selected": "rgb(229, 231, 235)",
-    # Borders
-    "border_light": "rgb(229, 231, 235)",
-    "border_mid": "rgb(209, 213, 219)",
-    # Text
-    "text_primary": "rgb(17, 24, 39)",
-    "text_secondary": "rgb(75, 85, 99)",
-    "text_muted": "rgb(107, 114, 128)",
-    "text_placeholder": "rgb(156, 163, 175)",
-    # Accent
-    "accent": "rgb(37, 99, 235)",
-    "accent_hover": "rgb(29, 78, 216)",
-    "accent_subtle": "rgb(239, 246, 255)",
-    # Status pills
-    "success_bg": "rgb(220, 252, 231)",
-    "success_fg": "rgb(22, 101, 52)",
-    "success_border": "rgb(187, 247, 208)",
-    "warning_bg": "rgb(254, 249, 195)",
-    "warning_fg": "rgb(133, 77, 14)",
-    "warning_border": "rgb(253, 224, 71)",
-    "danger_bg": "rgb(254, 226, 226)",
-    "danger_fg": "rgb(153, 27, 27)",
-    "danger_border": "rgb(252, 165, 165)",
-    "info_bg": "rgb(219, 234, 254)",
-    "info_fg": "rgb(30, 64, 175)",
-    "info_border": "rgb(191, 219, 254)",
-    "neutral_bg": "rgb(243, 244, 246)",
-    "neutral_fg": "rgb(55, 65, 81)",
-    "neutral_border": "rgb(229, 231, 235)",
-    # Log viewer (always-dark in light theme for readability)
-    "log_bg": "rgb(17, 24, 39)",
-    "log_fg": "rgb(243, 244, 246)",
-    # Primary button (dark-on-light)
-    "btn_primary_bg": "rgb(17, 24, 39)",
-    "btn_primary_hover": "rgb(31, 41, 55)",
-    "btn_primary_pressed": "rgb(55, 65, 81)",
-    "btn_primary_disabled": "rgb(156, 163, 175)",
-    "btn_primary_fg": "rgb(255, 255, 255)",
-    # Misc
-    "scroll_handle": "rgba(17, 24, 39, 38)",
-    "scroll_handle_hover": "rgba(17, 24, 39, 70)",
-    "sidebar_chip_bg": "rgba(17, 24, 39, 6)",
-    "sidebar_hover": "rgba(17, 24, 39, 9)",
-    "convo_count_bg": "rgb(243, 244, 246)",
+    'bg_window': '#f7f5fb',
+    'bg_sidebar': '#eeeaf6',
+    'bg_topbar': '#ffffff',
+    'bg_card': '#ffffff',
+    'bg_subtle': '#f1edf8',
+    'bg_hover': '#eee8f8',
+    'bg_nav_selected': '#e4d8f5',
+    'border_light': '#e4ddeb',
+    'border_mid': '#cec2de',
+    'text_primary': '#272035',
+    'text_secondary': '#5c526d',
+    'text_muted': '#756985',
+    'text_placeholder': '#81768f',
+    'accent': '#7434bd',
+    'accent_hover': '#6125a6',
+    'accent_subtle': '#eee4fa',
+    'success_bg': 'rgb(220, 252, 231)',
+    'success_fg': 'rgb(22, 101, 52)',
+    'success_border': 'rgb(187, 247, 208)',
+    'warning_bg': 'rgb(254, 249, 195)',
+    'warning_fg': 'rgb(133, 77, 14)',
+    'warning_border': 'rgb(253, 224, 71)',
+    'danger_bg': 'rgb(254, 226, 226)',
+    'danger_fg': 'rgb(153, 27, 27)',
+    'danger_border': 'rgb(252, 165, 165)',
+    'info_bg': '#eee4fa',
+    'info_fg': '#672da6',
+    'info_border': '#d8bff1',
+    'neutral_bg': 'rgb(243, 244, 246)',
+    'neutral_fg': 'rgb(55, 65, 81)',
+    'neutral_border': 'rgb(229, 231, 235)',
+    'log_bg': '#1c1627',
+    'log_fg': '#eee5f6',
+    'btn_primary_bg': '#7434bd',
+    'btn_primary_hover': '#6125a6',
+    'btn_primary_pressed': '#50208b',
+    'btn_primary_disabled': '#c8bbd8',
+    'btn_primary_fg': '#ffffff',
+    'scroll_handle': '#c7b8d8',
+    'scroll_handle_hover': '#9c80ba',
+    'sidebar_chip_bg': '#e8e0f2',
+    'sidebar_hover': '#e6def1',
+    'convo_count_bg': '#e8def4',
+    'user_bg': '#eee4fa',
+    'user_fg': '#3d1b61',
+    'user_border': '#ddc8ef',
 }
 
 
 PALETTE_DARK: dict[str, str] = {
-    # Surfaces
-    "bg_window": "rgb(15, 18, 24)",
-    "bg_sidebar": "rgb(20, 24, 32)",
-    "bg_topbar": "rgb(18, 22, 30)",
-    "bg_card": "rgb(24, 28, 38)",
-    "bg_subtle": "rgb(20, 24, 32)",
-    "bg_hover": "rgb(34, 40, 52)",
-    "bg_nav_selected": "rgb(38, 44, 58)",
-    # Borders
-    "border_light": "rgb(40, 46, 60)",
-    "border_mid": "rgb(60, 68, 84)",
-    # Text
-    "text_primary": "rgb(241, 245, 249)",
-    "text_secondary": "rgb(203, 213, 225)",
-    "text_muted": "rgb(148, 163, 184)",
-    "text_placeholder": "rgb(100, 116, 139)",
-    # Accent
-    "accent": "rgb(96, 165, 250)",
-    "accent_hover": "rgb(147, 197, 253)",
-    "accent_subtle": "rgba(96, 165, 250, 32)",
-    # Status pills
-    "success_bg": "rgba(34, 197, 94, 36)",
-    "success_fg": "rgb(134, 239, 172)",
-    "success_border": "rgba(34, 197, 94, 80)",
-    "warning_bg": "rgba(234, 179, 8, 36)",
-    "warning_fg": "rgb(250, 204, 21)",
-    "warning_border": "rgba(234, 179, 8, 80)",
-    "danger_bg": "rgba(239, 68, 68, 36)",
-    "danger_fg": "rgb(252, 165, 165)",
-    "danger_border": "rgba(239, 68, 68, 80)",
-    "info_bg": "rgba(59, 130, 246, 36)",
-    "info_fg": "rgb(147, 197, 253)",
-    "info_border": "rgba(59, 130, 246, 80)",
-    "neutral_bg": "rgba(148, 163, 184, 28)",
-    "neutral_fg": "rgb(203, 213, 225)",
-    "neutral_border": "rgba(148, 163, 184, 60)",
-    # Log viewer
-    "log_bg": "rgb(10, 13, 18)",
-    "log_fg": "rgb(226, 232, 240)",
-    # Primary button (accent-on-dark)
-    "btn_primary_bg": "rgb(96, 165, 250)",
-    "btn_primary_hover": "rgb(147, 197, 253)",
-    "btn_primary_pressed": "rgb(59, 130, 246)",
-    "btn_primary_disabled": "rgb(71, 85, 105)",
-    "btn_primary_fg": "rgb(15, 18, 24)",
-    # Misc
-    "scroll_handle": "rgba(226, 232, 240, 50)",
-    "scroll_handle_hover": "rgba(226, 232, 240, 90)",
-    "sidebar_chip_bg": "rgba(241, 245, 249, 10)",
-    "sidebar_hover": "rgba(241, 245, 249, 14)",
-    "convo_count_bg": "rgba(241, 245, 249, 10)",
+    'bg_window': '#17121f',
+    'bg_sidebar': '#1c1627',
+    'bg_topbar': '#211a2d',
+    'bg_card': '#241d30',
+    'bg_subtle': '#20192c',
+    'bg_hover': '#30243f',
+    'bg_nav_selected': '#3c2a51',
+    'border_light': '#3b2e4b',
+    'border_mid': '#5b466f',
+    'text_primary': '#f3edf9',
+    'text_secondary': '#d2c6df',
+    'text_muted': '#b0a0c2',
+    'text_placeholder': '#a291b4',
+    'accent': '#c79bff',
+    'accent_hover': '#d7b6ff',
+    'accent_subtle': '#352344',
+    'success_bg': 'rgba(34, 197, 94, 36)',
+    'success_fg': 'rgb(134, 239, 172)',
+    'success_border': 'rgba(34, 197, 94, 80)',
+    'warning_bg': 'rgba(234, 179, 8, 36)',
+    'warning_fg': 'rgb(250, 204, 21)',
+    'warning_border': 'rgba(234, 179, 8, 80)',
+    'danger_bg': 'rgba(239, 68, 68, 36)',
+    'danger_fg': 'rgb(252, 165, 165)',
+    'danger_border': 'rgba(239, 68, 68, 80)',
+    'info_bg': '#352344',
+    'info_fg': '#d7b6ff',
+    'info_border': '#604079',
+    'neutral_bg': 'rgba(148, 163, 184, 28)',
+    'neutral_fg': 'rgb(203, 213, 225)',
+    'neutral_border': 'rgba(148, 163, 184, 60)',
+    'log_bg': '#120e19',
+    'log_fg': '#eee5f6',
+    'btn_primary_bg': '#b58ae9',
+    'btn_primary_hover': '#cba4f8',
+    'btn_primary_pressed': '#a174d7',
+    'btn_primary_disabled': '#52405f',
+    'btn_primary_fg': '#21152f',
+    'scroll_handle': '#5b466f',
+    'scroll_handle_hover': '#9474b0',
+    'sidebar_chip_bg': '#2b2139',
+    'sidebar_hover': '#2c213b',
+    'convo_count_bg': '#352344',
+    'user_bg': '#3a2850',
+    'user_fg': '#f0e2ff',
+    'user_border': '#5f407c',
 }
 
 
@@ -273,6 +265,13 @@ QComboBox QAbstractItemView {{
     border: 1px solid {border_light};
     border-radius: 8px;
 }}
+QComboBox::drop-down {{ border: none; width: 26px; subcontrol-position: top right; subcontrol-origin: padding; }}
+QComboBox::down-arrow {{ image: url({arrow_down}); width: 10px; height: 6px; }}
+QSpinBox, QDoubleSpinBox {{ padding-right: 25px; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{ border: none; width: 21px; subcontrol-origin: border; subcontrol-position: top right; }}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{ border: none; width: 21px; subcontrol-origin: border; subcontrol-position: bottom right; }}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url({arrow_up}); width: 8px; height: 5px; }}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url({arrow_down}); width: 8px; height: 5px; }}
 QPlainTextEdit, QTextEdit {{
     background: {bg_card};
     color: {text_primary};
@@ -332,7 +331,7 @@ SEGMENTED_BUTTON_QSS = """
 QPushButton {{
     background: {bg_card};
     border: 1px solid {border_mid};
-    border-radius: 0px;
+    border-radius: 8px;
     padding: 7px 14px;
     color: {text_secondary};
     font-family: 'Segoe UI';
@@ -370,9 +369,9 @@ QScrollBar::handle:vertical:hover {{
     background: {scroll_handle_hover};
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-    border: none;
-    background: none;
+    border: none; background: none; height: 0px;
 }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 """
 
 LOG_QSS = """
@@ -407,19 +406,12 @@ QPushButton#ConvoRow:pressed {{
 }}
 """
 
-CARD_QSS = (
-    "background: {bg_card}; "
-    "border: 1px solid {border_light}; "
-    "border-radius: 12px;"
-)
+CARD_QSS = "QFrame#SurfaceCard {{ background: {bg_card}; border: 1px solid {border_light}; border-radius: 14px; }}"
 
 STAT_CARD_QSS = CARD_QSS
 
-FOOTER_BAR_QSS = (
-    "background-color: {bg_subtle}; "
-    "border-top: 1px solid {border_light}; "
-    "border-radius: 0px;"
-)
+FOOTER_BAR_QSS = "QFrame#SettingsFooter {{ background: {bg_subtle}; border-top: 1px solid {border_light}; }}"
+
 
 # Status pills — kind ∈ {success, warning, danger, info, neutral}.
 PILL_QSS = """
@@ -454,7 +446,12 @@ QLabel#StatusPill {{
 
 def qss(template: str, palette: dict[str, str] | None = None) -> str:
     """Substitute palette tokens into a QSS template."""
-    pal = palette if palette is not None else active_palette()
+    pal = dict(palette if palette is not None else active_palette())
+    variant = 'dark' if pal['bg_window'] == PALETTE_DARK['bg_window'] else 'light'
+    assets = Path(__file__).parent / 'assets' / 'ui'
+    pal.update(arrow_down=(assets / f'chevron-down-{variant}.svg').as_posix(),
+               arrow_up=(assets / f'chevron-up-{variant}.svg').as_posix(),
+               checkmark=(assets / f'checkmark-{variant}.svg').as_posix())
     return template.format(**pal)
 
 
@@ -462,6 +459,85 @@ def value(token: str, palette: dict[str, str] | None = None) -> str:
     """Resolve a single color token in the active (or supplied) palette."""
     pal = palette if palette is not None else active_palette()
     return pal[token]
+
+
+def color(token: str) -> QColor:
+    """Resolve a painter color using the same tokens as widget styles."""
+    spec = value(token)
+    if spec.startswith('rgb'):
+        parts = [int(v.strip()) for v in spec[spec.index('(') + 1:spec.index(')')].split(',')]
+        return QColor(*parts)
+    return QColor(spec)
+
+
+def apply_application_theme(app) -> None:
+    """Theme native controls too, including dialogs, tooltips and popups."""
+    app.setStyle('Fusion')
+    palette = QPalette()
+    for role, token in {
+        QPalette.ColorRole.Window: 'bg_window', QPalette.ColorRole.WindowText: 'text_primary',
+        QPalette.ColorRole.Base: 'bg_card', QPalette.ColorRole.AlternateBase: 'bg_subtle',
+        QPalette.ColorRole.Text: 'text_primary', QPalette.ColorRole.PlaceholderText: 'text_placeholder',
+        QPalette.ColorRole.Button: 'bg_card', QPalette.ColorRole.ButtonText: 'text_primary',
+        QPalette.ColorRole.Highlight: 'accent', QPalette.ColorRole.HighlightedText: 'bg_card',
+        QPalette.ColorRole.ToolTipBase: 'bg_card', QPalette.ColorRole.ToolTipText: 'text_primary',
+        QPalette.ColorRole.Link: 'accent',
+    }.items():
+        palette.setColor(role, color(token))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, color('text_muted'))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, color('text_muted'))
+    app.setPalette(palette)
+    app.setFont(font(10))
+    app.setStyleSheet(qss(CONTROLS_QSS))
+
+
+def apply_window_chrome(widget) -> None:
+    """Match the Windows title bar to the selected light or dark palette."""
+    from PyQt6.QtWidgets import QApplication
+
+    if sys.platform != 'win32' or QApplication.platformName() != 'windows':
+        return
+    import ctypes
+
+    try:
+        hwnd = int(widget.winId())
+        dark = ctypes.c_int(active_palette() is PALETTE_DARK)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(ctypes.c_void_p(hwnd), 20, ctypes.byref(dark), 4)
+        for attribute, token in ((35, 'bg_topbar'), (36, 'text_primary')):
+            c = color(token)
+            native = ctypes.c_uint(c.red() | (c.green() << 8) | (c.blue() << 16))
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(ctypes.c_void_p(hwnd), attribute, ctypes.byref(native), 4)
+    except (AttributeError, OSError):
+        pass  # Older Windows versions keep their standard title bar.
+
+
+MENU_QSS = """
+QMenu {{ background: {bg_card}; color: {text_primary}; border: 1px solid {border_mid}; padding: 6px; }}
+QMenu::item {{ padding: 9px 24px; border-radius: 6px; background: transparent; }}
+QMenu::item:selected {{ background: {accent_subtle}; color: {accent}; }}
+QMenu::separator {{ height: 1px; background: {border_light}; margin: 6px; }}
+"""
+
+CONTROLS_QSS = MENU_QSS + """
+QToolTip {{ background: {bg_card}; color: {text_primary}; border: 1px solid {border_mid}; padding: 8px; }}
+QSlider::groove:horizontal {{ height: 6px; border-radius: 3px; background: {border_light}; }}
+QSlider::sub-page:horizontal {{ background: {accent}; border-radius: 3px; }}
+QSlider::handle:horizontal {{ width: 16px; margin: -5px 0; background: {accent}; border: 2px solid {bg_card}; border-radius: 8px; }}
+QSlider::handle:horizontal:hover {{ background: {accent_hover}; }}
+QCheckBox {{ color: {text_secondary}; spacing: 8px; }}
+QMessageBox {{ background: {bg_window}; color: {text_primary}; }}
+QMessageBox QLabel {{ color: {text_primary}; background: transparent; }}
+QMessageBox QPushButton {{ background: {bg_card}; color: {text_primary}; padding: 8px 18px; border: 1px solid {border_mid}; border-radius: 8px; }}
+QMessageBox QPushButton:default {{ background: {btn_primary_bg}; color: {btn_primary_fg}; }}
+"""
+
+CHECKBOX_QSS = """
+QCheckBox {{ color: {text_secondary}; spacing: 8px; }}
+QCheckBox::indicator {{ width: 18px; height: 18px; border: 1px solid {border_mid}; border-radius: 5px; background: {bg_card}; }}
+QCheckBox::indicator:hover {{ border-color: {accent}; }}
+QCheckBox::indicator:checked {{ background: {btn_primary_bg}; border-color: {btn_primary_bg}; image: url({checkmark}); }}
+QCheckBox::indicator:disabled {{ background: {bg_subtle}; border-color: {border_light}; }}
+"""
 
 
 def inline(*declarations: str, palette: dict[str, str] | None = None) -> str:

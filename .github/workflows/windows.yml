@@ -19,8 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install ruff
+          python -m pip install -r requirements-dev.txt
 
       - name: Lint
         run: python -m ruff check .
@@ -29,5 +28,19 @@ jobs:
         run: python -m compileall -q -x ".*\\.venv.*" .
 
       - name: Test
-        run: python -m unittest discover -s tests -p "test*.py"
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests v2/tests -q
+
+      - name: Install isolated browser test runtime
+        run: |
+          python -m pip install -r requirements-browser.txt
+          python -m playwright install chromium
+
+      - name: Browser integration checks
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $env:HELPER_TEST_BROWSER = python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"
+          python -m pytest tests/test_engine_adapters.py -k BrowserIntegration -q
 

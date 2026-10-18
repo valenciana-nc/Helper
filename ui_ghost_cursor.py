@@ -19,12 +19,12 @@ from ui_overlay import local_screen_point, screen_device_pixel_ratio, screen_nat
 
 
 CURSOR_FILL_TOP = QColor(255, 255, 255, 235)
-CURSOR_FILL_BOTTOM = QColor(180, 220, 255, 235)
+CURSOR_FILL_BOTTOM = QColor(215, 178, 255, 235)
 CURSOR_OUTLINE = QColor(20, 30, 50, 220)
 CURSOR_SHADOW = QColor(0, 0, 0, 90)
-BUBBLE_BG = QColor(15, 23, 42, 235)
-BUBBLE_BORDER = QColor(120, 220, 200, 220)
-BUBBLE_TEXT = QColor(240, 250, 248)
+BUBBLE_BG = QColor(31, 20, 45, 235)
+BUBBLE_BORDER = QColor(195, 145, 250, 220)
+BUBBLE_TEXT = QColor(247, 237, 255)
 CURSOR_TIP_OFFSET = QPointF(2.0, 2.0)
 CURSOR_SCALE = 1.8
 
@@ -52,6 +52,8 @@ class _GhostWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        from capture_exclusion import exclude_from_capture
+        exclude_from_capture(self)
         self._sync_to_screen()
 
     def _sync_to_screen(self) -> None:

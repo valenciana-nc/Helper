@@ -1,45 +1,12 @@
 import math
 import sys
-import random
 
 from PyQt6.QtCore import QElapsedTimer, QEvent, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QKeyEvent, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient, QPolygonF
+from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QKeyEvent, QLinearGradient, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QMenu, QWidget
 
-def hash2(x: float, y: float) -> float:
-    s = math.sin(x * 127.1 + y * 311.7) * 43758.5453
-    return s - math.floor(s)
-
-def smooth(t: float) -> float:
-    return t * t * (3 - 2 * t)
-
-def noise2(x: float, y: float) -> float:
-    xi = math.floor(x)
-    yi = math.floor(y)
-    xf = x - xi
-    yf = y - yi
-    a = hash2(xi, yi)
-    b = hash2(xi + 1, yi)
-    c = hash2(xi, yi + 1)
-    d = hash2(xi + 1, yi + 1)
-    u = smooth(xf)
-    v = smooth(yf)
-    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v
-
-def wobble(angle: float, t: float) -> float:
-    return (
-        0.45 * math.sin(angle * 3 + t * 0.7) +
-        0.30 * math.sin(angle * 5 + t * 1.1 + 1.3) +
-        0.25 * math.sin(angle * 7 + t * 0.5 + 2.7)
-    )
-
-def mix_color(c1: QColor, c2: QColor, t: float) -> QColor:
-    return QColor(
-        int(c1.red() + (c2.red() - c1.red()) * t),
-        int(c1.green() + (c2.green() - c1.green()) * t),
-        int(c1.blue() + (c2.blue() - c1.blue()) * t),
-        int(c1.alpha() + (c2.alpha() - c1.alpha()) * t),
-    )
+import theme
+from ui_lava import paint_lava_orb
 
 class FloatingCircle(QWidget):
     mode_toggle_requested = pyqtSignal()
@@ -68,21 +35,21 @@ class FloatingCircle(QWidget):
     HELP_CHAT_PLACEHOLDER = "Ask helper how to..."
     ACTIVE_CHAT_PLACEHOLDER = "Tell Helper what to do..."
 
-    WIDGET_W = 124
-    WIDGET_W_OPEN = 440
-    WIDGET_H = 40
+    WIDGET_W = 156
+    WIDGET_W_OPEN = 460
+    WIDGET_H = 56
     PILL_INSET = 2.0
-    ORB_CX = 62.0
-    ORB_CX_OPEN = 24.0
-    ORB_CY = 20.0
-    ORB_BASE_R = 16.0
-    ORB_BASE_R_OPEN = 16.0
-    LEFT_CX = 20.0
-    LEFT_CY = 20.0
-    LEFT_R = 11.0
-    RIGHT_CX = 104.0
-    RIGHT_CY = 20.0
-    RIGHT_R = 11.0
+    ORB_CX = 78.0
+    ORB_CX_OPEN = 30.0
+    ORB_CY = 28.0
+    ORB_BASE_R = 22.0
+    ORB_BASE_R_OPEN = 22.0
+    LEFT_CX = 26.0
+    LEFT_CY = 28.0
+    LEFT_R = 16.0
+    RIGHT_CX = 130.0
+    RIGHT_CY = 28.0
+    RIGHT_R = 16.0
 
     ZONE_LEFT = "left"
     ZONE_ORB = "orb"
@@ -125,7 +92,6 @@ class FloatingCircle(QWidget):
         self._frame_timer = QTimer(self)
         self._frame_timer.setInterval(self._frame_interval_active)
         self._frame_timer.timeout.connect(self.update)
-        self._frame_timer.start()
 
         self.setFixedSize(self.WIDGET_W, self.WIDGET_H)
         self.setWindowFlags(
@@ -143,54 +109,19 @@ class FloatingCircle(QWidget):
         self._chat_input = QLineEdit(self)
         self._chat_input.setPlaceholderText(self._chat_placeholder_for_mode())
         self._chat_input.setFont(QFont("Segoe UI", 11))
-        self._chat_input.setStyleSheet(
-            """
-            QLineEdit {
-                background: transparent;
-                border: none;
-                color: white;
-                padding: 0px;
-            }
-            QLineEdit::placeholder {
-                color: rgba(255, 255, 255, 130);
-            }
-            """
-        )
+        self._chat_input.setStyleSheet(theme.qss("""
+            QLineEdit {{ background: transparent; border: none; color: {text_primary};
+                padding: 0; selection-background-color: {accent}; selection-color: white; }}
+        """))
+        self._chat_input.setAccessibleName("Message Helper")
+        self.setToolTip("Click to chat · Hold to speak · Right-click for settings")
         self._chat_input.returnPressed.connect(self._on_chat_input_submit)
         self._chat_input.installEventFilter(self)
         self._chat_input.hide()
 
-        self.wisps = [self._spawn_wisp() for _ in range(12)]
-
-    def _spawn_wisp(self, target: dict | None = None) -> dict:
-        cx, cy = self.ORB_CX, self.ORB_CY
-        base_radius = self.ORB_BASE_R
-        a = random.random() * math.pi * 2
-        r = math.sqrt(random.random()) * base_radius * 0.6
-        max_life = 1.6 + random.random() * 1.6
-        w = {
-            'x': cx + math.cos(a) * r,
-            'y': cy + math.sin(a) * r,
-            'vx': 0.0,
-            'vy': 0.0,
-            'life': max_life,
-            'max_life': max_life,
-            'hue': random.randint(0, 2),
-            'size': base_radius * (0.32 + random.random() * 0.22)
-        }
-        if target is not None:
-            target.update(w)
-            return target
-        return w
-
     def _wake_frame_timer(self) -> None:
-        """Restart the frame timer after an idle sleep.
-
-        The timer is stopped when the widget is fully idle (see paintEvent)
-        to save battery. Any user interaction or state change that could
-        start an animation must call this first.
-        """
-        if not self._frame_timer.isActive():
+        """Wake the animation timer for a visible widget."""
+        if self.isVisible() and not self._frame_timer.isActive():
             self._frame_timer.setInterval(self._frame_interval_active)
             self._frame_timer.start()
 
@@ -200,6 +131,7 @@ class FloatingCircle(QWidget):
             raise ValueError(f"Unsupported widget state: {state}")
         if normalized == self.state:
             return
+        self._wake_frame_timer()
         self.state = normalized
         self.state_changed.emit(self.state)
         self.update()
@@ -210,6 +142,7 @@ class FloatingCircle(QWidget):
             raise ValueError(f"Unsupported widget mode: {mode}")
         if normalized == self.mode:
             return
+        self._wake_frame_timer()
         self.mode = normalized
         self._chat_input.setPlaceholderText(self._chat_placeholder_for_mode())
         self.mode_changed.emit(self.mode)
@@ -238,6 +171,7 @@ class FloatingCircle(QWidget):
         already_open = self._open_target > 0.5
         if opened == already_open:
             return
+        self._wake_frame_timer()
         self._open_target = 1.0 if opened else 0.0
         if opened:
             self.setFixedSize(self.WIDGET_W_OPEN, self.WIDGET_H)
@@ -266,7 +200,7 @@ class FloatingCircle(QWidget):
         return self.ORB_CX + (self.ORB_CX_OPEN - self.ORB_CX) * self._open_amt
 
     def _update_chat_input_geometry(self) -> None:
-        left = int(self.ORB_CX_OPEN + self.ORB_BASE_R + 8)
+        left = int(self._effective_orb_x() + self.ORB_BASE_R + 8)
         right_margin = 14
         self._chat_input.setGeometry(
             left,
@@ -437,6 +371,8 @@ class FloatingCircle(QWidget):
         self._press_amt += (self._press_target - self._press_amt) * min(1.0, dt * 14.0)
         self._hover_amt += (self._hover_target - self._hover_amt) * min(1.0, dt * 11.0)
         self._open_amt += (self._open_target - self._open_amt) * min(1.0, dt * 11.0)
+        if self.is_chat_open():
+            self._update_chat_input_geometry()
 
         if (
             self._open_target <= 0.0
@@ -462,223 +398,41 @@ class FloatingCircle(QWidget):
             or abs(self._hover_amt - self._hover_target) > 0.005
             or abs(self._open_amt - self._open_target) > 0.005
         )
-        if animating:
-            if self._frame_timer.interval() != self._frame_interval_active:
-                self._frame_timer.setInterval(self._frame_interval_active)
-            if not self._frame_timer.isActive():
-                self._frame_timer.start()
-        elif self._frame_timer.isActive():
-            # Fully idle: stop the timer instead of repainting at 30fps
-            # forever. _wake_frame_timer() restarts it on the next
-            # interaction or state change.
-            self._frame_timer.stop()
+        # Keep the fluid moving at a quiet 30fps even while idle. Interaction
+        # runs at 60fps; hidden windows stop their timer in hideEvent.
+        interval = self._frame_interval_active if animating else 33
+        if self._frame_timer.interval() != interval:
+            self._frame_timer.setInterval(interval)
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
         painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-
         self._paint_pill_background(painter, self._hover_amt, self._open_amt)
-
-        cx_w = self._effective_orb_x()
-        cy_w = self.ORB_CY
-        base_radius = self.ORB_BASE_R + (self.ORB_BASE_R_OPEN - self.ORB_BASE_R) * self._open_amt
-        cx = cx_w
-        cy = cy_w
-
-        if self.mode == self.HELP:
-            col_hi = QColor(230, 245, 255, 255)
-            col_mid = QColor(165, 210, 255, 250)
-            col_base = QColor(120, 185, 245, 250)
-        else:
-            col_hi = QColor(210, 250, 240, 255)
-            col_mid = QColor(130, 225, 205, 250)
-            col_base = QColor(75, 200, 180, 250)
-
-        col_white = QColor(230, 245, 255)
-
-        level = 0.0
-        bass = 0.0
-        treble = 0.0
-        active = False
-
-        if self.state in {self.LISTENING, self.THINKING, self.SPEAKING}:
-            active = True
-            if self.state == self.SPEAKING:
-                env = noise2(0.1, t * 1.1) * 0.5 + noise2(0.3, t * 3.4) * 0.3 + noise2(0.7, t * 8.6) * 0.2
-                level = max(0.0, min(1.0, 0.4 + env * 0.45))
-                bass = max(0.0, min(1.0, 0.35 + noise2(1.1, t * 2.2) * 0.45))
-                treble = max(0.0, min(1.0, 0.30 + noise2(2.3, t * 7.1) * 0.45))
-            elif self.state == self.LISTENING:
-                level = max(0.0, 0.2 + 0.1 * math.sin(t * 3.0))
-                bass = 0.1
-                treble = 0.0
-            elif self.state == self.THINKING:
-                level = max(0.0, 0.15 + 0.05 * math.sin(t * 8.0))
-                bass = 0.0
-                treble = max(0.0, 0.2 + 0.1 * math.sin(t * 12.0))
-
-        self.level_smoothed = self.level_smoothed * 0.82 + level * 0.18
-        lv = self.level_smoothed
-
-        idle_breath = math.sin(t * 0.42) * 0.012
-        active_breath = lv * 0.045
-        r = base_radius * (1 + idle_breath + active_breath)
-
-        if active and lv > 0.05:
-            painter.save()
-            halo_r = r * 1.6
-            halo_grad = QRadialGradient(cx, cy, halo_r)
-            halo_alpha = int(min(0.18, lv * 0.30) * 255)
-            halo_grad.setColorAt(0.0, QColor(col_hi.red(), col_hi.green(), col_hi.blue(), 0))
-            halo_grad.setColorAt(r / halo_r, QColor(col_hi.red(), col_hi.green(), col_hi.blue(), halo_alpha))
-            halo_grad.setColorAt(1.0, QColor(col_hi.red(), col_hi.green(), col_hi.blue(), 0))
-            painter.setBrush(halo_grad)
-            painter.drawEllipse(QRectF(cx - halo_r, cy - halo_r, halo_r * 2, halo_r * 2))
-            painter.restore()
-
-        flow_speed = (38 + bass * 95) if active else 14
-        for w in self.wisps:
-            eps = 0.55
-            nx = w['x'] / base_radius
-            ny = w['y'] / base_radius
-            tn = t * 0.18
-            dnx = noise2(nx, ny + eps + tn) - noise2(nx, ny - eps + tn)
-            dny = noise2(nx + eps, ny + tn) - noise2(nx - eps, ny + tn)
-            w['vx'] = w['vx'] * 0.90 + dnx * flow_speed * dt * 8
-
-            w['vy'] = w['vy'] * 0.90 + (-dny) * flow_speed * dt * 8
-
-            dxc = w['x'] - cx_w
-            dyc = w['y'] - cy_w
-            dist = math.sqrt(dxc * dxc + dyc * dyc) or 1
-            if dist > base_radius * 0.7:
-                pull = (dist - base_radius * 0.7) * 5
-                w['vx'] -= (dxc / dist) * pull * dt
-                w['vy'] -= (dyc / dist) * pull * dt
-
-            w['x'] += w['vx'] * dt
-            w['y'] += w['vy'] * dt
-            w['life'] -= dt * (0.55 if active else 0.30)
-            if w['life'] <= 0:
-                self._spawn_wisp(w)
-
+        cx, cy = self._effective_orb_x(), self.ORB_CY
+        energy = {self.IDLE: 0, self.LISTENING: .35, self.THINKING: .55,
+                  self.SPEAKING: .8}.get(self.state, 0)
+        radius = self.ORB_BASE_R * (1 + .018 * math.sin(t * 1.4))
         painter.save()
-        wobble_amp = 0.018
-        bass_amp = 0.028
-        poly = QPolygonF()
-        segments = 64
-        ax_x, ax_y = self._press_axis
-
-        for i in range(segments + 1):
-            ang = (i / segments) * math.pi * 2
-            cos_ang = math.cos(ang)
-            sin_ang = math.sin(ang)
-            wob = wobble(ang, t) * wobble_amp + bass * bass_amp
-            rr = r * (1 + wob)
-
-            if self._press_amt > 0.001:
-                cos_axis = cos_ang * ax_x + sin_ang * ax_y
-                squash = 1 - self._press_amt * 0.25 * (cos_axis * cos_axis)
-                bulge = 1 + self._press_amt * 0.18 * (1 - cos_axis * cos_axis)
-                rr *= squash * bulge
-
-            if self._ripples:
-                ripple_term = 0.0
-                for rip in self._ripples:
-                    progress = rip['t'] / rip['max_t']
-                    age = 1.0 - progress
-                    band = math.exp(-((rr / r - progress * 1.15) ** 2) * 28.0)
-                    ripple_term += 0.06 * age * band
-                rr *= 1 + ripple_term
-
-            px = cx + cos_ang * rr
-            py = cy + sin_ang * rr
-            poly.append(QPointF(px, py))
-
-        path = QPainterPath()
-        path.addPolygon(poly)
-        painter.setClipPath(path)
-
-        base_shifted = mix_color(col_base, QColor(0, 0, 0), bass * 0.25)
-        body = QLinearGradient(cx, cy - r, cx, cy + r)
-        body.setColorAt(0.0, col_white)
-        body.setColorAt(0.28, col_hi)
-        body.setColorAt(0.65, col_mid)
-        body.setColorAt(1.0, base_shifted)
-        painter.setBrush(body)
-        painter.drawRect(QRectF(cx - r - 6, cy - r - 6, r * 2 + 12, r * 2 + 12))
-
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
-        for w in self.wisps:
-            life_fade = max(0.0, min(1.0, min(w['life'], w['max_life'] - w['life']) * 1.6))
-            treble_pulse = 1 + treble * 0.22
-            wr = w['size'] * (1 + lv * 0.32) * treble_pulse
-
-            c = col_hi if w['hue'] == 0 else col_mid if w['hue'] == 1 else col_white
-            cf = QColor(
-                int(c.red() * life_fade),
-                int(c.green() * life_fade),
-                int(c.blue() * life_fade),
-            )
-            cf_mid = QColor(
-                int(cf.red() * 0.45),
-                int(cf.green() * 0.45),
-                int(cf.blue() * 0.45),
-            )
-
-            grad = QRadialGradient(w['x'], w['y'], wr)
-            grad.setColorAt(0.0, cf)
-            grad.setColorAt(0.55, cf_mid)
-            grad.setColorAt(1.0, QColor(0, 0, 0, 0))
-            painter.setBrush(grad)
-            painter.drawEllipse(QRectF(w['x'] - wr, w['y'] - wr, wr * 2, wr * 2))
-
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-
-        sx_off = (noise2(0.7, t * 0.08) - 0.5) * r * 0.65
-        sy_off = (noise2(1.3, t * 0.08) - 0.5) * r * 0.28
-        spec_cx = cx + sx_off
-        spec_cy = cy - r * 0.4 + sy_off
-        spec = QRadialGradient(spec_cx, spec_cy, r * 0.7)
-        spec.setColorAt(0.0, QColor(255, 255, 255, int(0.85 * 255)))
-        spec.setColorAt(0.35, QColor(255, 255, 255, int(0.18 * 255)))
-        spec.setColorAt(1.0, QColor(255, 255, 255, 0))
-        painter.setBrush(spec)
-        painter.drawRect(QRectF(cx - r - 6, cy - r - 6, r * 2 + 12, r * 2 + 12))
-
-        sheen = QLinearGradient(cx, cy - r, cx, cy - r * 0.4)
-        sheen.setColorAt(0.0, QColor(255, 255, 255, int(0.55 * 255)))
-        sheen.setColorAt(1.0, QColor(255, 255, 255, 0))
-        painter.setBrush(sheen)
-        painter.drawRect(QRectF(cx - r - 6, cy - r - 6, r * 2 + 12, r * 2 + 12))
-
+        painter.translate(cx, cy)
+        painter.scale(1 + self._press_amt * .10, 1 - self._press_amt * .15)
+        paint_lava_orb(painter, QRectF(-radius, -radius, radius * 2, radius * 2), t, energy=energy)
         painter.restore()
-
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(255, 255, 255, 220), 1.3))
-        painter.drawPath(path)
-
-        if treble > 0.05:
-            dot_count = 6
-            for i in range(dot_count):
-                phase_ang = (i / dot_count) * math.pi * 2 + t * 0.3
-                jitter = (noise2(i * 1.7, t * 4) - 0.5) * 0.25
-                ang = phase_ang + jitter
-                dx = cx + math.cos(ang) * r * 0.97
-                dy = cy + math.sin(ang) * r * 0.97
-                dr = 1.5 + treble * 2.5
-                dot_alpha = treble * 0.55 * (0.6 + 0.4 * noise2(i * 3.1, t * 6))
-
-                dot_grad = QRadialGradient(dx, dy, dr * 3)
-                dot_grad.setColorAt(0.0, QColor(255, 255, 255, int(dot_alpha * 255)))
-                dot_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
-                painter.setBrush(dot_grad)
-                painter.drawEllipse(QRectF(dx - dr * 3, dy - dr * 3, dr * 6, dr * 6))
-
         self._paint_left_icon(painter, self._hover_amt)
         self._paint_right_icon(painter, self._hover_amt)
+        if self.state != self.IDLE:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor('#a750ea'))
+            painter.drawEllipse(QPointF(cx + 16, cy + 16), 3, 3)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._frame_timer.start(33)
+
+    def hideEvent(self, event) -> None:
+        self._frame_timer.stop()
+        super().hideEvent(event)
 
     def _paint_pill_background(self, painter: QPainter, hover_amt: float, open_amt: float = 0.0) -> None:
         combined = max(hover_amt, open_amt)
@@ -710,105 +464,48 @@ class FloatingCircle(QWidget):
         painter.setOpacity(alpha_scale)
         painter.setPen(Qt.PenStyle.NoPen)
 
-        painter.setBrush(QColor(225, 228, 235, 255))
+        painter.setBrush(theme.color('bg_card'))
         painter.drawRoundedRect(rect, radius, radius)
-
-        body = QLinearGradient(rect.topLeft(), rect.bottomLeft())
-        body.setColorAt(0.0, QColor(245, 247, 252, 255))
-        body.setColorAt(0.5, QColor(225, 228, 235, 255))
-        body.setColorAt(1.0, QColor(200, 205, 215, 255))
-        painter.setBrush(body)
-        painter.drawRoundedRect(rect, radius, radius)
-
-        gloss = QLinearGradient(rect.topLeft(), QPointF(rect.left(), rect.center().y()))
-        gloss.setColorAt(0.0, QColor(255, 255, 255, 110))
-        gloss.setColorAt(1.0, QColor(255, 255, 255, 0))
-        painter.setBrush(gloss)
-        painter.drawRoundedRect(rect, radius, radius)
-
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(255, 255, 255, 170), 1.0))
-        inner = rect.adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.drawRoundedRect(inner, radius - 0.5, radius - 0.5)
+        painter.setPen(QPen(theme.color('border_mid'), 1.0))
+        painter.drawRoundedRect(rect.adjusted(.5, .5, -.5, -.5), radius, radius)
         painter.restore()
 
     def _paint_left_icon(self, painter: QPainter, hover_amt: float) -> None:
-        icon_alpha = max(0.0, min(1.0, (hover_amt - 0.5) / 0.45)) * (1.0 - self._open_amt)
-        if icon_alpha < 0.01:
+        alpha = max(0.0, min(1.0, (hover_amt - .4) / .5)) * (1 - self._open_amt)
+        if alpha < .01:
             return
-        cx, cy = self.LEFT_CX, self.LEFT_CY
-        if self.mode == self.ACTIVE:
-            colors = (
-                QColor(120, 220, 200, 235),
-                QColor(160, 240, 220, 235),
-                QColor(90, 200, 180, 235),
-            )
-        else:
-            colors = (
-                QColor(255, 255, 255, 235),
-                QColor(235, 240, 248, 220),
-                QColor(200, 215, 230, 210),
-            )
-
-        petal_r = 4.2
-        offset = 3.6
-        centers = (
-            QPointF(cx, cy - offset),
-            QPointF(cx - offset * 0.92, cy + offset * 0.62),
-            QPointF(cx + offset * 0.92, cy + offset * 0.62),
-        )
-
         painter.save()
-        painter.setOpacity(icon_alpha)
+        painter.setOpacity(alpha)
+        cx, cy = self.LEFT_CX, self.LEFT_CY
         painter.setPen(Qt.PenStyle.NoPen)
-        for color, center in zip(colors, centers):
-            grad = QRadialGradient(center.x() - 0.8, center.y() - 0.8, petal_r * 1.4)
-            grad.setColorAt(0.0, QColor(255, 255, 255, 200))
-            grad.setColorAt(0.45, color)
-            grad.setColorAt(1.0, QColor(
-                max(0, color.red() - 60),
-                max(0, color.green() - 60),
-                max(0, color.blue() - 60),
-                color.alpha(),
-            ))
-            painter.setBrush(grad)
-            painter.drawEllipse(center, petal_r, petal_r)
+        painter.setBrush(theme.color('accent_subtle'))
+        painter.drawEllipse(QPointF(cx, cy), 16, 16)
+        painter.setPen(theme.color('accent'))
+        painter.setFont(QFont('Segoe UI', 11, QFont.Weight.DemiBold))
+        painter.drawText(QRectF(cx - 14, cy - 14, 28, 28), Qt.AlignmentFlag.AlignCenter,
+                         '?' if self.mode == self.HELP else '↗')
         painter.restore()
 
     def _paint_right_icon(self, painter: QPainter, hover_amt: float) -> None:
-        icon_alpha = max(0.0, min(1.0, (hover_amt - 0.5) / 0.45)) * (1.0 - self._open_amt)
-        if icon_alpha < 0.01:
+        alpha = max(0.0, min(1.0, (hover_amt - .4) / .5)) * (1 - self._open_amt)
+        if alpha < .01:
             return
-        cx, cy = self.RIGHT_CX, self.RIGHT_CY
-        body_w = 11.0
-        body_h = 8.4
-        body_rect = QRectF(cx - body_w / 2 - 1.6, cy - body_h / 2, body_w, body_h)
-
         painter.save()
-        painter.setOpacity(icon_alpha)
+        painter.setOpacity(alpha)
+        cx, cy = self.RIGHT_CX, self.RIGHT_CY
+        painter.setBrush(theme.color('accent_subtle'))
         painter.setPen(Qt.PenStyle.NoPen)
-
-        body_grad = QLinearGradient(body_rect.topLeft(), body_rect.bottomLeft())
-        body_grad.setColorAt(0.0, QColor(195, 200, 215, 235))
-        body_grad.setColorAt(1.0, QColor(140, 150, 170, 235))
-        painter.setBrush(body_grad)
-        painter.drawRoundedRect(body_rect, 1.8, 1.8)
-
-        lens = QPainterPath()
-        lens.moveTo(body_rect.right() - 0.5, cy - 2.6)
-        lens.lineTo(body_rect.right() + 4.2, cy - 4.0)
-        lens.lineTo(body_rect.right() + 4.2, cy + 4.0)
-        lens.lineTo(body_rect.right() - 0.5, cy + 2.6)
-        lens.closeSubpath()
-        painter.drawPath(lens)
-
-        painter.setBrush(QColor(255, 255, 255, 130))
-        highlight = QRectF(body_rect.left() + 1.2, body_rect.top() + 1.0, body_rect.width() - 2.4, 1.2)
-        painter.drawRoundedRect(highlight, 0.6, 0.6)
-
+        painter.drawEllipse(QPointF(cx, cy), 16, 16)
+        painter.setPen(QPen(theme.color('text_secondary'), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(QRectF(cx - 3, cy - 8, 6, 11), 3, 3)
+        painter.drawArc(QRectF(cx - 6, cy - 5, 12, 12), 180 * 16, 180 * 16)
+        painter.drawLine(QPointF(cx, cy + 7), QPointF(cx, cy + 10))
+        painter.drawLine(QPointF(cx - 3, cy + 10), QPointF(cx + 3, cy + 10))
         if self.muted:
-            painter.setPen(QPen(QColor(230, 70, 70, 235), 1.6))
-            painter.drawLine(int(cx - 9), int(cy + 7), int(cx + 9), int(cy - 7))
+            painter.setPen(QPen(theme.color('danger_fg'), 1.8))
+            painter.drawLine(QPointF(cx - 8, cy + 8), QPointF(cx + 8, cy - 8))
         painter.restore()
 
     def _paint_label(self, painter: QPainter, rect: QRectF, accent: QColor) -> None:
@@ -859,30 +556,7 @@ class FloatingCircle(QWidget):
 
     def _show_context_menu(self, global_pos: QPoint) -> None:
         menu = QMenu(self)
-        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        menu.setStyleSheet(
-            """
-            QMenu {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255, 255, 255, 20), stop:1 rgba(255, 255, 255, 5));
-                border-top: 1px solid rgba(255, 255, 255, 60);
-                border-left: 1px solid rgba(255, 255, 255, 40);
-                border-right: 1px solid rgba(255, 255, 255, 10);
-                border-bottom: 1px solid rgba(255, 255, 255, 10);
-                padding: 6px;
-                border-radius: 12px;
-            }
-            QMenu::item {
-                color: white;
-                padding: 6px 18px;
-                border-radius: 6px;
-                background-color: transparent;
-            }
-            QMenu::item:selected {
-                background-color: rgba(255, 255, 255, 30);
-                border: 1px solid rgba(255, 255, 255, 50);
-            }
-            """
-        )
+        menu.setStyleSheet(theme.qss(theme.MENU_QSS))
 
         mode_labels = (
             (self.HELP, "Help Mode"),
@@ -1000,16 +674,16 @@ class ChatStatusPill(QWidget):
         painter.setBrush(QColor(0, 0, 0, 60))
         painter.drawRoundedRect(shadow, radius, radius)
 
-        painter.setBrush(QColor(248, 249, 252, 245))
+        painter.setBrush(theme.color('bg_card'))
         painter.drawRoundedRect(rect, radius, radius)
 
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(0, 0, 0, 30), 1.0))
+        painter.setPen(QPen(theme.color('border_mid'), 1.0))
         painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius - 0.5, radius - 0.5)
 
         if self._text:
             painter.setFont(self._font)
-            painter.setPen(QColor(60, 70, 85, 240))
+            painter.setPen(theme.color('text_primary'))
             metrics = QFontMetrics(self._font)
             elided = metrics.elidedText(
                 self._text,
@@ -1038,27 +712,7 @@ class ChatInputPopup(QWidget):
 
         self._edit = QLineEdit(self)
         self._edit.setPlaceholderText(FloatingCircle.HELP_CHAT_PLACEHOLDER)
-        self._edit.setStyleSheet(
-            """
-            QLineEdit {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255, 255, 255, 20), stop:1 rgba(255, 255, 255, 5));
-                border-top: 1px solid rgba(255, 255, 255, 60);
-                border-left: 1px solid rgba(255, 255, 255, 40);
-                border-right: 1px solid rgba(255, 255, 255, 10);
-                border-bottom: 1px solid rgba(255, 255, 255, 10);
-                border-radius: 12px;
-                padding: 8px 14px;
-                color: white;
-                font-family: 'Segoe UI';
-                font-size: 11pt;
-            }
-            QLineEdit:focus {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255, 255, 255, 40), stop:1 rgba(255, 255, 255, 10));
-                border-top: 1px solid rgba(255, 255, 255, 80);
-                border-left: 1px solid rgba(255, 255, 255, 60);
-            }
-            """
-        )
+        self._edit.setStyleSheet(theme.qss(theme.INPUT_QSS))
         self._edit.returnPressed.connect(self._submit)
 
         layout = QHBoxLayout(self)
