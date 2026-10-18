@@ -587,7 +587,7 @@ def _to_responses_input(messages: list[dict[str, Any]], system_prompt: str | Non
                         "type": "function_call",
                         "name": fc["name"],
                         "arguments": json.dumps(fc.get("arguments") or {}),
-                        "call_id": fc.get("call_id") or f"call_{fc['name']}",
+                        "call_id": fc.get("call_id") or f"call_{fc.get('name', 'tool')}",
                     })
             if content_items:
                 out.append({"role": "assistant", "content": content_items})
@@ -614,7 +614,7 @@ def _to_responses_input(messages: list[dict[str, Any]], system_prompt: str | Non
                 fr = part["function_response"]
                 out.append({
                     "type": "function_call_output",
-                    "call_id": fr.get("call_id") or f"call_{fr['name']}",
+                    "call_id": fr.get("call_id") or f"call_{fr.get('name', 'tool')}",
                     "output": json.dumps(fr.get("response") or {}),
                 })
         if content_items:
@@ -941,7 +941,7 @@ def _to_chat_completions_messages(
                 elif "function_call" in part:
                     fc = part["function_call"]
                     tool_calls.append({
-                        "id": fc.get("call_id") or f"call_{fc['name']}",
+                        "id": fc.get("call_id") or f"call_{fc.get('name', 'tool')}",
                         "type": "function",
                         "function": {
                             "name": fc["name"],
@@ -977,7 +977,7 @@ def _to_chat_completions_messages(
                 fr = part["function_response"]
                 deferred_tool_outputs.append({
                     "role": "tool",
-                    "tool_call_id": fr.get("call_id") or f"call_{fr['name']}",
+                    "tool_call_id": fr.get("call_id") or f"call_{fr.get('name', 'tool')}",
                     "content": json.dumps(fr.get("response") or {}),
                 })
         if content_items:

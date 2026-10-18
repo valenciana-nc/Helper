@@ -244,7 +244,15 @@ def _to_gemini_contents(
             out.append({"role": gem_role, "parts": gem_parts})
 
     system_text = "\n\n".join(s for s in system_chunks if s) or None
-    return out, system_text
+    # Gemini requires strict user/model alternation; merge consecutive same-role
+    # messages (same as the Anthropic translator does).
+    merged: list[dict[str, Any]] = []
+    for msg in out:
+        if merged and merged[-1]["role"] == msg["role"]:
+            merged[-1]["parts"].extend(msg["parts"])
+        else:
+            merged.append(msg)
+    return merged, system_text
 
 
 def _gemini_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -302,6 +310,6 @@ def _parse_generate(payload: dict[str, Any]) -> ChatResult:
             tool_calls.append(ToolCall(
                 name=str(fc.get("name") or ""),
                 arguments=args if isinstance(args, dict) else {},
-                call_id=fc.get("name"),
+                call_id=f"call_{len(tool_calls)}_{fc.get('name') or 'tool'}",
             ))
     return ChatResult(text=" ".join(text_chunks).strip(), tool_calls=tool_calls)

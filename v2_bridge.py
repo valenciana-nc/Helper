@@ -26,9 +26,14 @@ def wav_to_pcm16(wav_bytes: bytes) -> bytes:
         frames = wf.readframes(wf.getnframes())
     import numpy as np
 
-    audio = np.frombuffer(frames, dtype=np.int16 if sampwidth == 2 else np.int32)
-    if sampwidth != 2:
-        audio = (audio >> 16).astype(np.int16)
+    if sampwidth == 1:
+        audio = (np.frombuffer(frames, dtype=np.uint8).astype(np.int16) - 128) * 256
+    elif sampwidth == 2:
+        audio = np.frombuffer(frames, dtype=np.int16)
+    elif sampwidth == 4:
+        audio = (np.frombuffer(frames, dtype=np.int32) >> 16).astype(np.int16)
+    else:
+        raise ValueError(f"Unsupported WAV sample width: {sampwidth}")
     if n_channels > 1:
         audio = audio.reshape(-1, n_channels).mean(axis=1).astype(np.int16)
     return np.ascontiguousarray(audio).tobytes()
