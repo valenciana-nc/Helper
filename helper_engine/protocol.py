@@ -12,6 +12,8 @@ PREDICATES = frozenset({
     "exists", "absent", "value_equals", "text_contains", "url_contains", "title_contains", "focused", "checked",
 })
 
+__all__ = ["ACTION_KINDS", "PREDICATES", "parse_decision", "parse_action", "parse_predicate", "json_object"]
+
 
 def json_object(raw: str) -> dict:
     text = raw.strip()
