@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
 
-from v2.world import ScreenFrame
+from v2.world import ScreenFrame, normalized_control_type
 
 
 @dataclass(frozen=True)
@@ -57,10 +57,6 @@ _INTERACTABLE_TYPES = frozenset(
 )
 
 
-def _normalized_control_type(control_type: str) -> str:
-    return "".join(ch for ch in control_type.lower() if ch.isalnum())
-
-
 def _badge_font() -> ImageFont.ImageFont:
     try:
         return ImageFont.load_default(size=_FONT_SIZE)
@@ -95,7 +91,7 @@ def annotate(frame: ScreenFrame, *, max_marks: int = 40) -> tuple[bytes, list[Ma
     for el in frame.elements.values():
         if not el.enabled or not el.visible:
             continue
-        if _normalized_control_type(el.control_type) not in _INTERACTABLE_TYPES:
+        if normalized_control_type(el.control_type) not in _INTERACTABLE_TYPES:
             continue
         _, _, w, h = el.rect
         if w < _MIN_DIM_PX or h < _MIN_DIM_PX:

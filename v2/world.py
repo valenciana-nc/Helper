@@ -56,6 +56,17 @@ class ScreenFrame:  # one observed moment
     changed_ids: set[str] = field(default_factory=set)  # ids added/removed/changed since last frame
 
 
+def normalized_control_type(control_type: str) -> str:
+    """Canonical control-type key: lowercase, alphanumeric-only.
+
+    UIA reports types like "Button"/"Edit"/"SplitButton"; every consumer
+    (annotation in observe.py, actuation in ground.py) must compare the
+    same way, so this lives next to Element instead of being copied
+    per-module.
+    """
+    return "".join(ch for ch in control_type.lower() if ch.isalnum())
+
+
 # ---------------------------------------------------------------------------
 # Capture + tree snapshot (module-level so tests can monkeypatch them)
 # ---------------------------------------------------------------------------

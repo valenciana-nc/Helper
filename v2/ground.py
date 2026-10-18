@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING
 
-from .world import Element
+from .world import Element, normalized_control_type
 
 if TYPE_CHECKING:
     from .world import WorldModel
@@ -44,12 +44,6 @@ _TYPABLE_TYPES = {
     "document",
     "searchbox",
 }
-
-
-def _normalized_control_type(control_type: str) -> str:
-    # UIA reports types like "Button"/"Edit"; compare case-insensitively
-    # (same normalization as v2.observe).
-    return "".join(ch for ch in control_type.lower() if ch.isalnum())
 
 
 def resolve_mark(
@@ -90,7 +84,7 @@ def find_by_text(world: WorldModel, text: str) -> Target | None:
         exact = 0 if name == needle else 1
         actionable = (
             0
-            if _normalized_control_type(el.control_type)
+            if normalized_control_type(el.control_type)
             in (_ACTIONABLE_TYPES | _TYPABLE_TYPES)
             else 1
         )
@@ -150,4 +144,4 @@ def center(rect: tuple[int, int, int, int]) -> tuple[int, int]:
 
 
 def is_typable(el: Element) -> bool:
-    return _normalized_control_type(el.control_type) in _TYPABLE_TYPES
+    return normalized_control_type(el.control_type) in _TYPABLE_TYPES
