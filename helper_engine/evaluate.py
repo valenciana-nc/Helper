@@ -29,7 +29,9 @@ def summarize(paths) -> dict:
               "invalid_lines": invalid}
     for metric in ("elapsed_seconds", "model_seconds", "model_calls", "actions",
                    "observations", "stale_decisions", "rejected_actions", "screenshot_bytes"):
-        values = [row[metric] for row in task_rows if isinstance(row.get(metric), (int, float))]
+        # bool is a subclass of int; exclude it so a stray True/False can't skew a mean.
+        values = [row[metric] for row in task_rows
+                  if isinstance(row.get(metric), (int, float)) and not isinstance(row.get(metric), bool)]
         result["mean_" + metric] = round(mean(values), 3) if values else None
     result["note"] = "Runtime completion is model-verified. Use an external task judge for a benchmark claim."
     return result
