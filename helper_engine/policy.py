@@ -11,6 +11,9 @@ COMMIT_WORDS = re.compile(r"\b(send|submit|purchase|buy|pay|delete|remove|erase|
 TERMINALS = re.compile(r"\b(powershell|terminal|cmd\.exe|command prompt|bash|wsl)\b", re.I)
 
 
+__all__ = ["COMMIT_WORDS", "TERMINALS", "confirmation_reason"]
+
+
 def confirmation_reason(action: Action, obs: Observation) -> str:
     if action.requires_confirmation:
         return "This action requests confirmation."

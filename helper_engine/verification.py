@@ -4,6 +4,9 @@ from __future__ import annotations
 from .types import Observation, Outcome, Predicate
 
 
+__all__ = ["evaluate"]
+
+
 def evaluate(predicates: tuple[Predicate, ...], obs: Observation) -> tuple[Outcome, str]:
     if not predicates:
         return Outcome.UNCERTAIN, "No deterministic postcondition; inspect current state."
