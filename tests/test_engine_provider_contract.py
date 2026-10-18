@@ -82,6 +82,18 @@ class ProviderContractTests(unittest.TestCase):
             client.chat([{"role": "user", "parts": []}], model="test")
         self.assertEqual(codex.bodies, [])
 
+    def test_anthropic_merges_consecutive_same_role_messages(self):
+        from anthropic_client import _to_anthropic_messages
+        messages = [
+            {"role": "assistant", "parts": [{"text": "first"}]},
+            {"role": "assistant", "parts": [{"text": "second"}]},
+            {"role": "user", "parts": [{"text": "reply"}]},
+        ]
+        translated, _ = _to_anthropic_messages(messages)
+        roles = [m["role"] for m in translated]
+        self.assertEqual(roles, ["assistant", "user"])
+        self.assertEqual(len(translated[0]["content"]), 2)
+
 
 class FinalReplyVisibilityTests(unittest.TestCase):
     @classmethod
