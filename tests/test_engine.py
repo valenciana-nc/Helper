@@ -399,5 +399,27 @@ class PerceptionTests(unittest.TestCase):
         self.assertEqual(image_difference(png, png), 0.0)
 
 
+class BootstrapTests(unittest.TestCase):
+    def test_invalid_page_index_raises_clear_error(self):
+        import os
+        from helper_engine.bootstrap import _int_env
+        os.environ["TEST_PAGE_INDEX"] = "not-a-number"
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                _int_env("TEST_PAGE_INDEX", None)
+            self.assertIn("TEST_PAGE_INDEX", str(ctx.exception))
+        finally:
+            del os.environ["TEST_PAGE_INDEX"]
+
+    def test_valid_page_index_parses(self):
+        import os
+        from helper_engine.bootstrap import _int_env
+        os.environ["TEST_PAGE_INDEX"] = "3"
+        try:
+            self.assertEqual(_int_env("TEST_PAGE_INDEX", None), 3)
+        finally:
+            del os.environ["TEST_PAGE_INDEX"]
+
+
 if __name__ == "__main__":
     unittest.main()
