@@ -32,6 +32,6 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ v2/t
 
 ## What "green" means
 
-Full suite green: 251 passed, 3 skipped, 16 subtests passed. The 3 skips are
+Full suite green: 252 passed, 3 skipped, 16 subtests passed. The 3 skips are
 expected (Windows-only paths on Linux, plus the historical v2 Linux-only
 world-model branch).
