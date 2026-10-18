@@ -463,14 +463,20 @@ class TtsStreamer:
 
     def speak(self, text_stream: Iterable[str]) -> None:
         """Start speaking chunks from ``text_stream``. Returns immediately."""
-        self.stop()  # halt any in-progress speech
         with self._worker_lock:
-            old = self._worker
+            self._stop.set()  # halt any in-progress speech
+            old, self._worker = self._worker, None
+            # Reset for the new utterance; a stop() during the join below will
+            # set it again, which we detect to honor the barge-in.
+            self._stop.clear()
         if old is not None:
             old.join(timeout=5)
-        self._stop.clear()
-        worker = threading.Thread(target=self._run, args=(text_stream,), daemon=True)
         with self._worker_lock:
+            # A concurrent stop() or speak() during the join set _stop or
+            # installed a worker; do not start over it (losing the barge-in).
+            if self._stop.is_set() or self._worker is not None:
+                return
+            worker = threading.Thread(target=self._run, args=(text_stream,), daemon=True)
             self._worker = worker
         worker.start()
 

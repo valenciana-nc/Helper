@@ -78,7 +78,7 @@ class V2Actuator:
                 for desc in win.descendants():
                     try:
                         rid = desc.element_info.runtime_id
-                        rid_str = ":".join(str(v) for v in rid) \
+                        rid_str = ".".join(str(v) for v in rid) \
                             if isinstance(rid, (list, tuple)) else str(rid)
                         if rid_str == runtime:
                             return desc

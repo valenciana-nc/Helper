@@ -303,6 +303,11 @@ class WorldModel:
         """Begin background refresh. Idempotent."""
         if self._thread is not None and self._thread.is_alive():
             return
+        # A dead thread without stop() leaves a subscribed UIA source behind;
+        # close it before replacing, or COM handlers accumulate.
+        old_source, self._uia_source = self._uia_source, None
+        if old_source is not None:
+            old_source.close()
         self._stop_event.clear()
         self._frame_event.clear()
         self._uia_source = _UiaEventSource()
