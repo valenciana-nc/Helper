@@ -85,10 +85,17 @@ class StoredConversation:
                 ts = 0.0
             if role and text:
                 messages.append(StoredMessage(role=role, text=text, timestamp=ts))
+
+        def _ts(key: str) -> float:
+            try:
+                return float(data.get(key) or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
         return cls(
             id=str(data.get("id") or uuid.uuid4().hex),
-            started_at=float(data.get("started_at") or 0.0),
-            ended_at=float(data.get("ended_at") or 0.0),
+            started_at=_ts("started_at"),
+            ended_at=_ts("ended_at"),
             title=str(data.get("title") or ""),
             messages=messages,
         )
