@@ -93,6 +93,7 @@ class WindowsDriver:
         return out.getvalue(), image.width, image.height, monitor["left"], monitor["top"], scale
 
     def observe(self) -> Observation:
+        """Capture the foreground window: screenshot plus UIA control tree."""
         hwnd = self._scope()
         api = self._api()
         token = uuid.uuid4().hex
@@ -120,6 +121,7 @@ class WindowsDriver:
                            left, top, scale, warnings=tuple(warnings))
 
     def validate(self, action, observation):
+        """Reject the action if the scene changed since the decision's observation."""
         if observation.id != self._current_id or str(int(self._scope())) != observation.scope:
             raise StaleObservation("The foreground window or observation changed")
         rect = target_rect(action, observation)
@@ -144,6 +146,7 @@ class WindowsDriver:
             raise StaleObservation("Windows did not grant foreground input to the target app")
 
     def execute(self, action, observation):
+        """Dispatch one typed action via UIA patterns or synthetic input."""
         target = action.target
         if target and target.element_id and action.kind in {"click", "fill"}:
             result = self.uia.request("act", token=observation.id, element_id=target.element_id,
