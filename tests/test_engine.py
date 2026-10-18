@@ -372,5 +372,20 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(result["invalid_lines"], 1)
 
 
+class PolicyTests(unittest.TestCase):
+    def test_destructive_words_require_confirmation(self):
+        from helper_engine.policy import confirmation_reason
+        obs = frame()
+        for word in ("remove", "uninstall", "format"):
+            action = Action("click", Target("u1"), "", (), 0, None, (), False, f"Click to {word} item")
+            self.assertTrue(confirmation_reason(action, obs), word)
+
+    def test_benign_click_needs_no_confirmation(self):
+        from helper_engine.policy import confirmation_reason
+        obs = frame()
+        action = Action("click", Target("u1"), "", (), 0, None, (), False, "Open settings")
+        self.assertEqual(confirmation_reason(action, obs), "")
+
+
 if __name__ == "__main__":
     unittest.main()

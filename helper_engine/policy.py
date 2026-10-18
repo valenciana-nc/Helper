@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from .types import Action, Observation
 
 
-COMMIT_WORDS = re.compile(r"\b(send|submit|purchase|buy|pay|delete|erase|publish|transfer|shutdown|install)\b", re.I)
+COMMIT_WORDS = re.compile(r"\b(send|submit|purchase|buy|pay|delete|remove|erase|uninstall|publish|transfer|shutdown|install|format)\b", re.I)
 TERMINALS = re.compile(r"\b(powershell|terminal|cmd\.exe|command prompt|bash|wsl)\b", re.I)
 
 
