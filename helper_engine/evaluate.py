@@ -8,6 +8,9 @@ from pathlib import Path
 from statistics import mean
 
 
+__all__ = ["summarize"]
+
+
 def summarize(paths) -> dict:
     """Aggregate finished run journals into completion rates and mean metrics.
 

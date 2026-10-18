@@ -7,6 +7,9 @@ import time
 from pathlib import Path
 
 
+__all__ = ["JsonJournal"]
+
+
 class JsonJournal:
     """Thread-safe append-only JSONL journal for run metadata.
 
