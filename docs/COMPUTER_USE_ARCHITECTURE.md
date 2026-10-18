@@ -144,6 +144,9 @@ not claim exact billable image tokens, which vary by model and provider.
 - Stale decisions cause a fresh observation and new grounding.
 - Ambiguous post-dispatch effects prevent repeating the matching non-idempotent action.
 - Repeated clicks on unchanged state are blocked and eventually request user help.
+  "Unchanged" compares each control's name, role, geometry, value, and state
+  flags (enabled, visible, focused, password), so a newly enabled button is
+  never mistaken for the same scene.
 - Receipts are created before post-action waiting, preserving effects on cancellation.
 - Escape, mode changes, and shutdown request cancellation. The runtime checks
   before model calls, after them, during waits, and immediately before input.
