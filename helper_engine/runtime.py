@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Limits:
+    """Per-run budgets: steps, model calls, wall-clock time, and invalid-decision tolerance."""
     max_steps: int = 40
     max_model_calls: int = 60
     max_seconds: float = 300
