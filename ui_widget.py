@@ -2,8 +2,8 @@ import math
 import sys
 
 from PyQt6.QtCore import QElapsedTimer, QEvent, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QKeyEvent, QLinearGradient, QPainter, QPen
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QMenu, QWidget
+from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QLinearGradient, QPainter, QPen
+from PyQt6.QtWidgets import QApplication, QLineEdit, QMenu, QWidget
 
 import theme
 from ui_lava import paint_lava_orb
