@@ -309,6 +309,25 @@ class EvidenceTests(unittest.TestCase):
         outcome, _ = evaluate((Predicate("absent", "Not present"),), frame())
         self.assertEqual(outcome, Outcome.UNCERTAIN)
 
+
+class SignatureTests(unittest.TestCase):
+    def test_enabled_state_change_alters_signature(self):
+        from dataclasses import replace
+        obs = frame()
+        disabled = replace(obs.elements[0], enabled=False)
+        obs2 = replace(obs, elements=(disabled,))
+        self.assertNotEqual(obs.signature, obs2.signature)
+
+    def test_focus_change_alters_signature(self):
+        from dataclasses import replace
+        obs = frame()
+        focused = replace(obs.elements[0], focused=True)
+        obs2 = replace(obs, elements=(focused,))
+        self.assertNotEqual(obs.signature, obs2.signature)
+
+    def test_identical_observations_share_signature(self):
+        self.assertEqual(frame().signature, frame().signature)
+
     def test_negative_monitor_origin_and_scaled_screenshot(self):
         obs = frame(origin=-1920, scale=0.5)
         rect = obs.screen_box((500, 500, 100, 100))

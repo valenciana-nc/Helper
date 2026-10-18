@@ -119,7 +119,11 @@ class Observation:
 
     @property
     def signature(self) -> str:
-        semantics = [(e.id, e.name, e.role, e.value, e.checked) for e in self.elements]
+        # Include the full element state: a button becoming enabled, a field
+        # gaining focus, or a checkbox toggling must all change the signature,
+        # or the runtime's no-progress detection will miss the state change.
+        semantics = [(e.id, e.name, e.role, e.value, e.enabled, e.visible,
+                      e.focused, e.checked, e.password) for e in self.elements]
         return hashlib.sha256(repr((self.scope, self.url, semantics)).encode()).hexdigest()[:20]
 
 
