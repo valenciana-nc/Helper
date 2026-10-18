@@ -123,12 +123,15 @@ class BrowserDriver:
                            warnings=("DOM snapshot covers visible main-frame controls; use vision for iframe/canvas targets.",))
 
     def matches_window_title(self, title: str) -> bool:
+        from .router import BROWSER_TITLE_MARKERS
         self._connect()
         page_title = self._page.title().strip()
-        suffixes = (" - Google Chrome", " - Microsoft Edge", " — Mozilla Firefox")
-        for suffix in suffixes:
-            if title.endswith(suffix):
-                title = title[:-len(suffix)]
+        for marker in BROWSER_TITLE_MARKERS:
+            for sep in (" - ", " — "):
+                suffix = sep + marker
+                if title.endswith(suffix):
+                    title = title[:-len(suffix)]
+                    break
         return bool(page_title) and title.strip() == page_title
 
     def validate(self, action, observation):
