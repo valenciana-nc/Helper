@@ -176,8 +176,10 @@ class Agent:
                     context["recent_actions"] = [receipt_context(r) for r in report.receipts[-8:]]
                     # The verifier checks the reply the user will receive, not only the screen.
                     context["proposed_reply"] = decision.message
-                    ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs)
-                    context.pop("proposed_reply", None)
+                    try:
+                        ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs)
+                    finally:
+                        context.pop("proposed_reply", None)
                     emit("goal_verification", {"status": "passed" if ok else "unproven", "message": evidence})
                     if ok:
                         report.status = RunStatus.COMPLETED

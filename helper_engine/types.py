@@ -119,11 +119,18 @@ class Observation:
     def image_box(self, rect: Rect) -> tuple[int, int, int, int]:
         x = round((rect.x - self.origin_x) * self.scale)
         y = round((rect.y - self.origin_y) * self.scale)
+        right = round((rect.x + rect.width - self.origin_x) * self.scale)
+        bottom = round((rect.y + rect.height - self.origin_y) * self.scale)
+        # No intersection with the screenshot: return an empty box so callers
+        # that check `right <= left` correctly treat it as invalid, instead of
+        # a misleading 1-pixel sliver from clamping.
+        if right <= 0 or bottom <= 0 or x >= self.width or y >= self.height:
+            return (0, 0, 0, 0)
         return (
             max(0, min(self.width - 1, x)),
             max(0, min(self.height - 1, y)),
-            max(1, min(self.width, round((rect.x + rect.width - self.origin_x) * self.scale))),
-            max(1, min(self.height, round((rect.y + rect.height - self.origin_y) * self.scale))),
+            max(0, min(self.width, right)),
+            max(0, min(self.height, bottom)),
         )
 
     @property

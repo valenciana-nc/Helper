@@ -103,7 +103,12 @@ class BrowserDriver:
         elements = []
         for index, item in enumerate(records):
             mark = f"b{index + 1}"
-            handle = properties[str(index)].as_element()
+            # The DOM can mutate between the evaluate() and get_properties()
+            # round-trips above; skip elements that vanished in between.
+            prop = properties.get(str(index))
+            if prop is None:
+                continue
+            handle = prop.as_element()
             if handle is None:
                 continue
             self._handles[mark] = handle

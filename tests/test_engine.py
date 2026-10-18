@@ -167,6 +167,21 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(model.verified_replies, ["The field now says Alice."])
         self.assertNotIn("proposed_reply", model.contexts[-1])
 
+    def test_proposed_reply_cleaned_up_when_verification_raises(self):
+        # Bug: context.pop("proposed_reply") was skipped if call_model raised,
+        # leaking the stale reply into subsequent model decisions.
+        driver = FakeDriver([frame(), frame("o2", value="Alice"), frame("o3", value="Alice")])
+        def reply(obs):
+            return Decision("finish", obs.id, message="The field now says Alice.")
+        model = ScriptModel([act(fill()), reply])
+        def boom(goal, obs, context):
+            raise TimeoutError("model call timed out")
+        model.verify_goal = boom
+        report = agent(model, driver).run_goal("Enter Alice and tell me the value", mode="active")
+        self.assertEqual(report.status, RunStatus.LIMITED)
+        for ctx in model.contexts:
+            self.assertNotIn("proposed_reply", ctx)
+
     def test_already_true_expectation_does_not_block_or_prove_a_click(self):
         # Real failure: "Skip ad" was expected to exist, which was true before clicking it.
         skip = Action("click", Target("u1"), description="Skip ad", expect=(Predicate("exists", "Name"),))
@@ -351,6 +366,51 @@ class SignatureTests(unittest.TestCase):
         rect = obs.screen_box((500, 500, 100, 100))
         self.assertEqual(rect, Rect(-1620, 200, 60, 40))
         self.assertEqual(obs.image_box(rect), (150, 100, 180, 120))
+
+    def test_image_box_off_screen_rect_returns_empty_box(self):
+        # Bug: fully off-screen rects produced a misleading 1-pixel sliver
+        # from clamping instead of an empty (invalid) box.
+        obs = frame()
+        box = obs.image_box(Rect(x=-500, y=10, width=50, height=50))
+        self.assertLessEqual(box[2], box[0], f"Expected invalid box, got {box}")
+        box = obs.image_box(Rect(x=10, y=-500, width=50, height=50))
+        self.assertLessEqual(box[3], box[1], f"Expected invalid box, got {box}")
+
+    def test_browser_observe_skips_elements_vanished_mid_snapshot(self):
+        # Bug: DOM mutating between the evaluate() and get_properties()
+        # round-trips caused KeyError on properties[str(index)].
+        from unittest.mock import MagicMock
+        from helper_engine.browser import BrowserDriver
+        driver = BrowserDriver.__new__(BrowserDriver)
+        driver._handles = {}
+        driver._selection = None
+        driver._page = MagicMock()
+        driver._page.is_closed.return_value = False
+        driver._connect = lambda: None
+        # Two records, but only one property (second element vanished).
+        sel = MagicMock()
+        sel.evaluate.return_value = [
+            {"name": "a", "role": "button", "rect": [0, 0, 10, 10], "value": "",
+             "enabled": True, "focused": False, "checked": False, "password": False},
+            {"name": "b", "role": "button", "rect": [20, 20, 10, 10], "value": "",
+             "enabled": True, "focused": False, "checked": False, "password": False},
+        ]
+        sel.get_properties.return_value = {"0": MagicMock(as_element=lambda: MagicMock())}
+        driver._page.evaluate_handle.return_value = sel
+        driver._page.screenshot.return_value = self._png_bytes(100, 100)
+        driver._page.url = "http://x/"
+        driver._page.title.return_value = "t"
+        driver._page.evaluate.return_value = ""
+        obs = driver.observe()
+        self.assertEqual(len(obs.elements), 1)
+        self.assertEqual(obs.elements[0].name, "a")
+
+    def _png_bytes(self, w, h):
+        import io
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), "white").save(buf, format="PNG")
+        return buf.getvalue()
 
     def test_journal_filters_typed_text_and_screenshots(self):
         with tempfile.TemporaryDirectory() as folder:
