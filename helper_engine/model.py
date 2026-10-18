@@ -119,6 +119,11 @@ class ProviderModel:
 
 
 def receipt_context(receipt) -> dict:
+    """Build the model-visible receipt dict, truncating typed text.
+
+    Values are included so the model can verify, but they are never
+    written to the metadata journal.
+    """
     # Model needs the most recent values to verify, but they are never written to the metadata journal.
     action = asdict(receipt.action)
     action["text"] = action["text"][:1000]
