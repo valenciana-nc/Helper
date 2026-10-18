@@ -3,9 +3,10 @@
 > Historical design. The production app and CLI now use helper_engine.
 > See [the current architecture](../docs/COMPUTER_USE_ARCHITECTURE.md).
 > The following spec records the old research baseline, not current guarantees.
+> v2/__main__.py forwards to helper_engine; the v2 control loop is not executed.
 
 A clean-room rebuild of the agent stack alongside v1. v1 stays untouched;
-v2 lives in this package and is wired via `v2/__main__.py`.
+v2 lives in this package.
 
 ## Design principles
 
