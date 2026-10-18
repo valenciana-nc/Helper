@@ -416,6 +416,12 @@ class PerceptionTests(unittest.TestCase):
         png = frame().png
         self.assertEqual(image_difference(png, png), 0.0)
 
+    def test_invalid_crop_box_reports_max_difference(self):
+        from helper_engine.perception import image_difference
+        png = frame().png
+        self.assertEqual(image_difference(png, png, box=(50, 50, 10, 10)), 1.0)
+        self.assertEqual(image_difference(png, png, box=(0, 0)), 1.0)
+
 
 class BootstrapTests(unittest.TestCase):
     def test_invalid_page_index_raises_clear_error(self):
