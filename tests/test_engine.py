@@ -446,5 +446,19 @@ class RouterTests(unittest.TestCase):
             self.assertIn(name, BROWSER_TITLE_MARKERS)
 
 
+class LimitsTests(unittest.TestCase):
+    def test_negative_budgets_rejected(self):
+        from helper_engine.runtime import Limits
+        with self.assertRaises(ValueError):
+            Limits(max_steps=0)
+        with self.assertRaises(ValueError):
+            Limits(max_seconds=-1)
+
+    def test_infinite_budgets_rejected(self):
+        from helper_engine.runtime import Limits
+        with self.assertRaises(ValueError):
+            Limits(max_seconds=float("inf"))
+
+
 if __name__ == "__main__":
     unittest.main()
