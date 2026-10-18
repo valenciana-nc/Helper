@@ -28,6 +28,11 @@ def _float_env(name: str, default: float) -> float:
 
 def build_agent(*, confirm=None, model_name: str | None = None, backend: str | None = None,
                 endpoint: str | None = None, page_index: int | None = None, headless: bool = False):
+    """Assemble the Agent with its model, driver, and limits from env/config.
+
+    Backend is one of desktop, browser, or hybrid. Numeric env vars are
+    validated with clear errors naming the variable.
+    """
     from config import AGENT_TIMEOUT_SEC, MAX_AGENT_STEPS, SCREENSHOT_MAX_EDGE, env_value
     from .model import ProviderModel
     from .windows import WindowsDriver
