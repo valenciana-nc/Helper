@@ -8,6 +8,12 @@ from pathlib import Path
 
 
 class JsonJournal:
+    """Thread-safe append-only JSONL journal for run metadata.
+
+    Only allowlisted metric keys are written; screenshots, goals, tokens,
+    and typed text are never persisted.
+    """
+
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         self._file = path.open("a", encoding="utf-8")
