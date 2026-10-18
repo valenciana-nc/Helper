@@ -5,13 +5,11 @@ import os
 import tempfile
 import time
 import unittest
-from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import requests
-from PIL import Image
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
@@ -31,12 +29,6 @@ from openai_client import (
     _parse_response,
     _parse_stream_response,
 )
-
-
-def _png_bytes(width: int = 10, height: int = 10) -> bytes:
-    buf = BytesIO()
-    Image.new("RGB", (width, height), color=(20, 40, 60)).save(buf, format="PNG")
-    return buf.getvalue()
 
 
 def _qt_app() -> QApplication:
