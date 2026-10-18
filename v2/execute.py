@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Protocol, TYPE_CHECKING
 
 from .ground import Target, center, find_by_text, is_typable, resolve_mark
+from .observe import crop_png
 from .plan import LlmPort, Subgoal
 from .verify import verify_subgoal
 from .world import Element
@@ -52,8 +53,6 @@ def do_subgoal(
 ) -> ActionResult:
     """Execute one subgoal with verify-and-retry. Never raises for grounding
     or actuation failures — returns ActionResult(ok=False) instead."""
-    from .observe import crop_png
-
     aborted = should_abort or (lambda: False)
     last_detail = "not attempted"
     for attempt in range(1, max_attempts + 1):
