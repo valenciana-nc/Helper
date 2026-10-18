@@ -11,6 +11,9 @@ BROWSER_TITLE_MARKERS = (
 )
 
 
+__all__ = ["BROWSER_TITLE_MARKERS", "HybridDriver"]
+
+
 class HybridDriver:
     def __init__(self, desktop, browser):
         self.desktop, self.browser = desktop, browser

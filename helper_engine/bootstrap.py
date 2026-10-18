@@ -4,6 +4,9 @@ from __future__ import annotations
 from .runtime import Agent, Limits
 
 
+__all__ = ["build_agent"]
+
+
 def _int_env(name: str, default: int | None) -> int | None:
     from config import env_value
     raw = env_value(name, "")
