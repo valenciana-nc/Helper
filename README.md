@@ -1,124 +1,144 @@
 <div align="center">
   <img src="assets/helper_logo.png" alt="Orb Helper logo" width="180" />
   <h1>HELPER</h1>
-  <p><strong>A floating Windows assistant with chat, voice, screen awareness, and autonomous computer use.</strong></p>
+  <p><strong>A floating Windows assistant that teaches or performs computer tasks.</strong></p>
 </div>
 
-## What We Are Building
+Helper combines chat, voice, screen awareness, and a computer-use runtime.
+Help mode explains one step and highlights its target while you act.
+Active mode performs typed actions and checks the resulting state.
 
-Orb Helper is a desktop assistant that lives as a small floating orb on Windows. It can open a chat window, listen for voice input, understand the current screen, and carry out multi-step computer tasks on its own — planning once, grounding every action to real UI elements, and verifying each step before moving on.
+## New computer-use architecture
 
-The goal is a helper that feels always available but stays out of the way: quick to summon, clear about what it is doing, and careful around risky actions.
+The desktop app and CLI use helper_engine through engine_bridge.py.
+Read the [architecture and design trade-offs](docs/COMPUTER_USE_ARCHITECTURE.md).
 
-## Architecture (v2)
+- Current observations: screenshot, app identity, visible controls, and explicit pixel geometry.
+- One next action at a time: validated JSON with observation-scoped target IDs.
+- Structured access first: Windows UI Automation patterns or optional browser DOM handles.
+- Visual fallback: current screenshot boxes for custom controls, with fresh-scene validation.
+- Outcome evidence: local value/focus/text checks, compact action receipts, and separate goal verification.
+- Bounded recovery: stale-target rejection, unknown-effect handling, cancellation, and run budgets.
+- Help mode enforced in the runtime: no desktop input is dispatched.
+- Metrics: observations, calls, bytes, action routes, elapsed time, and final status.
 
-One engine serves every goal, typed or spoken:
-
-- **World model** (`v2/world.py`): a persistent, live UI tree — refreshed from OS accessibility events on Windows (polling fallback) — with frame diffing, so the agent re-observes in ~300ms instead of re-walking the tree every step.
-- **Set-of-marks grounding** (`v2/observe.py`, `v2/ground.py`): the model picks numbered marks on the annotated screenshot; targets resolve to real UI elements. No coordinate guessing.
-- **Plan-once planner** (`v2/plan.py`): a single LLM call produces a subgoal checklist with success criteria; one replan is allowed per goal.
-- **Closed-loop executor** (`v2/execute.py`): actuate via UI patterns first (silent, DPI-proof), re-observe, verify, retry up to 3× per step before reporting failure.
-- **Local-first voice** (`v2/voice.py`): streaming speech-to-text (faster-whisper + VAD) and sentence-chunked TTS with barge-in.
-- **Qt bridge** (`v2_bridge.py`): runs the engine off the GUI thread; ghost cursor + highlight overlay track every action, chat shows ✓/✗ per step, Escape aborts the goal.
-
-## Core Pieces
-
-- **Floating orb:** a PyQt6 widget that stays on top and acts as the main entry point.
-- **Dashboard:** account, voice, model, and behavior settings.
-- **Chat:** typed goals backed by ChatGPT sign-in.
-- **Voice:** hold the hotkey to speak a goal; replies are spoken back.
-- **Screen awareness:** the world model keeps a live picture of what's visible.
+The account/provider settings, PyQt interface, teaching overlays, and voice
+implementation are reused. The old v2 control modules remain as a research
+baseline; the app and both CLI entry points use the new runtime.
 
 ## Setup
 
-```powershell
+~~~powershell
 cd $env:USERPROFILE\helperEngine
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-copy .env.example .env
-```
+~~~
 
-Run the orb:
+Copy .env.example to .env only for a new installation. Preserve an existing .env.
+Start the orb:
 
-```powershell
+~~~powershell
 .\.venv\Scripts\pythonw.exe main.py
-```
+~~~
 
-Run with a visible console while debugging:
+Use python.exe instead of pythonw.exe for a debugging console. Account, voice,
+model, and appearance settings are available in the dashboard. ChatGPT sign-in
+is the default chat/computer-use provider; configured OpenAI-compatible,
+Anthropic, and Gemini providers remain supported. Voice provider requirements
+are separate. No credentials are bundled with the engine.
 
-```powershell
-.\.venv\Scripts\python.exe main.py
-```
+## CLI
 
-## Sign-In
+Help mode is the default:
 
-Chat and computer-use features use the **Sign in with ChatGPT** button in the dashboard. The app still starts when signed out, but chat and computer-use stay disabled until sign-in succeeds.
+~~~powershell
+.\.venv\Scripts\python.exe -m helper_engine --mode help "Show me how to enable autosave"
+.\.venv\Scripts\python.exe -m helper_engine --mode active "Open Notepad and enter hello"
+~~~
 
-Voice transcription and spoken replies are separate and need `OPENAI_API_KEY` in `.env`.
+The compatibility command "python -m v2" delegates to the same new CLI.
+Desktop control targets the visible Windows session. Keep the target app
+available; Escape cancels desktop-app runs. CLI runs can be interrupted with Ctrl+C.
+
+## Browser control
+
+Install the optional adapter:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-browser.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m helper_engine --backend browser --mode active "Open https://example.com and read its heading"
+~~~
+
+Without an endpoint, browser mode launches an isolated Chromium session.
+To attach a browser you explicitly enabled for remote debugging, configure a
+loopback endpoint and a zero-based page index when there is more than one tab:
+
+~~~ini
+HELPER_CONTROL_BACKEND=browser
+HELPER_BROWSER_CDP_URL=http://127.0.0.1:9222
+HELPER_BROWSER_PAGE_INDEX=0
+~~~
+
+Hybrid mode uses Windows for desktop apps and DOM access when the selected tab
+matches the foreground Chrome/Edge title. It requires an explicit endpoint.
+Browser mode is more direct for a task confined to one selected tab.
+The adapter disconnects from an attached browser rather than closing it.
+Browser teaching uses chat instructions; desktop screen overlays currently apply
+to Windows observations, not CSS coordinates inside a browser viewport.
 
 ## Configuration
 
-Canonical settings use the `HELPER_*` prefix. Legacy `HELPLER_*` and `HARVIS_*` keys are still read as fallbacks, but the dashboard saves new changes as `HELPER_*`.
+Settings use the HELPER_ prefix. Legacy HELPLER_ and HARVIS_ aliases still load.
 
-Useful settings:
+| Setting | Purpose |
+|---|---|
+| HELPER_DEFAULT_MODE | help or active |
+| HELPER_CONTROL_BACKEND | desktop (default), browser, or hybrid |
+| HELPER_AGENT_MODEL | Model used by the configured provider |
+| HELPER_SCREENSHOT_MAX_EDGE | Windows observation resolution |
+| HELPER_MAX_AGENT_STEPS | Decision budget |
+| HELPER_RUN_TIMEOUT_SEC | Runtime deadline; defaults to HELPER_AGENT_TIMEOUT_SEC |
+| HELPER_GUIDE_WAIT_SEC | User-action wait in Help mode |
+| HELPER_SPEAK_TYPED_CHAT | Spoken replies for typed input |
 
-- `HELPER_HOTKEY=ctrl+shift+space`
-- `HELPER_DEFAULT_MODE=help`
-- `HELPER_AGENT_MODEL=gpt-5.5`
-- `HELPER_REASONING_MODEL=gpt-5.5`
-- `HELPER_SPEAK_TYPED_CHAT=false`
-- `OPENAI_API_KEY=` for voice only
+Mode changes cancel any current task. The runtime requests confirmation around
+recognized consequential actions. Those heuristics are not a complete security
+boundary; an automation agent acts with the account and app access you give it.
+Escape is checked before the next action; in-flight model/native calls complete
+or time out before their worker returns.
 
-## Modes
+## Diagnostics and evaluation
 
-- **Help mode:** walks through a task with a ghost cursor and persistent highlight rectangles while the user does the clicks.
-- **Active mode:** can execute actions. Risky actions, destructive text, purchases, sends, and terminal Enter require confirmation.
+The app writes metadata-only journals to logs/computer-use. They exclude goals,
+typed values, screen text, screenshots, and credentials. To summarize runs:
 
+~~~powershell
+.\.venv\Scripts\python.exe -m helper_engine.evaluate logs/computer-use
+~~~
 
-## Privacy and Safety
-
-- Local `.env` files, logs, screenshots, app data, virtual environments, and assistant state are ignored by git.
-- ChatGPT sign-in tokens are stored in the OS keyring when possible.
-- Active mode is opt-in for each session and keeps confirmation prompts around risky actions.
-
-## Troubleshooting
-
-- If sign-in fails, close other Helper instances and retry. OAuth needs local callback port `127.0.0.1:1455`.
-- If chat says you are not signed in, open Dashboard > Account and sign in with ChatGPT.
-- If voice says an API key is missing, add `OPENAI_API_KEY` in Dashboard > Account.
-- Logs live in `logs/startup.log`.
-- If the shortcut stops working after a folder rename, rerun `scratch/create_shortcut.ps1`.
-
-## Checks
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-.\.venv\Scripts\python.exe -m pip check
-```
-
-Help-mode target precision checks:
-
-```powershell
-.\.venv\Scripts\python.exe -m help_highlight_qa --artifacts logs/help_qa/latest
-.\.venv\Scripts\python.exe -m help_live_probe --capture primary --artifacts logs/help_live_probe/primary
-.\.venv\Scripts\python.exe -m help_precision_selftest --artifacts logs/help_precision_selftest/latest
-```
-
-`help_highlight_qa` runs model-free synthetic scenarios and writes failure
-artifacts when a target resolves incorrectly. `help_live_probe` captures the
-desktop, collects Windows UI Automation candidates, and draws their rectangles
-over the screenshot so monitor/DPI alignment can be inspected.
-`help_precision_selftest` opens a known local test window, captures it, resolves
-the Save button through the same Help targeting pipeline, and writes pass/fail
-artifacts.
+These are runtime metrics, not proof of benchmark superiority. Compare identical
+tasks with an external final-state judge before claiming the architecture beats
+another agent. Current limitations and extension points are in the architecture doc.
 
 ## Development checks
 
-From the project root on Windows:
+~~~powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+$env:QT_QPA_PLATFORM="offscreen"
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m compileall -q helper_engine engine_bridge.py main.py
+.\.venv\Scripts\python.exe -m pytest tests v2/tests -q
+~~~
 
-```powershell
-python -m ruff check .
-python -m compileall -q -x ".*\.venv.*" .
-python -m unittest discover -s tests -p "test*.py"
-```
+Tests use deterministic models, synthetic frames, and mocked device APIs.
+Optional real browser checks use an isolated local HTML fixture:
 
-Pull requests run the same checks on Windows through GitHub Actions.
+~~~powershell
+$env:HELPER_TEST_BROWSER = .\.venv\Scripts\python.exe -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"
+.\.venv\Scripts\python.exe -m pytest tests/test_engine_adapters.py -k BrowserIntegration -q
+~~~
+
+GitHub Actions runs the full Windows suite and isolated browser checks.
+For the opt-in native Windows fixture check, set HELPER_TEST_UIA=1 and run
+the WindowsIntegration tests described in the architecture document.

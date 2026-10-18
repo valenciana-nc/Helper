@@ -1,0 +1,289 @@
+"""One observation-driven loop for help and active mode, with bounded recovery."""
+from __future__ import annotations
+
+import logging
+import math
+import time
+import uuid
+from collections import deque
+from dataclasses import asdict, dataclass
+from typing import Callable
+
+from .model import receipt_context
+from .perception import image_difference, target_rect
+from .policy import confirmation_reason
+from .ports import Confirmation, Driver, EventSink, Model
+from .types import (
+    Cancelled, Effect, Execution, Metrics, Outcome, ProtocolError, Receipt,
+    RunReport, RunStatus, StaleObservation,
+)
+from .verification import evaluate
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Limits:
+    max_steps: int = 40
+    max_model_calls: int = 60
+    max_seconds: float = 300
+    help_wait_seconds: float = 90
+    poll_seconds: float = 0.35
+    max_invalid_decisions: int = 3
+
+    def __post_init__(self):
+        if min(self.max_steps, self.max_model_calls, self.max_invalid_decisions) < 1:
+            raise ValueError("Run budgets must be positive")
+        if min(self.max_seconds, self.help_wait_seconds, self.poll_seconds) <= 0:
+            raise ValueError("Time budgets must be positive")
+        if not all(math.isfinite(n) for n in (self.max_seconds, self.help_wait_seconds, self.poll_seconds)):
+            raise ValueError("Time budgets must be finite")
+
+
+class Agent:
+    def __init__(self, *, model: Model, driver: Driver, limits: Limits | None = None,
+                 confirm: Confirmation | None = None):
+        self.model, self.driver = model, driver
+        self.limits = limits or Limits()
+        self.confirm = confirm
+        self._conversation: deque[dict] = deque(maxlen=8)
+
+    def run_goal(self, goal: str, *, mode: str = "help", on_event: EventSink | None = None,
+                 should_abort: Callable[[], bool] | None = None) -> RunReport:
+        if mode not in {"help", "active"}:
+            raise ValueError("mode must be help or active")
+        if not isinstance(goal, str) or not goal.strip():
+            raise ValueError("goal cannot be empty")
+        goal = goal.strip()
+        callback = on_event or (lambda *_: None)
+        abort = should_abort or (lambda: False)
+        start = time.monotonic()
+        deadline = start + self.limits.max_seconds
+        report = RunReport(goal, RunStatus.FAILED, "The task did not complete.")
+        metrics: Metrics = report.metrics
+        run_id = uuid.uuid4().hex
+        context = {"mode": mode, "conversation": list(self._conversation), "milestones": [], "feedback": ""}
+        invalid = 0
+        finish_attempts = 0
+        uncertain_effects: set[str] = set()
+        previous_effect = None
+        no_progress = 0
+
+        def emit(name: str, data: dict):
+            try:
+                callback(name, {"run_id": run_id, **data})
+            except Exception:
+                log.exception("Event sink failed; action will not be replayed")
+
+        def checkpoint():
+            if abort():
+                raise Cancelled("Stopped by the user.")
+            if time.monotonic() >= deadline:
+                raise TimeoutError("The run reached its time budget.")
+
+        def observe():
+            checkpoint()
+            obs = self.driver.observe()
+            checkpoint()
+            metrics.observations += 1
+            if not obs.png or obs.width <= 1 or obs.height <= 1:
+                raise RuntimeError("No usable screenshot; refusing to act on a placeholder.")
+            return obs
+
+        def call_model(fn, obs):
+            checkpoint()
+            if metrics.model_calls >= self.limits.max_model_calls:
+                raise TimeoutError("The run reached its model-call budget.")
+            metrics.model_calls += 1
+            metrics.screenshot_bytes += len(obs.png)
+            began = time.monotonic()
+            try:
+                result = fn()
+            finally:
+                metrics.model_seconds += time.monotonic() - began
+            checkpoint()
+            return result
+
+        def pause(seconds):
+            stop = min(deadline, time.monotonic() + seconds)
+            while time.monotonic() < stop:
+                checkpoint()
+                time.sleep(min(0.04, max(0, stop - time.monotonic())))
+
+        emit("started", {"mode": mode})
+        try:
+            obs = observe()
+            for step in range(self.limits.max_steps):
+                checkpoint()
+                context["recent_actions"] = [receipt_context(r) for r in report.receipts[-8:]]
+                try:
+                    decision = call_model(lambda: self.model.decide(goal, obs, context), obs)
+                    if decision.observation_id != obs.id:
+                        raise ProtocolError("Decision refers to an expired observation.")
+                    if decision.action:
+                        target_rect(decision.action, obs)
+                except ProtocolError as exc:
+                    invalid += 1
+                    context["feedback"] = f"Rejected without executing: {exc}. Return corrected typed JSON."
+                    emit("decision_rejected", {"step": step, "status": "invalid"})
+                    if invalid >= self.limits.max_invalid_decisions:
+                        report.message = "The model repeatedly returned invalid actions. Nothing further was executed."
+                        break
+                    continue
+                invalid = 0
+                context["milestones"] = list(decision.milestones) or context["milestones"]
+                if report.receipts:
+                    last = report.receipts[-1]
+                    if (last.outcome != Outcome.ACHIEVED and decision.evidence
+                            and last.execution.effect != Effect.REJECTED):
+                        last.outcome = decision.previous_outcome
+                        last.evidence = decision.evidence
+                metrics.verified_actions = len(report.done)
+                emit("decision", {"step": step, "kind": decision.kind, "message": decision.message,
+                                  "milestones": context["milestones"]})
+                if decision.kind == "ask":
+                    report.status, report.message = RunStatus.NEEDS_INPUT, decision.message or "More information is needed."
+                    break
+                if decision.kind == "answer":
+                    if report.receipts:
+                        context["feedback"] = "Actions have occurred. Use finish and verify the full goal, or ask."
+                        obs = observe()
+                        continue
+                    report.status, report.message = RunStatus.ANSWERED, decision.message
+                    break
+                if decision.kind == "finish":
+                    # Always independently verify against a NEW full observation, never the old target crop.
+                    obs = observe()
+                    context["recent_actions"] = [receipt_context(r) for r in report.receipts[-8:]]
+                    ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs)
+                    emit("goal_verification", {"status": "passed" if ok else "unproven", "message": evidence})
+                    if ok:
+                        report.status, report.message = RunStatus.COMPLETED, evidence
+                        break
+                    finish_attempts += 1
+                    if finish_attempts >= 2:
+                        report.status, report.message = RunStatus.NEEDS_INPUT, "Completion could not be verified: " + evidence
+                        break
+                    context["feedback"] = "Goal verifier rejected completion: " + evidence
+                    continue
+                if decision.kind == "observe":
+                    pause(decision.wait_ms / 1000)
+                    obs = observe()
+                    continue
+                action = decision.action
+                if action is None:
+                    raise ProtocolError("Missing action")
+                fingerprint = action.fingerprint(obs)
+                if action.kind != "fill" and fingerprint in uncertain_effects:
+                    report.status = RunStatus.NEEDS_INPUT
+                    report.message = "An earlier matching action may already have taken effect. Check its result before retrying."
+                    break
+                if previous_effect and action.kind != "fill":
+                    old_fingerprint, before = previous_effect
+                    if (fingerprint == old_fingerprint and obs.signature == before.signature
+                            and image_difference(before.png, obs.png) < 0.025):
+                        no_progress += 1
+                        context["feedback"] = "The same action on unchanged state was blocked. Observe, use another route, or ask."
+                        metrics.rejected_actions += 1
+                        if no_progress >= 2:
+                            report.status, report.message = RunStatus.NEEDS_INPUT, "No observable progress; stopped repeating this action."
+                            break
+                        obs = observe()
+                        continue
+                already, _ = evaluate(action.expect, obs)
+                if already == Outcome.ACHIEVED:
+                    context["feedback"] = "That action's postconditions already hold. Continue with the remaining goal."
+                    no_progress += 1
+                    if no_progress >= 3:
+                        report.status, report.message = RunStatus.NEEDS_INPUT, "The proposed steps are already satisfied."
+                        break
+                    obs = observe()
+                    continue
+                no_progress = 0
+                if mode == "help":
+                    try:
+                        self.driver.validate(action, obs)
+                    except StaleObservation as exc:
+                        metrics.stale_decisions += 1
+                        context["feedback"] = f"Nothing executed. Scene changed: {exc}. Re-ground on this new observation."
+                        obs = observe()
+                        continue
+                rect = target_rect(action, obs)
+                emit("action_start", {"step": step, "kind": action.kind, "message": action.description,
+                                      "rect": rect.as_list() if rect else None, "surface": obs.surface})
+                before = obs
+                if mode == "help":
+                    # The teaching path never calls execute(), even for keys or launch operations.
+                    execution = Execution(Effect.GUIDED, "user", decision.message or action.description)
+                    emit("guided", {"message": decision.message or action.description or action.kind})
+                    until = min(deadline, time.monotonic() + self.limits.help_wait_seconds)
+                    while time.monotonic() < until:
+                        pause(self.limits.poll_seconds)
+                        obs = observe()
+                        achieved, _ = evaluate(action.expect, obs)
+                        if (achieved == Outcome.ACHIEVED or obs.signature != before.signature
+                                or image_difference(before.png, obs.png) > 0.04):
+                            break
+                    else:
+                        report.status, report.message = RunStatus.NEEDS_INPUT, "Follow the highlighted step, then ask me to continue."
+                        break
+                else:
+                    reason = confirmation_reason(action, obs)
+                    if reason and (self.confirm is None or not self.confirm(action, obs, reason)):
+                        checkpoint()
+                        report.status, report.message = RunStatus.NEEDS_INPUT, "This action needs your confirmation: " + reason
+                        break
+                    checkpoint()
+                    try:
+                        # Consent dialogs and a slow model can both change the scene.
+                        self.driver.validate(action, obs)
+                        execution = self.driver.execute(action, obs)
+                    except StaleObservation as exc:
+                        metrics.stale_decisions += 1
+                        context["feedback"] = f"Nothing executed: {exc}."
+                        obs = observe()
+                        continue
+                    except Exception as exc:
+                        # An exception after dispatch is UNKNOWN, never an excuse to repeat a click.
+                        execution = Execution(Effect.UNKNOWN, "driver", type(exc).__name__)
+                    metrics.actions += 1
+                    metrics.routes[execution.route] = metrics.routes.get(execution.route, 0) + 1
+                    if execution.effect == Effect.UNKNOWN:
+                        uncertain_effects.add(fingerprint)
+                    if execution.effect == Effect.REJECTED:
+                        metrics.rejected_actions += 1
+                    # Record dispatch BEFORE waiting or observing: cancellation/capture failure
+                    # after input must retain the fact that a side effect may have occurred.
+                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution, before.id)
+                    report.receipts.append(receipt)
+                    pause(0.15)
+                    obs = observe()
+                if mode == "help":
+                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution, before.id)
+                    report.receipts.append(receipt)
+                receipt.after_id = obs.id
+                if execution.effect not in {Effect.REJECTED, Effect.UNKNOWN}:
+                    receipt.outcome, receipt.evidence = evaluate(action.expect, obs)
+                previous_effect = (fingerprint, before)
+                metrics.verified_actions = len(report.done)
+                context["feedback"] = execution.detail or receipt.evidence
+                emit("action_result", {"step": step, "effect": execution.effect.value,
+                                       "route": execution.route, "outcome": receipt.outcome.value})
+            else:
+                report.status, report.message = RunStatus.LIMITED, "The run reached its decision budget."
+        except Cancelled as exc:
+            report.status, report.message = RunStatus.CANCELLED, str(exc)
+        except TimeoutError as exc:
+            report.status, report.message = RunStatus.LIMITED, str(exc)
+        except Exception as exc:
+            log.exception("Computer-use run failed")
+            report.status, report.message = RunStatus.FAILED, f"Task stopped: {type(exc).__name__}: {exc}"
+        finally:
+            try:
+                self.driver.close()
+            except Exception:
+                log.exception("Driver cleanup failed")
+            metrics.elapsed_seconds = time.monotonic() - start
+            emit("finished", {"status": report.status.value, **asdict(metrics)})
+        self._conversation.append({"user": goal, "status": report.status.value, "reply": report.message})
+        return report

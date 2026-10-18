@@ -1,0 +1,48 @@
+"""Evidence checks. A screen changing is never sufficient proof of success."""
+from __future__ import annotations
+
+from .types import Observation, Outcome, Predicate
+
+
+def evaluate(predicates: tuple[Predicate, ...], obs: Observation) -> tuple[Outcome, str]:
+    if not predicates:
+        return Outcome.UNCERTAIN, "No deterministic postcondition; inspect current state."
+    unknown = False
+    for predicate in predicates:
+        result = _evaluate_one(predicate, obs)
+        if result is False:
+            return Outcome.FAILED, f"Not yet satisfied: {predicate.kind}."
+        if result is None:
+            unknown = True
+    if unknown:
+        return Outcome.UNCERTAIN, "Required evidence is unavailable or ambiguous."
+    return Outcome.ACHIEVED, "All declared postconditions were observed."
+
+
+def _evaluate_one(p: Predicate, obs: Observation) -> bool | None:
+    if p.kind == "url_contains":
+        return p.value in obs.url if obs.url else None
+    if p.kind == "title_contains":
+        return p.value.casefold() in obs.title.casefold()
+    if p.kind == "text_contains":
+        text = "\n".join([obs.text, *(e.name for e in obs.elements),
+                          *(e.value for e in obs.elements if e.value is not None and not e.password)])
+        # Missing text in a truncated accessibility snapshot is not proof of absence.
+        return True if p.value.casefold() in text.casefold() else None
+    matches = [e for e in obs.elements if e.visible and e.name.casefold() == p.name.casefold()
+               and (not p.role or e.role.casefold() == p.role.casefold())]
+    if p.kind == "exists":
+        return True if matches else None
+    if p.kind == "absent":
+        # The adapters deliberately return bounded snapshots; absence needs visual verification.
+        return False if matches else None
+    if len(matches) != 1:
+        return None
+    element = matches[0]
+    if p.kind == "value_equals":
+        return element.value == p.value if element.value is not None and not element.password else None
+    if p.kind == "focused":
+        return element.focused
+    if p.kind == "checked":
+        return element.checked == (p.value == "true") if element.checked is not None else None
+    return None

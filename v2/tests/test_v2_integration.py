@@ -93,7 +93,8 @@ def test_actuator_type_and_key(monkeypatch):
 
 
 def test_actuator_element_paths_fail_gracefully_off_windows(monkeypatch):
-    # On this Linux box UIA is unavailable → element ops return False.
+    # Exercise the non-Windows branch regardless of the test runner's host.
+    monkeypatch.setattr(sys, "platform", "linux")
     act = V2Actuator()
     assert act.uia_available is False
 
@@ -152,7 +153,7 @@ def test_highlight_actuator_reports_rects():
         name = "Save"
         rect = (10, 20, 80, 30)
 
-    wrap = _HighlightActuator(Inner(), lambda r, l: seen.append((r, l)))
+    wrap = _HighlightActuator(Inner(), lambda rect, label: seen.append((rect, label)))
     assert wrap.click_element(El()) is True
     assert seen[0][0] == (10, 20, 80, 30)
     wrap.click_at(100, 200)

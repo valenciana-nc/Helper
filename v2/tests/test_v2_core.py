@@ -161,7 +161,8 @@ def test_vision_fallback_none_when_no_grounder():
 
 
 def test_vision_fallback_maps_region_to_screen():
-    box = lambda png, instr: (5, 5, 10, 10)
+    def box(png, instr):
+        return (5, 5, 10, 10)
     t = vision_fallback(_png(), "x", box, region_origin=(100, 200))
     assert t is not None and t.rect == (105, 205, 10, 10)
     assert t.source == "vision-fallback"

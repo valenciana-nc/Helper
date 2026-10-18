@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QColor, QFont, QFontDatabase, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -32,6 +32,8 @@ from PyQt6.QtWidgets import (
 import oauth_codex
 import config
 import theme
+from ui_lava import LavaOrb
+from ui_chat import MessageBubble
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
 
@@ -303,56 +305,15 @@ def _day_streak(stored: list[StoredConversation]) -> int:
     return streak
 
 
-class TranscriptBubble(QFrame):
+class TranscriptBubble(MessageBubble):
     def __init__(self, message: StoredMessage, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(4)
-
-        is_user = message.role == "user"
-        label = QLabel(message.text)
-        label.setWordWrap(True)
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        label.setFont(QFont("Segoe UI", 10))
-
-        if is_user:
-            label.setStyleSheet(
-                f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
-            )
-            self.setStyleSheet(
-                "TranscriptBubble {"
-                f"  background: {_COLOR_BG_HOVER};"
-                f"  border: 1px solid {_COLOR_BORDER_LIGHT};"
-                "  border-radius: 14px;"
-                "  border-bottom-right-radius: 4px;"
-                "}"
-            )
-        else:
-            label.setStyleSheet(
-                f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
-            )
-            self.setStyleSheet(
-                "TranscriptBubble {"
-                f"  background: {_COLOR_BG_CARD};"
-                f"  border: 1px solid {_COLOR_BORDER_LIGHT};"
-                "  border-radius: 14px;"
-                "  border-bottom-left-radius: 4px;"
-                "}"
-            )
-
-        layout.addWidget(label)
-
+        super().__init__(message.text, message.role == "user", parent)
         if message.timestamp > 0:
             ts = QLabel(_format_time(message.timestamp))
-            ts.setFont(QFont("Segoe UI", 8))
-            ts.setStyleSheet(
-                f"color: {_COLOR_TEXT_MUTED}; background: transparent; border: none;"
-            )
-            ts.setAlignment(
-                Qt.AlignmentFlag.AlignRight if is_user else Qt.AlignmentFlag.AlignLeft
-            )
-            layout.addWidget(ts)
+            ts.setFont(theme.font(8))
+            ts.setStyleSheet(theme.inline("color: {text_muted}", "background: transparent", "border: none"))
+            ts.setAlignment(Qt.AlignmentFlag.AlignRight if message.role == "user" else Qt.AlignmentFlag.AlignLeft)
+            self.layout().addWidget(ts)
 
 
 class ConversationTranscriptDialog(QDialog):
@@ -361,7 +322,9 @@ class ConversationTranscriptDialog(QDialog):
         self.setWindowTitle(conversation.title or "Conversation")
         self.setModal(True)
         self.resize(640, 580)
-        self.setStyleSheet(f"background: {_COLOR_BG_WINDOW};")
+        self.setMinimumSize(420, 360)
+        self._bubbles = []
+        self.setStyleSheet(f"QDialog {{ background: {_COLOR_BG_WINDOW}; }}")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -381,6 +344,8 @@ class ConversationTranscriptDialog(QDialog):
         title_wrap.setSpacing(1)
 
         title = QLabel(conversation.title or "Conversation")
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setWordWrap(True)
         title.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
         title.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
@@ -424,6 +389,7 @@ class ConversationTranscriptDialog(QDialog):
         else:
             for message in conversation.messages:
                 bubble = TranscriptBubble(message)
+                self._bubbles.append(bubble)
                 row = QHBoxLayout()
                 if message.role == "user":
                     row.addStretch()
@@ -435,6 +401,19 @@ class ConversationTranscriptDialog(QDialog):
         body_layout.addStretch()
         scroll.setWidget(body)
         layout.addWidget(scroll, 1)
+        self._transcript_scroll = scroll
+        scroll.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self._transcript_scroll.viewport() and event.type() == QEvent.Type.Resize:
+            width = max(160, int((obj.width() - 36) * .9))
+            for bubble in self._bubbles:
+                bubble.set_available_width(width)
+        return super().eventFilter(obj, event)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        theme.apply_window_chrome(self)
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
         if event.key() == Qt.Key.Key_Escape:
@@ -499,10 +478,10 @@ class DashboardWindow(QWidget):
         self.setWindowTitle("Helper Dashboard")
         self.setWindowFlags(Qt.WindowType.Window)
         self.setStyleSheet(
-            f"background: {_COLOR_BG_WINDOW}; color: {_COLOR_TEXT_PRIMARY};"
+            f"DashboardWindow {{ background: {_COLOR_BG_WINDOW}; color: {_COLOR_TEXT_PRIMARY}; }}"
         )
         self.setMinimumSize(760, 540)
-        self.resize(960, 660)
+        self.resize(1040, 760)
 
     def _build_ui(self) -> None:
         self._frame = QFrame(self)
@@ -539,7 +518,7 @@ class DashboardWindow(QWidget):
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
         sidebar.setStyleSheet(_SIDEBAR_QSS)
-        sidebar.setFixedWidth(240)
+        sidebar.setFixedWidth(208)
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(
@@ -551,37 +530,12 @@ class DashboardWindow(QWidget):
         brand_row.setContentsMargins(theme.SPACING.SM, 0, theme.SPACING.SM, 0)
         brand_row.setSpacing(theme.SPACING.MD)
 
-        logo_path = Path(__file__).parent / "assets" / "helper_logo.png"
-        logo_label = QLabel()
-        logo_label.setFixedSize(28, 28)
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_label.setStyleSheet("background: transparent; border: none;")
-        loaded_pixmap = False
-        if logo_path.exists():
-            pix = QPixmap(str(logo_path))
-            if not pix.isNull():
-                pix = pix.scaled(
-                    QSize(28, 28),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                logo_label.setPixmap(pix)
-                loaded_pixmap = True
-        if not loaded_pixmap:
-            # Render a clean accent-colored mark when there's no logo file.
-            icon_font = _icon_font()
-            mark_glyph = "" if icon_font else "◆"
-            logo_label.setText(mark_glyph)
-            font = QFont(icon_font, 16) if icon_font else QFont("Segoe UI", 16, QFont.Weight.DemiBold)
-            logo_label.setFont(font)
-            logo_label.setStyleSheet(
-                f"color: {_COLOR_ACCENT}; background: transparent; border: none;"
-            )
+        logo_label = LavaOrb(40)
         brand_row.addWidget(logo_label)
 
         brand_text = QVBoxLayout()
         brand_text.setContentsMargins(0, 0, 0, 0)
-        brand_text.setSpacing(-2)
+        brand_text.setSpacing(1)
 
         brand = QLabel("Helper")
         brand.setObjectName("SidebarBrand")
@@ -713,7 +667,9 @@ class DashboardWindow(QWidget):
         feed_wrap.addWidget(scroll, 1)
 
         outer.addLayout(feed_wrap, 7)
-        outer.addWidget(self._build_stats_panel(), 3)
+        self._stats_panel = self._build_stats_panel()
+        self._stats_panel.setMaximumWidth(200)
+        outer.addWidget(self._stats_panel, 3)
         return container
 
     def _build_stats_panel(self) -> QWidget:
@@ -724,6 +680,7 @@ class DashboardWindow(QWidget):
         layout.setSpacing(10)
 
         heading = QLabel("Stats")
+        heading.setWordWrap(True)
         heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         heading.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
@@ -741,6 +698,7 @@ class DashboardWindow(QWidget):
 
     def _make_stat_card(self, label_text: str, initial_value: str) -> QFrame:
         card = QFrame()
+        card.setObjectName("SurfaceCard")
         card.setStyleSheet(_STAT_CARD_QSS)
         inner = QVBoxLayout(card)
         inner.setContentsMargins(16, 14, 16, 14)
@@ -822,7 +780,7 @@ class DashboardWindow(QWidget):
 
         if total_count == 0:
             empty = QLabel(
-                "No conversations yet.\n\n"
+                "Your conversations live here.\n\n"
                 "Open the chat bar on the orb (or tap the hotkey) and ask Helper anything. "
                 "Each app session is saved here when you quit Helper."
             )
@@ -879,6 +837,8 @@ class DashboardWindow(QWidget):
             item = layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
                 continue
             sub = item.layout()
@@ -1070,6 +1030,7 @@ class DashboardWindow(QWidget):
         env_values: dict[str, str],
     ) -> QFrame:
         section = QFrame()
+        section.setObjectName("SurfaceCard")
         section.setStyleSheet(_section_card_qss(section_name))
         outer = QVBoxLayout(section)
         outer.setContentsMargins(
@@ -1099,6 +1060,7 @@ class DashboardWindow(QWidget):
             heading_row.addWidget(glyph_label)
 
         heading = QLabel(section_name)
+        heading.setWordWrap(True)
         heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         heading.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; border: none; background: transparent;"
@@ -1125,6 +1087,8 @@ class DashboardWindow(QWidget):
 
         form = QFormLayout()
         form.setContentsMargins(0, theme.SPACING.SM, 0, 0)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setHorizontalSpacing(theme.SPACING.LG)
         form.setVerticalSpacing(theme.SPACING.MD)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1276,14 +1240,7 @@ class DashboardWindow(QWidget):
             return wrap
         if kind == "toggle":
             w = QCheckBox()
-            w.setStyleSheet(
-                "QCheckBox { color: " + _COLOR_TEXT_SECONDARY + "; spacing: 8px; }"
-                "QCheckBox::indicator { width: 16px; height: 16px;"
-                " border: 1px solid " + _COLOR_BORDER_MID + ";"
-                " border-radius: 4px; background: " + _COLOR_BG_CARD + "; }"
-                "QCheckBox::indicator:checked { background: " + _COLOR_ACCENT + ";"
-                " border: 1px solid " + _COLOR_ACCENT + "; }"
-            )
+            w.setStyleSheet(theme.qss(theme.CHECKBOX_QSS, _PALETTE))
             truthy = str(current).strip().lower() in {"1", "true", "yes", "on"}
             if not current:
                 truthy = bool(default) if isinstance(default, bool) else False
@@ -1325,7 +1282,7 @@ class DashboardWindow(QWidget):
             wrap.setStyleSheet("background: transparent;")
             row = QHBoxLayout(wrap)
             row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(0)
+            row.setSpacing(6)
             group = QButtonGroup(wrap)
             group.setExclusive(True)
 
@@ -1390,6 +1347,7 @@ class DashboardWindow(QWidget):
 
     def _build_footer(self) -> QFrame:
         footer = QFrame()
+        footer.setObjectName("SettingsFooter")
         footer.setStyleSheet(_FOOTER_BAR_QSS)
         layout = QHBoxLayout(footer)
         layout.setContentsMargins(
@@ -1398,6 +1356,7 @@ class DashboardWindow(QWidget):
         layout.setSpacing(theme.SPACING.MD)
 
         hint = QLabel("Fields marked * require a restart to take effect.")
+        hint.setWordWrap(True)
         hint.setFont(QFont("Segoe UI", 8))
         hint.setStyleSheet(
             f"color: {_COLOR_TEXT_MUTED}; background: transparent; border: none;"
@@ -1416,7 +1375,7 @@ class DashboardWindow(QWidget):
         save_button.clicked.connect(self._save_settings)
         layout.addWidget(save_button)
 
-        restart_button = QPushButton("Save & restart")
+        restart_button = QPushButton("Save and restart")
         restart_button.setStyleSheet(_BUTTON_QSS)
         restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
         restart_button.clicked.connect(self._save_and_restart)
@@ -1518,6 +1477,7 @@ class DashboardWindow(QWidget):
         layout.addWidget(self._build_page_heading("Status", "Backend health and logs"))
 
         info_card = QFrame()
+        info_card.setObjectName("SurfaceCard")
         info_card.setStyleSheet(_STATUS_CARD_QSS)
         info_layout = QFormLayout(info_card)
         info_layout.setContentsMargins(14, 12, 14, 14)
@@ -1651,12 +1611,14 @@ class DashboardWindow(QWidget):
         layout.addWidget(self._build_page_heading("Account", "Sign-in and API keys"))
 
         account_card = QFrame()
+        account_card.setObjectName("SurfaceCard")
         account_card.setStyleSheet(_ACCOUNT_CARD_QSS)
         account_layout = QVBoxLayout(account_card)
         account_layout.setContentsMargins(14, 12, 14, 14)
         account_layout.setSpacing(10)
 
         heading = QLabel("Sign in with ChatGPT")
+        heading.setWordWrap(True)
         heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         heading.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
@@ -1705,6 +1667,7 @@ class DashboardWindow(QWidget):
         current_key = env_values.get("OPENAI_API_KEY", "")
 
         audio_card = QFrame()
+        audio_card.setObjectName("SurfaceCard")
         audio_card.setStyleSheet(_VOICE_CARD_QSS)
         audio_layout = QVBoxLayout(audio_card)
         audio_layout.setContentsMargins(18, 16, 18, 18)
@@ -1759,7 +1722,7 @@ class DashboardWindow(QWidget):
         save_button.clicked.connect(self._save_api_key)
         row.addWidget(save_button)
 
-        save_restart_button = QPushButton("Save & restart")
+        save_restart_button = QPushButton("Save and restart")
         save_restart_button.setStyleSheet(_BUTTON_QSS)
         save_restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
         save_restart_button.clicked.connect(self._save_api_key_and_restart)
@@ -1774,16 +1737,22 @@ class DashboardWindow(QWidget):
         self._login_thread: QThread | None = None
         self._login_worker: _LoginWorker | None = None
         self._refresh_account_card()
-        return container
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(_SCROLL_QSS)
+        scroll.setWidget(container)
+        return scroll
 
     def _build_custom_api_card(self, env_values: dict[str, str]) -> QFrame:
         card = QFrame()
+        card.setObjectName("SurfaceCard")
         card.setStyleSheet(_VOICE_CARD_QSS)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(18, 16, 18, 18)
         card_layout.setSpacing(10)
 
         heading = QLabel("Custom API (power Helper with any OpenAI-compatible API)")
+        heading.setWordWrap(True)
         heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         heading.setStyleSheet(
             f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
@@ -1805,6 +1774,7 @@ class DashboardWindow(QWidget):
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1862,7 +1832,7 @@ class DashboardWindow(QWidget):
         save_button.clicked.connect(self._save_custom_api)
         row.addWidget(save_button)
 
-        save_restart_button = QPushButton("Save & restart")
+        save_restart_button = QPushButton("Save and restart")
         save_restart_button.setStyleSheet(_BUTTON_QSS)
         save_restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
         save_restart_button.clicked.connect(self._save_custom_api_and_restart)
@@ -1990,6 +1960,10 @@ class DashboardWindow(QWidget):
         if not self._status_timer.isActive():
             self._status_timer.start()
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        theme.apply_window_chrome(self)
+
     def _reload_from_env(self) -> None:
         env_values = read_env(self._env_path)
         for env_key, widget in self._field_widgets.items():
@@ -2085,6 +2059,8 @@ class DashboardWindow(QWidget):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        if hasattr(self, "_stats_panel"):
+            self._stats_panel.setVisible(self.width() >= 930)
         self._frame.resize(self.size())
 
 

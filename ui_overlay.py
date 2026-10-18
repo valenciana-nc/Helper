@@ -210,6 +210,9 @@ def _native_screen_geometry(screen_geometry: QRect, device_pixel_ratio: float) -
 
 def _native_monitor_geometries() -> list[tuple[str, QRect]]:
     monitors: list[tuple[str, QRect]] = []
+    if sys.platform != "win32":
+        # WINFUNCTYPE and EnumDisplayMonitors only exist on Windows.
+        return monitors
     callback_type = ctypes.WINFUNCTYPE(
         ctypes.c_bool,
         wintypes.HMONITOR,
@@ -287,6 +290,8 @@ class OverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        from capture_exclusion import exclude_from_capture
+        exclude_from_capture(self)
         self._sync_to_screen()
 
     def _sync_to_screen(self) -> None:
@@ -317,9 +322,9 @@ class OverlayWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setClipRect(event.rect())
-        outline = QColor("#67e8f9")
-        fill = QColor(103, 232, 249, 40)
-        label_bg = QColor(15, 23, 42, 230)
+        outline = QColor("#c79bff")
+        fill = QColor(177, 110, 250, 44)
+        label_bg = QColor(31, 20, 45, 240)
         label_fg = QColor("#f8fafc")
         pen = QPen(outline, 3)
         painter.setPen(pen)

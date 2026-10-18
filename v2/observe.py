@@ -119,12 +119,12 @@ def annotate(frame: ScreenFrame, *, max_marks: int = 40) -> tuple[bytes, list[Ma
         n = len(marks) + 1
         draw.ellipse(box, fill=_BADGE_FILL)
         label = str(n)
-        l, t, r, b = draw.textbbox((0, 0), label, font=font)
-        tw, th = r - l, b - t
+        left, top, right, bottom = draw.textbbox((0, 0), label, font=font)
+        tw, th = right - left, bottom - top
         draw.text(
             (
-                bx + (_BADGE_DIAMETER - tw) / 2 - l,
-                by + (_BADGE_DIAMETER - th) / 2 - t,
+                bx + (_BADGE_DIAMETER - tw) / 2 - left,
+                by + (_BADGE_DIAMETER - th) / 2 - top,
             ),
             label,
             font=font,
