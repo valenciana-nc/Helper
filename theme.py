@@ -260,11 +260,15 @@ QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
 QComboBox QAbstractItemView {{
     background: {bg_card};
     color: {text_primary};
-    selection-background-color: {bg_hover};
+    selection-background-color: {accent_subtle};
     selection-color: {text_primary};
     border: 1px solid {border_light};
     border-radius: 8px;
+    font-family: 'Segoe UI';
+    font-size: 10pt;
+    outline: none;
 }}
+QComboBox QAbstractItemView::item {{ min-height: 26px; padding: 5px 10px; }}
 QComboBox::drop-down {{ border: none; width: 26px; subcontrol-position: top right; subcontrol-origin: padding; }}
 QComboBox::down-arrow {{ image: url({arrow_down}); width: 10px; height: 6px; }}
 QSpinBox, QDoubleSpinBox {{ padding-right: 25px; }}

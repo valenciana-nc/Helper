@@ -15,6 +15,9 @@ orbs animate at 30 fps while idle; the floating orb uses 60 fps during
 interaction. Hidden orbs stop their timers. A bounded texture cache allows
 the decorative orbs to share frames.
 
+The floating orb is 32 pixels across. Its chat bar is 360 × 40 pixels, with
+scaled side controls and a compact status pill.
+
 Chat and saved transcripts use selectable text with word-boundary wrapping and
 fallback wrapping for long paths and URLs. The composer stays outside the scroll
 area. Dashboard account settings scroll, form rows can wrap, and the statistics

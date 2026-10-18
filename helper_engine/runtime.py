@@ -124,6 +124,7 @@ class Agent:
                         target_rect(decision.action, obs)
                 except ProtocolError as exc:
                     invalid += 1
+                    log.warning("Rejected model decision %s/%s: %s", invalid, self.limits.max_invalid_decisions, exc)
                     context["feedback"] = f"Rejected without executing: {exc}. Return corrected typed JSON."
                     emit("decision_rejected", {"step": step, "status": "invalid"})
                     if invalid >= self.limits.max_invalid_decisions:
@@ -155,10 +156,14 @@ class Agent:
                     # Always independently verify against a NEW full observation, never the old target crop.
                     obs = observe()
                     context["recent_actions"] = [receipt_context(r) for r in report.receipts[-8:]]
+                    # The verifier checks the reply the user will receive, not only the screen.
+                    context["proposed_reply"] = decision.message
                     ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs)
+                    context.pop("proposed_reply", None)
                     emit("goal_verification", {"status": "passed" if ok else "unproven", "message": evidence})
                     if ok:
-                        report.status, report.message = RunStatus.COMPLETED, evidence
+                        report.status = RunStatus.COMPLETED
+                        report.message = decision.message.strip() or evidence
                         break
                     finish_attempts += 1
                     if finish_attempts >= 2:
@@ -191,11 +196,16 @@ class Agent:
                         obs = observe()
                         continue
                 already, _ = evaluate(action.expect, obs)
-                if already == Outcome.ACHIEVED:
-                    context["feedback"] = "That action's postconditions already hold. Continue with the remaining goal."
+                preheld = already == Outcome.ACHIEVED
+                # Only a fill whose exact target value is already present is a redundant step.
+                # Other expectations (e.g. "Skip button exists") can be true before the action.
+                if preheld and action.kind == "fill" and any(
+                        p.kind == "value_equals" and p.value == action.text for p in action.expect):
+                    context["feedback"] = "That field already has the requested value. Continue with the remaining goal."
                     no_progress += 1
                     if no_progress >= 3:
-                        report.status, report.message = RunStatus.NEEDS_INPUT, "The proposed steps are already satisfied."
+                        report.status = RunStatus.NEEDS_INPUT
+                        report.message = "I kept proposing a value that is already entered, so I stopped."
                         break
                     obs = observe()
                     continue
@@ -221,7 +231,7 @@ class Agent:
                         pause(self.limits.poll_seconds)
                         obs = observe()
                         achieved, _ = evaluate(action.expect, obs)
-                        if (achieved == Outcome.ACHIEVED or obs.signature != before.signature
+                        if ((achieved == Outcome.ACHIEVED and not preheld) or obs.signature != before.signature
                                 or image_difference(before.png, obs.png) > 0.04):
                             break
                     else:
@@ -264,6 +274,10 @@ class Agent:
                 receipt.after_id = obs.id
                 if execution.effect not in {Effect.REJECTED, Effect.UNKNOWN}:
                     receipt.outcome, receipt.evidence = evaluate(action.expect, obs)
+                    if preheld and receipt.outcome == Outcome.ACHIEVED:
+                        receipt.outcome = Outcome.UNCERTAIN
+                        receipt.evidence = ("The declared postconditions were already true before this action, "
+                                            "so they cannot confirm its effect. Inspect the current state.")
                 previous_effect = (fingerprint, before)
                 metrics.verified_actions = len(report.done)
                 context["feedback"] = execution.detail or receipt.evidence
@@ -277,7 +291,8 @@ class Agent:
             report.status, report.message = RunStatus.LIMITED, str(exc)
         except Exception as exc:
             log.exception("Computer-use run failed")
-            report.status, report.message = RunStatus.FAILED, f"Task stopped: {type(exc).__name__}: {exc}"
+            detail = str(exc).strip() or type(exc).__name__
+            report.status, report.message = RunStatus.FAILED, f"Task stopped: {detail[:600]}"
         finally:
             try:
                 self.driver.close()

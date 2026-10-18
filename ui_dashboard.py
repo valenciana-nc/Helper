@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from threading import Thread
 
 from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QColor, QFont, QFontDatabase, QIcon, QPainter, QPen, QPixmap
@@ -36,6 +37,7 @@ from ui_lava import LavaOrb
 from ui_chat import MessageBubble
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
+from model_catalogue import ModelCatalogue, load_codex_catalogue, refresh_codex_catalogue
 
 log = logging.getLogger("helper.dashboard")
 
@@ -47,8 +49,8 @@ def _default_schema() -> SettingsSchema:
     return [
         ("Providers & models", [
             ("HELPER_PROVIDER", "Provider", "provider", "codex", True),
-            ("HELPER_AGENT_MODEL", "Computer-use model", "model", "gpt-5.5", True),
-            ("HELPER_REASONING_MODEL", "Reasoning model", "model", "gpt-5.5", True),
+            ("HELPER_AGENT_MODEL", "Computer-use model", "model", config.CODEX_MODEL_DEFAULT, True),
+            ("HELPER_REASONING_MODEL", "Reasoning model", "model", config.CODEX_MODEL_DEFAULT, True),
             ("HELPER_API_BASE_URL", "OpenAI-compat base URL", "text", "", True),
             ("HELPER_API_KEY", "OpenAI-compat API key", "password", "", True),
             ("HELPER_ANTHROPIC_API_KEY", "Anthropic API key", "password", "", True),
@@ -425,6 +427,7 @@ class ConversationTranscriptDialog(QDialog):
 
 class DashboardWindow(QWidget):
     closed = pyqtSignal()
+    catalogue_refreshed = pyqtSignal(object)
 
     NAV_CONVERSATIONS = "conversations"
     NAV_SETTINGS = "settings"
@@ -448,6 +451,10 @@ class DashboardWindow(QWidget):
         self._auth_changed_callback = auth_changed_callback
         self._conversations_provider = conversations_provider
         self._schema = _default_schema()
+        self._codex_catalogue = load_codex_catalogue()
+        self._catalogue_loading = False
+        self._catalogue_generation = 0
+        self.catalogue_refreshed.connect(self._on_catalogue_refreshed)
         self._field_widgets: dict[str, QWidget] = {}
         self._field_restart: dict[str, bool] = {}
         self._original_values: dict[str, str] = {}
@@ -918,6 +925,10 @@ class DashboardWindow(QWidget):
             if isinstance(widget, QLineEdit):
                 widget.textChanged.connect(lambda _t: self._refresh_provider_dependents())
 
+        for key in ('HELPER_AGENT_MODEL', 'HELPER_REASONING_MODEL'):
+            combo = self._field_widgets.get(key)
+            if isinstance(combo, QComboBox):
+                combo.currentTextChanged.connect(lambda _text: self._update_model_catalogue_hint())
         self._refresh_provider_dependents()
 
     def _current_provider_key(self) -> str:
@@ -937,15 +948,29 @@ class DashboardWindow(QWidget):
             combo = self._field_widgets.get(model_key)
             if not isinstance(combo, QComboBox):
                 continue
-            current_text = combo.currentText()
+            current_text = self._widget_value(combo)
             combo.blockSignals(True)
             combo.clear()
-            combo.addItems(models)
+            if provider_key == 'codex':
+                for model in self._codex_catalogue.models:
+                    if model_key == 'HELPER_AGENT_MODEL' and not model.image_input:
+                        continue
+                    combo.addItem(model.label, model.id)
+                    combo.setItemData(combo.count() - 1, model.id, Qt.ItemDataRole.ToolTipRole)
+            else:
+                for model in models:
+                    combo.addItem(model, model)
             if current_text:
-                combo.setEditText(current_text)
-            elif models:
+                index = combo.findData(current_text)
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+                else:
+                    combo.setEditText(current_text)
+            elif combo.count():
                 combo.setCurrentIndex(0)
             combo.blockSignals(False)
+
+        self._update_model_catalogue_hint()
 
         # API-key visibility per provider.
         visibility = {
@@ -985,6 +1010,62 @@ class DashboardWindow(QWidget):
                 self._set_pill(self._provider_pill, "API key required", "warning")
         else:
             self._set_pill(self._provider_pill, "", "neutral")
+
+    def _update_model_catalogue_hint(self) -> None:
+        provider_key = self._current_provider_key()
+        if hasattr(self, '_model_catalogue_hint'):
+            self._refresh_models_button.setEnabled(provider_key == 'codex' and not self._catalogue_loading)
+            self._model_catalogue_hint.setVisible(provider_key == 'codex')
+            if provider_key == 'codex':
+                text = self._codex_catalogue.source + '.'
+                if self._codex_catalogue.warning:
+                    text += ' ' + self._codex_catalogue.warning
+                ids = {model.id for model in self._codex_catalogue.models}
+                saved = {self._field_value(key) for key in ('HELPER_AGENT_MODEL', 'HELPER_REASONING_MODEL')}
+                missing = sorted(value for value in saved if value and value not in ids)
+                if missing:
+                    text += ' Not in this catalogue: ' + ', '.join(missing) + '. Choose a listed model or enter a custom ID.'
+                self._model_catalogue_hint.setText(text)
+
+    def _refresh_models(self) -> None:
+        if self._catalogue_loading:
+            return
+        self._catalogue_loading = True
+        self._refresh_models_button.setEnabled(False)
+        self._refresh_models_button.setText('Refreshing…')
+        self._catalogue_generation += 1
+        generation = self._catalogue_generation
+        previous = self._codex_catalogue
+
+        def load() -> None:
+            try:
+                result = refresh_codex_catalogue()
+            except Exception:
+                log.exception('Model catalogue refresh failed')
+                result = ModelCatalogue(previous.models, previous.source,
+                                        'Model refresh failed; keeping the previous catalogue.')
+            try:
+                self.catalogue_refreshed.emit((generation, result))
+            except RuntimeError:
+                pass  # Window was destroyed while a bounded background request finished.
+
+        Thread(target=load, name='helper-model-catalogue', daemon=True).start()
+
+    def _on_catalogue_refreshed(self, payload: tuple[int, ModelCatalogue]) -> None:
+        generation, catalogue = payload
+        if generation != self._catalogue_generation:
+            return
+        self._catalogue_loading = False
+        self._codex_catalogue = catalogue
+        self._refresh_models_button.setText('Refresh models')
+        self._refresh_provider_dependents()
+
+    def _invalidate_model_catalogue(self) -> None:
+        self._catalogue_generation += 1
+        self._catalogue_loading = False
+        self._codex_catalogue = load_codex_catalogue()
+        self._refresh_models_button.setText('Refresh models')
+        self._refresh_provider_dependents()
 
     def _set_field_visible(self, env_key: str, visible: bool) -> None:
         label = self._field_label_widgets.get(env_key)
@@ -1084,6 +1165,18 @@ class DashboardWindow(QWidget):
             f"background: {_COLOR_BORDER_LIGHT}; border: none;"
         )
         outer.addWidget(divider)
+
+        if section_name == 'Providers & models':
+            self._refresh_models_button = QPushButton('Refresh models')
+            self._refresh_models_button.setStyleSheet(_GHOST_BUTTON_QSS)
+            self._refresh_models_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._refresh_models_button.clicked.connect(self._refresh_models)
+            heading_row.addWidget(self._refresh_models_button)
+            self._model_catalogue_hint = QLabel()
+            self._model_catalogue_hint.setWordWrap(True)
+            self._model_catalogue_hint.setFont(theme.font(9))
+            self._model_catalogue_hint.setStyleSheet(theme.inline('color: {text_muted}', 'background: transparent', 'border: none'))
+            outer.addWidget(self._model_catalogue_hint)
 
         form = QFormLayout()
         form.setContentsMargins(0, theme.SPACING.SM, 0, 0)
@@ -1325,6 +1418,11 @@ class DashboardWindow(QWidget):
             return _provider_key_from_label(widget.currentText())
         if kind == "model":
             assert isinstance(widget, QComboBox)
+            index = widget.currentIndex()
+            if index >= 0 and widget.currentText() == widget.itemText(index):
+                model_id = widget.itemData(index)
+                if isinstance(model_id, str) and model_id:
+                    return model_id
             return widget.currentText().strip()
         if kind == "theme":
             group = widget.property("group")
@@ -1907,6 +2005,8 @@ class DashboardWindow(QWidget):
 
     def _on_sign_in_finished(self, ok: bool, message: str) -> None:
         if ok:
+            self._invalidate_model_catalogue()
+            self._refresh_models()
             self._account_status_label.setText("Signed in. Helper is ready.")
             if self._auth_changed_callback is not None:
                 self._auth_changed_callback(True)
@@ -1923,6 +2023,7 @@ class DashboardWindow(QWidget):
 
     def _sign_out(self) -> None:
         oauth_codex.sign_out()
+        self._invalidate_model_catalogue()
         self._refresh_account_card()
         self._account_status_label.setText("Signed out.")
         if self._auth_changed_callback is not None:
@@ -1951,6 +2052,9 @@ class DashboardWindow(QWidget):
     # --- Window lifecycle ---------------------------------------------------
 
     def show_dashboard(self) -> None:
+        if not self._catalogue_loading and self._codex_catalogue.source != 'Signed-in account catalogue':
+            latest = load_codex_catalogue()
+            self._codex_catalogue = ModelCatalogue(latest.models, latest.source, self._codex_catalogue.warning)
         self._reload_from_env()
         self.show()
         self.raise_()
@@ -1993,7 +2097,11 @@ class DashboardWindow(QWidget):
                         break
             elif kind == "model":
                 assert isinstance(widget, QComboBox)
-                widget.setEditText(value)
+                index = widget.findData(value)
+                if index >= 0:
+                    widget.setCurrentIndex(index)
+                else:
+                    widget.setEditText(value)
             elif kind == "theme":
                 group = widget.property("group")
                 if group is not None:

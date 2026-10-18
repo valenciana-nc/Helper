@@ -183,6 +183,11 @@ class HelplerDesktopApp(QObject):
         self._recording_started_at = 0.0
         self._busy = False
         self._shutting_down = False
+        # The orb's pill is the only visible reply surface while the chat window is closed.
+        self._last_run_reply = ""
+        self._reply_hide_timer = QTimer(self)
+        self._reply_hide_timer.setSingleShot(True)
+        self._reply_hide_timer.timeout.connect(self._hide_final_reply)
 
         self.widget_state_requested.connect(self._widget.set_state)
         self.caption_changed.connect(self._widget.set_caption)
@@ -447,13 +452,31 @@ class HelplerDesktopApp(QObject):
         text = (text or "").strip()
         self._chat_window.set_status(text)
         if text:
+            self._reply_hide_timer.stop()
             self._status_pill.set_text(text)
             self._status_pill.anchor_above(self._widget)
             self._status_pill.show()
             self._status_pill.raise_()
-        else:
+        elif not self._reply_hide_timer.isActive():
             self._status_pill.set_text("")
             self._status_pill.hide()
+
+    def _show_final_reply(self, text: str) -> None:
+        self._chat_window.set_status("")
+        text = (text or "").strip()
+        if not text:
+            self._hide_final_reply()
+            return
+        self._status_pill.set_text(text)
+        self._status_pill.anchor_above(self._widget)
+        self._status_pill.show()
+        self._status_pill.raise_()
+        self._reply_hide_timer.start(max(6000, min(20000, 2500 + 60 * len(text))))
+
+    def _hide_final_reply(self) -> None:
+        self._reply_hide_timer.stop()
+        self._status_pill.set_text("")
+        self._status_pill.hide()
 
     def _handle_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason in {
@@ -556,6 +579,7 @@ class HelplerDesktopApp(QObject):
         self._chat_window.add_message(message, False)
         text = (message or "").strip()
         if text:
+            self._last_run_reply = text
             if self._active_conversation is not None:
                 self._append_to_active_conversation("assistant", text)
             self.chat_status_changed.emit(text)
@@ -781,8 +805,9 @@ class HelplerDesktopApp(QObject):
         self._ghost_cursor.clear()
         self._reset_busy_state()
         self.widget_state_requested.emit(FloatingCircle.IDLE)
-        self.chat_status_changed.emit("")
-        log.info("v2 goal finished ok=%s", ok)
+        # Do not erase the result: keep the answer or failure visible near the orb.
+        self._show_final_reply(self._last_run_reply)
+        log.info("Helper goal finished ok=%s", ok)
 
     def _speak_reply(self, text: str) -> None:
         """Speak via v2's streaming TTS (sentence-chunked, barge-in capable)."""
@@ -805,6 +830,8 @@ class HelplerDesktopApp(QObject):
         if self._engine_runner is None:
             return
         self._engine_abort.clear()
+        self._last_run_reply = ""
+        self._reply_hide_timer.stop()
         self.user_message_received.emit(goal)
         if not self._engine_runner.start_goal(goal, mode=self._selected_mode, speak=speak):
             self.agent_message_received.emit(

@@ -35,21 +35,21 @@ class FloatingCircle(QWidget):
     HELP_CHAT_PLACEHOLDER = "Ask helper how to..."
     ACTIVE_CHAT_PLACEHOLDER = "Tell Helper what to do..."
 
-    WIDGET_W = 156
-    WIDGET_W_OPEN = 460
-    WIDGET_H = 56
+    WIDGET_W = 124
+    WIDGET_W_OPEN = 360
+    WIDGET_H = 40
     PILL_INSET = 2.0
-    ORB_CX = 78.0
-    ORB_CX_OPEN = 30.0
-    ORB_CY = 28.0
-    ORB_BASE_R = 22.0
-    ORB_BASE_R_OPEN = 22.0
-    LEFT_CX = 26.0
-    LEFT_CY = 28.0
-    LEFT_R = 16.0
-    RIGHT_CX = 130.0
-    RIGHT_CY = 28.0
-    RIGHT_R = 16.0
+    ORB_CX = 62.0
+    ORB_CX_OPEN = 24.0
+    ORB_CY = 20.0
+    ORB_BASE_R = 16.0
+    ORB_BASE_R_OPEN = 16.0
+    LEFT_CX = 20.0
+    LEFT_CY = 20.0
+    LEFT_R = 12.0
+    RIGHT_CX = 104.0
+    RIGHT_CY = 20.0
+    RIGHT_R = 12.0
 
     ZONE_LEFT = "left"
     ZONE_ORB = "orb"
@@ -108,7 +108,7 @@ class FloatingCircle(QWidget):
 
         self._chat_input = QLineEdit(self)
         self._chat_input.setPlaceholderText(self._chat_placeholder_for_mode())
-        self._chat_input.setFont(QFont("Segoe UI", 11))
+        self._chat_input.setFont(QFont("Segoe UI", 10))
         self._chat_input.setStyleSheet(theme.qss("""
             QLineEdit {{ background: transparent; border: none; color: {text_primary};
                 padding: 0; selection-background-color: {accent}; selection-color: white; }}
@@ -424,7 +424,9 @@ class FloatingCircle(QWidget):
         if self.state != self.IDLE:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor('#a750ea'))
-            painter.drawEllipse(QPointF(cx + 16, cy + 16), 3, 3)
+            offset = radius * .7
+            dot_radius = radius * .13
+            painter.drawEllipse(QPointF(cx + offset, cy + offset), dot_radius, dot_radius)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -478,6 +480,9 @@ class FloatingCircle(QWidget):
         painter.save()
         painter.setOpacity(alpha)
         cx, cy = self.LEFT_CX, self.LEFT_CY
+        painter.translate(cx, cy)
+        painter.scale(self.LEFT_R / 16, self.LEFT_R / 16)
+        cx, cy = 0, 0
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(theme.color('accent_subtle'))
         painter.drawEllipse(QPointF(cx, cy), 16, 16)
@@ -494,6 +499,9 @@ class FloatingCircle(QWidget):
         painter.save()
         painter.setOpacity(alpha)
         cx, cy = self.RIGHT_CX, self.RIGHT_CY
+        painter.translate(cx, cy)
+        painter.scale(self.RIGHT_R / 16, self.RIGHT_R / 16)
+        cx, cy = 0, 0
         painter.setBrush(theme.color('accent_subtle'))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(cx, cy), 16, 16)
@@ -629,30 +637,64 @@ class ChatStatusPill(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self._text = ""
+        self._display = ""
         self._font = QFont("Segoe UI", 9)
-        self._padding_x = 16
-        self._padding_y = 6
-        self.setFixedHeight(26)
+        self._padding_x = 12
+        self._padding_y = 5
+        self._max_width = 420
+        self._max_lines = 4
+        self.setFixedHeight(24)
         self.setFixedWidth(220)
         self.hide()
 
+    def text(self) -> str:
+        return self._text
+
+    def _text_rect(self) -> QRectF:
+        return QRectF(self._padding_x, self._padding_y,
+                      max(1, self.width() - 2 * self._padding_x), max(1, self.height() - 2 * self._padding_y))
+
     def set_text(self, text: str) -> None:
-        text = (text or "").strip()
+        text = " ".join((text or "").split())
         if text == self._text:
             if not text:
                 self.hide()
             return
         self._text = text
         if not text:
+            self._display = ""
             self.hide()
             return
         metrics = QFontMetrics(self._font)
         text_w = metrics.horizontalAdvance(text)
-        width = max(140, min(420, text_w + 2 * self._padding_x))
+        width = max(120, min(self._max_width, text_w + 2 * self._padding_x + 2))
+        inner = width - 2 * self._padding_x
+        bounds = metrics.boundingRect(0, 0, inner, 10_000, int(Qt.TextFlag.TextWordWrap), text)
+        lines = max(1, min(self._max_lines, math.ceil(bounds.height() / max(1, metrics.lineSpacing()))))
+        height = lines * metrics.lineSpacing()
+        self._display = self._fit_text(text, metrics, inner, height)
         self.setFixedWidth(width)
+        self.setFixedHeight(max(24, height + 2 * self._padding_y))
         self.update()
         if not self.isVisible():
             self.show()
+
+    @staticmethod
+    def _fit_text(text: str, metrics: QFontMetrics, width: int, height: int) -> str:
+        def fits(candidate: str) -> bool:
+            return metrics.boundingRect(0, 0, width, 10_000, int(Qt.TextFlag.TextWordWrap),
+                                        candidate).height() <= height + 1
+        if fits(text):
+            return text
+        # The status pill is a preview; the complete reply stays in the chat transcript.
+        low, high = 0, len(text)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if fits(text[:middle].rstrip() + "…"):
+                low = middle
+            else:
+                high = middle - 1
+        return text[:low].rstrip() + "…"
 
     def anchor_above(self, orb_widget: QWidget) -> None:
         if orb_widget is None:
@@ -667,7 +709,7 @@ class ChatStatusPill(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = QRectF(0, 0, self.width(), self.height())
-        radius = rect.height() / 2.0
+        radius = min(12.0, rect.height() / 2.0)
 
         shadow = QRectF(rect).adjusted(0.0, 1.5, 0.0, 3.0)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -681,19 +723,13 @@ class ChatStatusPill(QWidget):
         painter.setPen(QPen(theme.color('border_mid'), 1.0))
         painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius - 0.5, radius - 0.5)
 
-        if self._text:
+        if self._display:
             painter.setFont(self._font)
             painter.setPen(theme.color('text_primary'))
-            metrics = QFontMetrics(self._font)
-            elided = metrics.elidedText(
-                self._text,
-                Qt.TextElideMode.ElideRight,
-                int(rect.width()) - 2 * self._padding_x,
-            )
             painter.drawText(
-                rect,
-                int(Qt.AlignmentFlag.AlignCenter),
-                elided,
+                self._text_rect(),
+                int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
+                self._display,
             )
 
 
@@ -708,15 +744,16 @@ class ChatInputPopup(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setFixedSize(360, 56)
+        self.setFixedSize(320, 40)
 
         self._edit = QLineEdit(self)
         self._edit.setPlaceholderText(FloatingCircle.HELP_CHAT_PLACEHOLDER)
-        self._edit.setStyleSheet(theme.qss(theme.INPUT_QSS))
+        self._edit.setStyleSheet(theme.qss(theme.INPUT_QSS) +
+                                'QLineEdit { padding: 4px 10px; font-size: 10pt; min-height: 18px; }')
         self._edit.returnPressed.connect(self._submit)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self._edit)
 
     def open_at(self, global_pos: QPoint) -> None:

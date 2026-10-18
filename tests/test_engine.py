@@ -82,6 +82,7 @@ class ScriptModel:
 
     def verify_goal(self, goal, observation, context):
         self.verifications.append(observation.id)
+        self.verified_replies = getattr(self, "verified_replies", []) + [context.get("proposed_reply")]
         return self.verified, "Expected final content is visible." if self.verified else "Saved result is not visible."
 
 
@@ -144,6 +145,43 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(report.done, ["a1"])
         self.assertEqual(model.verifications, ["o3"])
         self.assertTrue(driver.closed)
+
+    def test_verified_finish_returns_and_checks_the_users_reply(self):
+        driver = FakeDriver([frame(), frame("o2", value="Alice"), frame("o3", value="Alice")])
+        def reply(obs):
+            return Decision("finish", obs.id, message="The field now says Alice.")
+        model = ScriptModel([act(fill()), reply])
+        report = agent(model, driver).run_goal("Enter Alice and tell me the value", mode="active")
+        self.assertEqual(report.status, RunStatus.COMPLETED)
+        self.assertEqual(report.message, "The field now says Alice.")
+        self.assertEqual(model.verified_replies, ["The field now says Alice."])
+        self.assertNotIn("proposed_reply", model.contexts[-1])
+
+    def test_already_true_expectation_does_not_block_or_prove_a_click(self):
+        # Real failure: "Skip ad" was expected to exist, which was true before clicking it.
+        skip = Action("click", Target("u1"), description="Skip ad", expect=(Predicate("exists", "Name"),))
+        driver = FakeDriver([frame(), frame("o2", color="black"), frame("o3", color="black")])
+        model = ScriptModel([act(skip), finish])
+        report = agent(model, driver).run_goal("Skip the ad", mode="active")
+        self.assertEqual(len(driver.calls), 1)
+        self.assertEqual(report.status, RunStatus.COMPLETED)
+        self.assertEqual(report.receipts[0].outcome, Outcome.UNCERTAIN)
+        self.assertIn("already true before", model.contexts[1]["feedback"])
+
+    def test_redundant_fill_is_skipped_without_input(self):
+        driver = FakeDriver([frame(value="Alice")] * 4)
+        model = ScriptModel([act(fill()), act(fill()), act(fill())])
+        report = agent(model, driver).run_goal("Enter Alice", mode="active")
+        self.assertEqual(driver.calls, [])
+        self.assertEqual(report.status, RunStatus.NEEDS_INPUT)
+
+    def test_help_mode_waits_when_expectation_was_already_true(self):
+        guided = Action("click", Target("u1"), description="Click Name", expect=(Predicate("exists", "Name"),))
+        driver = FakeDriver([frame()] * 40)
+        report = agent(ScriptModel([act(guided)]), driver).run_goal("Show me", mode="help")
+        self.assertEqual(driver.calls, [])
+        self.assertEqual(report.status, RunStatus.NEEDS_INPUT)
+        self.assertIn("Follow the highlighted step", report.message)
 
     def test_model_error_never_reports_success(self):
         driver = FakeDriver()

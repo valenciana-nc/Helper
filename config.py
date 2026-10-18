@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import urlsplit
+from model_catalogue import load_codex_catalogue
 
 APP_NAME = "Helper"
 ROOT = Path(__file__).parent
@@ -14,7 +15,7 @@ LOGS_DIR = ROOT / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 STARTUP_LOG = LOGS_DIR / "startup.log"
 ENV_PATH = ROOT / ".env"
-CODEX_MODEL_DEFAULT = "gpt-5.5"
+CODEX_MODEL_DEFAULT = "gpt-6-luna"
 STT_MODEL_DEFAULT = "whisper-1"
 TTS_MODEL_DEFAULT = "gpt-4o-mini-tts"
 
@@ -246,12 +247,10 @@ _theme_raw = env_value("HELPER_THEME", "light").strip().lower()
 THEME = "dark" if _theme_raw == "dark" else "light"
 
 
-# Curated model menus per provider. openai_compat stays free-text — the user
-# brings their own endpoint and model. Codex defaults map to the existing
-# CODEX_MODEL_DEFAULT family. Anthropic/Gemini lists are conservative; users
-# can still type a custom value into the editable dropdown.
+# Codex choices follow the installed catalogue, with current offline suggestions.
+# Other providers retain their own editable model menus.
 PROVIDER_MODELS: dict[str, list[str]] = {
-    "codex": ["gpt-5.5", "gpt-5", "gpt-4.1", "o3", "o3-mini"],
+    "codex": [model.id for model in load_codex_catalogue().models],
     "openai_compat": [],
     "anthropic": [
         "claude-opus-4-8",

@@ -66,6 +66,39 @@ class ChatResult:
     tool_calls: list[ToolCall]
 
 
+class InvalidChatRequest(ProviderError):
+    """A local caller passed messages no provider adapter can serialize."""
+
+
+_NEUTRAL_PART_KEYS = frozenset({"text", "image_png", "function_call", "function_response"})
+
+
+def _require_neutral_messages(messages: list[dict[str, Any]]) -> None:
+    """Reject wrong-shaped history before any network call.
+
+    Every provider adapter reads ``parts``. A message built for another API shape
+    (for example ``content`` items) would otherwise serialize to an empty request.
+    """
+    if not isinstance(messages, list) or not messages:
+        raise InvalidChatRequest("Helper built an empty model request.")
+    usable = False
+    for message in messages:
+        if not isinstance(message, dict) or "content" in message:
+            raise InvalidChatRequest("Helper built a model request in an unsupported message format.")
+        parts = message.get("parts")
+        if not isinstance(parts, list):
+            raise InvalidChatRequest("Each model request message needs a parts list.")
+        for part in parts:
+            if not isinstance(part, dict) or len(part) != 1 or not part.keys() <= _NEUTRAL_PART_KEYS:
+                raise InvalidChatRequest("Helper built a model request with an unsupported part.")
+            value = next(iter(part.values()))
+            if (isinstance(value, str) and value.strip()) or (isinstance(value, bytes) and value) or isinstance(
+                    value, dict):
+                usable = True
+    if not usable:
+        raise InvalidChatRequest("Helper built a model request without text or an image.")
+
+
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 CONNECT_TIMEOUT_SEC = 10
 READ_TIMEOUT_SEC = 120
@@ -297,6 +330,7 @@ class OpenAIClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> ChatResult:
+        _require_neutral_messages(messages)
         if self._custom is not None:
             return self._custom.chat(
                 messages,
@@ -327,6 +361,7 @@ class OpenAIClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> ChatResult:
+        _require_neutral_messages(messages)
         if self._custom is not None:
             return self._custom.computer_use_step(
                 messages,

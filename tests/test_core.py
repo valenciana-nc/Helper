@@ -83,7 +83,7 @@ class EnvAliasTests(unittest.TestCase):
 
     def test_legacy_gemini_model_falls_back_for_codex(self) -> None:
         with patch.dict(os.environ, {"HARVIS_REASONING_MODEL": "gemini-2.5-flash"}, clear=True):
-            self.assertEqual(config.resolve_codex_model("HELPER_REASONING_MODEL"), "gpt-5.5")
+            self.assertEqual(config.resolve_codex_model("HELPER_REASONING_MODEL"), config.CODEX_MODEL_DEFAULT)
             self.assertIn("HARVIS_REASONING_MODEL=gemini-2.5-flash", config.model_compatibility_warnings()[0])
 
     def test_legacy_non_model_settings_still_resolve(self) -> None:
@@ -319,7 +319,7 @@ class ProviderTests(unittest.TestCase):
             patch("oauth_codex.get_access_token", return_value="access"),
             patch("token_store.load", return_value=None),
         ):
-            with self.assertRaisesRegex(UnsupportedModel, "gemini-2.5-flash.*gpt-5.5"):
+            with self.assertRaisesRegex(UnsupportedModel, f"gemini-2.5-flash.*{config.CODEX_MODEL_DEFAULT}"):
                 provider.post_response({"model": "gemini-2.5-flash", "input": "hi"})
 
     def test_openai_client_sends_codex_safe_chat_model(self) -> None:
@@ -333,10 +333,11 @@ class ProviderTests(unittest.TestCase):
 
         provider = Provider()
         client = OpenAIClient(codex_provider=provider)  # type: ignore[arg-type]
-        result = client.chat([], model="gemini-2.5-flash", system_prompt="Be helpful.")
+        result = client.chat([{"role": "user", "parts": [{"text": "hi"}]}],
+                             model="gemini-2.5-flash", system_prompt="Be helpful.")
 
         self.assertEqual(result.text, "hello")
-        self.assertEqual(provider.body["model"], "gpt-5.5")
+        self.assertEqual(provider.body["model"], config.CODEX_MODEL_DEFAULT)
         self.assertFalse(provider.body["store"])
         self.assertTrue(provider.body["stream"])
         self.assertEqual(provider.body["instructions"], "Be helpful.")
