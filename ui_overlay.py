@@ -210,6 +210,9 @@ def _native_screen_geometry(screen_geometry: QRect, device_pixel_ratio: float) -
 
 def _native_monitor_geometries() -> list[tuple[str, QRect]]:
     monitors: list[tuple[str, QRect]] = []
+    if sys.platform != "win32":
+        # WINFUNCTYPE and EnumDisplayMonitors only exist on Windows.
+        return monitors
     callback_type = ctypes.WINFUNCTYPE(
         ctypes.c_bool,
         wintypes.HMONITOR,
