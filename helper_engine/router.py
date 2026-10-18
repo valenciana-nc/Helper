@@ -3,6 +3,13 @@ from __future__ import annotations
 
 from .types import StaleObservation
 
+# Window title markers for common browsers. The browser adapter only enriches
+# when it can match an explicit tab — never guessing an authenticated session.
+BROWSER_TITLE_MARKERS = (
+    "Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera",
+    "Vivaldi", "Arc",
+)
+
 
 class HybridDriver:
     def __init__(self, desktop, browser):
@@ -13,7 +20,7 @@ class HybridDriver:
         observation = self.desktop.observe()
         self._selected = self.desktop
         # Never guess an authenticated tab. The browser adapter selects one explicit page.
-        if any(marker in observation.title for marker in ("Google Chrome", "Microsoft Edge")):
+        if any(marker in observation.title for marker in BROWSER_TITLE_MARKERS):
             try:
                 if self.browser.matches_window_title(observation.title):
                     enriched = self.browser.observe()
