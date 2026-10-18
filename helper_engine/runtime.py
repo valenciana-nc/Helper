@@ -45,6 +45,14 @@ class Limits:
 
 
 class Agent:
+    """Observation-driven computer-use loop.
+
+    Each iteration: observe → model decides one typed action → validate
+    against the fresh observation → execute → verify locally. Help mode
+    never dispatches input; active mode requires policy confirmation for
+    destructive actions.
+    """
+
     def __init__(self, *, model: Model, driver: Driver, limits: Limits | None = None,
                  confirm: Confirmation | None = None):
         self.model, self.driver = model, driver
