@@ -421,5 +421,12 @@ class BootstrapTests(unittest.TestCase):
             del os.environ["TEST_PAGE_INDEX"]
 
 
+class RouterTests(unittest.TestCase):
+    def test_browser_markers_cover_major_browsers(self):
+        from helper_engine.router import BROWSER_TITLE_MARKERS
+        for name in ("Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave"):
+            self.assertIn(name, BROWSER_TITLE_MARKERS)
+
+
 if __name__ == "__main__":
     unittest.main()
