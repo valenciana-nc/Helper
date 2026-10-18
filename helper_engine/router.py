@@ -15,6 +15,13 @@ __all__ = ["BROWSER_TITLE_MARKERS", "HybridDriver"]
 
 
 class HybridDriver:
+    """Desktop-first driver that enriches browser windows with DOM observation.
+
+    Falls back to the desktop observation if the browser tab can't be matched.
+    Never guesses an authenticated tab — the browser adapter selects one
+    explicit page via CDP.
+    """
+
     def __init__(self, desktop, browser):
         self.desktop, self.browser = desktop, browser
         self._selected = None
