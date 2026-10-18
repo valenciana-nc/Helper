@@ -654,6 +654,11 @@ class HelplerDesktopApp(QObject):
             return None
 
         if self._audio is None:
+            # No audio: track the press for tap-to-toggle-chat, but no recording.
+            with self._lock:
+                self._pressed.add(name)
+                if not self._busy and self._hotkey.issubset(self._pressed):
+                    self._recording_started_at = time.perf_counter()
             return None
         should_start = False
         with self._lock:
@@ -669,13 +674,21 @@ class HelplerDesktopApp(QObject):
 
         if should_start:
             self._engine_abort.clear()
-            self._audio.start_recording()
+            try:
+                self._audio.start_recording()
+            except Exception:
+                log.exception("Failed to start recording")
+                with self._lock:
+                    self._recording_active = False
+                    self._recording_started_at = 0.0
+                self.widget_state_requested.emit(FloatingCircle.IDLE)
+                return None
             self.widget_state_requested.emit(FloatingCircle.LISTENING)
             log.info("Listening...")
         return None
 
     def _on_release(self, key: object) -> None:
-        if not self._backend_ready or self._audio is None:
+        if not self._backend_ready:
             return
 
         name = key_name(key)
@@ -695,9 +708,16 @@ class HelplerDesktopApp(QObject):
                 else:
                     self._busy = True
                     should_finish = True
+            elif self._audio is None and not self._hotkey.issubset(self._pressed):
+                # No-audio tap: quick press+release toggles chat.
+                elapsed = time.perf_counter() - self._recording_started_at
+                self._recording_started_at = 0.0
+                if elapsed < CHAT_TAP_THRESHOLD_SEC:
+                    should_toggle_chat = True
 
         if should_toggle_chat:
-            self._audio.cancel_recording()
+            if self._audio is not None:
+                self._audio.cancel_recording()
             self.caption_changed.emit("")
             self.widget_state_requested.emit(FloatingCircle.IDLE)
             log.info("Hotkey tapped. Toggling chat window.")
@@ -723,7 +743,15 @@ class HelplerDesktopApp(QObject):
                 should_start = True
         if should_start:
             self._engine_abort.clear()
-            self._audio.start_recording()
+            try:
+                self._audio.start_recording()
+            except Exception:
+                log.exception("Failed to start recording (orb hold)")
+                with self._lock:
+                    self._recording_active = False
+                    self._recording_started_at = 0.0
+                self.widget_state_requested.emit(FloatingCircle.IDLE)
+                return
             self.widget_state_requested.emit(FloatingCircle.LISTENING)
             log.info("Listening (orb hold)...")
 
