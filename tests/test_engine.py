@@ -319,6 +319,14 @@ class EvidenceTests(unittest.TestCase):
         outcome, _ = evaluate((Predicate("absent", "Not present"),), frame())
         self.assertEqual(outcome, Outcome.UNCERTAIN)
 
+    def test_password_values_are_not_searchable(self):
+        from dataclasses import replace
+        obs = frame()
+        secret = replace(obs.elements[0], value="hunter2", password=True)
+        obs = replace(obs, elements=(secret,))
+        outcome, _ = evaluate((Predicate("text_contains", value="hunter2"),), obs)
+        self.assertEqual(outcome, Outcome.UNCERTAIN)
+
 
 class SignatureTests(unittest.TestCase):
     def test_enabled_state_change_alters_signature(self):
