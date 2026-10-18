@@ -387,5 +387,17 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(confirmation_reason(action, obs), "")
 
 
+class PerceptionTests(unittest.TestCase):
+    def test_corrupt_images_report_max_difference(self):
+        from helper_engine.perception import image_difference
+        self.assertEqual(image_difference(b"not an image", b"also not"), 1.0)
+        self.assertEqual(image_difference(frame().png, b"corrupt"), 1.0)
+
+    def test_identical_images_have_zero_difference(self):
+        from helper_engine.perception import image_difference
+        png = frame().png
+        self.assertEqual(image_difference(png, png), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
