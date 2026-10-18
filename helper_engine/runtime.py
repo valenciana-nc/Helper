@@ -22,6 +22,9 @@ from .verification import evaluate
 log = logging.getLogger(__name__)
 
 
+__all__ = ["Limits", "Agent"]
+
+
 @dataclass(frozen=True)
 class Limits:
     """Per-run budgets: steps, model calls, wall-clock time, and invalid-decision tolerance."""
