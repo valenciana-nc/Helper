@@ -134,6 +134,16 @@ class ProtocolTests(unittest.TestCase):
             parse_decision(json.dumps({"kind": "act", "observation_id": "o1", "action": {
                 "kind": "click", "target": {"element_id": "u1", "box": [1, 2, 3, 4]}}}))
 
+    def test_element_target_defaults_to_full_confidence(self):
+        decision = parse_decision(json.dumps({"kind": "act", "observation_id": "o1", "action": {
+            "kind": "click", "target": {"element_id": "u1"}}}))
+        self.assertEqual(decision.action.target.confidence, 1.0)
+
+    def test_visual_target_requires_explicit_high_confidence(self):
+        with self.assertRaises(ProtocolError):
+            parse_decision(json.dumps({"kind": "act", "observation_id": "o1", "action": {
+                "kind": "click", "target": {"box": [10, 10, 50, 50]}}}))
+
 
 class RuntimeTests(unittest.TestCase):
     def test_fill_verified_locally_then_full_goal_verified_on_new_observation(self):
