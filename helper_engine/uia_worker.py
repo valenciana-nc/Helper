@@ -42,12 +42,16 @@ class UiaClient:
     def close(self):
         process, self._process = self._process, None
         pipe, self._pipe = self._pipe, None
-        if pipe is not None:
-            pipe.close()
-        if process is not None:
-            if process.is_alive():
-                process.terminate()
-            process.join(timeout=0.5)
+        try:
+            if pipe is not None:
+                pipe.close()
+        finally:
+            # Process cleanup must not be skipped if pipe.close() raises;
+            # otherwise the worker leaks as an orphaned helper-uia process.
+            if process is not None:
+                if process.is_alive():
+                    process.terminate()
+                process.join(timeout=0.5)
 
 
 def _property(wrapper, prop: int, default=None):

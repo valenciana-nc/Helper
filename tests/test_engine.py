@@ -511,6 +511,36 @@ class RouterTests(unittest.TestCase):
         for name in ("Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave"):
             self.assertIn(name, BROWSER_TITLE_MARKERS)
 
+    def test_hybrid_close_clears_selected_when_browser_close_raises(self):
+        # Bug: _selected kept pointing at a closed driver if browser.close() raised.
+        from unittest.mock import MagicMock
+        from helper_engine.router import HybridDriver
+        driver = HybridDriver.__new__(HybridDriver)
+        driver.desktop = MagicMock()
+        driver.browser = MagicMock()
+        driver.browser.close.side_effect = RuntimeError("boom")
+        driver._selected = driver.browser
+        with self.assertRaises(RuntimeError):
+            driver.close()
+        self.assertIsNone(driver._selected)
+
+    def test_uia_close_terminates_process_when_pipe_close_raises(self):
+        # Bug: worker process leaked if pipe.close() raised during close().
+        from unittest.mock import MagicMock
+        from helper_engine.uia_worker import UiaClient
+        client = UiaClient.__new__(UiaClient)
+        client._pipe = MagicMock()
+        client._pipe.close.side_effect = OSError("broken pipe")
+        proc = MagicMock()
+        proc.is_alive.return_value = True
+        client._process = proc
+        with self.assertRaises(OSError):
+            client.close()
+        proc.terminate.assert_called_once()
+        proc.join.assert_called_once()
+        self.assertIsNone(client._process)
+        self.assertIsNone(client._pipe)
+
 
 class LimitsTests(unittest.TestCase):
     def test_negative_budgets_rejected(self):

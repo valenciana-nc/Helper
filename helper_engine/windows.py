@@ -10,6 +10,7 @@ from ctypes import wintypes
 from urllib.parse import urlsplit
 
 from .perception import image_difference, target_rect
+from .protocol import ProtocolError
 from .types import Effect, Element, Execution, Observation, Rect, StaleObservation
 from .uia_worker import UiaClient
 
@@ -57,9 +58,12 @@ class WindowsDriver:
         if hwnd and self._pid(api, hwnd) != os.getpid():
             self._last_hwnd = hwnd
             return hwnd
-        if self._last_hwnd and api.IsWindowVisible(self._last_hwnd):
+        if self._last_hwnd and api.IsWindowVisible(self._last_hwnd) \
+                and self._pid(api, self._last_hwnd) != os.getpid():
             return self._last_hwnd
-        # Helper's own chat/orb must not become an action target.
+        # Helper's own chat/orb must not become an action target. (The PID
+        # check above also guards against HWND reuse: a recycled handle for
+        # our own window must not be returned here.)
         cursor = hwnd
         for _ in range(80):
             cursor = api.GetWindow(cursor, 2)  # GW_HWNDNEXT; z order
@@ -124,7 +128,12 @@ class WindowsDriver:
         """Reject the action if the scene changed since the decision's observation."""
         if observation.id != self._current_id or str(int(self._scope())) != observation.scope:
             raise StaleObservation("The foreground window or observation changed")
-        rect = target_rect(action, observation)
+        try:
+            rect = target_rect(action, observation)
+        except ProtocolError as exc:
+            # Target vanished/disabled since the decision: stale scene, not an
+            # ambiguous side effect. Must not become Effect.UNKNOWN.
+            raise StaleObservation(f"Target no longer valid: {exc}") from exc
         if action.target and action.target.element_id:
             result = self.uia.request("validate", token=observation.id, element_id=action.target.element_id)
             if result.get("status") != "valid":
@@ -172,7 +181,10 @@ class WindowsDriver:
         import pyautogui
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0
-        rect = target_rect(action, observation)
+        try:
+            rect = target_rect(action, observation)
+        except ProtocolError as exc:
+            raise StaleObservation(f"Target no longer valid: {exc}") from exc
         if action.kind in {"click", "double_click", "right_click"}:
             x, y = rect.center
             pyautogui.click(x, y, clicks=2 if action.kind == "double_click" else 1,

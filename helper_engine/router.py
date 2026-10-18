@@ -55,5 +55,7 @@ class HybridDriver:
         try:
             self.desktop.close()
         finally:
-            self.browser.close()
-            self._selected = None
+            try:
+                self.browser.close()
+            finally:
+                self._selected = None
