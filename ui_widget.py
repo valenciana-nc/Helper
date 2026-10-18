@@ -733,51 +733,6 @@ class ChatStatusPill(QWidget):
             )
 
 
-class ChatInputPopup(QWidget):
-    submitted = pyqtSignal(str)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setFixedSize(320, 40)
-
-        self._edit = QLineEdit(self)
-        self._edit.setPlaceholderText(FloatingCircle.HELP_CHAT_PLACEHOLDER)
-        self._edit.setStyleSheet(theme.qss(theme.INPUT_QSS) +
-                                'QLineEdit { padding: 4px 10px; font-size: 10pt; min-height: 18px; }')
-        self._edit.returnPressed.connect(self._submit)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(self._edit)
-
-    def open_at(self, global_pos: QPoint) -> None:
-        self.move(global_pos)
-        self._edit.clear()
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        self._edit.setFocus(Qt.FocusReason.PopupFocusReason)
-
-    def _submit(self) -> None:
-        text = self._edit.text().strip()
-        self.hide()
-        if text:
-            self.submitted.emit(text)
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # type: ignore[override]
-        if event.key() == Qt.Key.Key_Escape:
-            self.hide()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-
 def _run_demo() -> int:
     app = QApplication(sys.argv)
     widget = FloatingCircle()
