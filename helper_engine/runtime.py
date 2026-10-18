@@ -50,6 +50,12 @@ class Agent:
 
     def run_goal(self, goal: str, *, mode: str = "help", on_event: EventSink | None = None,
                  should_abort: Callable[[], bool] | None = None) -> RunReport:
+        """Run one computer-use goal to completion, verification, or budget exhaustion.
+
+        Mode "help" guides the user without dispatching input; mode "active"
+        executes typed actions through the driver with policy confirmation.
+        Returns a RunReport with status, message, receipts, and metrics.
+        """
         if mode not in {"help", "active"}:
             raise ValueError("mode must be help or active")
         if not isinstance(goal, str) or not goal.strip():
