@@ -31,9 +31,9 @@ def _evaluate_one(p: Predicate, obs: Observation) -> bool | None:
         text = "\n".join([obs.text, *(e.name for e in obs.elements),
                           *(e.value for e in obs.elements if e.value is not None and not e.password)])
         # Missing text in a truncated accessibility snapshot is not proof of absence.
-        return True if p.value.casefold() in text.casefold() else None
-    matches = [e for e in obs.elements if e.visible and e.name.casefold() == p.name.casefold()
-               and (not p.role or e.role.casefold() == p.role.casefold())]
+        return True if (p.value or "").casefold() in text.casefold() else None
+    matches = [e for e in obs.elements if e.visible and e.name.casefold() == (p.name or "").casefold()
+               and (not p.role or e.role.casefold() == (p.role or "").casefold())]
     if p.kind == "exists":
         return True if matches else None
     if p.kind == "absent":
