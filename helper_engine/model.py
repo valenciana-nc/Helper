@@ -57,6 +57,7 @@ Return exactly {"satisfied":true|false,"evidence":"specific current evidence","m
 
 
 def observation_text(obs: Observation) -> dict:
+    """Render an observation as the JSON control list the model decides from."""
     controls = [
         {"id": e.id, "name": e.name[:180], "role": e.role, "value": None if e.password else e.value,
          "rect": list(obs.image_box(e.rect)), "enabled": e.enabled, "focused": e.focused,
@@ -97,10 +98,12 @@ class ProviderModel:
         return result.text or ""
 
     def decide(self, goal: str, observation: Observation, context: dict):
+        """Ask the model for the single next decision (act/observe/finish/answer/ask)."""
         payload = {"goal": goal, "observation": observation_text(observation), "context": context}
         return parse_decision(self._call(payload, observation, system=SYSTEM, annotate=True))
 
     def verify_goal(self, goal: str, observation: Observation, context: dict) -> tuple[bool, str]:
+        """Independently verify goal completion against a fresh observation."""
         payload = {"original_goal": goal, "observation": observation_text(observation), "context": context}
         data = json_object(self._call(payload, observation, system=VERIFY_SYSTEM, annotate=False))
         if set(data) != {"satisfied", "evidence", "missing"}:
