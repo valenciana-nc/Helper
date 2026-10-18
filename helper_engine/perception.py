@@ -24,18 +24,23 @@ def target_rect(action: Action, observation: Observation) -> Rect | None:
 
 def image_difference(first: bytes, second: bytes, *, box=None) -> float:
     """Normalized mean pixel difference; invalid images cannot prove freshness."""
-    with Image.open(io.BytesIO(first)) as a, Image.open(io.BytesIO(second)) as b:
-        a, b = a.convert("RGB"), b.convert("RGB")
-        if a.size != b.size:
-            return 1.0
-        if box is not None:
-            left, top, right, bottom = box
-            if right <= left or bottom <= top:
+    try:
+        with Image.open(io.BytesIO(first)) as a, Image.open(io.BytesIO(second)) as b:
+            a, b = a.convert("RGB"), b.convert("RGB")
+            if a.size != b.size:
                 return 1.0
-            a, b = a.crop(box), b.crop(box)
-        a = a.resize((96, 64))
-        b = b.resize((96, 64))
-        return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
+            if box is not None:
+                left, top, right, bottom = box
+                if right <= left or bottom <= top:
+                    return 1.0
+                a, b = a.crop(box), b.crop(box)
+            a = a.resize((96, 64))
+            b = b.resize((96, 64))
+            return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
+    except Exception:
+        # A corrupt screenshot must never crash the run; treat as fully different
+        # so the runtime re-observes instead of trusting stale pixels.
+        return 1.0
 
 
 def annotated_png(observation: Observation, *, limit: int = 100) -> bytes:
