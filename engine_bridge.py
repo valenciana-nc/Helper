@@ -52,6 +52,11 @@ class EngineRunner(QObject):
         return self._agent
 
     def _confirm(self, action, observation, reason):
+        """Modal confirmation on the GUI thread with a 120s deadline.
+
+        Returns True only when the user clicks Yes before the deadline and
+        no abort/shutdown is pending.
+        """
         target = observation.element(action.target.element_id) if action.target and action.target.element_id else None
         label = target.name if target else action.kind
         pending = PendingApproval(f"{reason}\n\n{action.description or action.kind}\nTarget: {label[:160]}")
@@ -82,6 +87,7 @@ class EngineRunner(QObject):
             pending.event.set()
 
     def start_goal(self, goal: str, *, mode: str = "help", speak: bool = False):
+        """Start one engine run on a daemon thread. Returns False if already running."""
         if mode not in {"help", "active"}:
             raise ValueError("Unknown control mode")
         with self._lock:
