@@ -303,12 +303,3 @@ def validate_api_base_url(value: str) -> str | None:
 
 
 DESTRUCTIVE_KEYWORDS = ("delete", "remove", "rm ", "send", "buy", "purchase", "format", "shutdown")
-
-
-def assert_auth() -> None:
-    import token_store
-
-    if token_store.load() is None:
-        raise RuntimeError(
-            "Not signed in. Open the dashboard and click 'Sign in with ChatGPT' to continue."
-        )
