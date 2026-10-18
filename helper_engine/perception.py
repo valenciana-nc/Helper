@@ -8,6 +8,9 @@ from PIL import Image, ImageChops, ImageDraw, ImageStat
 from .types import Action, Observation, ProtocolError, Rect
 
 
+__all__ = ["target_rect", "image_difference", "annotated_png"]
+
+
 def target_rect(action: Action, observation: Observation) -> Rect | None:
     target = action.target
     if target is None:
