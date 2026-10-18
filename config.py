@@ -301,5 +301,3 @@ def validate_api_base_url(value: str) -> str | None:
         return None
     return "API base URL must use HTTPS (or HTTP on localhost only)"
 
-
-DESTRUCTIVE_KEYWORDS = ("delete", "remove", "rm ", "send", "buy", "purchase", "format", "shutdown")
