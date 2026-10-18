@@ -475,5 +475,20 @@ class RunReportTests(unittest.TestCase):
             self.assertFalse(RunReport("g", status, "m").ok)
 
 
+class SummarizeTests(unittest.TestCase):
+    def test_boolean_metrics_do_not_skew_means(self):
+        import json
+        import tempfile
+        from helper_engine.evaluate import summarize
+        row = {"event": "finished", "run_id": "r1", "status": "completed",
+               "model_calls": True, "actions": 4}
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write(json.dumps(row) + "\n")
+            path = f.name
+        result = summarize([path])
+        self.assertIsNone(result["mean_model_calls"])
+        self.assertEqual(result["mean_actions"], 4.0)
+
+
 if __name__ == "__main__":
     unittest.main()
