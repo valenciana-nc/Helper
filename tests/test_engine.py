@@ -460,5 +460,14 @@ class LimitsTests(unittest.TestCase):
             Limits(max_seconds=float("inf"))
 
 
+class RunReportTests(unittest.TestCase):
+    def test_ok_covers_completed_and_answered(self):
+        from helper_engine.types import RunReport, RunStatus
+        for status in (RunStatus.COMPLETED, RunStatus.ANSWERED):
+            self.assertTrue(RunReport("g", status, "m").ok)
+        for status in (RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.LIMITED, RunStatus.NEEDS_INPUT):
+            self.assertFalse(RunReport("g", status, "m").ok)
+
+
 if __name__ == "__main__":
     unittest.main()
