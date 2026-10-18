@@ -9,6 +9,11 @@ from statistics import mean
 
 
 def summarize(paths) -> dict:
+    """Aggregate finished run journals into completion rates and mean metrics.
+
+    Conversational answers are excluded from the task completion rate.
+    Never infers success from action counts.
+    """
     runs = {}
     invalid = 0
     for path in paths:
