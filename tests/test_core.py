@@ -349,6 +349,39 @@ class ProviderTests(unittest.TestCase):
                 prev_refresh=None,
             )
 
+    def test_oauth_callback_escapes_error_description_html(self) -> None:
+        # error_description comes from the authorization server (untrusted):
+        # the localhost error page must not reflect it into HTML raw.
+        from oauth_codex import _build_handler
+
+        import io as _io
+
+        class FakeCompletion:
+            def __init__(self):
+                self.set_calls = 0
+
+            def set(self):
+                self.set_calls += 1
+
+        result: dict[str, str] = {}
+        completion = FakeCompletion()
+        handler_cls = _build_handler(result, completion)
+        handler = handler_cls.__new__(handler_cls)
+        handler.path = (
+            "/auth/callback?error=access_denied"
+            "&error_description=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
+        )
+        handler.wfile = _io.BytesIO()
+        handler.send_response = lambda code: None  # type: ignore[method-assign]
+        handler.send_header = lambda k, v: None  # type: ignore[method-assign]
+        handler.end_headers = lambda: None  # type: ignore[method-assign]
+        handler.do_GET()
+
+        body = handler.wfile.getvalue().decode("utf-8")
+        self.assertNotIn("<script>", body)
+        self.assertIn("&lt;script&gt;", body)
+        self.assertEqual(completion.set_calls, 1)
+
 
 class LaunchSafetyTests(unittest.TestCase):
     def test_shell_metacharacters_are_rejected(self) -> None:

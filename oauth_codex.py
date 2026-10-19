@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import logging
 import math
@@ -281,7 +282,11 @@ def _build_handler(result: dict[str, str], completion: threading.Event):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             if "error" in params:
-                body = f"<h1>Sign-in failed</h1><p>{params.get('error_description', params['error'])}</p>"
+                # error_description comes from the authorization server; it is
+                # untrusted text, so escape it before embedding in HTML.
+                msg = html.escape(
+                    str(params.get("error_description", params["error"])))
+                body = f"<h1>Sign-in failed</h1><p>{msg}</p>"
             else:
                 body = "<h1>Signed in</h1><p>You can close this tab and return to Helper.</p>"
             self.wfile.write(body.encode("utf-8"))
