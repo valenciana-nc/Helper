@@ -18,11 +18,18 @@ from PyQt6.QtCore import QObject, pyqtSignal
 log = logging.getLogger("helper.v2bridge")
 
 
-def wav_to_pcm16(wav_bytes: bytes) -> bytes:
-    """Strip a WAV container → raw mono int16 PCM bytes (v1 records 16kHz)."""
+def wav_to_pcm16(wav_bytes: bytes, *, sample_rate: int = 16000) -> bytes:
+    """Strip a WAV container → raw mono int16 PCM bytes at `sample_rate` Hz.
+
+    v2's STT backend consumes 16 kHz audio, but v1's recorder runs at
+    HELPER_AUDIO_SAMPLE_RATE (env-configurable 8k–192k): without
+    resampling here, a non-16k recording reaches whisper at the wrong
+    speed and transcribes as gibberish.
+    """
     with wave.open(BytesIO(wav_bytes), "rb") as wf:
         n_channels = wf.getnchannels()
         sampwidth = wf.getsampwidth()
+        src_rate = wf.getframerate()
         frames = wf.readframes(wf.getnframes())
     import numpy as np
 
@@ -36,7 +43,30 @@ def wav_to_pcm16(wav_bytes: bytes) -> bytes:
         raise ValueError(f"Unsupported WAV sample width: {sampwidth}")
     if n_channels > 1:
         audio = audio.reshape(-1, n_channels).mean(axis=1).astype(np.int16)
-    return np.ascontiguousarray(audio).tobytes()
+    if src_rate != sample_rate and len(audio):
+        audio = _resample_int16(np.asarray(audio, dtype=np.float64),
+                                src_rate, sample_rate)
+    return np.ascontiguousarray(audio, dtype=np.int16).tobytes()
+
+
+def _resample_int16(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
+    """Linear-interpolation resample of mono float audio → int16.
+
+    numpy-only (no scipy): exact identity behavior aside, good enough for
+    STT input, and degenerate rates can never produce an oversized array
+    or a division by zero.
+    """
+    import numpy as np
+
+    if from_rate <= 0 or to_rate <= 0 or len(audio) == 0:
+        return np.zeros(0, dtype=np.int16)
+    n_out = int(round(len(audio) * to_rate / from_rate))
+    if n_out <= 0:
+        return np.zeros(0, dtype=np.int16)
+    positions = np.linspace(0.0, len(audio) - 1, n_out)
+    resampled = np.interp(positions, np.arange(len(audio), dtype=np.float64),
+                          audio)
+    return np.clip(resampled, -32768, 32767).astype(np.int16)
 
 
 def transcribe_v2(wav_bytes: bytes, *, prefer_local: bool = True) -> str:

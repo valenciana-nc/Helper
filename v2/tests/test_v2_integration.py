@@ -136,6 +136,31 @@ def test_wav_to_pcm16_stereo_to_mono():
     assert vals == (150, 350)
 
 
+def test_wav_to_pcm16_resamples_to_16k():
+    from v2_bridge import wav_to_pcm16
+
+    # DC signal: linear resampling must preserve both value and duration.
+    pcm = struct.pack("<4h", 1000, 1000, 1000, 1000)
+    out = wav_to_pcm16(_make_wav(pcm, framerate=8000))
+    vals = struct.unpack("<%dh" % (len(out) // 2), out)
+    assert len(vals) == 8  # 0.5ms @8k -> 0.5ms @16k
+    assert all(v == 1000 for v in vals)
+
+    pcm48 = struct.pack("<12h", *([2000] * 12))
+    out48 = wav_to_pcm16(_make_wav(pcm48, framerate=48000))
+    vals48 = struct.unpack("<%dh" % (len(out48) // 2), out48)
+    assert len(vals48) == 4  # 0.25ms @48k -> 0.25ms @16k
+    assert all(v == 2000 for v in vals48)
+
+
+def test_wav_to_pcm16_keeps_16k_bit_exact():
+    from v2_bridge import wav_to_pcm16
+
+    pcm = struct.pack("<8h", 100, -100, 1000, -1000, 500, -500, 0, 32767)
+    out = wav_to_pcm16(_make_wav(pcm, framerate=16000))
+    assert out == pcm  # no resampling touched
+
+
 def test_highlight_actuator_reports_rects():
     from v2_bridge import _HighlightActuator
 
