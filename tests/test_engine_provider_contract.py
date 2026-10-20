@@ -94,6 +94,17 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(roles, ["assistant", "user"])
         self.assertEqual(len(translated[0]["content"]), 2)
 
+    def test_gemini_merges_consecutive_same_role_messages(self):
+        messages = [
+            {"role": "assistant", "parts": [{"text": "first"}]},
+            {"role": "assistant", "parts": [{"text": "second"}]},
+            {"role": "user", "parts": [{"text": "reply"}]},
+        ]
+        translated, _ = _to_gemini_contents(messages)
+        roles = [m["role"] for m in translated]
+        self.assertEqual(roles, ["model", "user"])
+        self.assertEqual(len(translated[0]["parts"]), 2)
+
 
 class FinalReplyVisibilityTests(unittest.TestCase):
     @classmethod
