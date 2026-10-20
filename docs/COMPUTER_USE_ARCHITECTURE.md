@@ -1,11 +1,9 @@
 # Helper computer-use architecture
 
-This is the production replacement for v2's plan-once desktop executor.
-The floating orb, account/provider settings, chat, voice, cursor, and highlight
-widgets connect to one new runtime through engine_bridge.py. The engine is
-implemented from scratch in helper_engine. The v2 voice implementation is reused;
-the older v2 control implementation remains as a historical research baseline.
-Neither the desktop app nor either CLI entry point executes that older control loop.
+This is Helper's production observation-driven computer-use runtime. The
+floating orb, account/provider settings, chat, voice, cursor, and highlight
+widgets connect through `engine_bridge.py` to the engine implemented in
+`helper_engine`. Desktop tasks and CLI tasks use the same engine.
 
 ## What changed and why
 
@@ -85,9 +83,11 @@ application identity, current URL where available, warnings, and a unique ID.
 The model must echo that ID. Target IDs are short marks valid only for that
 observation; they resolve to cached live controls, never a fuzzy text search.
 Codex requests use strict JSON-schema output with an observation-specific ID
-and current target IDs. Other configured providers receive the same schema in
-their instructions, without assuming a shared structured-output API. Both paths
-still pass the same local semantic validation; malformed or stale output never
+and current target IDs. The provider receives no computer-use/action tools: it
+returns a decision, while the local runtime validates it and dispatches through
+its own Windows or browser drivers. Other configured providers receive the same
+schema in their instructions, without assuming a shared structured-output API.
+Both paths still pass the same local semantic validation; malformed or stale output never
 dispatches input. Nullable unused fields support the strict schema without
 accepting bare actions, type aliases, or flattened targets.
 
@@ -101,7 +101,7 @@ Windows keeps physical screen coordinates separate from downscaled image
 coordinates and preserves negative monitor origins. Browser screenshots use CSS
 pixel scale, matching DOM bounding boxes even on a high-DPI display.
 
-The computer-use frame, teaching overlays, and ghost cursor request Windows capture exclusion so
+The computer-use frame and ghost cursor request Windows capture exclusion so
 their animation does not become evidence of app progress. That mechanism depends
 on Windows/DWM support; it is not a secrecy guarantee.
 

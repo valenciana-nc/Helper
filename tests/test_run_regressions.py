@@ -54,7 +54,7 @@ class ModelFormatRegressions(unittest.TestCase):
 
     def test_custom_providers_keep_wire_compatibility_and_receive_full_schema(self):
         provider = Mock()
-        provider.chat.return_value = ChatResult("{}", [])
+        provider.chat.return_value = ChatResult("{}")
         client = OpenAIClient(custom_provider=provider)
         client.chat([{"role": "user", "parts": [{"text": "Check"}]}], model="custom", response_schema=VERIFICATION)
         kwargs = provider.chat.call_args.kwargs
@@ -275,7 +275,7 @@ class DesktopLifecycleRegressions(unittest.TestCase):
             app._audio = Mock()
             app._audio.stop_recording.return_value = SimpleNamespace(duration_sec=1, wav_bytes=b"fixture")
             called_on = []
-            with (patch("v2_bridge.transcribe_v2", return_value="Play my video"),
+            with (patch("voice_bridge.transcribe_audio", return_value="Play my video"),
                   patch.object(app._engine_runner, "start_goal", side_effect=lambda *a, **k: called_on.append(
                       threading.get_ident()) or True)):
                 worker = threading.Thread(target=app._finish_recording)
@@ -385,7 +385,7 @@ class DesktopLifecycleRegressions(unittest.TestCase):
         with self.desktop() as app:
             app._audio = Mock()
             first, second = Mock(), Mock()
-            with patch("v2.voice.TtsStreamer", side_effect=[first, second]) as factory:
+            with patch("helper_voice.TtsStreamer", side_effect=[first, second]) as factory:
                 app._speak_reply("First")
                 app._speak_reply("Second")
             factory.assert_called_with(model=main.TTS_MODEL, voice=main.TTS_VOICE)

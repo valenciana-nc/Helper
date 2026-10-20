@@ -25,9 +25,9 @@ Read the [architecture and design trade-offs](docs/COMPUTER_USE_ARCHITECTURE.md)
 - The CLI's explicit Help mode is enforced in the runtime: no desktop input is dispatched.
 - Metrics: observations, calls, bytes, action routes, elapsed time, and final status.
 
-The account/provider settings, PyQt interface, teaching overlays, and voice
-implementation are reused. The old v2 control modules remain as a research
-baseline; the app and both CLI entry points use the new runtime.
+The desktop app and CLI use the same observation-driven runtime. Voice input
+and speech output are provided separately by `audio_recorder.py` and
+`helper_voice.py`.
 
 ## Setup
 
@@ -59,7 +59,6 @@ The CLI keeps an explicit Help mode (no input dispatched), which is its default:
 .\.venv\Scripts\python.exe -m helper_engine --mode active "Open Notepad and enter hello"
 ~~~
 
-The compatibility command "python -m v2" delegates to the same new CLI.
 Desktop control targets the visible Windows session. Keep the target app
 available; Escape cancels desktop-app runs. CLI runs can be interrupted with Ctrl+C.
 
@@ -87,8 +86,8 @@ Hybrid mode uses Windows for desktop apps and DOM access when the selected tab
 matches the foreground Chrome/Edge title. It requires an explicit endpoint.
 Browser mode is more direct for a task confined to one selected tab.
 The adapter disconnects from an attached browser rather than closing it.
-Browser teaching uses chat instructions; desktop screen overlays currently apply
-to Windows observations, not CSS coordinates inside a browser viewport.
+Browser targets use DOM/CSS bounds. The desktop aura and pointer are not
+per-element highlights inside a browser viewport.
 
 ## Configuration
 
@@ -131,7 +130,7 @@ another agent. Current limitations and extension points are in the architecture 
 $env:QT_QPA_PLATFORM="offscreen"
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m compileall -q helper_engine engine_bridge.py main.py
-.\.venv\Scripts\python.exe -m pytest tests v2/tests -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 ~~~
 
 Tests use deterministic models, synthetic frames, and mocked device APIs.

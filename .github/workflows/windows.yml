@@ -30,7 +30,7 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest tests v2/tests -q
+        run: python -m pytest tests -q
 
       - name: Install isolated browser test runtime
         run: |

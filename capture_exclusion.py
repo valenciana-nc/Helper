@@ -1,4 +1,4 @@
-"""Keep Helper's teaching overlays out of the screenshots used for feedback."""
+"""Keep Helper's passive desktop decorations out of model screenshots."""
 from __future__ import annotations
 
 import ctypes

@@ -45,14 +45,13 @@ from ui_chat import ChatWindow
 from ui_computer_use import ComputerUseManager
 from ui_dashboard import DashboardWindow
 from ui_ghost_cursor import GhostCursorManager
-from ui_overlay import OverlayManager
 from ui_widget import ChatStatusPill, FloatingCircle
 from windows_integration import configure_windows_app_identity, ensure_windows_shortcuts
 
 log = logging.getLogger("helper")
 
 if TYPE_CHECKING:
-    from audio_handler import AudioHandler
+    from audio_recorder import AudioRecorder
 
 
 ALIASES = {
@@ -108,10 +107,6 @@ def key_name(key: object) -> str | None:
 class HelplerDesktopApp(QObject):
     widget_state_requested = pyqtSignal(str)
     caption_changed = pyqtSignal(str)
-    overlay_highlight_requested = pyqtSignal(
-        int, int, int, int, str, int, int, int
-    )
-    overlay_clear_requested = pyqtSignal()
     ghost_clear_requested = pyqtSignal()
     agent_message_received = pyqtSignal(str)
     user_message_received = pyqtSignal(str)
@@ -146,7 +141,7 @@ class HelplerDesktopApp(QObject):
         # credential-manager round-trip. Refreshed on auth transitions via
         # _handle_auth_changed().
         self._cached_signed_in: bool | None = None
-        # The same typed runtime serves chat, voice, teaching, and active control.
+        # The same typed runtime serves chat, voice, and active control.
         from engine_bridge import EngineRunner
 
         self._engine_abort = Event()
@@ -174,13 +169,11 @@ class HelplerDesktopApp(QObject):
             conversations_provider=self._conversations_snapshot,
         )
         self._dashboard.setWindowIcon(self._app_icon)
-        self._overlay = OverlayManager(app)
         self._computer_use = ComputerUseManager(app, self)
         self._ghost_cursor = GhostCursorManager(app)
-        self._audio: AudioHandler | None = None
+        self._audio: AudioRecorder | None = None
         self._tts = None
         self._listener = None
-        self._mouse_listener = None
         self._lock = Lock()
         self._pressed: set[str] = set()
         self._recording_active = False
@@ -198,8 +191,6 @@ class HelplerDesktopApp(QObject):
 
         self.widget_state_requested.connect(self._widget.set_state)
         self.caption_changed.connect(self._widget.set_caption)
-        self.overlay_highlight_requested.connect(self._overlay.show_highlight)
-        self.overlay_clear_requested.connect(self._overlay.clear)
         self.ghost_clear_requested.connect(self._ghost_cursor.clear)
         self.agent_message_received.connect(self._handle_agent_message)
         self.user_message_received.connect(self._handle_user_message)
@@ -281,11 +272,11 @@ class HelplerDesktopApp(QObject):
 
         self._backend_initializing = True
         try:
-            from pynput import keyboard, mouse
+            from pynput import keyboard
 
             try:
-                from audio_handler import AudioHandler
-                audio = AudioHandler()
+                from audio_recorder import AudioRecorder
+                audio = AudioRecorder()
             except Exception:
                 audio = None
                 log.exception("Voice unavailable; keyboard and typed chat remain available")
@@ -293,17 +284,14 @@ class HelplerDesktopApp(QObject):
                 on_press=self._on_press,
                 on_release=self._on_release,
             )
-            mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
 
             self._audio = audio
             self._listener = listener
-            self._mouse_listener = mouse_listener
 
             if self._shutting_down:
                 return
 
             self._listener.start()
-            self._mouse_listener.start()
             self._backend_ready = True
             self._backend_error = None
             self.widget_state_requested.emit(FloatingCircle.IDLE)
@@ -315,7 +303,6 @@ class HelplerDesktopApp(QObject):
             log.exception("Backend init failed")
             self._audio = None
             self._listener = None
-            self._mouse_listener = None
             self._backend_ready = False
             self._backend_error = str(exc)
             self.caption_changed.emit(f"Startup failed: {str(exc)[:60]}")
@@ -342,15 +329,11 @@ class HelplerDesktopApp(QObject):
         self._persist_active_conversation()
         if self._listener is not None:
             self._listener.stop()
-        if self._mouse_listener is not None:
-            self._mouse_listener.stop()
         if self._audio is not None:
             self._audio.cancel_recording()
-            self._audio.stop_playback()
         self._chat_window.hide()
         self._status_pill.hide()
         self._dashboard.hide()
-        self._overlay.clear()
         self._ghost_cursor.clear()
         self._widget.hide()
         self._status_pill.hide()
@@ -427,11 +410,8 @@ class HelplerDesktopApp(QObject):
         self._engine_abort.set()
         self._computer_use.set_active(False)
         self._stop_speech()
-        if self._audio is not None:
-            self._audio.stop_playback()
         if self._chat_window.isVisible():
             self._toggle_chat_window()
-        self.overlay_clear_requested.emit()
         self._ghost_cursor.clear()
         log.info("Goal aborted by user.")
 
@@ -700,10 +680,6 @@ class HelplerDesktopApp(QObject):
             self.widget_state_requested.emit(FloatingCircle.THINKING)
             Thread(target=self._finish_recording, daemon=True).start()
 
-    def _on_mouse_click(self, x: int, y: int, button, pressed: bool) -> None:
-        # Reserved for future v2 use (e.g. user-demonstration capture).
-        del x, y, button, pressed
-
     def _start_voice_recording(self) -> None:
         if not self._backend_ready or self._audio is None or self._widget.muted:
             return
@@ -741,9 +717,9 @@ class HelplerDesktopApp(QObject):
         try:
             recording = self._audio.stop_recording()
             log.info("Captured %.2fs. Transcribing...", recording.duration_sec)
-            from v2_bridge import transcribe_v2
+            from voice_bridge import transcribe_audio
 
-            transcript = transcribe_v2(recording.wav_bytes).strip()
+            transcript = transcribe_audio(recording.wav_bytes).strip()
             log.info("Voice transcription completed (characters=%d).", len(transcript))
             if transcript:
                 # The recorder runs off-thread. Timers, widgets, and task admission belong to Qt's thread.
@@ -826,7 +802,6 @@ class HelplerDesktopApp(QObject):
 
     def _on_engine_finished(self, ok: bool) -> None:
         self._computer_use.set_active(False)
-        self.overlay_clear_requested.emit()
         self._ghost_cursor.clear()
         self._reset_busy_state()
         self.widget_state_requested.emit(FloatingCircle.IDLE)
@@ -835,7 +810,7 @@ class HelplerDesktopApp(QObject):
         log.info("Helper goal finished ok=%s", ok)
 
     def _speak_reply(self, text: str) -> None:
-        """Speak via v2's streaming TTS (sentence-chunked, barge-in capable)."""
+        """Speak via the streaming TTS runtime (sentence-chunked, barge-in capable)."""
         message = (text or "").strip()
         if not message or self._audio is None or self._widget.muted:
             return
@@ -843,14 +818,14 @@ class HelplerDesktopApp(QObject):
             return
         self.widget_state_requested.emit(FloatingCircle.SPEAKING)
         try:
-            from v2.voice import TtsStreamer
+            from helper_voice import TtsStreamer
 
             self._stop_speech()
             # A fresh cancellation token avoids joining an old HTTP synthesis call on Qt's thread.
             self._tts = TtsStreamer(model=TTS_MODEL, voice=TTS_VOICE)
             self._tts.speak([message])
         except Exception as exc:
-            log.exception("v2 TTS failed: %s", exc)
+            log.exception("TTS failed: %s", exc)
 
     def _start_goal(self, goal: str, *, speak: bool = False) -> None:
         if self._engine_runner is None or self._shutting_down:

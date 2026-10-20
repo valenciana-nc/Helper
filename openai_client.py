@@ -54,23 +54,15 @@ class UnsupportedModel(ProviderError):
 
 
 @dataclass(frozen=True)
-class ToolCall:
-    name: str
-    arguments: dict[str, Any]
-    call_id: str | None = None
-
-
-@dataclass(frozen=True)
 class ChatResult:
     text: str
-    tool_calls: list[ToolCall]
 
 
 class InvalidChatRequest(ProviderError):
     """A local caller passed messages no provider adapter can serialize."""
 
 
-_NEUTRAL_PART_KEYS = frozenset({"text", "image_png", "function_call", "function_response"})
+_NEUTRAL_PART_KEYS = frozenset({"text", "image_png"})
 
 
 def _require_neutral_messages(messages: list[dict[str, Any]]) -> None:
@@ -105,204 +97,6 @@ READ_TIMEOUT_SEC = 120
 MAX_RETRIES = 2
 
 
-ROUTE_CLASSIFIER_PROMPT = (
-    "Classify the user message as one of two words and reply with ONLY that single word:\n"
-    "- 'act' if the user wants Helper to operate the Windows desktop "
-    "(click, type, open a site/app, navigate, scroll, search the web, fill a form, etc.).\n"
-    "- 'chat' if the user is making conversation, asking a factual question, "
-    "or asking how to do something themselves.\n"
-    "Reply with exactly one word: act or chat. No punctuation. No explanation."
-)
-
-
-COMPUTER_USE_TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "name": "click_at",
-        "description": "Click at the given normalized point (0-1000) on the screenshot.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["x", "y"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "double_click_at",
-        "description": "Double-click at the given normalized point (0-1000).",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["x", "y"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "right_click_at",
-        "description": "Right-click at the given normalized point (0-1000).",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["x", "y"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "hover_at",
-        "description": "Move the cursor over the given normalized point (0-1000).",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-            },
-            "required": ["x", "y"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "type_text_at",
-        "description": "Click the point and then type text into it.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "text": {"type": "string"},
-                "press_enter": {"type": "boolean"},
-                "clear_before_typing": {"type": "boolean"},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["x", "y", "text"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "key_combination",
-        "description": "Press a keyboard combination (e.g. 'ctrl+s', 'alt+tab').",
-        "parameters": {
-            "type": "object",
-                "properties": {
-                    "keys": {"type": "string"},
-                    "safety_decision": {
-                        "type": "object",
-                        "properties": {
-                            "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                            "explanation": {"type": "string"},
-                        },
-                    },
-                },
-            "required": ["keys"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "scroll_at",
-        "description": "Scroll at the given normalized point.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "y": {"type": "integer", "minimum": 0, "maximum": 1000},
-                "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
-            },
-            "required": ["x", "y", "direction"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "scroll_document",
-        "description": "Scroll the whole document/window.",
-        "parameters": {
-            "type": "object",
-            "properties": {"direction": {"type": "string", "enum": ["up", "down", "left", "right"]}},
-            "required": ["direction"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "drag_and_drop",
-        "description": "Drag from one normalized point to another.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "x": {"type": "integer"},
-                "y": {"type": "integer"},
-                "destination_x": {"type": "integer"},
-                "destination_y": {"type": "integer"},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["x", "y", "destination_x", "destination_y"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "navigate",
-        "description": "Navigate the browser to a URL.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string"},
-                "safety_decision": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["proceed", "require_confirmation"]},
-                        "explanation": {"type": "string"},
-                    },
-                },
-            },
-            "required": ["url"],
-        },
-    },
-    {"type": "function", "name": "open_web_browser", "description": "Open the default web browser.", "parameters": {"type": "object", "properties": {}}},
-    {"type": "function", "name": "wait_5_seconds", "description": "Wait five seconds for the UI to settle.", "parameters": {"type": "object", "properties": {}}},
-    {"type": "function", "name": "go_back", "description": "Navigate back.", "parameters": {"type": "object", "properties": {}}},
-    {"type": "function", "name": "go_forward", "description": "Navigate forward.", "parameters": {"type": "object", "properties": {}}},
-]
-
-
 class OpenAIClient:
     def __init__(
         self,
@@ -314,9 +108,7 @@ class OpenAIClient:
     ) -> None:
         self._api_key = optional_api_key or None
         self._session = requests.Session()
-        # `_custom` is any provider that implements chat/computer_use_step/
-        # classify_route — ChatCompletionsProvider, AnthropicProvider, or
-        # GeminiProvider. When set, it bypasses the Codex OAuth path entirely.
+        # `_custom` bypasses the Codex OAuth path for configured providers.
         self._custom = custom_provider
         self._custom_model = (custom_model or "").strip() or None
         self._codex = codex_provider or CodexProvider(self._session)
@@ -360,77 +152,6 @@ class OpenAIClient:
                                       "strict": True, "schema": response_schema}}
         payload = self._codex.post_response(body)
         return _parse_response(payload)
-
-    def computer_use_step(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        model: str,
-        system_prompt: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-    ) -> ChatResult:
-        _require_neutral_messages(messages)
-        if self._custom is not None:
-            return self._custom.computer_use_step(
-                messages,
-                model=self._custom_model or model,
-                system_prompt=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        model = self._codex_model(model)
-        body = {
-            "model": model,
-            "store": False,
-            "stream": True,
-            "instructions": system_prompt or "",
-            "input": _to_responses_input(messages, None),
-            "tools": COMPUTER_USE_TOOLS,
-            "tool_choice": "auto",
-        }
-        payload = self._codex.post_response(body)
-        return _parse_response(payload)
-
-    def classify_route(self, text: str, *, model: str) -> str:
-        """Classify a user message as 'act' (computer-use intent) or 'chat'.
-
-        Returns the literal word reported by the model, or empty string on any
-        failure. Callers are expected to apply their own safe default.
-        """
-        message = (text or "").strip()
-        if not message:
-            return ""
-        if self._custom is not None:
-            return self._custom.classify_route(message, model=self._custom_model or model)
-        model = self._codex_model(model)
-        body = {
-            "model": model,
-            "store": False,
-            "stream": False,
-            "instructions": ROUTE_CLASSIFIER_PROMPT,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": message[:500]}],
-                }
-            ],
-        }
-        try:
-            payload = self._codex.post_response(body)
-        except ProviderError as exc:
-            log.warning("Route classifier call failed: %s", exc)
-            return ""
-        try:
-            result = _parse_response(payload)
-        except BadProviderResponse as exc:
-            log.warning("Route classifier returned unreadable response: %s", exc)
-            return ""
-        word = (result.text or "").strip().lower().split()
-        if not word:
-            return ""
-        token = word[0].strip(".,'\"!?")
-        return token
 
     def transcribe(self, wav_bytes: bytes, *, model: str) -> str:
         if not self._api_key:
@@ -567,16 +288,7 @@ class CodexProvider:
 
 
 def _to_responses_input(messages: list[dict[str, Any]], system_prompt: str | None) -> list[dict[str, Any]]:
-    """Translate neutral history-message dicts into the Responses API `input` array.
-
-    Neutral message shape:
-        {"role": "user"|"assistant"|"system", "parts": [
-            {"text": str},
-            {"image_png": bytes},
-            {"function_call": {"name": str, "arguments": dict, "call_id": str|None}},
-            {"function_response": {"name": str, "response": dict, "call_id": str|None}},
-        ]}
-    """
+    """Translate neutral text/image messages into the Responses API input shape."""
     out: list[dict[str, Any]] = []
     if system_prompt:
         out.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
@@ -584,50 +296,16 @@ def _to_responses_input(messages: list[dict[str, Any]], system_prompt: str | Non
     for msg in messages:
         role = msg.get("role", "user")
         parts = msg.get("parts") or []
-
-        if role == "assistant":
-            content_items: list[dict[str, Any]] = []
-            for part in parts:
-                if "text" in part and part["text"]:
-                    content_items.append({"type": "output_text", "text": part["text"]})
-                elif "function_call" in part:
-                    fc = part["function_call"]
-                    out.append({
-                        "type": "function_call",
-                        "name": fc["name"],
-                        "arguments": json.dumps(fc.get("arguments") or {}),
-                        "call_id": fc.get("call_id") or f"call_{fc['name']}",
-                    })
-            if content_items:
-                out.append({"role": "assistant", "content": content_items})
-            continue
-
-        if role == "system":
-            text_chunks = [p["text"] for p in parts if "text" in p and p["text"]]
-            if text_chunks:
-                out.append({"role": "system", "content": [{"type": "input_text", "text": " ".join(text_chunks)}]})
-            continue
-
-        # user / tool roles
         content_items = []
         for part in parts:
             if "text" in part and part["text"]:
-                content_items.append({"type": "input_text", "text": part["text"]})
+                content_type = "output_text" if role == "assistant" else "input_text"
+                content_items.append({"type": content_type, "text": part["text"]})
             elif "image_png" in part and part["image_png"]:
                 b64 = base64.b64encode(part["image_png"]).decode("ascii")
-                content_items.append({
-                    "type": "input_image",
-                    "image_url": f"data:image/png;base64,{b64}",
-                })
-            elif "function_response" in part:
-                fr = part["function_response"]
-                out.append({
-                    "type": "function_call_output",
-                    "call_id": fr.get("call_id") or f"call_{fr['name']}",
-                    "output": json.dumps(fr.get("response") or {}),
-                })
+                content_items.append({"type": "input_image", "image_url": f"data:image/png;base64,{b64}"})
         if content_items:
-            out.append({"role": "user", "content": content_items})
+            out.append({"role": role, "content": content_items})
     return out
 
 
@@ -640,7 +318,6 @@ def _parse_response(payload: dict[str, Any]) -> ChatResult:
         raise BadProviderResponse("ChatGPT/Codex response output was not a list.")
 
     text_chunks: list[str] = []
-    tool_calls: list[ToolCall] = []
 
     for item in output:
         if not isinstance(item, dict):
@@ -656,20 +333,8 @@ def _parse_response(payload: dict[str, Any]) -> ChatResult:
                 text = content.get("text")
                 if content.get("type") in ("output_text", "text") and isinstance(text, str) and text:
                     text_chunks.append(text)
-        elif item_type == "function_call":
-            try:
-                args = json.loads(item.get("arguments") or "{}")
-            except json.JSONDecodeError:
-                raw_arguments = str(item.get("arguments") or "")
-                log.warning("Could not parse tool arguments (length=%d)", len(raw_arguments))
-                args = {}
-            tool_calls.append(ToolCall(
-                name=str(item.get("name") or ""),
-                arguments=args,
-                call_id=item.get("call_id"),
-            ))
 
-    return ChatResult(text=" ".join(c.strip() for c in text_chunks if c.strip()), tool_calls=tool_calls)
+    return ChatResult(text=" ".join(c.strip() for c in text_chunks if c.strip()))
 
 
 def _parse_stream_response(text: str, request_id: str, json_error: ValueError | None = None) -> dict[str, Any]:
@@ -812,51 +477,6 @@ class ChatCompletionsProvider:
         payload = self._post(body)
         return _parse_chat_completions(payload)
 
-    def computer_use_step(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        model: str,
-        system_prompt: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-    ) -> ChatResult:
-        body: dict[str, Any] = {
-            "model": model,
-            "messages": _to_chat_completions_messages(messages, system_prompt),
-            "tools": _chat_completions_tools(COMPUTER_USE_TOOLS),
-            "tool_choice": "auto",
-        }
-        if temperature is not None:
-            body["temperature"] = float(temperature)
-        if max_tokens is not None:
-            body["max_tokens"] = int(max_tokens)
-        payload = self._post(body)
-        return _parse_chat_completions(payload)
-
-    def classify_route(self, text: str, *, model: str) -> str:
-        body = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": ROUTE_CLASSIFIER_PROMPT},
-                {"role": "user", "content": text[:500]},
-            ],
-        }
-        try:
-            payload = self._post(body)
-        except ProviderError as exc:
-            log.warning("Route classifier call failed: %s", exc)
-            return ""
-        try:
-            result = _parse_chat_completions(payload)
-        except BadProviderResponse as exc:
-            log.warning("Route classifier returned unreadable response: %s", exc)
-            return ""
-        word = (result.text or "").strip().lower().split()
-        if not word:
-            return ""
-        return word[0].strip(".,'\"!?")
-
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         url = f"{self._base_url}/chat/completions"
         headers = {
@@ -932,7 +552,7 @@ def _to_chat_completions_messages(
     messages: list[dict[str, Any]],
     system_prompt: str | None,
 ) -> list[dict[str, Any]]:
-    """Translate neutral history-message dicts into chat-completions messages."""
+    """Translate neutral text/image history into chat-completions messages."""
     out: list[dict[str, Any]] = []
     if system_prompt:
         out.append({"role": "system", "content": system_prompt})
@@ -940,79 +560,32 @@ def _to_chat_completions_messages(
     for msg in messages:
         role = msg.get("role", "user")
         parts = msg.get("parts") or []
-
-        if role == "assistant":
-            text_chunks: list[str] = []
-            tool_calls: list[dict[str, Any]] = []
-            for part in parts:
-                if "text" in part and part["text"]:
-                    text_chunks.append(part["text"])
-                elif "function_call" in part:
-                    fc = part["function_call"]
-                    tool_calls.append({
-                        "id": fc.get("call_id") or f"call_{fc['name']}",
-                        "type": "function",
-                        "function": {
-                            "name": fc["name"],
-                            "arguments": json.dumps(fc.get("arguments") or {}),
-                        },
-                    })
-            entry: dict[str, Any] = {"role": "assistant"}
-            entry["content"] = " ".join(text_chunks) if text_chunks else None
-            if tool_calls:
-                entry["tool_calls"] = tool_calls
-            out.append(entry)
-            continue
-
+        text_chunks = [part["text"] for part in parts if part.get("text")]
         if role == "system":
-            text_chunks = [p["text"] for p in parts if "text" in p and p["text"]]
             if text_chunks:
                 out.append({"role": "system", "content": " ".join(text_chunks)})
             continue
+        if role == "assistant":
+            if text_chunks:
+                out.append({"role": "assistant", "content": " ".join(text_chunks)})
+            continue
 
-        # user / tool roles
-        content_items: list[dict[str, Any]] = []
-        deferred_tool_outputs: list[dict[str, Any]] = []
+        content_items: list[dict[str, Any]] = [
+            {"type": "text", "text": text} for text in text_chunks
+        ]
         for part in parts:
-            if "text" in part and part["text"]:
-                content_items.append({"type": "text", "text": part["text"]})
-            elif "image_png" in part and part["image_png"]:
+            if "image_png" in part and part["image_png"]:
                 b64 = base64.b64encode(part["image_png"]).decode("ascii")
                 content_items.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/png;base64,{b64}"},
                 })
-            elif "function_response" in part:
-                fr = part["function_response"]
-                deferred_tool_outputs.append({
-                    "role": "tool",
-                    "tool_call_id": fr.get("call_id") or f"call_{fr['name']}",
-                    "content": json.dumps(fr.get("response") or {}),
-                })
         if content_items:
-            # Some providers only accept string content for simple text-only turns.
             if len(content_items) == 1 and content_items[0].get("type") == "text":
                 out.append({"role": "user", "content": content_items[0]["text"]})
             else:
                 out.append({"role": "user", "content": content_items})
-        out.extend(deferred_tool_outputs)
     return out
-
-
-def _chat_completions_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    wrapped: list[dict[str, Any]] = []
-    for tool in tools:
-        if tool.get("type") != "function":
-            continue
-        wrapped.append({
-            "type": "function",
-            "function": {
-                "name": tool.get("name", ""),
-                "description": tool.get("description", ""),
-                "parameters": tool.get("parameters") or {"type": "object", "properties": {}},
-            },
-        })
-    return wrapped
 
 
 def _parse_chat_completions(payload: dict[str, Any]) -> ChatResult:
@@ -1042,28 +615,7 @@ def _parse_chat_completions(payload: dict[str, Any]) -> ChatResult:
         ]
         text = " ".join(chunk.strip() for chunk in chunks if chunk.strip())
 
-    tool_calls: list[ToolCall] = []
-    raw_tool_calls = message.get("tool_calls") or []
-    if not isinstance(raw_tool_calls, list):
-        raise BadProviderResponse("Custom API tool_calls was not a list.")
-    for call in raw_tool_calls:
-        if not isinstance(call, dict):
-            raise BadProviderResponse("Custom API response contained an invalid tool call.")
-        fn = call.get("function") or {}
-        if not isinstance(fn, dict):
-            raise BadProviderResponse("Custom API response contained an invalid tool function.")
-        raw_args = fn.get("arguments") or "{}"
-        try:
-            args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
-        except json.JSONDecodeError:
-            log.warning("Could not parse tool arguments (length=%d)", len(str(raw_args)))
-            args = {}
-        tool_calls.append(ToolCall(
-            name=str(fn.get("name") or ""),
-            arguments=args if isinstance(args, dict) else {},
-            call_id=call.get("id"),
-        ))
-    return ChatResult(text=text, tool_calls=tool_calls)
+    return ChatResult(text=text)
 
 
 def make_openai_client(

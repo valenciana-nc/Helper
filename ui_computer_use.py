@@ -85,7 +85,7 @@ class ComputerUseWindow(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._sync_to_screen()
         screen.geometryChanged.connect(self._sync_to_screen)
-        # Like the teaching overlays, the frame is presentation, not model evidence.
+        # The frame is presentation, not model evidence.
         exclude_from_capture(self)
 
     def _sync_to_screen(self, *_args) -> None:

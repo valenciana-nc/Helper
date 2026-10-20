@@ -245,13 +245,11 @@ class ComputerUseUITests(unittest.TestCase):
         self.assertEqual(body.alpha(), 255)
         self.assertLess(body.lightness(), 80)
 
-    def test_active_pointer_does_not_cover_the_target_with_a_box_or_caption(self):
+    def test_active_control_uses_only_the_glowing_pointer(self):
         with self.desktop() as app:
-            with (patch.object(app._ghost_cursor, "animate_to") as pointer,
-                  patch.object(app._overlay, "show_highlight") as box):
+            with patch.object(app._ghost_cursor, "animate_to") as pointer:
                 app._on_engine_highlight(100, 200, 80, 24, "Click the browser search box")
             pointer.assert_called_once_with(140, 212)
-            box.assert_not_called()
 
 
 if __name__ == "__main__":

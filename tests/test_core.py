@@ -222,23 +222,11 @@ class AnthropicProviderTests(unittest.TestCase):
 
 
 class ProviderTests(unittest.TestCase):
-    def test_parse_response_reads_text_and_tool_calls(self) -> None:
+    def test_parse_response_reads_text(self) -> None:
         result = _parse_response(
-            {
-                "output": [
-                    {"type": "message", "content": [{"type": "output_text", "text": "hello"}]},
-                    {
-                        "type": "function_call",
-                        "name": "click_at",
-                        "arguments": '{"x":1,"y":2}',
-                        "call_id": "call_1",
-                    },
-                ]
-            }
+            {"output": [{"type": "message", "content": [{"type": "output_text", "text": "hello"}]}]}
         )
         self.assertEqual(result.text, "hello")
-        self.assertEqual(result.tool_calls[0].name, "click_at")
-        self.assertEqual(result.tool_calls[0].call_id, "call_1")
 
     def test_parse_response_rejects_non_object(self) -> None:
         with self.assertRaises(BadProviderResponse):
@@ -251,22 +239,6 @@ class ProviderTests(unittest.TestCase):
     def test_chat_completions_parser_rejects_malformed_choice(self) -> None:
         with self.assertRaises(BadProviderResponse):
             _parse_chat_completions({"choices": [None]})  # type: ignore[list-item]
-
-    def test_parse_response_keeps_malformed_tool_call_with_empty_args(self) -> None:
-        result = _parse_response(
-            {
-                "output": [
-                    {
-                        "type": "function_call",
-                        "name": "click_at",
-                        "arguments": "{bad json",
-                        "call_id": "call_bad",
-                    }
-                ]
-            }
-        )
-        self.assertEqual(result.tool_calls[0].arguments, {})
-        self.assertEqual(result.tool_calls[0].call_id, "call_bad")
 
     def test_parse_stream_response_reads_completed_output_item(self) -> None:
         payload = _parse_stream_response(
@@ -529,7 +501,7 @@ class ConversationStoreTests(unittest.TestCase):
             convo.title = "v1"
             store.save(convo)
 
-            convo.add_message("user", "v2")
+            convo.add_message("user", "legacy")
             convo.title = "v1"
             store.save(convo)
 
