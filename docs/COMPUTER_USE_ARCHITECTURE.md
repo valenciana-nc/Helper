@@ -1,11 +1,9 @@
 # Helper computer-use architecture
 
-This is the production replacement for v2's plan-once desktop executor.
-The floating orb, account/provider settings, chat, voice, cursor, and highlight
-widgets connect to one new runtime through engine_bridge.py. The engine is
-implemented from scratch in helper_engine. The v2 voice implementation is reused;
-the older v2 control implementation remains as a historical research baseline.
-Neither the desktop app nor either CLI entry point executes that older control loop.
+This is Helper's production observation-driven computer-use runtime. The
+floating orb, account/provider settings, chat, voice, cursor, and highlight
+widgets connect through `engine_bridge.py` to the engine implemented in
+`helper_engine`. Desktop tasks and CLI tasks use the same engine.
 
 ## What changed and why
 
@@ -19,7 +17,9 @@ differently. UI mode selection affected appearance without constraining input.
 The replacement gives every decision an observation ID, makes operations typed,
 revalidates targets immediately before input, records whether an operation was
 applied/rejected/unknown, and makes completion a separate verification decision.
-Help mode cannot call the execution driver.
+The desktop uses one conversation: the model answers questions and performs actions
+only for requests to operate the computer. There is no desktop mode switch.
+The CLI still offers explicit Help mode, which cannot call the execution driver.
 
 ## Execution path
 
@@ -58,7 +58,8 @@ while still avoiding a model round trip per physical keystroke.
 | Module | Responsibility |
 |---|---|
 | types.py | Immutable observations, elements, geometry, typed actions, receipts, reports |
-| protocol.py | Strict JSON schema, action names, bounded values, target geometry, confidence |
+| protocol.py | Local validation of JSON, action names, bounded values, target geometry, confidence |
+| schemas.py | Provider output schemas, bound to the current observation ID and exposed element IDs |
 | ports.py | Small model and driver interfaces; no Qt or platform imports |
 | runtime.py | Task budgets, cancellation, teaching/active modes, bounded recovery, completion |
 | model.py | Existing configured provider, current screenshot and compact task context |
@@ -73,6 +74,7 @@ while still avoiding a model round trip per physical keystroke.
 | journal.py | Optional metadata-only JSONL records |
 | evaluate.py | Summarizes run status, time, calls, actions, bytes and routes |
 | engine_bridge.py | Worker-thread execution, queued Qt presentation signals and approval dialog |
+| ui_computer_use.py | Passive lavender edge aura and violet/white banner during computer actions; capture exclusion and multi-monitor layout |
 
 ## Observation and targeting rules
 
@@ -80,6 +82,14 @@ An observation includes the screenshot, origin and scale, visible controls,
 application identity, current URL where available, warnings, and a unique ID.
 The model must echo that ID. Target IDs are short marks valid only for that
 observation; they resolve to cached live controls, never a fuzzy text search.
+Codex requests use strict JSON-schema output with an observation-specific ID
+and current target IDs. The provider receives no computer-use/action tools: it
+returns a decision, while the local runtime validates it and dispatches through
+its own Windows or browser drivers. Other configured providers receive the same
+schema in their instructions, without assuming a shared structured-output API.
+Both paths still pass the same local semantic validation; malformed or stale output never
+dispatches input. Nullable unused fields support the strict schema without
+accepting bare actions, type aliases, or flattened targets.
 
 For custom controls, the model can supply a normalized screenshot bounding box
 and confidence of at least 0.85. Confidence is a model estimate, not a measured
@@ -91,7 +101,7 @@ Windows keeps physical screen coordinates separate from downscaled image
 coordinates and preserves negative monitor origins. Browser screenshots use CSS
 pixel scale, matching DOM bounding boxes even on a high-DPI display.
 
-Teaching overlays and the ghost cursor request Windows capture exclusion so
+The computer-use frame and ghost cursor request Windows capture exclusion so
 their animation does not become evidence of app progress. That mechanism depends
 on Windows/DWM support; it is not a secrecy guarantee.
 
@@ -142,17 +152,21 @@ not claim exact billable image tokens, which vary by model and provider.
 - A parser or model error cannot create a successful empty plan.
 - Invalid schemas get bounded correction opportunities and perform no input.
 - Stale decisions cause a fresh observation and new grounding.
+- Validation errors before dispatch never become receipts claiming a possible click.
+  Cancellation is checked again after validation and after presentation callbacks.
 - Ambiguous post-dispatch effects prevent repeating the matching non-idempotent action.
 - Repeated clicks on unchanged state are blocked and eventually request user help.
   "Unchanged" compares each control's name, role, geometry, value, and state
   flags (enabled, visible, focused, password), so a newly enabled button is
   never mistaken for the same scene.
 - Receipts are created before post-action waiting, preserving effects on cancellation.
-- Escape, mode changes, and shutdown request cancellation. The runtime checks
+- Escape and shutdown request cancellation. The desktop frame hides immediately on Escape.
+  The runtime checks
   before model calls, after them, during waits, and immediately before input.
 - In-flight HTTP/model calls and individual native/browser calls are not instantly
   interruptible. Their existing transport/driver timeout applies; no next action
   is dispatched after cancellation is observed.
+- Journal failures cannot disable task execution, hide presentation events, or leave the runner busy.
 - Budgets bound decisions, model calls, elapsed time between blocking calls, and
   waiting for the user. The outcome distinguishes completed, answered,
   needs_input, failed, cancelled, and limited.

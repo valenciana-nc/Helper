@@ -1,11 +1,11 @@
-"""Streaming voice for Helper-E v2: VAD, streaming STT, streaming TTS.
+"""Streaming voice runtime: VAD, streaming STT, streaming TTS.
 
 Design notes
 ------------
 * No Qt anywhere in this module.
 * All heavy imports are lazy (function-level): ``torch`` (Silero VAD),
-  ``faster_whisper`` (local STT), ``sounddevice`` (playback) and v1's
-  ``openai_client`` (cloud STT/TTS fallback). Importing this module never
+  ``faster_whisper`` (local STT), ``sounddevice`` (playback) and the configured
+  OpenAI voice client (cloud STT/TTS fallback). Importing this module never
   crashes and never pulls in heavy dependencies.
 * Audio currency is 16 kHz mono int16 PCM bytes (``pcm16_16k``).
 * Threading: ``SttStreamer.feed`` is safe to call from an audio-callback
@@ -158,7 +158,7 @@ class SileroVad:
 
 
 # ---------------------------------------------------------------------------
-# Cloud helpers (v1 reuse, lazy)
+# Cloud helpers (lazy)
 # ---------------------------------------------------------------------------
 
 def _openai_api_key() -> str | None:
@@ -167,20 +167,20 @@ def _openai_api_key() -> str | None:
     if key:
         return key
     try:
-        from config import OPENAI_API_KEY  # v1 config; loads .env
+        from config import OPENAI_API_KEY  # Loads .env
     except Exception:
         return None
     return (OPENAI_API_KEY or "").strip() or None
 
 
-def _v1_openai_client(api_key: str):
-    """Lazily build v1's OpenAIClient for cloud audio APIs."""
+def _openai_voice_client(api_key: str):
+    """Lazily build the OpenAI client used by cloud audio APIs."""
     try:
         from openai_client import OpenAIClient
     except ImportError as exc:
         raise RuntimeError(
-            "Cloud audio needs v1's openai_client module on sys.path "
-            "(run from the Helper-E repo root)."
+            "Cloud audio needs Helper's openai_client module on sys.path "
+            "(run from the Helper repository root)."
         ) from exc
     return OpenAIClient(optional_api_key=api_key)
 
@@ -211,7 +211,7 @@ class _LocalWhisperBackend:
 
 
 class _CloudWhisperBackend:
-    """whisper-1 via v1's openai_client. No partials — single-shot transcribe."""
+    """whisper-1 via the configured client. No partials — single-shot transcribe."""
 
     def __init__(self, client) -> None:
         self._client = client
@@ -304,7 +304,7 @@ class SttStreamer:
         if not key:
             return None
         try:
-            return _CloudWhisperBackend(_v1_openai_client(key))
+            return _CloudWhisperBackend(_openai_voice_client(key))
         except RuntimeError as exc:
             log.warning("Cloud STT unavailable: %s", exc)
             return None
@@ -453,7 +453,7 @@ class TtsStreamer:
     ) -> None:
         self._voice = voice
         self._model = model
-        self._wav_dir = Path(wav_dir) if wav_dir else Path(tempfile.gettempdir()) / "helper-v2-tts"
+        self._wav_dir = Path(wav_dir) if wav_dir else Path(tempfile.gettempdir()) / "helper-tts"
         self._stop = threading.Event()
         self._worker_lock = threading.Lock()
         self._worker: threading.Thread | None = None
@@ -556,7 +556,7 @@ class TtsStreamer:
                 "Cloud TTS needs OPENAI_API_KEY set, or install a local TTS "
                 "engine and override TtsStreamer._local_synthesize."
             )
-        self._cloud_client = _v1_openai_client(key)
+        self._cloud_client = _openai_voice_client(key)
         return self._cloud_client
 
     # -- playback -------------------------------------------------------

@@ -6,7 +6,7 @@ import math
 from PyQt6.QtCore import QEvent, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QFont, QFontMetrics, QTextOption
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QScrollArea, QSizePolicy, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -77,16 +77,10 @@ class ChatWindow(QWidget):
     closed = pyqtSignal()
     close_requested = pyqtSignal()
     dashboard_requested = pyqtSignal()
-    mode_select_requested = pyqtSignal(str)
-
-    HELP = 'help'
-    ACTIVE = 'active'
-    HELP_INPUT_PLACEHOLDER = 'Ask helper how to...'
-    ACTIVE_INPUT_PLACEHOLDER = 'Tell Helper what to do...'
+    INPUT_PLACEHOLDER = 'Ask anything or give me a task…'
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._mode = self.HELP
         self._bubbles: list[MessageBubble] = []
         self.setWindowTitle('Helper')
         self.setWindowFlags(Qt.WindowType.Window)
@@ -149,33 +143,11 @@ class ChatWindow(QWidget):
         compose = QVBoxLayout(composer)
         compose.setContentsMargins(22, 14, 22, 16)
         compose.setSpacing(10)
-        modes = QHBoxLayout()
-        modes.setSpacing(6)
-        group = QButtonGroup(self)
-        group.setExclusive(True)
-        self._mode_buttons = {}
-        for value, text in ((self.HELP, 'Help'), (self.ACTIVE, 'Act')):
-            button = QPushButton(text)
-            button.setCheckable(True)
-            button.setChecked(value == self._mode)
-            button.setStyleSheet(theme.qss(theme.SEGMENTED_BUTTON_QSS))
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setToolTip('Guide me step by step' if value == self.HELP else 'Let Helper carry out my task')
-            button.clicked.connect(lambda _checked=False, mode=value: self.mode_select_requested.emit(mode))
-            group.addButton(button)
-            self._mode_buttons[value] = button
-            modes.addWidget(button)
-        self._mode_description = self._label('Step-by-step guidance', 9, 'text_muted')
-        self._mode_description.setWordWrap(True)
-        modes.addSpacing(6)
-        modes.addWidget(self._mode_description, 1)
-        compose.addLayout(modes)
-
         input_row = QHBoxLayout()
         input_row.setSpacing(8)
         self._input = QLineEdit()
         self._input.setAccessibleName('Message Helper')
-        self._input.setPlaceholderText(self._input_placeholder_for_mode())
+        self._input.setPlaceholderText(self.INPUT_PLACEHOLDER)
         self._input.setMinimumHeight(30)
         self._input.setStyleSheet(theme.qss(theme.INPUT_QSS))
         self._input.returnPressed.connect(self._submit)
@@ -233,20 +205,8 @@ class ChatWindow(QWidget):
         self._input.setText(text)
         self._input.setFocus()
 
-    def set_mode(self, mode: str) -> None:
-        normalized = (mode or '').lower()
-        if normalized not in {self.HELP, self.ACTIVE}:
-            raise ValueError(f'Unsupported chat mode: {mode}')
-        self._mode = normalized
-        self._input.setPlaceholderText(self._input_placeholder_for_mode())
-        self._mode_buttons[normalized].setChecked(True)
-        self._mode_description.setText('Step-by-step guidance' if normalized == self.HELP else 'Helper carries out your task')
-
     def set_status(self, text: str) -> None:
         self._status.setText(text.strip() if text.strip() else 'Enter to send  ·  Escape to minimize')
-
-    def _input_placeholder_for_mode(self) -> str:
-        return self.HELP_INPUT_PLACEHOLDER if self._mode == self.HELP else self.ACTIVE_INPUT_PLACEHOLDER
 
     def add_message(self, text: str, is_user: bool) -> None:
         text = (text or '').strip()

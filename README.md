@@ -5,8 +5,10 @@
 </div>
 
 Helper combines chat, voice, screen awareness, and a computer-use runtime.
-Help mode explains one step and highlights its target while you act.
-Active mode performs typed actions and checks the resulting state.
+Ask questions or give it a task in the same chat—there is no Help/Act switch.
+Helper answers questions, explains how to do things, or uses the computer when you ask it to act.
+A soft lavender edge aura and purple/white status banner appear during computer use; Escape stops the task.
+The chat-bubble icon and the lava sphere both open the floating chat input.
 
 ## New computer-use architecture
 
@@ -15,16 +17,17 @@ Read the [architecture and design trade-offs](docs/COMPUTER_USE_ARCHITECTURE.md)
 
 - Current observations: screenshot, app identity, visible controls, and explicit pixel geometry.
 - One next action at a time: validated JSON with observation-scoped target IDs.
+- Strict schema output on Codex; schema-guided output and bounded repairs on other providers.
 - Structured access first: Windows UI Automation patterns or optional browser DOM handles.
 - Visual fallback: current screenshot boxes for custom controls, with fresh-scene validation.
 - Outcome evidence: local value/focus/text checks, compact action receipts, and separate goal verification.
 - Bounded recovery: stale-target rejection, unknown-effect handling, cancellation, and run budgets.
-- Help mode enforced in the runtime: no desktop input is dispatched.
+- The CLI's explicit Help mode is enforced in the runtime: no desktop input is dispatched.
 - Metrics: observations, calls, bytes, action routes, elapsed time, and final status.
 
-The account/provider settings, PyQt interface, teaching overlays, and voice
-implementation are reused. The old v2 control modules remain as a research
-baseline; the app and both CLI entry points use the new runtime.
+The desktop app and CLI use the same observation-driven runtime. Voice input
+and speech output are provided separately by `audio_recorder.py` and
+`helper_voice.py`.
 
 ## Setup
 
@@ -49,14 +52,13 @@ are separate. No credentials are bundled with the engine.
 
 ## CLI
 
-Help mode is the default:
+The CLI keeps an explicit Help mode (no input dispatched), which is its default:
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m helper_engine --mode help "Show me how to enable autosave"
 .\.venv\Scripts\python.exe -m helper_engine --mode active "Open Notepad and enter hello"
 ~~~
 
-The compatibility command "python -m v2" delegates to the same new CLI.
 Desktop control targets the visible Windows session. Keep the target app
 available; Escape cancels desktop-app runs. CLI runs can be interrupted with Ctrl+C.
 
@@ -84,8 +86,8 @@ Hybrid mode uses Windows for desktop apps and DOM access when the selected tab
 matches the foreground Chrome/Edge title. It requires an explicit endpoint.
 Browser mode is more direct for a task confined to one selected tab.
 The adapter disconnects from an attached browser rather than closing it.
-Browser teaching uses chat instructions; desktop screen overlays currently apply
-to Windows observations, not CSS coordinates inside a browser viewport.
+Browser targets use DOM/CSS bounds. The desktop aura and pointer are not
+per-element highlights inside a browser viewport.
 
 ## Configuration
 
@@ -93,7 +95,6 @@ Settings use the HELPER_ prefix. Legacy HELPLER_ and HARVIS_ aliases still load.
 
 | Setting | Purpose |
 |---|---|
-| HELPER_DEFAULT_MODE | help or active |
 | HELPER_CONTROL_BACKEND | desktop (default), browser, or hybrid |
 | HELPER_AGENT_MODEL | Model used by the configured provider |
 | HELPER_SCREENSHOT_MAX_EDGE | Windows observation resolution |
@@ -102,8 +103,9 @@ Settings use the HELPER_ prefix. Legacy HELPLER_ and HARVIS_ aliases still load.
 | HELPER_GUIDE_WAIT_SEC | User-action wait in Help mode |
 | HELPER_SPEAK_TYPED_CHAT | Spoken replies for typed input |
 
-Mode changes cancel any current task. The runtime requests confirmation around
-recognized consequential actions. Those heuristics are not a complete security
+The desktop uses automatic chat/task handling; old HELPER_DEFAULT_MODE settings
+are ignored. Explicit no-input teaching is still available with the CLI's --mode help.
+The runtime requests confirmation around recognized consequential actions. Those heuristics are not a complete security
 boundary; an automation agent acts with the account and app access you give it.
 Escape is checked before the next action; in-flight model/native calls complete
 or time out before their worker returns.
@@ -128,7 +130,7 @@ another agent. Current limitations and extension points are in the architecture 
 $env:QT_QPA_PLATFORM="offscreen"
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m compileall -q helper_engine engine_bridge.py main.py
-.\.venv\Scripts\python.exe -m pytest tests v2/tests -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 ~~~
 
 Tests use deterministic models, synthetic frames, and mocked device APIs.

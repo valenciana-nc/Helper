@@ -1,7 +1,7 @@
-"""GeminiProvider — talks to Google Generative Language (Gemini) API.
+"""Gemini provider adapter for the Google Generative Language API.
 
-Used when HELPER_PROVIDER=gemini. Reuses ChatResult/ToolCall/ProviderError
-types and retry helpers from openai_client.
+Used when HELPER_PROVIDER=gemini. Reuses ChatResult/ProviderError types and
+retry helpers from openai_client.
 """
 
 from __future__ import annotations
@@ -22,12 +22,9 @@ from openai_client import (
     RETRYABLE_STATUS_CODES,
     AuthExpired,
     ChatResult,
-    COMPUTER_USE_TOOLS,
     ProviderError,
     ProviderUnavailable,
     RateLimited,
-    ROUTE_CLASSIFIER_PROMPT,
-    ToolCall,
     _redact,
 )
 
@@ -61,50 +58,8 @@ class GeminiProvider:
             system_prompt=system_prompt,
             temperature=temperature,
             max_tokens=max_tokens,
-            include_tools=False,
         )
         return _parse_generate(self._post(model, body))
-
-    def computer_use_step(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        model: str,
-        system_prompt: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-    ) -> ChatResult:
-        body = self._body(
-            messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            include_tools=True,
-        )
-        return _parse_generate(self._post(model, body))
-
-    def classify_route(self, text: str, *, model: str) -> str:
-        body = {
-            "system_instruction": {"parts": [{"text": ROUTE_CLASSIFIER_PROMPT}]},
-            "contents": [
-                {"role": "user", "parts": [{"text": (text or "").strip()[:500]}]},
-            ],
-            "generationConfig": {"maxOutputTokens": 8},
-        }
-        try:
-            payload = self._post(model, body)
-        except ProviderError as exc:
-            log.warning("Gemini route classifier failed: %s", exc)
-            return ""
-        try:
-            result = _parse_generate(payload)
-        except BadProviderResponse as exc:
-            log.warning("Gemini route classifier returned unreadable response: %s", exc)
-            return ""
-        words = (result.text or "").strip().lower().split()
-        if not words:
-            return ""
-        return words[0].strip(".,'\"!?")
 
     # ------------------------------------------------------------------
 
@@ -115,7 +70,6 @@ class GeminiProvider:
         system_prompt: str | None,
         temperature: float | None,
         max_tokens: int | None,
-        include_tools: bool,
     ) -> dict[str, Any]:
         contents, system_text = _to_gemini_contents(messages)
         system_text = system_prompt or system_text
@@ -129,9 +83,6 @@ class GeminiProvider:
             gen_config["maxOutputTokens"] = int(max_tokens)
         if gen_config:
             body["generationConfig"] = gen_config
-        if include_tools:
-            body["tools"] = [{"function_declarations": _gemini_tools(COMPUTER_USE_TOOLS)}]
-            body["tool_config"] = {"function_calling_config": {"mode": "AUTO"}}
         return body
 
     def _post(self, model: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -218,28 +169,6 @@ def _to_gemini_contents(
                         "data": base64.b64encode(part["image_png"]).decode("ascii"),
                     },
                 })
-            elif "function_call" in part:
-                fc = part["function_call"]
-                gem_parts.append({
-                    "function_call": {
-                        "name": fc.get("name", ""),
-                        "args": fc.get("arguments") or {},
-                    },
-                })
-            elif "function_response" in part:
-                fr = part["function_response"]
-                response_obj = fr.get("response")
-                if isinstance(response_obj, str):
-                    try:
-                        response_obj = json.loads(response_obj)
-                    except json.JSONDecodeError:
-                        response_obj = {"output": response_obj}
-                gem_parts.append({
-                    "function_response": {
-                        "name": fr.get("name", ""),
-                        "response": response_obj if isinstance(response_obj, dict) else {"output": response_obj},
-                    },
-                })
         if gem_parts:
             out.append({"role": gem_role, "parts": gem_parts})
 
@@ -253,19 +182,6 @@ def _to_gemini_contents(
         else:
             merged.append(msg)
     return merged, system_text
-
-
-def _gemini_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    wrapped: list[dict[str, Any]] = []
-    for tool in tools:
-        if tool.get("type") != "function":
-            continue
-        wrapped.append({
-            "name": tool.get("name", ""),
-            "description": tool.get("description", ""),
-            "parameters": tool.get("parameters") or {"type": "object", "properties": {}},
-        })
-    return wrapped
 
 
 def _parse_generate(payload: dict[str, Any]) -> ChatResult:
@@ -290,26 +206,10 @@ def _parse_generate(payload: dict[str, Any]) -> ChatResult:
     if not isinstance(parts, list):
         raise BadProviderResponse("Gemini candidate parts was not a list.")
     text_chunks: list[str] = []
-    tool_calls: list[ToolCall] = []
     for part in parts:
         if not isinstance(part, dict):
             continue
         text = part.get("text")
         if isinstance(text, str) and text:
             text_chunks.append(text.strip())
-        elif "functionCall" in part:
-            fc = part["functionCall"] or {}
-            if not isinstance(fc, dict):
-                raise BadProviderResponse("Gemini response contained an invalid function call.")
-            args = fc.get("args") or {}
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except json.JSONDecodeError:
-                    args = {}
-            tool_calls.append(ToolCall(
-                name=str(fc.get("name") or ""),
-                arguments=args if isinstance(args, dict) else {},
-                call_id=f"call_{len(tool_calls)}_{fc.get('name') or 'tool'}",
-            ))
-    return ChatResult(text=" ".join(text_chunks).strip(), tool_calls=tool_calls)
+    return ChatResult(text=" ".join(text_chunks).strip())

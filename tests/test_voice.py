@@ -1,4 +1,4 @@
-"""Tests for v2/voice.py — streaming VAD/STT/TTS.
+"""Tests for Helper's streaming VAD/STT/TTS runtime.
 
 No network, no real models, no audio device. sounddevice is never imported
 here (voice.py only imports it lazily inside _play_wav, which is
@@ -17,9 +17,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from v2 import voice as vm
+import helper_voice as vm
 
 
 # ---------------------------------------------------------------------------
@@ -276,10 +276,10 @@ def test_openai_api_key_env_and_config(monkeypatch):
     assert vm._openai_api_key() is None
 
 
-def test_v1_openai_client_missing_module_raises(monkeypatch):
+def test_openai_voice_client_missing_module_raises(monkeypatch):
     monkeypatch.setitem(sys.modules, "openai_client", None)
     with pytest.raises(RuntimeError, match="openai_client"):
-        vm._v1_openai_client("k")
+        vm._openai_voice_client("k")
 
 
 def test_try_cloud_returns_none_when_client_build_fails(monkeypatch):
@@ -288,7 +288,7 @@ def test_try_cloud_returns_none_when_client_build_fails(monkeypatch):
     def boom(key):
         raise RuntimeError("no client")
 
-    monkeypatch.setattr(vm, "_v1_openai_client", boom)
+    monkeypatch.setattr(vm, "_openai_voice_client", boom)
     assert vm.SttStreamer()._try_cloud() is None
 
 
@@ -459,7 +459,7 @@ def test_ensure_cloud_client_cached_no_key_and_create(monkeypatch):
         t._ensure_cloud_client()
     fake_client = object()
     monkeypatch.setattr(vm, "_openai_api_key", lambda: "k")
-    monkeypatch.setattr(vm, "_v1_openai_client", lambda key: fake_client)
+    monkeypatch.setattr(vm, "_openai_voice_client", lambda key: fake_client)
     assert t._ensure_cloud_client() is fake_client
     assert t._cloud_client is fake_client
 

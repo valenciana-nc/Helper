@@ -141,6 +141,15 @@ class BrowserDriver:
         return bool(page_title) and title.strip() == page_title
 
     def validate(self, action, observation):
+        try:
+            self._validate_current(action, observation)
+        except StaleObservation:
+            raise
+        except Exception as exc:
+            # Detached nodes and navigation races happen before input. Refresh rather than record a possible click.
+            raise StaleObservation(f"Browser validation unavailable: {type(exc).__name__}") from exc
+
+    def _validate_current(self, action, observation):
         if self._page.is_closed() or observation.id != self._current_id or self._page.url != self._url:
             raise StaleObservation("The selected tab navigated or its observation expired")
         try:

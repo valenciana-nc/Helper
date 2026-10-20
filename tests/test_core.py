@@ -214,23 +214,11 @@ class AnthropicProviderTests(unittest.TestCase):
 
 
 class ProviderTests(unittest.TestCase):
-    def test_parse_response_reads_text_and_tool_calls(self) -> None:
+    def test_parse_response_reads_text(self) -> None:
         result = _parse_response(
-            {
-                "output": [
-                    {"type": "message", "content": [{"type": "output_text", "text": "hello"}]},
-                    {
-                        "type": "function_call",
-                        "name": "click_at",
-                        "arguments": '{"x":1,"y":2}',
-                        "call_id": "call_1",
-                    },
-                ]
-            }
+            {"output": [{"type": "message", "content": [{"type": "output_text", "text": "hello"}]}]}
         )
         self.assertEqual(result.text, "hello")
-        self.assertEqual(result.tool_calls[0].name, "click_at")
-        self.assertEqual(result.tool_calls[0].call_id, "call_1")
 
     def test_parse_response_rejects_non_object(self) -> None:
         with self.assertRaises(BadProviderResponse):
@@ -243,22 +231,6 @@ class ProviderTests(unittest.TestCase):
     def test_chat_completions_parser_rejects_malformed_choice(self) -> None:
         with self.assertRaises(BadProviderResponse):
             _parse_chat_completions({"choices": [None]})  # type: ignore[list-item]
-
-    def test_parse_response_keeps_malformed_tool_call_with_empty_args(self) -> None:
-        result = _parse_response(
-            {
-                "output": [
-                    {
-                        "type": "function_call",
-                        "name": "click_at",
-                        "arguments": "{bad json",
-                        "call_id": "call_bad",
-                    }
-                ]
-            }
-        )
-        self.assertEqual(result.tool_calls[0].arguments, {})
-        self.assertEqual(result.tool_calls[0].call_id, "call_bad")
 
     def test_parse_stream_response_reads_completed_output_item(self) -> None:
         payload = _parse_stream_response(
@@ -452,27 +424,19 @@ class DesktopWindowTests(unittest.TestCase):
         window.hide()
         window.deleteLater()
 
-    def test_chat_window_placeholder_tracks_mode(self) -> None:
+    def test_chat_window_accepts_questions_and_tasks_without_mode_switches(self) -> None:
         app = _qt_app()
         window = ChatWindow()
-
-        self.assertEqual(window._input.placeholderText(), "Ask helper how to...")
-        window.set_mode(FloatingCircle.ACTIVE)
-        self.assertEqual(window._input.placeholderText(), "Tell Helper what to do...")
-        window.set_mode(FloatingCircle.HELP)
-        self.assertEqual(window._input.placeholderText(), "Ask helper how to...")
+        self.assertEqual(window._input.placeholderText(), "Ask anything or give me a task…")
+        self.assertFalse(hasattr(window, "_mode_buttons"))
         app.processEvents()
         window.deleteLater()
 
-    def test_floating_chat_placeholder_tracks_mode(self) -> None:
+    def test_floating_chat_accepts_questions_and_tasks_without_mode_switches(self) -> None:
         app = _qt_app()
         widget = FloatingCircle()
-
-        self.assertEqual(widget._chat_input.placeholderText(), "Ask helper how to...")
-        widget.set_mode(FloatingCircle.ACTIVE)
-        self.assertEqual(widget._chat_input.placeholderText(), "Tell Helper what to do...")
-        widget.set_mode(FloatingCircle.HELP)
-        self.assertEqual(widget._chat_input.placeholderText(), "Ask helper how to...")
+        self.assertEqual(widget._chat_input.placeholderText(), "Ask anything or give me a task…")
+        self.assertFalse(hasattr(widget, "mode_toggle_requested"))
         app.processEvents()
         widget.deleteLater()
 
@@ -562,7 +526,7 @@ class ConversationStoreTests(unittest.TestCase):
             convo.title = "v1"
             store.save(convo)
 
-            convo.add_message("user", "v2")
+            convo.add_message("user", "legacy")
             convo.title = "v1"
             store.save(convo)
 

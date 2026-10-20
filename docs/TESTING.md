@@ -6,7 +6,7 @@
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # Windows: full set
 # Linux: install the subset (PyQt6, pytest, pytest-qt); skip pywin32, winrt-*, pywinauto
-xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ v2/tests/ -q -p no:cacheprovider
+xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -p no:cacheprovider
 ```
 
 ## Layout
@@ -18,8 +18,8 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ v2/t
 - `tests/test_engine_provider_contract.py` — provider message translation
   (Codex/Anthropic/Gemini/OpenAI-compatible) and final-reply visibility.
 - `tests/test_core.py` — config, conversation store, launch safety, UI widgets.
-- `tests/test_overlay_geometry.py` — overlay highlight geometry.
-- `v2/tests/` — historical v2 baseline (research only, not executed by the app).
+- `tests/test_computer_use_ui.py` and `tests/test_screen_geometry.py` — passive desktop presentation and monitor geometry.
+- `tests/test_voice.py`, `tests/test_voice_bridge.py`, and `tests/test_audio_recorder.py` — active voice capture/transcription pipeline.
 
 ## Conventions
 
@@ -32,6 +32,5 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ v2/t
 
 ## What "green" means
 
-Full suite green: 252 passed, 3 skipped, 16 subtests passed. The 3 skips are
-expected (Windows-only paths on Linux, plus the historical v2 Linux-only
-world-model branch).
+Full suite green: 213 passed, 20 subtests passed in the verified Windows run.
+Some Windows-only UIA checks may be skipped on Linux.

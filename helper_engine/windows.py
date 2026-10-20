@@ -135,7 +135,11 @@ class WindowsDriver:
             # ambiguous side effect. Must not become Effect.UNKNOWN.
             raise StaleObservation(f"Target no longer valid: {exc}") from exc
         if action.target and action.target.element_id:
-            result = self.uia.request("validate", token=observation.id, element_id=action.target.element_id)
+            try:
+                result = self.uia.request("validate", token=observation.id, element_id=action.target.element_id)
+            except Exception as exc:
+                # Validation never dispatches input; a dead UIA lease requires a new snapshot, not an unknown effect.
+                raise StaleObservation("Accessibility validation was unavailable; observe again") from exc
             if result.get("status") != "valid":
                 raise StaleObservation("The accessibility target changed")
         # A fresh image catches canvas changes, scrolls, occlusion and stale keyboard focus.
