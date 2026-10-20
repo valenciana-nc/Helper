@@ -4,9 +4,10 @@ import io
 import struct
 import wave
 
+import numpy as np
 import pytest
 
-from voice_bridge import wav_to_pcm16
+from voice_bridge import _resample_int16, wav_to_pcm16
 
 
 def _wav(pcm: bytes, *, channels: int = 1, sample_width: int = 2, rate: int = 16_000) -> bytes:
@@ -49,3 +50,29 @@ def test_wav_to_pcm16_converts_signed_thirty_two_bit_samples():
 def test_wav_to_pcm16_rejects_invalid_wav_data():
     with pytest.raises(wave.Error):
         wav_to_pcm16(b"not a wav")
+
+
+def test_wav_to_pcm16_leaves_sixteen_kilohertz_audio_bit_exact():
+    pcm = struct.pack("<4h", 100, -100, 1000, -1000)
+    assert wav_to_pcm16(_wav(pcm, rate=16_000)) == pcm
+
+
+def test_wav_to_pcm16_resamples_non_sixteen_kilohertz_to_16k():
+    # The voice runtime consumes 16 kHz; the recorder can produce 8k-192k.
+    src = np.linspace(-1000, 1000, 80).astype("<i2")
+    out = wav_to_pcm16(_wav(src.tobytes(), rate=8_000))
+    assert len(out) // 2 == 160  # 80 samples at 8kHz -> 160 at 16kHz
+    vals = struct.unpack("<160h", out)
+    assert vals[0] == pytest.approx(-1000, abs=2)
+    assert vals[-1] == pytest.approx(1000, abs=2)
+
+
+def test_wav_to_pcm16_resample_of_empty_audio_is_empty():
+    assert wav_to_pcm16(_wav(b"", rate=8_000)) == b""
+
+
+def test_resample_int16_rejects_degenerate_rates():
+    audio = np.ones(10, dtype=np.float64)
+    assert _resample_int16(audio, 0, 16_000).size == 0
+    assert _resample_int16(audio, 8_000, 0).size == 0
+    assert _resample_int16(np.zeros(0, dtype=np.float64), 8_000, 16_000).size == 0
