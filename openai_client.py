@@ -329,9 +329,15 @@ class OpenAIClient:
         system_prompt: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> ChatResult:
         _require_neutral_messages(messages)
         if self._custom is not None:
+            # Compatible endpoints and non-OpenAI providers do not all implement
+            # the same structured-output API. Keep their existing wire format.
+            if response_schema is not None:
+                system_prompt = ((system_prompt or "") + "\nReturn JSON matching this schema:\n"
+                                 + json.dumps(response_schema, ensure_ascii=True))
             return self._custom.chat(
                 messages,
                 model=self._custom_model or model,
@@ -349,6 +355,9 @@ class OpenAIClient:
         }
         if max_tokens is not None:
             body["max_output_tokens"] = int(max_tokens)
+        if response_schema is not None:
+            body["text"] = {"format": {"type": "json_schema", "name": "helper_response",
+                                      "strict": True, "schema": response_schema}}
         payload = self._codex.post_response(body)
         return _parse_response(payload)
 

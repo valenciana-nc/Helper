@@ -427,27 +427,19 @@ class DesktopWindowTests(unittest.TestCase):
         window.hide()
         window.deleteLater()
 
-    def test_chat_window_placeholder_tracks_mode(self) -> None:
+    def test_chat_window_accepts_questions_and_tasks_without_mode_switches(self) -> None:
         app = _qt_app()
         window = ChatWindow()
-
-        self.assertEqual(window._input.placeholderText(), "Ask helper how to...")
-        window.set_mode(FloatingCircle.ACTIVE)
-        self.assertEqual(window._input.placeholderText(), "Tell Helper what to do...")
-        window.set_mode(FloatingCircle.HELP)
-        self.assertEqual(window._input.placeholderText(), "Ask helper how to...")
+        self.assertEqual(window._input.placeholderText(), "Ask anything or give me a task…")
+        self.assertFalse(hasattr(window, "_mode_buttons"))
         app.processEvents()
         window.deleteLater()
 
-    def test_floating_chat_placeholder_tracks_mode(self) -> None:
+    def test_floating_chat_accepts_questions_and_tasks_without_mode_switches(self) -> None:
         app = _qt_app()
         widget = FloatingCircle()
-
-        self.assertEqual(widget._chat_input.placeholderText(), "Ask helper how to...")
-        widget.set_mode(FloatingCircle.ACTIVE)
-        self.assertEqual(widget._chat_input.placeholderText(), "Tell Helper what to do...")
-        widget.set_mode(FloatingCircle.HELP)
-        self.assertEqual(widget._chat_input.placeholderText(), "Ask helper how to...")
+        self.assertEqual(widget._chat_input.placeholderText(), "Ask anything or give me a task…")
+        self.assertFalse(hasattr(widget, "mode_toggle_requested"))
         app.processEvents()
         widget.deleteLater()
 

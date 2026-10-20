@@ -125,6 +125,15 @@ def _provider_from_values(values: Mapping[str, str] | None = None) -> str:
     return (value or "codex").strip().lower()
 
 
+def resolve_provider_model(name: str, values: Mapping[str, str] | None = None) -> str:
+    provider = _provider_from_values(values)
+    defaults = {"anthropic": "claude-sonnet-4-6", "gemini": "gemini-2.5-flash", "openai_compat": CODEX_MODEL_DEFAULT}
+    if provider not in defaults:
+        return resolve_codex_model(name, values=values)
+    value, _source = env_value_with_source(name, defaults[provider], values)
+    return value
+
+
 def model_compatibility_warnings(values: Mapping[str, str] | None = None) -> list[str]:
     warnings: list[str] = []
     provider = _provider_from_values(values)
@@ -207,10 +216,9 @@ def legacy_env_keys() -> list[str]:
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 HOTKEY = env_value("HELPER_HOTKEY", "ctrl+shift+space").lower()
-DEFAULT_MODE = env_value("HELPER_DEFAULT_MODE", "help").lower()
 
-AGENT_MODEL = resolve_codex_model("HELPER_AGENT_MODEL", CODEX_MODEL_DEFAULT)
-REASONING_MODEL = resolve_codex_model("HELPER_REASONING_MODEL", CODEX_MODEL_DEFAULT)
+AGENT_MODEL = resolve_provider_model("HELPER_AGENT_MODEL")
+REASONING_MODEL = resolve_provider_model("HELPER_REASONING_MODEL")
 STT_MODEL = resolve_openai_voice_model("HELPER_STT_MODEL", STT_MODEL_DEFAULT)
 TTS_MODEL = resolve_openai_voice_model("HELPER_TTS_MODEL", TTS_MODEL_DEFAULT)
 TTS_VOICE = env_value("HELPER_TTS_VOICE", "alloy")

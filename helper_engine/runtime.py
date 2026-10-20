@@ -125,8 +125,13 @@ class Agent:
                 except ProtocolError as exc:
                     invalid += 1
                     log.warning("Rejected model decision %s/%s: %s", invalid, self.limits.max_invalid_decisions, exc)
-                    context["feedback"] = f"Rejected without executing: {exc}. Return corrected typed JSON."
-                    emit("decision_rejected", {"step": step, "status": "invalid"})
+                    context["feedback"] = (
+                        f"Rejected without executing: {exc}. Return one DECISION envelope with top-level kind "
+                        "act/observe/finish/answer/ask and observation_id. Put the operation inside action.kind; "
+                        "target/description/expect belong inside action, never at the top level. Do not use type. "
+                        "For non-act decisions set action:null. Use the complete examples in the system instructions."
+                    )
+                    emit("decision_rejected", {"step": step, "status": "invalid", "reason": "invalid_schema"})
                     if invalid >= self.limits.max_invalid_decisions:
                         report.message = "The model repeatedly returned invalid actions. Nothing further was executed."
                         break
@@ -199,8 +204,11 @@ class Agent:
                 preheld = already == Outcome.ACHIEVED
                 # Only a fill whose exact target value is already present is a redundant step.
                 # Other expectations (e.g. "Skip button exists") can be true before the action.
-                if preheld and action.kind == "fill" and any(
-                        p.kind == "value_equals" and p.value == action.text for p in action.expect):
+                element = obs.element(action.target.element_id) if action.target and action.target.element_id else None
+                if (preheld and action.kind == "fill" and element is not None and not element.password
+                        and element.value == action.text and any(
+                            p.kind == "value_equals" and p.value == action.text
+                            and p.name.casefold() == element.name.casefold() for p in action.expect)):
                     context["feedback"] = "That field already has the requested value. Continue with the remaining goal."
                     no_progress += 1
                     if no_progress >= 3:
@@ -216,13 +224,17 @@ class Agent:
                     except StaleObservation as exc:
                         metrics.stale_decisions += 1
                         context["feedback"] = f"Nothing executed. Scene changed: {exc}. Re-ground on this new observation."
+                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
                         obs = observe()
                         continue
                 rect = target_rect(action, obs)
-                emit("action_start", {"step": step, "kind": action.kind, "message": action.description,
-                                      "rect": rect.as_list() if rect else None, "surface": obs.surface})
+                def action_start():
+                    emit("action_start", {"step": step, "kind": action.kind, "message": action.description,
+                                          "rect": rect.as_list() if rect else None, "surface": obs.surface})
+
                 before = obs
                 if mode == "help":
+                    action_start()
                     # The teaching path never calls execute(), even for keys or launch operations.
                     execution = Execution(Effect.GUIDED, "user", decision.message or action.description)
                     emit("guided", {"message": decision.message or action.description or action.kind})
@@ -247,14 +259,31 @@ class Agent:
                     try:
                         # Consent dialogs and a slow model can both change the scene.
                         self.driver.validate(action, obs)
+                    except StaleObservation as exc:
+                        metrics.stale_decisions += 1
+                        context["feedback"] = f"Nothing executed: {exc}."
+                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
+                        obs = observe()
+                        continue
+                    except Exception as exc:
+                        log.exception("Action validation failed before dispatch")
+                        report.message = f"Could not validate the next action; no input was sent: {type(exc).__name__}."
+                        emit("decision_rejected", {"step": step, "status": "failed", "reason": "validation_error"})
+                        break
+                    # Native validation can block; Escape during it must prevent dispatch.
+                    checkpoint()
+                    action_start()
+                    checkpoint()
+                    try:
                         execution = self.driver.execute(action, obs)
                     except StaleObservation as exc:
                         metrics.stale_decisions += 1
                         context["feedback"] = f"Nothing executed: {exc}."
+                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
                         obs = observe()
                         continue
                     except Exception as exc:
-                        # An exception after dispatch is UNKNOWN, never an excuse to repeat a click.
+                        # Only an exception during dispatch can have an UNKNOWN effect.
                         execution = Execution(Effect.UNKNOWN, "driver", type(exc).__name__)
                     metrics.actions += 1
                     metrics.routes[execution.route] = metrics.routes.get(execution.route, 0) + 1

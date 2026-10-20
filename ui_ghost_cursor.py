@@ -7,26 +7,53 @@ from PyQt6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
-    QLinearGradient,
     QPainter,
     QPainterPath,
     QPen,
     QPolygonF,
+    QRadialGradient,
 )
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ui_overlay import local_screen_point, screen_device_pixel_ratio, screen_native_geometry
 
 
-CURSOR_FILL_TOP = QColor(255, 255, 255, 235)
-CURSOR_FILL_BOTTOM = QColor(215, 178, 255, 235)
-CURSOR_OUTLINE = QColor(20, 30, 50, 220)
-CURSOR_SHADOW = QColor(0, 0, 0, 90)
+CURSOR_AURA_RADIUS = 36.0
 BUBBLE_BG = QColor(31, 20, 45, 235)
 BUBBLE_BORDER = QColor(195, 145, 250, 220)
 BUBBLE_TEXT = QColor(247, 237, 255)
-CURSOR_TIP_OFFSET = QPointF(2.0, 2.0)
-CURSOR_SCALE = 1.8
+CURSOR_SCALE = 1.0
+
+
+def paint_control_pointer(painter: QPainter, x: float, y: float) -> None:
+    """Small dark-violet pointer, white outline and a diffuse lavender halo."""
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    center = QPointF(x + 5, y + 6)
+    aura = QRadialGradient(center, CURSOR_AURA_RADIUS)
+    for position, alpha in ((0, 108), (.2, 88), (.45, 45), (.72, 12), (1, 0)):
+        aura.setColorAt(position, QColor(199, 155, 255, alpha))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(aura)
+    painter.drawEllipse(center, CURSOR_AURA_RADIUS, CURSOR_AURA_RADIUS)
+
+    painter.translate(x, y)
+    pointer = QPainterPath()
+    pointer.addPolygon(QPolygonF([
+        QPointF(0, 0), QPointF(15, 4.5), QPointF(7.2, 8.3), QPointF(4.2, 15),
+    ]))
+    pointer.closeSubpath()
+    painter.translate(0, 1)
+    painter.setPen(QPen(QColor(0, 0, 0, 50), 3, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(QColor(0, 0, 0, 50))
+    painter.drawPath(pointer)
+    painter.translate(0, -1)
+    painter.setPen(QPen(QColor(255, 255, 255), 1.8, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(QColor(31, 20, 45))
+    painter.drawPath(pointer)
+    painter.restore()
 
 
 @dataclass(frozen=True)
@@ -107,39 +134,7 @@ class _GhostWindow(QWidget):
         )
 
     def _draw_cursor(self, painter: QPainter, x: float, y: float) -> None:
-        painter.save()
-        painter.translate(x - CURSOR_TIP_OFFSET.x(), y - CURSOR_TIP_OFFSET.y())
-        painter.scale(CURSOR_SCALE, CURSOR_SCALE)
-
-        path = QPainterPath()
-        polygon = QPolygonF(
-            [
-                QPointF(0.0, 0.0),
-                QPointF(0.0, 16.0),
-                QPointF(4.4, 12.6),
-                QPointF(7.4, 18.4),
-                QPointF(9.6, 17.4),
-                QPointF(6.7, 11.7),
-                QPointF(11.6, 11.7),
-            ]
-        )
-        path.addPolygon(polygon)
-        path.closeSubpath()
-
-        painter.translate(1.4, 2.0)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(CURSOR_SHADOW)
-        painter.drawPath(path)
-        painter.translate(-1.4, -2.0)
-
-        gradient = QLinearGradient(0.0, 0.0, 0.0, 18.0)
-        gradient.setColorAt(0.0, CURSOR_FILL_TOP)
-        gradient.setColorAt(1.0, CURSOR_FILL_BOTTOM)
-        painter.setBrush(gradient)
-        painter.setPen(QPen(CURSOR_OUTLINE, 1.2))
-        painter.drawPath(path)
-
-        painter.restore()
+        paint_control_pointer(painter, x, y)
 
     def _draw_bubble(
         self,

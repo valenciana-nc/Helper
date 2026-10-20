@@ -31,6 +31,7 @@ class EngineRunner(QObject):
     speak = pyqtSignal(str)
     finished = pyqtSignal(bool)
     busy = pyqtSignal(bool)
+    computer_use = pyqtSignal(bool)
     approval_requested = pyqtSignal(object)
 
     def __init__(self, parent=None, should_abort: Callable[[], bool] | None = None):
@@ -38,6 +39,8 @@ class EngineRunner(QObject):
         self._lock = threading.Lock()
         self._running = False
         self._agent = None
+        self._mode = "active"
+        self._computer_use_active = False
         self._should_abort = should_abort or (lambda: False)
         self.approval_requested.connect(self._display_approval)
 
@@ -81,7 +84,7 @@ class EngineRunner(QObject):
             pending.granted = result == QMessageBox.StandardButton.Yes
             pending.event.set()
 
-    def start_goal(self, goal: str, *, mode: str = "help", speak: bool = False):
+    def start_goal(self, goal: str, *, mode: str = "active", speak: bool = False):
         if mode not in {"help", "active"}:
             raise ValueError("Unknown control mode")
         with self._lock:
@@ -89,17 +92,31 @@ class EngineRunner(QObject):
                 return False
             self._running = True
         self.busy.emit(True)
-        threading.Thread(target=self._run, args=(goal, mode, speak), daemon=True, name="helper-goal").start()
+        try:
+            threading.Thread(target=self._run, args=(goal, mode, speak), daemon=True, name="helper-goal").start()
+        except Exception:
+            with self._lock:
+                self._running = False
+            self.busy.emit(False)
+            raise
         return True
 
     def _run(self, goal, mode, speak):
         from helper_engine.journal import JsonJournal
+        self._mode = mode
         ok = False
         journal = None
         try:
-            journal = JsonJournal(Path(__file__).parent / "logs" / "computer-use" / f"{uuid.uuid4().hex}.jsonl")
+            try:
+                journal = JsonJournal(Path(__file__).parent / "logs" / "computer-use" / f"{uuid.uuid4().hex}.jsonl")
+            except Exception:
+                log.exception("Could not open optional run journal; continuing without it")
             def event(name, payload):
-                journal(name, payload)
+                if journal:
+                    try:
+                        journal(name, payload)
+                    except Exception:
+                        log.exception("Could not write optional run journal")
                 self._on_event(name, payload)
             report = self._get_agent().run_goal(goal, mode=mode, on_event=event, should_abort=self._should_abort)
             ok = report.ok
@@ -110,8 +127,12 @@ class EngineRunner(QObject):
             log.exception("Helper engine failed")
             self.message.emit(f"Task stopped: {exc}")
         finally:
+            self._set_computer_use(False)
             if journal:
-                journal.close()
+                try:
+                    journal.close()
+                except Exception:
+                    log.exception("Could not close optional run journal")
             with self._lock:
                 self._running = False
             self.status.emit("")
@@ -119,13 +140,22 @@ class EngineRunner(QObject):
             self.busy.emit(False)
             self.finished.emit(ok)
 
+    def _set_computer_use(self, active: bool):
+        if active != self._computer_use_active:
+            self._computer_use_active = active
+            self.computer_use.emit(active)
+
     def _on_event(self, name, payload):
         if name == "started":
+            self._mode = payload.get("mode", self._mode)
+            self._set_computer_use(False)
             self.state.emit("thinking")
             self.status.emit("Looking at the current app…")
         elif name == "decision":
             self.status.emit(payload.get("message") or "Checking the next step…")
         elif name == "action_start":
+            if self._mode == "active" and not self._should_abort():
+                self._set_computer_use(True)
             self.status.emit(payload.get("message") or payload.get("kind", ""))
             rect = payload.get("rect")
             if rect and payload.get("surface") == "desktop":
@@ -136,3 +166,5 @@ class EngineRunner(QObject):
             self.status.emit("Checking the result…")
         elif name == "goal_verification":
             self.status.emit("Checking the complete goal…")
+        elif name == "finished":
+            self._set_computer_use(False)

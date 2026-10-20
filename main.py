@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -22,23 +23,26 @@ if sys.platform == "win32":
         except Exception:
             pass
 
-from PyQt6.QtCore import QObject, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QRectF, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from config import (
-    DEFAULT_MODE,
     ENV_PATH,
     HOTKEY,
     ROOT,
     STARTUP_LOG,
     SPEAK_TYPED_CHAT,
+    TTS_MODEL,
+    TTS_VOICE,
     setup_logging,
 )
 from conversation_store import ConversationStore, StoredConversation
+from env_io import read_env
 import oauth_codex
 import theme
 from ui_chat import ChatWindow
+from ui_computer_use import ComputerUseManager
 from ui_dashboard import DashboardWindow
 from ui_ghost_cursor import GhostCursorManager
 from ui_overlay import OverlayManager
@@ -115,6 +119,7 @@ class HelplerDesktopApp(QObject):
     chat_window_toggle_requested = pyqtSignal()
     chat_show_requested = pyqtSignal()
     chat_status_changed = pyqtSignal(str)
+    voice_transcribed = pyqtSignal(str)
 
     def __init__(self, app: QApplication, hotkey: str, startup_surface: str = "background") -> None:
         super().__init__()
@@ -153,13 +158,10 @@ class HelplerDesktopApp(QObject):
         self._engine_runner.highlight.connect(self._on_engine_highlight)
         self._engine_runner.speak.connect(self._speak_reply)
         self._engine_runner.finished.connect(self._on_engine_finished)
-        # Each run snapshots its mode; Escape cancels it before the next input.
-        if DEFAULT_MODE == FloatingCircle.ACTIVE:
-            self._selected_mode = FloatingCircle.ACTIVE
-        else:
-            self._selected_mode = FloatingCircle.HELP
+        self._engine_runner.computer_use.connect(self._on_computer_use_changed)
+        # One desktop experience: the model answers or acts according to the request.
+        # Legacy HELPER/HARVIS_DEFAULT_MODE must not silently disable requested actions.
         self._chat_window = ChatWindow()
-        self._chat_window.set_mode(self._selected_mode)
         self._chat_window.setWindowIcon(self._app_icon)
         self._status_pill = ChatStatusPill()
         self._conversation_store = ConversationStore(CONVERSATIONS_PATH)
@@ -173,8 +175,10 @@ class HelplerDesktopApp(QObject):
         )
         self._dashboard.setWindowIcon(self._app_icon)
         self._overlay = OverlayManager(app)
+        self._computer_use = ComputerUseManager(app, self)
         self._ghost_cursor = GhostCursorManager(app)
         self._audio: AudioHandler | None = None
+        self._tts = None
         self._listener = None
         self._mouse_listener = None
         self._lock = Lock()
@@ -188,6 +192,9 @@ class HelplerDesktopApp(QObject):
         self._reply_hide_timer = QTimer(self)
         self._reply_hide_timer.setSingleShot(True)
         self._reply_hide_timer.timeout.connect(self._hide_final_reply)
+        self._startup_timer = QTimer(self)
+        self._startup_timer.setSingleShot(True)
+        self._startup_timer.timeout.connect(self._finish_startup_animation)
 
         self.widget_state_requested.connect(self._widget.set_state)
         self.caption_changed.connect(self._widget.set_caption)
@@ -200,21 +207,20 @@ class HelplerDesktopApp(QObject):
         self.chat_window_toggle_requested.connect(self._toggle_chat_window_if_visible)
         self.chat_show_requested.connect(self._show_chat_window)
         self.chat_status_changed.connect(self._on_chat_status_changed)
+        self.voice_transcribed.connect(self._on_voice_transcribed)
 
-        self._widget.mode_toggle_requested.connect(self._handle_mode_toggle_requested)
-        self._widget.mode_select_requested.connect(self._handle_mode_select_requested)
         self._widget.quit_requested.connect(self._handle_quit_requested)
         self._widget.restart_requested.connect(self._handle_restart_requested)
         self._widget.chat_requested.connect(self._toggle_widget_chat)
         self._widget.chat_submitted.connect(self._handle_chat_submitted)
         self._widget.voice_hold_started.connect(self._start_voice_recording)
         self._widget.voice_hold_finished.connect(self._stop_voice_recording)
+        self._widget.muted_changed.connect(self._on_muted_changed)
         self._widget.chat_open_changed.connect(self._on_widget_chat_open_changed)
         self._widget.dashboard_requested.connect(self._toggle_dashboard)
         self._widget.moved.connect(self._on_widget_moved)
 
         self._chat_window.dashboard_requested.connect(self._toggle_dashboard)
-        self._chat_window.mode_select_requested.connect(self._handle_mode_select_requested)
         self._chat_window.submitted.connect(self._handle_chat_submitted)
         self._chat_window.closed.connect(self._on_chat_closed)
         self._chat_window.close_requested.connect(self._handle_main_window_close_requested)
@@ -225,7 +231,6 @@ class HelplerDesktopApp(QObject):
         self._setup_tray()
 
         self._widget.move(*self._initial_widget_position())
-        self._widget.set_mode(self._selected_mode)
         self._widget.show()
         if self._startup_surface == "chat":
             QTimer.singleShot(0, self._show_chat_window)
@@ -233,13 +238,17 @@ class HelplerDesktopApp(QObject):
             QTimer.singleShot(0, self._show_dashboard_window)
         self._sync_tray_actions()
         self._widget.set_state(FloatingCircle.LISTENING)
-        QTimer.singleShot(2000, lambda: self._widget.set_state(FloatingCircle.IDLE))
+        self._startup_timer.start(2000)
         QTimer.singleShot(800, self._show_first_launch_balloon)
         QTimer.singleShot(50, self._initialize_backend)
 
     def start(self) -> None:
         log.info("Starting Helper. Loading backend for %s...", self._hotkey_label)
         log.info("Right-click the widget or tray icon for controls.")
+
+    def _finish_startup_animation(self) -> None:
+        if not self._shutting_down and not self._busy and not self._recording_active:
+            self.widget_state_requested.emit(FloatingCircle.IDLE)
 
     def _initial_widget_position(self) -> tuple[int, int]:
         screen = self._app.primaryScreen()
@@ -274,9 +283,8 @@ class HelplerDesktopApp(QObject):
         try:
             from pynput import keyboard, mouse
 
-            from audio_handler import AudioHandler
-
             try:
+                from audio_handler import AudioHandler
                 audio = AudioHandler()
             except Exception:
                 audio = None
@@ -327,6 +335,10 @@ class HelplerDesktopApp(QObject):
             return
         self._shutting_down = True
         self._engine_abort.set()
+        self._stop_speech()
+        self._reply_hide_timer.stop()
+        self._startup_timer.stop()
+        self._computer_use.close()
         self._persist_active_conversation()
         if self._listener is not None:
             self._listener.stop()
@@ -413,6 +425,8 @@ class HelplerDesktopApp(QObject):
         # GUI-thread slot for the Esc hotkey: never touch QWidget from the
         # pynput listener thread.
         self._engine_abort.set()
+        self._computer_use.set_active(False)
+        self._stop_speech()
         if self._audio is not None:
             self._audio.stop_playback()
         if self._chat_window.isVisible():
@@ -498,7 +512,7 @@ class HelplerDesktopApp(QObject):
             "signed_in": self._cached_signed_in,
             "agent_ready": True,  # engine creation is lazy
             "agent_error": None,
-            "mode": self._selected_mode,
+            "mode": "automatic",
             "hotkey": self._hotkey_label,
             "log_path": STARTUP_LOG,
             "engine_running": self._engine_runner.is_running(),
@@ -526,41 +540,19 @@ class HelplerDesktopApp(QObject):
     def _handle_restart_requested(self) -> None:
         log.info("Restart requested. Launching a fresh instance...")
         try:
+            # dotenv-loaded values are inherited by children. Reload the saved file
+            # explicitly so Save and restart cannot resurrect the old model/provider.
+            environment = os.environ.copy()
+            environment.update(read_env(ENV_PATH))
             subprocess.Popen(
                 [sys.executable, *sys.argv],
                 close_fds=True,
+                env=environment,
             )
         except Exception:
             log.exception("Restart failed")
             return
         self._handle_quit_requested()
-
-    def _handle_mode_toggle_requested(self) -> None:
-        order = FloatingCircle.MODE_ORDER
-        current = self._widget.mode
-        idx = order.index(current) if current in order else 0
-        target = order[(idx + 1) % len(order)]
-        self._request_mode(target)
-
-    def _handle_mode_select_requested(self, mode: str) -> None:
-        self._request_mode(mode)
-
-    def _request_mode(self, mode: str) -> None:
-        if mode == self._widget.mode:
-            return
-        self._set_mode(mode)
-
-    def _set_mode(self, mode: str) -> None:
-        if mode not in {FloatingCircle.HELP, FloatingCircle.ACTIVE}:
-            raise ValueError("Unknown control mode")
-        if self._engine_runner.is_running():
-            self._engine_abort.set()
-        self._selected_mode = mode
-        self._widget.set_mode(mode)
-        self._chat_window.set_mode(mode)
-        self.overlay_clear_requested.emit()
-        self._ghost_cursor.clear()
-        log.info("Mode set to %s.", mode.upper())
 
     def _backend_status_message(self) -> str:
         if self._backend_error:
@@ -653,7 +645,7 @@ class HelplerDesktopApp(QObject):
                 log.info("Abort requested.")
             return None
 
-        if self._audio is None:
+        if self._audio is None or self._widget.muted:
             return None
         should_start = False
         with self._lock:
@@ -713,7 +705,7 @@ class HelplerDesktopApp(QObject):
         del x, y, button, pressed
 
     def _start_voice_recording(self) -> None:
-        if not self._backend_ready or self._audio is None:
+        if not self._backend_ready or self._audio is None or self._widget.muted:
             return
         should_start = False
         with self._lock:
@@ -752,15 +744,41 @@ class HelplerDesktopApp(QObject):
             from v2_bridge import transcribe_v2
 
             transcript = transcribe_v2(recording.wav_bytes).strip()
-            log.info("Transcript: %s", transcript)
+            log.info("Voice transcription completed (characters=%d).", len(transcript))
             if transcript:
-                self._start_goal(transcript, speak=True)
+                # The recorder runs off-thread. Timers, widgets, and task admission belong to Qt's thread.
+                self.voice_transcribed.emit(transcript)
             else:
                 self._reset_busy_state(clear_caption=True)
         except Exception as exc:
             log.exception("voice pipeline failed")
             self.agent_message_received.emit(f"Voice error: {exc}")
             self._reset_busy_state(clear_caption=True)
+
+    @pyqtSlot(str)
+    def _on_voice_transcribed(self, transcript: str) -> None:
+        if self._shutting_down:
+            return
+        if self._engine_abort.is_set() or self._widget.muted:
+            self._reset_busy_state(clear_caption=True)
+            return
+        self._start_goal(transcript, speak=True)
+
+    def _on_muted_changed(self, muted: bool) -> None:
+        if not muted:
+            return
+        self._stop_speech()
+        with self._lock:
+            recording = self._recording_active
+            self._recording_active = False
+            self._recording_started_at = 0.0
+        if recording and self._audio is not None:
+            self._audio.cancel_recording()
+            self.widget_state_requested.emit(FloatingCircle.IDLE)
+
+    def _stop_speech(self) -> None:
+        if self._tts is not None:
+            self._tts.stop()
 
     def _handle_chat_submitted(self, text: str) -> None:
         message = (text or "").strip()
@@ -769,14 +787,17 @@ class HelplerDesktopApp(QObject):
         if not self._backend_ready:
             status = self._backend_status_message()
             self._chat_window.add_message(status, False)
+            self._show_final_reply(status)
             log.info(status)
             return
 
         with self._lock:
-            if self._busy:
-                return
-            self._busy = True
-
+            busy = self._busy
+            if not busy:
+                self._busy = True
+        if busy:
+            self._on_chat_status_changed("Helper is already working. Press Escape to stop it first.")
+            return
         self._start_goal(message, speak=SPEAK_TYPED_CHAT)
 
     def _reset_busy_state(self, *, clear_caption: bool = False) -> None:
@@ -788,19 +809,23 @@ class HelplerDesktopApp(QObject):
 
     # -- computer-use engine ------------------------------------------------------
 
+    def _on_computer_use_changed(self, active: bool) -> None:
+        # Queued worker events must not restore a frame after Escape or shutdown.
+        self._computer_use.set_active(active and not self._engine_abort.is_set() and not self._shutting_down)
+
     def _on_engine_highlight(
         self, x: int, y: int, width: int, height: int, label: str
     ) -> None:
+        if self._engine_abort.is_set() or self._shutting_down:
+            return
         anchor_x = x + width // 2
         anchor_y = y + height // 2
-        self._ghost_cursor.animate_to(anchor_x, anchor_y, label)
-        self._overlay.show_highlight(
-            x, y, width, height, label,
-            duration_ms=0 if self._selected_mode == FloatingCircle.HELP else 1200,
-            anchor_x=anchor_x, anchor_y=anchor_y,
-        )
+        # Active control uses the small aura pointer. Action details remain in chat/status;
+        # a target rectangle and floating speech bubble would obscure the app being used.
+        self._ghost_cursor.animate_to(anchor_x, anchor_y)
 
     def _on_engine_finished(self, ok: bool) -> None:
+        self._computer_use.set_active(False)
         self.overlay_clear_requested.emit()
         self._ghost_cursor.clear()
         self._reset_busy_state()
@@ -812,7 +837,7 @@ class HelplerDesktopApp(QObject):
     def _speak_reply(self, text: str) -> None:
         """Speak via v2's streaming TTS (sentence-chunked, barge-in capable)."""
         message = (text or "").strip()
-        if not message or self._audio is None:
+        if not message or self._audio is None or self._widget.muted:
             return
         if self._engine_abort.is_set():
             return
@@ -820,23 +845,38 @@ class HelplerDesktopApp(QObject):
         try:
             from v2.voice import TtsStreamer
 
-            tts = TtsStreamer()
-            # Stream one chunk; the worker synthesizes sentence-by-sentence.
-            tts.speak([message])
+            self._stop_speech()
+            # A fresh cancellation token avoids joining an old HTTP synthesis call on Qt's thread.
+            self._tts = TtsStreamer(model=TTS_MODEL, voice=TTS_VOICE)
+            self._tts.speak([message])
         except Exception as exc:
             log.exception("v2 TTS failed: %s", exc)
 
     def _start_goal(self, goal: str, *, speak: bool = False) -> None:
-        if self._engine_runner is None:
+        if self._engine_runner is None or self._shutting_down:
             return
+        if self._engine_runner.is_running():
+            # A second submission must never clear cancellation on the in-flight run.
+            self._on_chat_status_changed("Helper is already working. Press Escape to stop it first.")
+            return
+        with self._lock:
+            self._busy = True
+        self._stop_speech()
         self._engine_abort.clear()
         self._last_run_reply = ""
         self._reply_hide_timer.stop()
         self.user_message_received.emit(goal)
-        if not self._engine_runner.start_goal(goal, mode=self._selected_mode, speak=speak):
-            self.agent_message_received.emit(
-                "Helper is already working on a goal — wait for it to finish.")
+        try:
+            started = self._engine_runner.start_goal(goal, mode="active", speak=speak)
+        except Exception:
+            log.exception("Could not start task worker")
+            self.agent_message_received.emit("Could not start the task worker. Please try again.")
             self._reset_busy_state()
+            return
+        if not started:
+            self._on_chat_status_changed("Helper is already working on a goal — wait for it to finish.")
+            if not self._engine_runner.is_running():
+                self._reset_busy_state()
 
 def _startup_surface(argv: list[str]) -> str:
     args = {arg.strip().lower() for arg in argv[1:]}

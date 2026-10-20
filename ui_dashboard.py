@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -66,8 +67,6 @@ def _default_schema() -> SettingsSchema:
         ]),
         ("Agent", [
             ("HELPER_HOTKEY", "Hotkey", "text", "ctrl+shift+space", True),
-            ("HELPER_DEFAULT_MODE", "Default mode", "choice", ["help", "active"], True),
-            ("HELPER_ROUTE_CLASSIFIER", "Use LLM route classifier", "toggle", True, True),
             ("HELPER_MAX_AGENT_STEPS", "Max steps per task", "int", 25, True),
             ("HELPER_AGENT_TIMEOUT_SEC", "Task timeout (s)", "int", 180, True),
             ("HELPER_SCREENSHOT_MAX_EDGE", "Screenshot max edge", "int", 1280, True),
@@ -1482,6 +1481,7 @@ class DashboardWindow(QWidget):
         return footer
 
     def _save_settings(self) -> tuple[dict[str, str], bool]:
+        self._last_save_ok = False
         updates: dict[str, str] = {}
         needs_restart = False
         for env_key, widget in self._field_widgets.items():
@@ -1498,6 +1498,7 @@ class DashboardWindow(QWidget):
             return {}, False
 
         if not updates:
+            self._last_save_ok = True
             self._set_pill(self._save_status, "No changes", "neutral")
             return updates, False
 
@@ -1508,6 +1509,7 @@ class DashboardWindow(QWidget):
             self._set_pill(self._save_status, f"Save failed: {exc}", "danger")
             return updates, False
 
+        self._last_save_ok = True
         for env_key in updates:
             self._original_values[env_key] = updates[env_key]
 
@@ -1543,7 +1545,7 @@ class DashboardWindow(QWidget):
         if temp_raw:
             try:
                 temp = float(temp_raw)
-                if temp < 0.0 or temp > 2.0:
+                if not math.isfinite(temp) or temp < 0.0 or temp > 2.0:
                     return "Temperature must be between 0.0 and 2.0"
             except ValueError:
                 return "Temperature must be a number"
@@ -1554,14 +1556,15 @@ class DashboardWindow(QWidget):
                 mt = int(float(max_tokens_raw))
                 if mt < 1 or mt > 200_000:
                     return "Max tokens must be between 1 and 200000"
-            except ValueError:
+            except (ValueError, OverflowError):
                 return "Max tokens must be a number"
 
         return None
 
     def _save_and_restart(self) -> None:
-        _, _ = self._save_settings()
-        self._restart_callback()
+        self._save_settings()
+        if self._last_save_ok:
+            self._restart_callback()
 
     # --- Status page --------------------------------------------------------
 
@@ -1951,6 +1954,11 @@ class DashboardWindow(QWidget):
         if (base or key) and not (base and key):
             self._custom_api_status.setText("Both Base URL and API key are required.")
             return False
+        if base:
+            error = config.validate_api_base_url(base)
+            if error:
+                self._custom_api_status.setText(error)
+                return False
         updates = {
             "HELPER_API_BASE_URL": base,
             "HELPER_API_KEY": key,

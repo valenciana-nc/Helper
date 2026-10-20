@@ -2,16 +2,13 @@ import math
 import sys
 
 from PyQt6.QtCore import QElapsedTimer, QEvent, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QKeyEvent, QLinearGradient, QPainter, QPen
+from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QKeyEvent, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QMenu, QWidget
 
 import theme
 from ui_lava import paint_lava_orb
 
 class FloatingCircle(QWidget):
-    mode_toggle_requested = pyqtSignal()
-    mode_select_requested = pyqtSignal(str)
-    mode_changed = pyqtSignal(str)
     muted_changed = pyqtSignal(bool)
     state_changed = pyqtSignal(str)
     quit_requested = pyqtSignal()
@@ -29,11 +26,7 @@ class FloatingCircle(QWidget):
     THINKING = "thinking"
     SPEAKING = "speaking"
 
-    HELP = "help"
-    ACTIVE = "active"
-    MODE_ORDER = ("help", "active")
-    HELP_CHAT_PLACEHOLDER = "Ask helper how to..."
-    ACTIVE_CHAT_PLACEHOLDER = "Tell Helper what to do..."
+    CHAT_PLACEHOLDER = "Ask anything or give me a task…"
 
     WIDGET_W = 124
     WIDGET_W_OPEN = 360
@@ -60,7 +53,6 @@ class FloatingCircle(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.state = self.IDLE
-        self.mode = self.HELP
         self.muted = False
         self.caption: str = ""
         self._drag_offset: QPoint | None = None
@@ -107,7 +99,7 @@ class FloatingCircle(QWidget):
         self.setWindowTitle("Helper")
 
         self._chat_input = QLineEdit(self)
-        self._chat_input.setPlaceholderText(self._chat_placeholder_for_mode())
+        self._chat_input.setPlaceholderText(self.CHAT_PLACEHOLDER)
         self._chat_input.setFont(QFont("Segoe UI", 10))
         self._chat_input.setStyleSheet(theme.qss("""
             QLineEdit {{ background: transparent; border: none; color: {text_primary};
@@ -135,23 +127,6 @@ class FloatingCircle(QWidget):
         self.state = normalized
         self.state_changed.emit(self.state)
         self.update()
-
-    def set_mode(self, mode: str) -> None:
-        normalized = mode.lower()
-        if normalized not in {self.HELP, self.ACTIVE}:
-            raise ValueError(f"Unsupported widget mode: {mode}")
-        if normalized == self.mode:
-            return
-        self._wake_frame_timer()
-        self.mode = normalized
-        self._chat_input.setPlaceholderText(self._chat_placeholder_for_mode())
-        self.mode_changed.emit(self.mode)
-        self.update()
-
-    def _chat_placeholder_for_mode(self) -> str:
-        if self.mode == self.HELP:
-            return self.HELP_CHAT_PLACEHOLDER
-        return self.ACTIVE_CHAT_PLACEHOLDER
 
     def set_caption(self, text: str) -> None:
         normalized = (text or "").strip()
@@ -215,11 +190,6 @@ class FloatingCircle(QWidget):
             return
         self._chat_input.clear()
         self.chat_submitted.emit(text)
-
-    def toggle_mode(self) -> None:
-        order = self.MODE_ORDER
-        idx = order.index(self.mode) if self.mode in order else 0
-        self.set_mode(order[(idx + 1) % len(order)])
 
     def toggle_muted(self) -> None:
         self.set_muted(not self.muted)
@@ -328,12 +298,10 @@ class FloatingCircle(QWidget):
             elif getattr(self, '_click_pos', None) is not None and not self._was_dragging:
                 dist = (event.globalPosition() - self._click_pos).manhattanLength()
                 if dist < 5:
-                    if self._click_zone == self.ZONE_LEFT:
-                        self.mode_toggle_requested.emit()
+                    if self._click_zone in {self.ZONE_LEFT, self.ZONE_ORB}:
+                        self.chat_requested.emit()
                     elif self._click_zone == self.ZONE_RIGHT:
                         self.toggle_muted()
-                    elif self._click_zone == self.ZONE_ORB:
-                        self.chat_requested.emit()
             self._press_target = 0.0
             self._drag_offset = None
             self._click_pos = None
@@ -486,10 +454,21 @@ class FloatingCircle(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(theme.color('accent_subtle'))
         painter.drawEllipse(QPointF(cx, cy), 16, 16)
-        painter.setPen(theme.color('accent'))
-        painter.setFont(QFont('Segoe UI', 11, QFont.Weight.DemiBold))
-        painter.drawText(QRectF(cx - 14, cy - 14, 28, 28), Qt.AlignmentFlag.AlignCenter,
-                         '?' if self.mode == self.HELP else '↗')
+        painter.setPen(QPen(theme.color('accent'), 1.8, Qt.PenStyle.SolidLine,
+                            Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        bubble = QPainterPath(QPointF(-4, 5))
+        bubble.lineTo(-8, 9)
+        bubble.lineTo(-8, -4)
+        bubble.quadTo(-8, -7, -5, -7)
+        bubble.lineTo(5, -7)
+        bubble.quadTo(8, -7, 8, -4)
+        bubble.lineTo(8, 2)
+        bubble.quadTo(8, 5, 5, 5)
+        bubble.closeSubpath()
+        painter.drawPath(bubble)
+        painter.drawLine(QPointF(-4, -2), QPointF(4, -2))
+        painter.drawLine(QPointF(-4, 1), QPointF(1, 1))
         painter.restore()
 
     def _paint_right_icon(self, painter: QPainter, hover_amt: float) -> None:
@@ -566,17 +545,8 @@ class FloatingCircle(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(theme.qss(theme.MENU_QSS))
 
-        mode_labels = (
-            (self.HELP, "Help Mode"),
-            (self.ACTIVE, "Active Mode"),
-        )
-        for value, label in mode_labels:
-            marker = "•  " if self.mode == value else "    "
-            action = QAction(marker + label, self)
-            action.triggered.connect(
-                lambda checked=False, target=value: self.mode_select_requested.emit(target)
-            )
-            menu.addAction(action)
+        chat_action = menu.addAction("Open chat")
+        chat_action.triggered.connect(self.chat_requested.emit)
 
         mute_action = QAction("Unmute" if self.muted else "Mute", self)
         mute_action.triggered.connect(self.toggle_muted)
@@ -747,7 +717,7 @@ class ChatInputPopup(QWidget):
         self.setFixedSize(320, 40)
 
         self._edit = QLineEdit(self)
-        self._edit.setPlaceholderText(FloatingCircle.HELP_CHAT_PLACEHOLDER)
+        self._edit.setPlaceholderText(FloatingCircle.CHAT_PLACEHOLDER)
         self._edit.setStyleSheet(theme.qss(theme.INPUT_QSS) +
                                 'QLineEdit { padding: 4px 10px; font-size: 10pt; min-height: 18px; }')
         self._edit.returnPressed.connect(self._submit)
@@ -781,7 +751,7 @@ class ChatInputPopup(QWidget):
 def _run_demo() -> int:
     app = QApplication(sys.argv)
     widget = FloatingCircle()
-    widget.mode_toggle_requested.connect(widget.toggle_mode)
+    widget.chat_requested.connect(widget.toggle_chat_open)
     widget.move(80, 80)
     widget.show()
     return app.exec()

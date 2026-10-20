@@ -144,7 +144,8 @@ class QtBridgeTests(unittest.TestCase):
         try:
             self.assertFalse(app._engine_runner.is_running())
             self.assertFalse(app._engine_abort.is_set())
-            self.assertEqual(app._selected_mode, app._widget.HELP)
+            self.assertFalse(app._computer_use.active)
+            self.assertFalse(hasattr(app._widget, "mode_toggle_requested"))
         finally:
             app.shutdown()
             for widget in (app._widget, app._chat_window, app._dashboard, app._status_pill):
@@ -213,6 +214,51 @@ class BrowserIntegrationTests(unittest.TestCase):
         self.assertEqual(report.metrics.actions, 1)
         self.assertEqual(report.metrics.routes, {"dom": 1})
         self.assertEqual(report.metrics.model_calls, 3)
+
+    def test_provider_to_runtime_to_browser_repairs_play_request_and_verifies(self):
+        from helper_engine.model import ProviderModel
+        from helper_engine.runtime import Agent, Limits
+        from openai_client import OpenAIClient
+        driver = BrowserDriver(headless=True, executable_path=os.environ["HELPER_TEST_BROWSER"])
+        driver._connect()
+        driver._page.set_content("""<title>Current song</title><p id="state">Paused</p>
+          <button id="play" aria-label="Play">Play</button><script>
+          play.onclick=()=>{state.textContent='Playing'; play.setAttribute('aria-label','Pause')};</script>""")
+        observed = []
+        class Codex:
+            first = True
+            def post_response(self, body):
+                payload = json.loads(body["input"][0]["content"][0]["text"])
+                obs = payload["observation"]
+                observed.append(obs["visible_text"])
+                schema = body["text"]["format"]["schema"]
+                if "satisfied" in schema["properties"]:
+                    data = {"satisfied": "Playing" in obs["visible_text"],
+                            "evidence": "The current song is Playing and Pause is visible.", "missing": []}
+                elif self.first:
+                    self.first = False
+                    # A non-conforming backend response must still fail closed locally.
+                    data = {"kind": "act", "observation_id": obs["observation_id"],
+                            "target": {"element_id": obs["controls"][0]["id"]}, "description": "Play"}
+                else:
+                    playing = "Playing" in obs["visible_text"]
+                    action = None if playing else {"kind": "click", "target": {"element_id": obs["controls"][0]["id"]},
+                        "text": "", "keys": [], "amount": 0, "destination": None, "expect": [],
+                        "description": "Play current song", "requires_confirmation": False}
+                    data = {"kind": "finish" if playing else "act", "observation_id": obs["observation_id"],
+                            "action": action, "message": "The current song is playing." if playing else "Starting playback.",
+                            "previous_outcome": "uncertain", "evidence": "", "milestones": [], "wait_ms": 200}
+                return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(data)}]}]}
+        try:
+            report = Agent(model=ProviderModel(OpenAIClient(codex_provider=Codex()), "test"), driver=driver,
+                           limits=Limits(max_seconds=15)).run_goal("Play the song I have open", mode="active")
+            self.assertTrue(report.ok, report.message)
+            self.assertEqual(report.message, "The current song is playing.")
+            self.assertEqual(report.metrics.actions, 1)
+            self.assertEqual(report.metrics.model_calls, 4)
+            self.assertIn("Playing", observed[-1])
+        finally:
+            driver.close()
 
 
 @unittest.skipUnless(sys.platform == "win32" and os.environ.get("HELPER_TEST_UIA") == "1",

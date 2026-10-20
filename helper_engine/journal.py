@@ -14,7 +14,7 @@ class JsonJournal:
         self._lock = threading.Lock()
 
     def __call__(self, name: str, payload: dict) -> None:
-        allowed = {"run_id", "step", "status", "route", "effect", "outcome", "seconds",
+        allowed = {"run_id", "step", "status", "route", "effect", "outcome", "seconds", "reason", "kind", "mode", "surface",
                    "observations", "model_calls", "actions", "verified_actions", "stale_decisions",
                    "rejected_actions", "screenshot_bytes", "model_seconds", "elapsed_seconds", "routes"}
         record = {"event": name, "time": time.time(),

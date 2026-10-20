@@ -90,7 +90,7 @@ def parse_action(data) -> Action:
     if kind not in ACTION_KINDS:
         raise ProtocolError(f"Unsupported action: {kind}")
     target = None
-    if "target" in data:
+    if data.get("target") is not None:
         raw = data["target"]
         if not isinstance(raw, dict):
             raise ProtocolError("target must be an object")
@@ -122,7 +122,7 @@ def parse_action(data) -> Action:
         raise ProtocolError("amount must be an integer between -2400 and 2400")
     if kind == "scroll" and amount == 0:
         raise ProtocolError("scroll requires a nonzero amount")
-    destination = _box(data["destination"]) if "destination" in data else None
+    destination = _box(data["destination"]) if data.get("destination") is not None else None
     if kind == "drag" and destination is None:
         raise ProtocolError("drag requires a destination box")
     expected = data.get("expect", [])
@@ -149,13 +149,13 @@ def parse_decision(raw: str) -> Decision:
         raise ProtocolError("Unknown decision kind")
     oid = _text(data, "observation_id", limit=200, required=True)
     action = parse_action(data.get("action")) if kind == "act" else None
-    if kind != "act" and "action" in data:
-        raise ProtocolError("Only act may contain an action")
+    if kind != "act" and data.get("action") is not None:
+        raise ProtocolError("Only act may contain a non-null action")
     if kind in {"answer", "ask"} and not _text(data, "message").strip():
         raise ProtocolError(f"{kind} requires a nonempty message")
     try:
         previous = Outcome(data.get("previous_outcome", "uncertain"))
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         raise ProtocolError("Invalid previous_outcome") from exc
     milestones = data.get("milestones", [])
     if (not isinstance(milestones, list) or len(milestones) > 12
