@@ -633,6 +633,7 @@ def make_openai_client(
       - openai_compat  -> ChatCompletionsProvider on any /v1 endpoint
       - anthropic      -> AnthropicProvider
       - gemini         -> GeminiProvider
+      - xai            -> ChatCompletionsProvider on xAI's fixed API endpoint
 
     For backwards-compat: if HELPER_PROVIDER is unset but HELPER_API_BASE_URL +
     HELPER_API_KEY are both set, behave as if openai_compat were selected.
@@ -642,12 +643,15 @@ def make_openai_client(
     """
     import config
 
-    provider_name = (getattr(config, "PROVIDER", "codex") or "codex").strip().lower()
+    provider_name = config.effective_provider()
 
-    # Legacy fallback — users who set the custom-API fields before
-    # HELPER_PROVIDER existed should keep working.
-    if provider_name == "codex" and config.custom_api_enabled():
-        provider_name = "openai_compat"
+    if provider_name == "xai":
+        if not config.XAI_API_KEY:
+            raise NotSignedIn("Connect Grok with an xAI API key in Dashboard → Account.")
+        return OpenAIClient(
+            optional_api_key=optional_api_key,
+            custom_provider=ChatCompletionsProvider("https://api.x.ai/v1", config.XAI_API_KEY),
+        )
 
     if provider_name == "openai_compat":
         if not config.custom_api_enabled():
@@ -668,9 +672,7 @@ def make_openai_client(
 
     if provider_name == "anthropic":
         if not config.ANTHROPIC_API_KEY:
-            log.warning(
-                "HELPER_PROVIDER=anthropic but HELPER_ANTHROPIC_API_KEY is empty; falling back to Codex."
-            )
+            raise NotSignedIn("Connect Claude with an Anthropic API key in Dashboard → Account.")
         else:
             from anthropic_client import AnthropicProvider
 

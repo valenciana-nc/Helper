@@ -1,27 +1,48 @@
-"""Passive, softly fading computer-use aura and status banner."""
+"""Passive, breathing purple computer-use aura and glowing status banner."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter
+import math
+
+from PyQt6.QtCore import QElapsedTimer, QObject, QPointF, QRect, QRectF, Qt, QTimer
+from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QRegion
 from PyQt6.QtWidgets import QApplication, QWidget
 
 import theme
 from capture_exclusion import exclude_from_capture
 
 
+# Intentional purple presentation, independent of the monochrome dashboard/theme accents.
 AURA_COLOR = "#c79bff"
+AURA_PEAK_COLOR = "#b478ff"
+PULSE_SECONDS = 4.2
+ANIMATION_INTERVAL_MS = 33
+BANNER_COLOR = "#9254de"
+BANNER_END_COLOR = "#7b3dcc"
 BANNER_TEXT = "Helper is using your computer  ·  Esc to cancel"
 BANNER_TOP = 38.0
 BANNER_HEIGHT = 34.0
 BANNER_RADIUS = 5.0
+BANNER_MAX_GLOW = 16
 
 
-def _edge_gradient(start: QPointF, end: QPointF, opacity: float) -> QLinearGradient:
+def aura_pulse(seconds: float) -> float:
+    """A seamless low → high → low breath, starting at the original faint state."""
+    return (1 - math.cos(math.tau * (max(0.0, seconds) % PULSE_SECONDS) / PULSE_SECONDS)) / 2
+
+
+def _aura_depth(bounds: QRectF, pulse: float) -> float:
+    base = min(96.0, max(56.0, bounds.height() * .10))
+    return min(base * (1 + .55 * pulse), min(bounds.width(), bounds.height()) * .24)
+
+
+def _edge_gradient(start: QPointF, end: QPointF, opacity: float, pulse: float) -> QLinearGradient:
     gradient = QLinearGradient(start, end)
-    # A smooth translucent wash, not a stroked border. No tint reaches the center.
+    low, high = QColor(AURA_COLOR), QColor(AURA_PEAK_COLOR)
+    shade = QColor(*(round(a + (b - a) * pulse) for a, b in zip(low.getRgb()[:3], high.getRgb()[:3])))
+    # Expand and intensify a diffuse wash, never a hard stroked border or a center tint.
     for position, alpha in ((0, 58), (.12, 46), (.35, 25), (.65, 8), (1, 0)):
-        color = QColor(AURA_COLOR)
-        color.setAlpha(round(alpha * opacity))
+        color = QColor(shade)
+        color.setAlpha(round(alpha * opacity * (1 + .8 * pulse)))
         gradient.setColorAt(position, color)
     return gradient
 
@@ -31,11 +52,24 @@ def banner_rect(bounds: QRectF, metrics: QFontMetricsF) -> QRectF:
     return QRectF(bounds.center().x() - width / 2, bounds.top() + BANNER_TOP, width, BANNER_HEIGHT)
 
 
-def paint_computer_use_frame(painter: QPainter, bounds: QRectF) -> None:
-    """Diffuse lavender edge light and a violet/white banner, with no hard perimeter."""
+def _animation_region(bounds: QRectF, metrics: QFontMetricsF) -> QRegion:
+    """Only repaint the maximum edge strips and banner halo, not the desktop center."""
+    rect = bounds.toAlignedRect()
+    depth = math.ceil(_aura_depth(bounds, 1)) + 1
+    region = QRegion(QRect(rect.left(), rect.top(), rect.width(), depth))
+    region |= QRegion(QRect(rect.left(), rect.bottom() - depth + 1, rect.width(), depth))
+    region |= QRegion(QRect(rect.left(), rect.top(), depth, rect.height()))
+    region |= QRegion(QRect(rect.right() - depth + 1, rect.top(), depth, rect.height()))
+    halo = BANNER_MAX_GLOW + 2
+    return region | QRegion(banner_rect(bounds, metrics).adjusted(-halo, -halo, halo, halo).toAlignedRect())
+
+
+def paint_computer_use_frame(painter: QPainter, bounds: QRectF, seconds: float = 0.0) -> None:
+    """Breathing purple edge light and a purple/white glowing banner; transparent center."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    depth = min(96.0, max(56.0, bounds.height() * .10))
+    pulse = aura_pulse(seconds)
+    depth = _aura_depth(bounds, pulse)
     for region, start, end, opacity in (
         (QRectF(bounds.left(), bounds.top(), bounds.width(), depth),
          bounds.topLeft(), bounds.topLeft() + QPointF(0, depth), 1.0),
@@ -46,17 +80,22 @@ def paint_computer_use_frame(painter: QPainter, bounds: QRectF) -> None:
         (QRectF(bounds.right() - depth, bounds.top(), depth, bounds.height()),
          bounds.topRight(), bounds.topRight() - QPointF(depth, 0), .75),
     ):
-        painter.fillRect(region, _edge_gradient(start, end, opacity))
+        painter.fillRect(region, _edge_gradient(start, end, opacity, pulse))
 
     painter.setFont(theme.font(9, QFont.Weight.DemiBold))
     chip = banner_rect(bounds, QFontMetricsF(painter.font()))
     painter.setPen(Qt.PenStyle.NoPen)
-    # A soft, very small lift behind the banner, not a dark pill or keyboard keycap.
-    painter.setBrush(QColor(31, 20, 45, 18))
-    painter.drawRoundedRect(chip.adjusted(-2, -1, 2, 3), BANNER_RADIUS + 1, BANNER_RADIUS + 1)
+    # Small nested translucent layers approximate a soft bloom without a full-screen blur.
+    spread = 10 + (BANNER_MAX_GLOW - 10) * pulse
+    for expansion in range(math.ceil(spread), 0, -1):
+        glow = QColor(AURA_COLOR)
+        glow.setAlpha(round(1 + (4 + 3 * pulse) * (1 - expansion / spread) ** 2))
+        painter.setBrush(glow)
+        painter.drawRoundedRect(chip.adjusted(-expansion, -expansion, expansion, expansion),
+                                BANNER_RADIUS + expansion, BANNER_RADIUS + expansion)
     fill = QLinearGradient(chip.topLeft(), chip.topRight())
-    fill.setColorAt(0, QColor(theme.PALETTE_LIGHT["accent"]))
-    fill.setColorAt(1, QColor(theme.PALETTE_LIGHT["accent_hover"]))
+    fill.setColorAt(0, QColor(BANNER_COLOR))
+    fill.setColorAt(1, QColor(BANNER_END_COLOR))
     painter.setBrush(fill)
     painter.drawRoundedRect(chip, BANNER_RADIUS, BANNER_RADIUS)
     painter.setPen(QColor("#ffffff"))
@@ -70,6 +109,7 @@ class ComputerUseWindow(QWidget):
     def __init__(self, screen) -> None:
         super().__init__()
         self._screen = screen
+        self._animation_seconds = 0.0
         self.setWindowTitle("Helper computer use")
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -90,14 +130,20 @@ class ComputerUseWindow(QWidget):
 
     def _sync_to_screen(self, *_args) -> None:
         self.setGeometry(self._screen.geometry())
+        self._animated_region = _animation_region(QRectF(self.rect()), QFontMetricsF(theme.font(9, QFont.Weight.DemiBold)))
         self.update()
+
+    def set_animation_time(self, seconds: float) -> None:
+        if seconds != self._animation_seconds:
+            self._animation_seconds = seconds
+            self.update(self._animated_region)
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
         painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        paint_computer_use_frame(painter, QRectF(self.rect()))
+        paint_computer_use_frame(painter, QRectF(self.rect()), self._animation_seconds)
 
     def closeEvent(self, event) -> None:
         try:
@@ -112,6 +158,11 @@ class ComputerUseManager(QObject):
         super().__init__(parent)
         self._app = app
         self._active = False
+        self._clock = QElapsedTimer()
+        self._timer = QTimer(self)
+        self._timer.setInterval(ANIMATION_INTERVAL_MS)
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._timer.timeout.connect(self._advance_animation)
         self._windows: list[ComputerUseWindow] = []
         self.refresh_windows()
         app.screenAdded.connect(self.refresh_windows)
@@ -129,14 +180,30 @@ class ComputerUseManager(QObject):
             window.deleteLater()
         self.set_active(self._active)
 
+    def _advance_animation(self) -> None:
+        if self._active:
+            seconds = self._clock.elapsed() / 1000
+            for window in self._windows:
+                window.set_animation_time(seconds)
+
     def set_active(self, active: bool) -> None:
+        was_active = self._active
         self._active = bool(active)
+        if self._active:
+            if not was_active:
+                self._clock.start()
+                self._timer.start()
+            self._advance_animation()
+        else:
+            self._timer.stop()
+            self._clock.invalidate()
         for window in self._windows:
             if self._active:
                 window.show()
                 window.raise_()
             else:
                 window.hide()
+                window.set_animation_time(0.0)
 
     def close(self) -> None:
         self.set_active(False)

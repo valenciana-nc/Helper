@@ -187,6 +187,7 @@ class Decision:
     evidence: str = ""
     milestones: tuple[str, ...] = ()
     wait_ms: int = 200
+    continue_task: bool = False
 
 
 @dataclass(frozen=True)
@@ -215,6 +216,7 @@ class Metrics:
     verified_actions: int = 0
     stale_decisions: int = 0
     rejected_actions: int = 0
+    clarification_reviews: int = 0
     screenshot_bytes: int = 0
     model_seconds: float = 0.0
     elapsed_seconds: float = 0.0

@@ -13,11 +13,19 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
 
 - `tests/test_engine.py` — core runtime: protocol parsing, verification evidence,
   policy gate, runtime loop, perception, bootstrap validation.
+- `tests/test_agent_autonomy.py` — act-first clarification review, budget/cancellation
+  boundaries, in-memory follow-ups, preserved progress/uncertain effects, full-goal
+  verification, and harmless-search versus consequential-action policy checks.
 - `tests/test_engine_adapters.py` — Qt bridge, Windows UIA worker, browser/Hybrid
   drivers (headless Chromium fixture where available).
 - `tests/test_engine_provider_contract.py` — provider message translation
   (Codex/Anthropic/Gemini/OpenAI-compatible) and final-reply visibility.
+- `tests/test_provider_accounts.py` — Claude/Grok account cards, safe persistence,
+  Status-page removal, provider selection, and xAI text/image request routing.
 - `tests/test_core.py` — config, conversation store, launch safety, UI widgets.
+- `tests/test_theme.py` — monochrome chrome, white surfaces, contrast, neutral controls, and purple orb branding.
+  The separate computer-use UI tests cover the breathing purple edge aura,
+  purple/white banner and halo, synchronized timing, dirty regions, and idle/Escape cleanup.
 - `tests/test_computer_use_ui.py` and `tests/test_screen_geometry.py` — passive desktop presentation and monitor geometry.
 - `tests/test_voice.py`, `tests/test_voice_bridge.py`, and `tests/test_audio_recorder.py` — active voice capture/transcription pipeline.
 
@@ -32,5 +40,8 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
 
 ## What "green" means
 
-Full suite green: 213 passed, 20 subtests passed in the verified Windows run.
+The verified Windows adapter-first run passed 266 tests and 161 subtests.
+Default-order runs also encountered order-sensitive browser screenshot timeouts;
+see `VALIDATION.md` for the results and caveat. The focused computer-use/theme/
+geometry checks passed 31 tests and 113 subtests.
 Some Windows-only UIA checks may be skipped on Linux.

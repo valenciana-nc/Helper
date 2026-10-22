@@ -1,8 +1,13 @@
-# Violet desktop UI
+# White desktop UI, purple orb and breathing computer-use glow
 
-The chat, dashboard, transcript viewer, floating input, menus and native dialogs
-share the light and dark palettes in `theme.py`. Text and controls use opaque
-surfaces so readability does not depend on the desktop wallpaper or OS theme.
+The dashboard, transcript viewer, floating input, menus and native dialogs
+share the monochrome palettes in `theme.py`. Light mode uses white windows,
+sidebar, and cards with black text/buttons and neutral gray borders. The optional
+dark theme is grayscale too. Purple is reserved for the sphere artwork and the
+computer-use edge aura, banner, and cursor halo—not buttons, selection, alerts,
+navigation, or input borders.
+Text and controls use opaque surfaces so readability does not depend on the
+desktop wallpaper or OS theme.
 Card styles target their frames instead of leaking borders into child widgets.
 
 `ui_lava.py` follows the original Helper orb's luminous shading: white at the
@@ -17,19 +22,45 @@ the decorative orbs to share frames.
 
 The floating orb is 32 pixels across. Its chat bar is 360 × 40 pixels, with
 scaled side controls and a compact status pill. The left control is a stroked
-chat-bubble icon in the existing violet circle, opening the same floating input
-as the lava sphere. The Help/Act selector is removed from both chat surfaces:
-questions and computer tasks share one composer.
+chat-bubble icon in a neutral circle, opening the same floating input
+as the lava sphere. Questions and computer tasks share that composer, with no
+Help/Act selector. The dashboard is the sole main window: normal launches and
+tray activation open it directly. The separate welcome/chat window is removed;
+conversation transcripts remain available in the dashboard.
 
-`ui_computer_use.py` draws a faint lavender aura fading smoothly inward from the
-screen edges, without a solid stroke or rounded frame. The desktop center is
-fully transparent. A violet, lightly rounded banner near the top center reads
-“Helper is using your computer · Esc to cancel” in white semibold text. There
-is no dark pill, separate keycap, or ornamental status dot.
+The README PNG and multi-size Windows ICO are generated from the same violet
+orb painter with `python tools/build_brand_assets.py`. The app's window/tray
+icons and desktop shortcut load that ICO, keeping the branding consistent.
+Only the dashboard-facing Helper shortcut is retained; obsolete Chat shortcuts
+are removed when Helper refreshes its shortcuts.
 
-The active-control pointer is small and dark with a white outline and a diffuse
-lavender halo. The aura, banner, and white text use Helper's existing violet/white
-palette. Active tasks do not add target rectangles or a cursor speech bubble;
+The sidebar contains Conversations, Settings, and Account; the Status page and
+embedded log viewer are removed. Account places matching Claude and Grok cards
+directly below ChatGPT. Their buttons open official API-console sign-in pages;
+API keys remain masked, API billing is explicit, and browser sign-in alone is
+never displayed as a connected Helper account. Saving selects the provider and
+model, while restart applies it to the running engine.
+
+`ui_computer_use.py` draws a diffuse purple aura fading smoothly inward from all
+four screen edges, without a solid stroke or rounded frame. The reference is a
+colored edge bloom plus a matching colored banner, not a static outline. A
+4.2-second cosine cycle begins at the original faint lavender (`#c79bff`), expands
+55% farther inward, raises edge opacity 80%, and shifts toward a more saturated
+violet (`#b478ff`), then smoothly returns and repeats. The desktop center stays
+fully transparent throughout the cycle.
+
+The lightly rounded purple-gradient banner near the top center reads “Helper is
+using your computer · Esc to cancel” in white semibold text. Its soft purple halo
+also expands and brightens with the same breath, while the text/body stay opaque
+and legible. There is no white banner, dark pill, separate keycap, or status dot.
+One monotonic clock and an approximately 30-fps timer keep all monitors in phase;
+hotplug does not restart the cycle. Only the edge strips and banner halo are
+repainted, and the timer stops while inactive. Escape hides the windows and stops
+the animation immediately; a new task starts at the faint resting state.
+
+The active-control pointer stays small and black with a white outline and a
+diffuse purple halo matching the edge aura (`#c79bff`). The computer-use glow and
+banner are purple; dashboard chrome remains monochrome. Active tasks do not add target rectangles or a cursor speech bubble;
 action details remain in the existing chat/status surface. The aura appears only
 once the engine starts an active computer action, stays visible through outcome
 checks, and hides on completion, error, Escape, or shutdown. Per-monitor windows
@@ -41,14 +72,10 @@ fallback wrapping for long paths and URLs. The composer stays outside the scroll
 area. Dashboard account settings scroll, form rows can wrap, and the statistics
 column hides in narrow windows.
 
-Visual review included light and dark themes, the empty conversation, long
-messages, 420-pixel chat windows, 760-pixel dashboard windows, all dashboard
-pages, floating controls, and multiple lava animation phases. The live Windows
-chat was also opened and inspected. Ruff passed on the changed UI modules.
-The automatic-chat/frame update also has offscreen light/dark previews and
-regressions for the chat icon, automatic action mode, transparent/passive frame,
-monitor geometry/hotplug, worker failures, ordinary answers, and Escape cleanup.
-The full suite with the isolated browser and native UIA fixtures passed:
-248 tests, 1 skipped, and 16 subtests. The aura revision also checks smooth
-edge falloff, the violet cancel banner, the lavender pointer halo, and removal of target
-boxes/captions from active control.
+Visual checks include white/black chrome, purple orb branding, the breathing aura
+and purple/white banner, dashboard startup and tray
+activation, floating input, and transcript wrapping. Regressions cover the
+PNG/ICO artwork and all icon sizes, foreground/background launch flags,
+minimized dashboard restoration, automatic task handling, passive presentation,
+monitor geometry/hotplug, failures, ordinary answers, and Escape cleanup.
+Current full-suite results are recorded in `VALIDATION.md`.

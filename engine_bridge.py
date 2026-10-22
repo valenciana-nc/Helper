@@ -166,6 +166,8 @@ class EngineRunner(QObject):
             rect = payload.get("rect")
             if rect and payload.get("surface") == "desktop":
                 self.highlight.emit(*rect, payload.get("message", "")[:120])
+        elif name == "decision_rejected" and payload.get("reason") == "clarification_review":
+            self.status.emit("Working through the task with the information available…")
         elif name == "guided":
             self.message.emit(payload.get("message") or "Follow the highlighted step.")
         elif name == "action_result":

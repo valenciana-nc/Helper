@@ -23,8 +23,8 @@ if sys.platform == "win32":
         except Exception:
             pass
 
-from PyQt6.QtCore import QObject, QRectF, Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QIcon, QPainter, QPixmap
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from config import (
@@ -39,9 +39,9 @@ from config import (
 )
 from conversation_store import ConversationStore, StoredConversation
 from env_io import read_env
+import config
 import oauth_codex
 import theme
-from ui_chat import ChatWindow
 from ui_computer_use import ComputerUseManager
 from ui_dashboard import DashboardWindow
 from ui_ghost_cursor import GhostCursorManager
@@ -74,18 +74,8 @@ APP_ICON_PATH = ROOT / "assets" / "helper_logo.ico"
 CONVERSATIONS_PATH = ROOT / "data" / "conversations.json"
 
 def helper_app_icon(app: QApplication) -> QIcon:
-    from ui_lava import paint_lava_orb
-
-    icon = QIcon()
-    for size in (16, 24, 32, 48, 64, 128, 256):
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        inset = size * .08
-        paint_lava_orb(painter, QRectF(inset, inset, size - inset * 2, size - inset * 2), 2.4)
-        painter.end()
-        icon.addPixmap(pixmap)
-    return icon
+    """Use the same violet artwork as the desktop shortcut and README."""
+    return QIcon(str(APP_ICON_PATH))
 
 
 def normalize_key_name(name: str) -> str:
@@ -111,8 +101,7 @@ class HelplerDesktopApp(QObject):
     agent_message_received = pyqtSignal(str)
     user_message_received = pyqtSignal(str)
     chat_toggle_requested = pyqtSignal()
-    chat_window_toggle_requested = pyqtSignal()
-    chat_show_requested = pyqtSignal()
+    escape_requested = pyqtSignal()
     chat_status_changed = pyqtSignal(str)
     voice_transcribed = pyqtSignal(str)
 
@@ -156,8 +145,6 @@ class HelplerDesktopApp(QObject):
         self._engine_runner.computer_use.connect(self._on_computer_use_changed)
         # One desktop experience: the model answers or acts according to the request.
         # Legacy HELPER/HARVIS_DEFAULT_MODE must not silently disable requested actions.
-        self._chat_window = ChatWindow()
-        self._chat_window.setWindowIcon(self._app_icon)
         self._status_pill = ChatStatusPill()
         self._conversation_store = ConversationStore(CONVERSATIONS_PATH)
         self._active_conversation: StoredConversation | None = None
@@ -180,7 +167,7 @@ class HelplerDesktopApp(QObject):
         self._recording_started_at = 0.0
         self._busy = False
         self._shutting_down = False
-        # The orb's pill is the only visible reply surface while the chat window is closed.
+        # Live replies appear beside the orb; saved transcripts live in the dashboard.
         self._last_run_reply = ""
         self._reply_hide_timer = QTimer(self)
         self._reply_hide_timer.setSingleShot(True)
@@ -195,8 +182,7 @@ class HelplerDesktopApp(QObject):
         self.agent_message_received.connect(self._handle_agent_message)
         self.user_message_received.connect(self._handle_user_message)
         self.chat_toggle_requested.connect(self._toggle_widget_chat)
-        self.chat_window_toggle_requested.connect(self._toggle_chat_window_if_visible)
-        self.chat_show_requested.connect(self._show_chat_window)
+        self.escape_requested.connect(self._on_escape_pressed)
         self.chat_status_changed.connect(self._on_chat_status_changed)
         self.voice_transcribed.connect(self._on_voice_transcribed)
 
@@ -211,10 +197,7 @@ class HelplerDesktopApp(QObject):
         self._widget.dashboard_requested.connect(self._toggle_dashboard)
         self._widget.moved.connect(self._on_widget_moved)
 
-        self._chat_window.dashboard_requested.connect(self._toggle_dashboard)
-        self._chat_window.submitted.connect(self._handle_chat_submitted)
-        self._chat_window.closed.connect(self._on_chat_closed)
-        self._chat_window.close_requested.connect(self._handle_main_window_close_requested)
+        self._dashboard.closed.connect(self._sync_tray_actions)
         self._app.aboutToQuit.connect(self.shutdown)
 
         self._tray_icon: QSystemTrayIcon | None = None
@@ -223,9 +206,7 @@ class HelplerDesktopApp(QObject):
 
         self._widget.move(*self._initial_widget_position())
         self._widget.show()
-        if self._startup_surface == "chat":
-            QTimer.singleShot(0, self._show_chat_window)
-        elif self._startup_surface == "dashboard":
+        if self._startup_surface != "background":
             QTimer.singleShot(0, self._show_dashboard_window)
         self._sync_tray_actions()
         self._widget.set_state(FloatingCircle.LISTENING)
@@ -331,7 +312,6 @@ class HelplerDesktopApp(QObject):
             self._listener.stop()
         if self._audio is not None:
             self._audio.cancel_recording()
-        self._chat_window.hide()
         self._status_pill.hide()
         self._dashboard.hide()
         self._ghost_cursor.clear()
@@ -371,10 +351,7 @@ class HelplerDesktopApp(QObject):
 
         tray_menu = QMenu()
         self._tray_toggle_action = tray_menu.addAction("Show Helper")
-        self._tray_toggle_action.triggered.connect(self._toggle_chat_window)
-
-        dashboard_action = tray_menu.addAction("Dashboard")
-        dashboard_action.triggered.connect(self._toggle_dashboard)
+        self._tray_toggle_action.triggered.connect(self._toggle_dashboard)
 
         tray_menu.addSeparator()
 
@@ -396,28 +373,18 @@ class HelplerDesktopApp(QObject):
             return
         self._tray_toggle_action.setText(
             "Minimize Helper"
-            if self._chat_window.isVisible() and not self._chat_window.isMinimized()
+            if self._dashboard.isVisible() and not self._dashboard.isMinimized()
             else "Show Helper"
         )
 
-    def _toggle_chat_window(self) -> None:
-        self._chat_window.toggle_visibility()
-        self._sync_tray_actions()
-
-    def _toggle_chat_window_if_visible(self) -> None:
+    def _on_escape_pressed(self) -> None:
         # GUI-thread slot for the Esc hotkey: never touch QWidget from the
         # pynput listener thread.
         self._engine_abort.set()
         self._computer_use.set_active(False)
         self._stop_speech()
-        if self._chat_window.isVisible():
-            self._toggle_chat_window()
         self._ghost_cursor.clear()
         log.info("Goal aborted by user.")
-
-    def _show_chat_window(self) -> None:
-        self._chat_window.show_chat()
-        self._sync_tray_actions()
 
     def _show_dashboard_window(self) -> None:
         self._dashboard.show_dashboard()
@@ -425,9 +392,6 @@ class HelplerDesktopApp(QObject):
 
     def _toggle_widget_chat(self) -> None:
         self._widget.toggle_chat_open()
-        self._sync_tray_actions()
-
-    def _on_chat_closed(self) -> None:
         self._sync_tray_actions()
 
     def _on_widget_chat_open_changed(self, opened: bool) -> None:
@@ -444,7 +408,6 @@ class HelplerDesktopApp(QObject):
 
     def _on_chat_status_changed(self, text: str) -> None:
         text = (text or "").strip()
-        self._chat_window.set_status(text)
         if text:
             self._reply_hide_timer.stop()
             self._status_pill.set_text(text)
@@ -456,7 +419,6 @@ class HelplerDesktopApp(QObject):
             self._status_pill.hide()
 
     def _show_final_reply(self, text: str) -> None:
-        self._chat_window.set_status("")
         text = (text or "").strip()
         if not text:
             self._hide_final_reply()
@@ -477,15 +439,20 @@ class HelplerDesktopApp(QObject):
             QSystemTrayIcon.ActivationReason.Trigger,
             QSystemTrayIcon.ActivationReason.DoubleClick,
         }:
-            self._toggle_chat_window()
+            self._toggle_dashboard()
 
     def _toggle_dashboard(self) -> None:
         self._dashboard.toggle_visibility()
+        self._sync_tray_actions()
 
     def _status_snapshot(self) -> dict[str, object]:
         if self._cached_signed_in is None:
             self._cached_signed_in = oauth_codex.is_signed_in()
+        provider = config.effective_provider()
+        connected = bool(self._cached_signed_in) if provider == "codex" else config.provider_key_configured(provider)
         return {
+            "provider": provider,
+            "provider_connected": connected,
             "backend_ready": self._backend_ready,
             "backend_initializing": self._backend_initializing,
             "backend_error": self._backend_error,
@@ -502,20 +469,14 @@ class HelplerDesktopApp(QObject):
         self._cached_signed_in = signed_in
         if signed_in:
             self.agent_message_received.emit("Signed in. Helper is ready.")
+        elif config.effective_provider() == "codex":
+            self.agent_message_received.emit("Signed out of ChatGPT. Sign in again to use this provider.")
         else:
-            self.agent_message_received.emit(
-                "Signed out. Chat and computer-use are disabled until you sign in again."
-            )
+            self.agent_message_received.emit("Signed out of ChatGPT. Your selected API provider is unchanged.")
 
     def _handle_quit_requested(self) -> None:
         self.shutdown()
         self._app.quit()
-
-    def _handle_main_window_close_requested(self) -> None:
-        # X button minimizes the chat window instead of quitting the entire
-        # app (orb, tray icon, hotkeys). Quitting is via the tray/widget
-        # "Quit Helper" actions.
-        self._chat_window.hide_window()
 
     def _handle_restart_requested(self) -> None:
         log.info("Restart requested. Launching a fresh instance...")
@@ -542,13 +503,11 @@ class HelplerDesktopApp(QObject):
         return "Helper backend is not ready yet."
 
     def _handle_user_message(self, message: str) -> None:
-        self._chat_window.add_message(message, True)
         text = (message or "").strip()
         if text:
             self._append_to_active_conversation("user", text)
 
     def _handle_agent_message(self, message: str) -> None:
-        self._chat_window.add_message(message, False)
         text = (message or "").strip()
         if text:
             self._last_run_reply = text
@@ -620,8 +579,8 @@ class HelplerDesktopApp(QObject):
                 log.info("Recording canceled.")
             else:
                 # Never touch QWidget from the pynput thread; the signal
-                # queues the toggle/abort to the GUI thread.
-                self.chat_window_toggle_requested.emit()
+                # queues cancellation to the GUI thread.
+                self.escape_requested.emit()
                 log.info("Abort requested.")
             return None
 
@@ -694,7 +653,7 @@ class HelplerDesktopApp(QObject):
                 self._audio.cancel_recording()
             self.caption_changed.emit("")
             self.widget_state_requested.emit(FloatingCircle.IDLE)
-            log.info("Hotkey tapped. Toggling chat window.")
+            log.info("Hotkey tapped. Toggling floating chat input.")
             self.chat_toggle_requested.emit()
             return
 
@@ -792,7 +751,6 @@ class HelplerDesktopApp(QObject):
             return
         if not self._backend_ready:
             status = self._backend_status_message()
-            self._chat_window.add_message(status, False)
             self._show_final_reply(status)
             log.info(status)
             return
@@ -887,8 +845,6 @@ def _startup_surface(argv: list[str]) -> str:
     args = {arg.strip().lower() for arg in argv[1:]}
     if "--background" in args:
         return "background"
-    if "--chat" in args or "--app" in args:
-        return "chat"
     return "dashboard"
 
 

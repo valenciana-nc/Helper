@@ -145,7 +145,7 @@ def parse_action(data) -> Action:
 def parse_decision(raw: str) -> Decision:
     data = json_object(raw)
     _fields(data, {"kind", "observation_id", "message", "action", "previous_outcome",
-                   "evidence", "milestones", "wait_ms"})
+                   "evidence", "milestones", "wait_ms", "continue_task"})
     kind = _text(data, "kind", required=True)
     if kind not in {"act", "observe", "finish", "answer", "ask"}:
         raise ProtocolError("Unknown decision kind")
@@ -166,5 +166,8 @@ def parse_decision(raw: str) -> Decision:
     wait_ms = data.get("wait_ms", 200)
     if isinstance(wait_ms, bool) or not isinstance(wait_ms, int) or not 0 <= wait_ms <= 5000:
         raise ProtocolError("wait_ms must be in 0..5000")
+    continuation = data.get("continue_task", False)
+    if not isinstance(continuation, bool):
+        raise ProtocolError("continue_task must be boolean")
     return Decision(kind, oid, _text(data, "message", limit=2000), action, previous,
-                    _text(data, "evidence", limit=2000), tuple(milestones), wait_ms)
+                    _text(data, "evidence", limit=2000), tuple(milestones), wait_ms, continuation)

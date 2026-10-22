@@ -21,7 +21,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -35,7 +34,8 @@ import oauth_codex
 import config
 import theme
 from ui_lava import LavaOrb
-from ui_chat import MessageBubble
+from ui_messages import MessageBubble
+from ui_provider_accounts import PROVIDER_ACCOUNTS, ProviderAccountCard
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
 from model_catalogue import ModelCatalogue, load_codex_catalogue, refresh_codex_catalogue
@@ -56,6 +56,7 @@ def _default_schema() -> SettingsSchema:
             ("HELPER_API_KEY", "OpenAI-compat API key", "password", "", True),
             ("HELPER_ANTHROPIC_API_KEY", "Anthropic API key", "password", "", True),
             ("HELPER_GEMINI_API_KEY", "Gemini API key", "password", "", True),
+            ("HELPER_XAI_API_KEY", "Grok API key", "password", "", True),
             ("HELPER_STT_MODEL", "Speech-to-text (OpenAI)", "text", "whisper-1", True),
             ("HELPER_TTS_MODEL", "Text-to-speech (OpenAI)", "text", "gpt-4o-mini-tts", True),
             ("HELPER_TTS_VOICE", "TTS voice", "text", "alloy", True),
@@ -154,11 +155,9 @@ _BUTTON_QSS = theme.qss(theme.BUTTON_QSS, _PALETTE)
 _GHOST_BUTTON_QSS = theme.qss(theme.GHOST_BUTTON_QSS, _PALETTE)
 _SEGMENTED_BUTTON_QSS = theme.qss(theme.SEGMENTED_BUTTON_QSS, _PALETTE)
 _SCROLL_QSS = theme.qss(theme.SCROLL_QSS, _PALETTE)
-_LOG_QSS = theme.qss(theme.LOG_QSS, _PALETTE)
 _CONVO_ROW_QSS = theme.qss(theme.CONVO_ROW_QSS, _PALETTE)
 _STAT_CARD_QSS = theme.qss(theme.STAT_CARD_QSS, _PALETTE)
 _CARD_QSS = theme.qss(theme.CARD_QSS, _PALETTE)
-_STATUS_CARD_QSS = _CARD_QSS
 _ACCOUNT_CARD_QSS = _CARD_QSS
 _VOICE_CARD_QSS = _CARD_QSS
 _FOOTER_BAR_QSS = theme.qss(theme.FOOTER_BAR_QSS, _PALETTE)
@@ -198,7 +197,6 @@ def _icon_font() -> str | None:
 _NAV_ICON_GLYPHS: dict[str, str] = {
     "conversations": "",  # Comment / chat
     "settings": "",        # Settings gear
-    "status": "",          # Health / status pulse
     "account": "",         # Contact / person
 }
 
@@ -207,7 +205,6 @@ _NAV_ICON_GLYPHS: dict[str, str] = {
 _NAV_ICON_FALLBACK: dict[str, str] = {
     "conversations": "▢",
     "settings": "⚙",
-    "status": "◉",
     "account": "◌",
 }
 
@@ -258,7 +255,7 @@ def _nav_icon(key: str, color_token: str = "text_secondary") -> QIcon:
 
 
 # Curated provider menu used by the new provider/model dropdowns.
-_PROVIDER_KEYS: tuple[str, ...] = ("codex", "openai_compat", "anthropic", "gemini")
+_PROVIDER_KEYS: tuple[str, ...] = ("codex", "openai_compat", "anthropic", "gemini", "xai")
 
 
 def _provider_label(key: str) -> str:
@@ -430,9 +427,8 @@ class DashboardWindow(QWidget):
 
     NAV_CONVERSATIONS = "conversations"
     NAV_SETTINGS = "settings"
-    NAV_STATUS = "status"
     NAV_ACCOUNT = "account"
-    NAV_ORDER = (NAV_CONVERSATIONS, NAV_SETTINGS, NAV_STATUS, NAV_ACCOUNT)
+    NAV_ORDER = (NAV_CONVERSATIONS, NAV_SETTINGS, NAV_ACCOUNT)
 
     def __init__(
         self,
@@ -465,19 +461,20 @@ class DashboardWindow(QWidget):
         self._nav_buttons: dict[str, QPushButton] = {}
         self._page_index: dict[str, int] = {}
         self._last_rendered_signature: tuple[Any, ...] | None = None
-        # Cache the keyring-backed account email: _refresh_status() runs every
+        # Cache the keyring-backed account email: the connection pill refreshes every
         # 2s and account_email() is a credential-manager round-trip. Refreshed
         # in _refresh_account_card() on auth transitions.
         self._cached_account_email: str | None = None
+        self._provider_account_cards: dict[str, ProviderAccountCard] = {}
 
         self._build_window()
         self._build_ui()
-        self._refresh_status()
+        self._refresh_connection_status()
         self._refresh_conversations(force=True)
 
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(2000)
-        self._status_timer.timeout.connect(self._refresh_status)
+        self._status_timer.timeout.connect(self._refresh_connection_status)
         self._status_timer.timeout.connect(self._refresh_conversations)
 
     def _build_window(self) -> None:
@@ -513,7 +510,6 @@ class DashboardWindow(QWidget):
         self._stack.setStyleSheet(f"background: {_COLOR_BG_WINDOW};")
         self._page_index[self.NAV_CONVERSATIONS] = self._stack.addWidget(self._build_conversations_page())
         self._page_index[self.NAV_SETTINGS] = self._stack.addWidget(self._build_settings_page())
-        self._page_index[self.NAV_STATUS] = self._stack.addWidget(self._build_status_page())
         self._page_index[self.NAV_ACCOUNT] = self._stack.addWidget(self._build_account_page())
         body_layout.addWidget(self._stack, 1)
 
@@ -565,7 +561,6 @@ class DashboardWindow(QWidget):
         for key, label, icon_key in (
             (self.NAV_CONVERSATIONS, "Conversations", "conversations"),
             (self.NAV_SETTINGS, "Settings", "settings"),
-            (self.NAV_STATUS, "Status", "status"),
             (self.NAV_ACCOUNT, "Account", "account"),
         ):
             btn = QPushButton(label)
@@ -597,10 +592,6 @@ class DashboardWindow(QWidget):
         )
         layout.addWidget(self._sidebar_foot_pill)
 
-        # Keep the legacy attribute name available so existing _refresh_status
-        # code paths that reference it don't NameError.
-        self._sidebar_foot_chip = self._sidebar_foot_pill
-
         version_label = QLabel("Helper · local build")
         version_label.setFont(QFont("Segoe UI", 8))
         version_label.setStyleSheet(
@@ -618,8 +609,6 @@ class DashboardWindow(QWidget):
         self._stack.setCurrentIndex(self._page_index[key])
         if key == self.NAV_CONVERSATIONS:
             self._refresh_conversations(force=True)
-        elif key == self.NAV_STATUS:
-            self._refresh_status()
         elif key == self.NAV_ACCOUNT:
             self._refresh_account_card()
 
@@ -919,6 +908,7 @@ class DashboardWindow(QWidget):
             "HELPER_API_KEY",
             "HELPER_ANTHROPIC_API_KEY",
             "HELPER_GEMINI_API_KEY",
+            "HELPER_XAI_API_KEY",
         ):
             widget = self._field_widgets.get(key)
             if isinstance(widget, QLineEdit):
@@ -977,6 +967,7 @@ class DashboardWindow(QWidget):
             "HELPER_API_KEY": provider_key == "openai_compat",
             "HELPER_ANTHROPIC_API_KEY": provider_key == "anthropic",
             "HELPER_GEMINI_API_KEY": provider_key == "gemini",
+            "HELPER_XAI_API_KEY": provider_key == "xai",
         }
         for env_key, visible in visibility.items():
             self._set_field_visible(env_key, visible)
@@ -1005,6 +996,11 @@ class DashboardWindow(QWidget):
         elif provider_key == "gemini":
             if self._field_value("HELPER_GEMINI_API_KEY"):
                 self._set_pill(self._provider_pill, "Ready", "success")
+            else:
+                self._set_pill(self._provider_pill, "API key required", "warning")
+        elif provider_key == "xai":
+            if self._field_value("HELPER_XAI_API_KEY"):
+                self._set_pill(self._provider_pill, "API key supplied", "success")
             else:
                 self._set_pill(self._provider_pill, "API key required", "warning")
         else:
@@ -1539,6 +1535,9 @@ class DashboardWindow(QWidget):
         elif provider == "gemini":
             if not self._field_value("HELPER_GEMINI_API_KEY"):
                 return "Gemini provider needs an API key"
+        elif provider == "xai":
+            if not self._field_value("HELPER_XAI_API_KEY"):
+                return "Grok provider needs an xAI API key"
 
         # Generation bounds (clamped on read in config.py, but flag here too).
         temp_raw = self._field_value("HELPER_TEMPERATURE")
@@ -1566,139 +1565,27 @@ class DashboardWindow(QWidget):
         if self._last_save_ok:
             self._restart_callback()
 
-    # --- Status page --------------------------------------------------------
-
-    def _build_status_page(self) -> QWidget:
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(28, 28, 28, 20)
-        layout.setSpacing(14)
-
-        layout.addWidget(self._build_page_heading("Status", "Backend health and logs"))
-
-        info_card = QFrame()
-        info_card.setObjectName("SurfaceCard")
-        info_card.setStyleSheet(_STATUS_CARD_QSS)
-        info_layout = QFormLayout(info_card)
-        info_layout.setContentsMargins(14, 12, 14, 14)
-        info_layout.setHorizontalSpacing(14)
-        info_layout.setVerticalSpacing(8)
-
-        self._status_labels: dict[str, QLabel] = {}
-        for key, label in [
-            ("backend", "Backend"),
-            ("account", "Account"),
-            ("agent", "Agent"),
-            ("mode", "Current mode"),
-            ("hotkey", "Hotkey"),
-            ("error", "Last error"),
-            ("log_path", "Log file"),
-        ]:
-            name = QLabel(label)
-            name.setFont(QFont("Segoe UI", 9))
-            name.setStyleSheet(
-                f"color: {_COLOR_TEXT_MUTED}; background: transparent; border: none;"
-            )
-            value = QLabel("—")
-            value.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
-            value.setStyleSheet(
-                f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
-            )
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            info_layout.addRow(name, value)
-            self._status_labels[key] = value
-        layout.addWidget(info_card)
-
-        log_heading = QLabel("Recent log")
-        log_heading.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-        log_heading.setStyleSheet(
-            f"color: {_COLOR_TEXT_PRIMARY}; background: transparent; border: none;"
-        )
-        layout.addWidget(log_heading)
-
-        self._log_view = QPlainTextEdit()
-        self._log_view.setReadOnly(True)
-        self._log_view.setStyleSheet(_LOG_QSS)
-        layout.addWidget(self._log_view, 1)
-        return container
-
-    def _refresh_status(self) -> None:
-        if not hasattr(self, "_status_labels"):
-            return
+    def _refresh_connection_status(self) -> None:
+        """Refresh the small account indicator; there is no separate Status page."""
         try:
             snapshot = self._status_provider() or {}
         except Exception:
-            log.exception("Status provider raised")
+            log.exception("Connection status provider raised")
             return
-
-        if snapshot.get("backend_ready"):
-            backend_text = "Ready"
-        elif snapshot.get("backend_initializing"):
-            backend_text = "Starting..."
-        elif snapshot.get("backend_error"):
-            backend_text = f"Failed: {snapshot['backend_error']}"
-        else:
-            backend_text = "Not started"
-
-        account_text = "Signed in" if snapshot.get("signed_in") else "Signed out"
-        if snapshot.get("agent_ready"):
-            agent_text = "Ready"
-        elif snapshot.get("agent_error"):
-            agent_text = f"Disabled: {snapshot['agent_error']}"
+        provider = snapshot.get("provider", "codex")
+        if provider != "codex":
+            ready = bool(snapshot.get("provider_connected"))
+            label = config.PROVIDER_LABELS.get(provider, str(provider))
+            self._set_pill(self._sidebar_foot_pill,
+                           f"{label} · API key {'configured' if ready else 'required'}",
+                           "success" if ready else "warning")
         elif snapshot.get("signed_in"):
-            agent_text = "Not started"
+            if self._cached_account_email is None:
+                self._cached_account_email = oauth_codex.account_email() or "ChatGPT"
+            self._set_pill(self._sidebar_foot_pill, f"Signed in · {self._cached_account_email}", "success")
         else:
-            agent_text = "Disabled until sign-in"
-
-        self._status_labels["backend"].setText(backend_text)
-        self._status_labels["account"].setText(account_text)
-        self._status_labels["agent"].setText(agent_text)
-        self._status_labels["mode"].setText(str(snapshot.get("mode", "-")).upper())
-        self._status_labels["hotkey"].setText(str(snapshot.get("hotkey", "-")))
-        self._status_labels["error"].setText(
-            str(snapshot.get("backend_error") or snapshot.get("agent_error") or "None")
-        )
-
-        log_path = snapshot.get("log_path")
-        if isinstance(log_path, Path):
-            self._status_labels["log_path"].setText(str(log_path))
-            self._update_log_view(log_path)
-        else:
-            self._status_labels["log_path"].setText("—")
-
-        if hasattr(self, "_sidebar_foot_pill"):
-            if snapshot.get("signed_in"):
-                if self._cached_account_email is None:
-                    self._cached_account_email = oauth_codex.account_email() or "ChatGPT"
-                self._set_pill(self._sidebar_foot_pill, f"Signed in · {self._cached_account_email}", "success")
-            else:
-                self._cached_account_email = None
-                self._set_pill(
-                    self._sidebar_foot_pill,
-                    "Not signed in — open Account to sign in",
-                    "warning",
-                )
-
-    def _update_log_view(self, log_path: Path) -> None:
-        if not log_path.exists():
-            return
-        try:
-            with log_path.open("r", encoding="utf-8", errors="replace") as handle:
-                handle.seek(0, 2)
-                size = handle.tell()
-                read_size = min(size, 8_000)
-                handle.seek(size - read_size)
-                tail = handle.read()
-        except OSError:
-            return
-        lines = tail.splitlines()[-80:]
-        text = "\n".join(lines)
-        if text != self._log_view.toPlainText():
-            self._log_view.setPlainText(text)
-            scrollbar = self._log_view.verticalScrollBar()
-            scrollbar.setValue(scrollbar.maximum())
+            self._cached_account_email = None
+            self._set_pill(self._sidebar_foot_pill, "Not signed in — open Account to sign in", "warning")
 
     # --- Account page -------------------------------------------------------
 
@@ -1765,6 +1652,14 @@ class DashboardWindow(QWidget):
         layout.addWidget(account_card)
 
         env_values = read_env(self._env_path)
+        for account in PROVIDER_ACCOUNTS:
+            model = (env_values.get("HELPER_AGENT_MODEL") if env_values.get("HELPER_PROVIDER") == account.provider
+                     else None) or config.resolve_provider_model("HELPER_AGENT_MODEL", {"HELPER_PROVIDER": account.provider})
+            card = ProviderAccountCard(account, env_values.get(account.key_setting, ""), model)
+            card.save_requested.connect(self._save_provider_account)
+            card.remove_requested.connect(self._remove_provider_account)
+            self._provider_account_cards[account.provider] = card
+            layout.addWidget(card)
         current_key = env_values.get("OPENAI_API_KEY", "")
 
         audio_card = QFrame()
@@ -1843,6 +1738,62 @@ class DashboardWindow(QWidget):
         scroll.setStyleSheet(_SCROLL_QSS)
         scroll.setWidget(container)
         return scroll
+
+    def _sync_saved_account_settings(self, updates: dict[str, str]) -> None:
+        """Update only saved fields, preserving unrelated unsaved Settings drafts."""
+        for key, value in updates.items():
+            widget = self._field_widgets.get(key)
+            if widget is not None:
+                blocked = widget.blockSignals(True)
+                try:
+                    if isinstance(widget, QLineEdit):
+                        widget.setText(value)
+                    elif isinstance(widget, QComboBox):
+                        index = widget.findData(value)
+                        if index >= 0:
+                            widget.setCurrentIndex(index)
+                        else:
+                            widget.setEditText(value)
+                finally:
+                    widget.blockSignals(blocked)
+            self._original_values[key] = value
+        self._refresh_provider_dependents()
+
+    def _save_provider_account(self, provider: str, key: str, model: str, restart: bool) -> bool:
+        card = self._provider_account_cards[provider]
+        if not key.strip() or not model.strip() or any(c.isspace() for c in key) or any(c in model for c in "\r\n"):
+            card.status_label.setText("Enter a valid API key and model first.")
+            return False
+        updates = {card.account.key_setting: key, "HELPER_PROVIDER": provider,
+                   "HELPER_AGENT_MODEL": model, "HELPER_REASONING_MODEL": model}
+        try:
+            write_env(self._env_path, updates)
+        except Exception as exc:
+            log.error("Could not save %s credentials (%s)", provider, type(exc).__name__)
+            card.status_label.setText("Could not save. No provider change was applied.")
+            return False
+        self._sync_saved_account_settings(updates)
+        card.refresh_saved_key(key)
+        card.status_label.setText(f"API key saved; {card.account.name} selected. Restart to apply. Key not validated.")
+        if restart:
+            self._restart_callback()
+        return True
+
+    def _remove_provider_account(self, provider: str) -> bool:
+        card = self._provider_account_cards[provider]
+        updates = {card.account.key_setting: ""}
+        try:
+            write_env(self._env_path, updates)
+        except Exception as exc:
+            log.error("Could not remove %s credentials (%s)", provider, type(exc).__name__)
+            card.status_label.setText("Could not remove the saved key.")
+            return False
+        card.key_input.clear()
+        card.show_key_button.setChecked(False)
+        card.refresh_saved_key("")
+        self._sync_saved_account_settings(updates)
+        card.status_label.setText("API key removed. Restart to disconnect the running provider.")
+        return True
 
     def _build_custom_api_card(self, env_values: dict[str, str]) -> QFrame:
         card = QFrame()
@@ -1982,6 +1933,13 @@ class DashboardWindow(QWidget):
     def _refresh_account_card(self) -> None:
         if not hasattr(self, "_sign_in_button"):
             return
+        try:
+            values = read_env(self._env_path)
+        except OSError:
+            values = None
+        if values is not None:
+            for card in self._provider_account_cards.values():
+                card.refresh_saved_key(values.get(card.account.key_setting, ""))
         signed_in = oauth_codex.is_signed_in()
         if signed_in:
             email = oauth_codex.account_email() or "unknown account"
@@ -2064,10 +2022,12 @@ class DashboardWindow(QWidget):
             latest = load_codex_catalogue()
             self._codex_catalogue = ModelCatalogue(latest.models, latest.source, self._codex_catalogue.warning)
         self._reload_from_env()
+        if self.isMinimized():
+            self.showNormal()
         self.show()
         self.raise_()
         self.activateWindow()
-        self._refresh_status()
+        self._refresh_connection_status()
         self._refresh_conversations(force=True)
         if not self._status_timer.isActive():
             self._status_timer.start()
@@ -2156,7 +2116,7 @@ class DashboardWindow(QWidget):
         self.closed.emit()
 
     def toggle_visibility(self) -> None:
-        if self.isVisible():
+        if self.isVisible() and not self.isMinimized():
             self.hide_window()
         else:
             self.show_dashboard()

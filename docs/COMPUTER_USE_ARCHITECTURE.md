@@ -43,6 +43,9 @@ flowchart TD
     Receipt --> Check
     Check --> Local[Check explicit postconditions locally]
     Local --> Model
+    Model -->|First proposed question, active only| Review[One bounded clarification review]
+    Review --> Obs
+    Model -->|Essential question after review| Input[Needs user input + in-memory pending task]
     Model -->|Finish request| Final[Fresh full observation + independent goal verifier]
     Final -->|Unproven| Model
     Final -->|Verified| Result[Final report + metrics]
@@ -74,7 +77,7 @@ while still avoiding a model round trip per physical keystroke.
 | journal.py | Optional metadata-only JSONL records |
 | evaluate.py | Summarizes run status, time, calls, actions, bytes and routes |
 | engine_bridge.py | Worker-thread execution, queued Qt presentation signals and approval dialog |
-| ui_computer_use.py | Passive lavender edge aura and violet/white banner during computer actions; capture exclusion and multi-monitor layout |
+| ui_computer_use.py | Passive breathing purple edge aura and glowing purple/white banner; capture exclusion and synchronized multi-monitor presentation |
 
 ## Observation and targeting rules
 
@@ -103,7 +106,11 @@ pixel scale, matching DOM bounding boxes even on a high-DPI display.
 
 The computer-use frame and ghost cursor request Windows capture exclusion so
 their animation does not become evidence of app progress. That mechanism depends
-on Windows/DWM support; it is not a secrecy guarantee.
+on Windows/DWM support; it is not a secrecy guarantee. The aura and banner halo
+breathe together on a 4.2-second cycle using one monotonic clock across monitors.
+The approximately 30-fps presentation timer only runs during active computer use,
+repainting the edge strips/banner rather than the desktop center. Escape and
+shutdown stop it immediately. This adds no model calls or execution delays.
 
 ## Efficient platform access
 
@@ -131,13 +138,45 @@ not automatically selected.
 ## Context and verification cost
 
 Each decision receives one current annotated screenshot plus at most 100
-structured controls, a bounded conversation summary, milestones, feedback, and
-the eight most recent receipts. Prior screenshot history is not resent.
+structured controls, the eight most recent conversation turns, milestones, feedback,
+and the eight most recent receipts. Prior screenshot history is not resent.
 The last annotation/base64 encoding is cached for invalid-response repairs.
 
 Exact checks run locally after an action. The next normal decision also assesses
 the prior result; routine steps do not require an extra verifier model call.
 Only a request to finish triggers a separate fresh full-state goal check.
+
+### Task autonomy and follow-ups
+
+The actor instructions prefer routine reversible work over clarification: inspect the
+current UI, search the supplied words despite typos, choose reasonable defaults,
+and complete independent clear parts of a multi-part request. Essential missing
+private input and consequential choices are not guessed. These instructions are
+behavioral guidance, not a guarantee that every task will succeed.
+
+In active mode, the first proposed `ask` gets one review opportunity within the
+existing decision/model/time budgets. The runtime supplies the proposed question
+as feedback and takes a fresh observation; it does not expose that question as a
+final reply yet. The model may act, inspect, or still ask if genuinely blocked.
+There is at most one review per run, no review on the normal action path, and no
+extra review in explicit CLI Help mode. Review counts are included in metadata.
+
+An unfinished active task is kept in memory with its original goal, user follow-up
+instructions, milestones, up to eight recent receipts, and uncertain-action
+fingerprints. On the next request, the normal decision call chooses `continue_task`
+in the typed response. A continuation restores that task's goal and progress;
+an unrelated new task starts fresh, and an ordinary answer does not automatically
+resume the pending task. Once selected, the pending-task candidate is removed
+from the current decision context so it cannot distract a new task. Continuations
+must still pass target validation and policy checks, and cannot use an ordinary
+`answer` to bypass final-goal verification. Completion or cancellation clears the
+pending task. This is not durable resumption: restarting Helper loses this state,
+and saved transcripts alone do not restore it.
+
+Exact search submissions and ordinary field filling avoid keyword-only consent
+false positives. Explicit confirmation requests, credential fields, consequential
+commit controls, and terminal commits retain their checks. Policy remains a
+heuristic boundary, not a complete security system.
 
 The independent verifier call shares the configured model but has separate
 instructions. It is not an independent external benchmark judge. Partial UIA/DOM
@@ -154,7 +193,11 @@ not claim exact billable image tokens, which vary by model and provider.
 - Stale decisions cause a fresh observation and new grounding.
 - Validation errors before dispatch never become receipts claiming a possible click.
   Cancellation is checked again after validation and after presentation callbacks.
-- Ambiguous post-dispatch effects prevent repeating the matching non-idempotent action.
+- Ambiguous post-dispatch effects prevent repeating the matching non-idempotent action,
+  including after an in-memory task continuation.
+- A failed finish can be corrected; observable non-rejected/non-unknown action progress
+  resets the consecutive failed-finish counter. Two unproven finishes without new
+  progress still stop rather than spin indefinitely.
 - Repeated clicks on unchanged state are blocked and eventually request user help.
   "Unchanged" compares each control's name, role, geometry, value, and state
   flags (enabled, visible, focused, password), so a newly enabled button is

@@ -44,6 +44,7 @@ DECISION = _object({
     "evidence": _text(2000),
     "milestones": {"type": "array", "items": _text(300), "maxItems": 12},
     "wait_ms": {"type": "integer", "minimum": 0, "maximum": 5000},
+    "continue_task": {"type": "boolean"},
 })
 VERIFICATION = _object({
     "satisfied": {"type": "boolean"}, "evidence": _text(2000),

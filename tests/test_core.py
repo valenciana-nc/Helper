@@ -10,13 +10,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import requests
+from PIL import Image
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
 import config
 import main
 import token_store
-from ui_chat import ChatWindow
 from ui_dashboard import DashboardWindow
 from ui_widget import FloatingCircle
 from openai_client import (
@@ -389,48 +389,38 @@ class DesktopWindowTests(unittest.TestCase):
         self.assertTrue(main.APP_ICON_PATH.exists())
         self.assertFalse(main.helper_app_icon(app).isNull())
 
-    def test_chat_window_is_normal_taskbar_window_and_close_requests_quit(self) -> None:
-        app = _qt_app()
-        window = ChatWindow()
+    def test_all_foreground_launches_open_the_dashboard(self) -> None:
+        for flags in ([], ["--dashboard"], ["--app"], ["--chat"]):
+            with self.subTest(flags=flags):
+                self.assertEqual(main._startup_surface(["main.py", *flags]), "dashboard")
+        self.assertEqual(main._startup_surface(["main.py", "--background"]), "background")
 
-        flags = window.windowFlags()
-        self.assertTrue(flags & Qt.WindowType.Window)
-        self.assertEqual(
-            flags & Qt.WindowType.WindowType_Mask,
-            Qt.WindowType.Window,
-        )
+    def test_readme_logo_and_desktop_icon_share_purple_artwork(self) -> None:
+        logo_path = main.APP_ICON_PATH.with_suffix(".png")
+        with Image.open(logo_path) as logo, Image.open(main.APP_ICON_PATH) as icon:
+            self.assertEqual(logo.size, (1024, 1024))
+            self.assertTrue({(16, 16), (32, 32), (48, 48), (256, 256)} <= icon.ico.sizes())
+            for size in icon.ico.sizes():
+                with self.subTest(size=size):
+                    frame = icon.ico.getimage(size).convert("RGBA")
+                    expected = logo.convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+                    self.assertEqual(frame.tobytes(), expected.tobytes())
+            red, green, blue, alpha = logo.convert("RGBA").getpixel((512, 780))
+            self.assertGreater(red, green + 10)
+            self.assertGreater(blue, green + 30)
+            self.assertEqual(alpha, 255)
+            self.assertEqual(logo.convert("RGBA").getpixel((0, 0))[3], 0)
 
-        close_requested: list[bool] = []
-        window.close_requested.connect(lambda: close_requested.append(True))
-        window.close()
-        app.processEvents()
-
-        self.assertTrue(close_requested)
-
-    def test_chat_show_restores_minimized_window(self) -> None:
-        app = _qt_app()
-        window = ChatWindow()
-
-        window.show()
-        app.processEvents()
-        window.showMinimized()
-        app.processEvents()
-
-        window.show_chat()
-        app.processEvents()
-
-        self.assertTrue(window.isVisible())
-        self.assertFalse(window.isMinimized())
-        window.hide()
-        window.deleteLater()
-
-    def test_chat_window_accepts_questions_and_tasks_without_mode_switches(self) -> None:
-        app = _qt_app()
-        window = ChatWindow()
-        self.assertEqual(window._input.placeholderText(), "Ask anything or give me a task…")
-        self.assertFalse(hasattr(window, "_mode_buttons"))
-        app.processEvents()
-        window.deleteLater()
+    def test_shortcuts_open_only_dashboard_and_retire_the_old_chat_shortcut(self) -> None:
+        import windows_integration as integration
+        with tempfile.TemporaryDirectory() as folder:
+            with (patch.object(integration, "os", SimpleNamespace(name="nt", environ={"APPDATA": folder})),
+                  patch.object(integration.Path, "home", return_value=Path(folder))):
+                specs = integration.helper_shortcut_specs()
+                self.assertEqual(len(specs), 2)
+                self.assertTrue(all(path.name == "Helper.lnk" and flag == "--dashboard" for path, flag in specs))
+                stale = integration._stale_shortcut_paths()
+                self.assertEqual(sum(path.name == "Helper Chat.lnk" for path in stale), 2)
 
     def test_floating_chat_accepts_questions_and_tasks_without_mode_switches(self) -> None:
         app = _qt_app()

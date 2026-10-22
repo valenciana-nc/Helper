@@ -122,7 +122,7 @@ class FinalReplyVisibilityTests(unittest.TestCase):
             self.assertEqual(app._status_pill.text(), "Looking at the current app...")
         finally:
             app.shutdown()
-            for widget in (app._widget, app._chat_window, app._dashboard, app._status_pill):
+            for widget in (app._widget, app._dashboard, app._status_pill):
                 widget.close()
                 widget.deleteLater()
             self.app.processEvents()

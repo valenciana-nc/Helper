@@ -103,7 +103,7 @@ class FloatingCircle(QWidget):
         self._chat_input.setFont(QFont("Segoe UI", 10))
         self._chat_input.setStyleSheet(theme.qss("""
             QLineEdit {{ background: transparent; border: none; color: {text_primary};
-                padding: 0; selection-background-color: {accent}; selection-color: white; }}
+                padding: 0; selection-background-color: {accent}; selection-color: {selection_fg}; }}
         """))
         self._chat_input.setAccessibleName("Message Helper")
         self.setToolTip("Click to chat · Hold to speak · Right-click for settings")
@@ -391,7 +391,7 @@ class FloatingCircle(QWidget):
         self._paint_right_icon(painter, self._hover_amt)
         if self.state != self.IDLE:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor('#a750ea'))
+            painter.setBrush(theme.color('accent'))
             offset = radius * .7
             dot_radius = radius * .13
             painter.drawEllipse(QPointF(cx + offset, cy + offset), dot_radius, dot_radius)
@@ -537,7 +537,7 @@ class FloatingCircle(QWidget):
             Qt.TextElideMode.ElideLeft,
             int(text_rect.width()),
         )
-        painter.setPen(QColor(240, 248, 255, 230))
+        painter.setPen(QColor(245, 245, 245, 230))
         painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignCenter), elided)
         painter.restore()
 

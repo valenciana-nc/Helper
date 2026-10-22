@@ -148,7 +148,7 @@ class QtBridgeTests(unittest.TestCase):
             self.assertFalse(hasattr(app._widget, "mode_toggle_requested"))
         finally:
             app.shutdown()
-            for widget in (app._widget, app._chat_window, app._dashboard, app._status_pill):
+            for widget in (app._widget, app._dashboard, app._status_pill):
                 widget.close()
                 widget.deleteLater()
             self.app.processEvents()

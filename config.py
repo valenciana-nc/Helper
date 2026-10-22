@@ -16,6 +16,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 STARTUP_LOG = LOGS_DIR / "startup.log"
 ENV_PATH = ROOT / ".env"
 CODEX_MODEL_DEFAULT = "gpt-6-luna"
+GROK_MODEL_DEFAULT = "grok-4.7"
 STT_MODEL_DEFAULT = "whisper-1"
 TTS_MODEL_DEFAULT = "gpt-4o-mini-tts"
 
@@ -127,7 +128,8 @@ def _provider_from_values(values: Mapping[str, str] | None = None) -> str:
 
 def resolve_provider_model(name: str, values: Mapping[str, str] | None = None) -> str:
     provider = _provider_from_values(values)
-    defaults = {"anthropic": "claude-sonnet-4-6", "gemini": "gemini-2.5-flash", "openai_compat": CODEX_MODEL_DEFAULT}
+    defaults = {"anthropic": "claude-sonnet-4-6", "gemini": "gemini-2.5-flash",
+                "xai": GROK_MODEL_DEFAULT, "openai_compat": CODEX_MODEL_DEFAULT}
     if provider not in defaults:
         return resolve_codex_model(name, values=values)
     value, _source = env_value_with_source(name, defaults[provider], values)
@@ -245,6 +247,7 @@ API_MODEL = env_value("HELPER_API_MODEL", "").strip()
 PROVIDER = env_value("HELPER_PROVIDER", "codex").strip().lower() or "codex"
 ANTHROPIC_API_KEY = env_value("HELPER_ANTHROPIC_API_KEY", "").strip()
 GEMINI_API_KEY = env_value("HELPER_GEMINI_API_KEY", "").strip()
+XAI_API_KEY = env_value("HELPER_XAI_API_KEY", "").strip()
 
 
 TEMPERATURE = _float_env("HELPER_TEMPERATURE", 0.7, lo=0.0, hi=2.0)
@@ -259,6 +262,7 @@ THEME = "dark" if _theme_raw == "dark" else "light"
 PROVIDER_MODELS: dict[str, list[str]] = {
     "codex": [model.id for model in load_codex_catalogue().models],
     "openai_compat": [],
+    "xai": [GROK_MODEL_DEFAULT, "grok-4.3"],
     "anthropic": [
         "claude-opus-4-8",
         "claude-sonnet-4-6",
@@ -277,11 +281,25 @@ PROVIDER_LABELS: dict[str, str] = {
     "openai_compat": "OpenAI-compatible",
     "anthropic": "Anthropic Claude",
     "gemini": "Google Gemini",
+    "xai": "Grok (xAI)",
 }
 
 
 def custom_api_enabled() -> bool:
     return bool(API_BASE_URL and API_KEY)
+
+
+def effective_provider() -> str:
+    """Resolve the selected provider, including the legacy custom-endpoint fallback."""
+    provider = (PROVIDER or "codex").strip().lower()
+    return "openai_compat" if provider == "codex" and custom_api_enabled() else provider
+
+
+def provider_key_configured(provider: str) -> bool:
+    """Report configured API credentials, not a verified account sign-in."""
+    if provider == "openai_compat":
+        return custom_api_enabled()
+    return bool({"anthropic": ANTHROPIC_API_KEY, "gemini": GEMINI_API_KEY, "xai": XAI_API_KEY}.get(provider))
 
 
 def validate_api_base_url(value: str) -> str | None:

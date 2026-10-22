@@ -6,6 +6,7 @@ import math
 import time
 import uuid
 from collections import deque
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Callable
 
@@ -44,6 +45,20 @@ class Limits:
             raise ValueError("Time budgets must be finite")
 
 
+@dataclass(frozen=True)
+class _PendingTask:
+    goal: str
+    follow_ups: tuple[str, ...]
+    question: str
+    milestones: tuple[str, ...]
+    progress: tuple[dict, ...]
+    uncertain_effects: frozenset[str]
+
+    def model_context(self) -> dict:
+        return {"goal": self.goal, "follow_up_instructions": list(self.follow_ups), "question": self.question,
+                "milestones": list(self.milestones), "prior_progress": deepcopy(list(self.progress))}
+
+
 class Agent:
     """Observation-driven computer-use loop.
 
@@ -59,6 +74,7 @@ class Agent:
         self.limits = limits or Limits()
         self.confirm = confirm
         self._conversation: deque[dict] = deque(maxlen=8)
+        self._pending_task: _PendingTask | None = None
 
     def run_goal(self, goal: str, *, mode: str = "help", on_event: EventSink | None = None,
                  should_abort: Callable[[], bool] | None = None) -> RunReport:
@@ -73,6 +89,11 @@ class Agent:
         if not isinstance(goal, str) or not goal.strip():
             raise ValueError("goal cannot be empty")
         goal = goal.strip()
+        user_request = base_goal = goal
+        follow_ups: tuple[str, ...] = ()
+        pending = self._pending_task if mode == "active" else None
+        continuation_selected = False
+        task_selected = False
         callback = on_event or (lambda *_: None)
         abort = should_abort or (lambda: False)
         start = time.monotonic()
@@ -81,6 +102,8 @@ class Agent:
         metrics: Metrics = report.metrics
         run_id = uuid.uuid4().hex
         context = {"mode": mode, "conversation": list(self._conversation), "milestones": [], "feedback": ""}
+        if pending is not None:
+            context["pending_task"] = pending.model_context()
         invalid = 0
         finish_attempts = 0
         uncertain_effects: set[str] = set()
@@ -155,6 +178,21 @@ class Agent:
                         break
                     continue
                 invalid = 0
+                # Resolve continuation in the existing decision call, not a separate intent/model pass.
+                if pending is not None and not continuation_selected and (decision.continue_task or decision.kind != "ask"):
+                    continuation_selected = True
+                    context.pop("pending_task", None)
+                    if decision.continue_task:
+                        base_goal = pending.goal
+                        follow_ups = (*pending.follow_ups, user_request)
+                        goal = base_goal + "\nUser follow-up instructions:\n" + "\n".join(follow_ups)
+                        report.goal = goal
+                        context["milestones"] = list(pending.milestones)
+                        context["prior_progress"] = deepcopy(list(pending.progress))
+                        uncertain_effects.update(pending.uncertain_effects)
+                        task_selected = True
+                if decision.kind in {"act", "observe", "finish"}:
+                    task_selected = True
                 context["milestones"] = list(decision.milestones) or context["milestones"]
                 if report.receipts:
                     last = report.receipts[-1]
@@ -163,14 +201,33 @@ class Agent:
                         last.outcome = decision.previous_outcome
                         last.evidence = decision.evidence
                 metrics.verified_actions = len(report.done)
+                if (decision.kind == "ask" and mode == "active" and metrics.clarification_reviews == 0
+                        and step + 1 < self.limits.max_steps and metrics.model_calls < self.limits.max_model_calls):
+                    # A proposed question is not automatically a user blocker. Review it once before exposing it.
+                    metrics.clarification_reviews += 1
+                    context["clarification_review"] = {"proposed_question": decision.message,
+                                                       "actions_taken": metrics.actions}
+                    context["feedback"] = (
+                        "Before asking the user, reassess whether this is essential. Perform safe independent parts, "
+                        "inspect/search the supplied words, and use reversible reasonable defaults. Do not ask the user "
+                        "to do routine computer steps you can execute. If this message refers to pending_task, resume "
+                        "that original task with continue_task:true instead of asking them to restate it. Only return "
+                        "ask again for an essential unresolved choice, missing private input, or human-only blocker. "
+                        "Do not invent secrets, recipients, amounts, or bypass confirmation. Explain the concrete blocker."
+                    )
+                    emit("decision_rejected", {"step": step, "status": "reviewing", "reason": "clarification_review"})
+                    obs = observe()
+                    continue
+                if decision.kind != "ask":
+                    context.pop("clarification_review", None)
                 emit("decision", {"step": step, "kind": decision.kind, "message": decision.message,
                                   "milestones": context["milestones"]})
                 if decision.kind == "ask":
                     report.status, report.message = RunStatus.NEEDS_INPUT, decision.message or "More information is needed."
                     break
                 if decision.kind == "answer":
-                    if report.receipts:
-                        context["feedback"] = "Actions have occurred. Use finish and verify the full goal, or ask."
+                    if report.receipts or task_selected:
+                        context["feedback"] = "This task is in progress. Use finish and verify the full goal, or ask."
                         obs = observe()
                         continue
                     report.status, report.message = RunStatus.ANSWERED, decision.message
@@ -327,6 +384,11 @@ class Agent:
                         receipt.outcome = Outcome.UNCERTAIN
                         receipt.evidence = ("The declared postconditions were already true before this action, "
                                             "so they cannot confirm its effect. Inspect the current state.")
+                if execution.effect not in {Effect.REJECTED, Effect.UNKNOWN} and (
+                        receipt.outcome == Outcome.ACHIEVED or obs.signature != before.signature
+                        or image_difference(before.png, obs.png) > 0.025):
+                    # Failed finish attempts are consecutive only while no new progress has been made.
+                    finish_attempts = 0
                 previous_effect = (fingerprint, before)
                 metrics.verified_actions = len(report.done)
                 context["feedback"] = execution.detail or receipt.evidence
@@ -349,5 +411,14 @@ class Agent:
                 log.exception("Driver cleanup failed")
             metrics.elapsed_seconds = time.monotonic() - start
             emit("finished", {"status": report.status.value, **asdict(metrics)})
-        self._conversation.append({"user": goal, "status": report.status.value, "reply": report.message})
+        if mode == "active":
+            if report.status == RunStatus.NEEDS_INPUT or (
+                    report.status in {RunStatus.FAILED, RunStatus.LIMITED} and (report.receipts or task_selected)):
+                progress = context.get("prior_progress", []) + [receipt_context(r) for r in report.receipts]
+                self._pending_task = _PendingTask(base_goal, follow_ups, report.message,
+                                                  tuple(context["milestones"]), tuple(progress[-8:]),
+                                                  frozenset(uncertain_effects))
+            elif report.status in {RunStatus.COMPLETED, RunStatus.CANCELLED} or task_selected:
+                self._pending_task = None
+        self._conversation.append({"user": user_request, "status": report.status.value, "reply": report.message})
         return report

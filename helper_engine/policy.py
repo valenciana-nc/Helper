@@ -18,10 +18,20 @@ def confirmation_reason(action: Action, obs: Observation) -> str:
     if action.requires_confirmation:
         return "This action requests confirmation."
     target = obs.element(action.target.element_id) if action.target and action.target.element_id else None
+    if target is None and action.kind == "press":
+        focused = [element for element in obs.elements if element.focused]
+        target = focused[0] if len(focused) == 1 else None
     if target and target.password:
         return "This field contains credentials."
+    # Filling a normal field prepares a draft/query; it does not itself click a commit button.
+    if action.kind == "fill":
+        return ""
     labels = " ".join([action.description, target.name if target else ""])
-    if COMMIT_WORDS.search(labels):
+    commits = {match.group().casefold() for match in COMMIT_WORDS.finditer(labels)}
+    search_control = target and target.name.strip().casefold() in {
+        "search", "search youtube", "search google", "submit search", "search button", "find",
+    }
+    if commits and not (commits == {"submit"} and search_control):
         return "This action may send, publish, spend, install, or delete."
     if action.kind == "press":
         keys = {key.casefold() for key in action.keys}

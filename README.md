@@ -1,13 +1,17 @@
 <div align="center">
-  <img src="assets/helper_logo.png" alt="Orb Helper logo" width="180" />
+  <img src="assets/helper_logo.png" alt="Purple Helper orb" width="180" />
   <h1>HELPER</h1>
   <p><strong>A floating Windows assistant that teaches or performs computer tasks.</strong></p>
 </div>
 
 Helper combines chat, voice, screen awareness, and a computer-use runtime.
-Ask questions or give it a task in the same chat—there is no Help/Act switch.
+Helper opens directly to the dashboard—there is no separate welcome/chat page.
+Ask questions or give it a task through the floating orb input; saved conversations are in the dashboard.
+There is no Help/Act switch.
 Helper answers questions, explains how to do things, or uses the computer when you ask it to act.
-A soft lavender edge aura and purple/white status banner appear during computer use; Escape stops the task.
+Purple is reserved for the orb and computer-use presentation. The app uses white surfaces, black text/buttons, and neutral gray borders.
+During computer use, a purple edge aura slowly expands, intensifies, and recedes; a glowing purple banner uses white text.
+The agent cursor has a matching purple halo around its black/white pointer. Escape stops the task and animation.
 The chat-bubble icon and the lava sphere both open the floating chat input.
 
 ## New computer-use architecture
@@ -21,9 +25,12 @@ Read the [architecture and design trade-offs](docs/COMPUTER_USE_ARCHITECTURE.md)
 - Structured access first: Windows UI Automation patterns or optional browser DOM handles.
 - Visual fallback: current screenshot boxes for custom controls, with fresh-scene validation.
 - Outcome evidence: local value/focus/text checks, compact action receipts, and separate goal verification.
+- Act-first task handling: searchable typos and reversible choices should not block clear parts of a request.
+- Bounded clarification review: reassess a proposed question once before stopping for user input.
+- In-session follow-ups retain an unfinished goal and recent progress, without an extra intent-classifier call.
 - Bounded recovery: stale-target rejection, unknown-effect handling, cancellation, and run budgets.
 - The CLI's explicit Help mode is enforced in the runtime: no desktop input is dispatched.
-- Metrics: observations, calls, bytes, action routes, elapsed time, and final status.
+- Metrics: observations, calls, clarification reviews, bytes, action routes, elapsed time, and final status.
 
 The desktop app and CLI use the same observation-driven runtime. Voice input
 and speech output are provided separately by `audio_recorder.py` and
@@ -46,9 +53,15 @@ Start the orb:
 
 Use python.exe instead of pythonw.exe for a debugging console. Account, voice,
 model, and appearance settings are available in the dashboard. ChatGPT sign-in
-is the default chat/computer-use provider; configured OpenAI-compatible,
-Anthropic, and Gemini providers remain supported. Voice provider requirements
-are separate. No credentials are bundled with the engine.
+is the default chat/computer-use provider; Claude, Grok, Gemini, and configured
+OpenAI-compatible APIs are also supported. Voice provider requirements are
+separate. No credentials are bundled with the engine.
+
+Account contains Claude and Grok cards directly beneath ChatGPT. Their sign-in
+buttons open the official API consoles; paste an API key and choose **Save** or
+**Use and restart**. Restart applies the selected provider. This is API-key access,
+not Claude/Grok chat-subscription OAuth, and API usage is billed separately.
+The Status page is removed; the dashboard has Conversations, Settings, and Account.
 
 ## CLI
 
@@ -105,6 +118,9 @@ Settings use the HELPER_ prefix. Legacy HELPLER_ and HARVIS_ aliases still load.
 
 The desktop uses automatic chat/task handling; old HELPER_DEFAULT_MODE settings
 are ignored. Explicit no-input teaching is still available with the CLI's --mode help.
+When you request action, Helper is instructed to inspect/search and make safe independent progress rather than
+ask you to rephrase routine details. Essential missing information can still require a question. Follow-up task
+memory lasts only in the running app; saved transcripts do not restore an executable task after restart.
 The runtime requests confirmation around recognized consequential actions. Those heuristics are not a complete security
 boundary; an automation agent acts with the account and app access you give it.
 Escape is checked before the next action; in-flight model/native calls complete

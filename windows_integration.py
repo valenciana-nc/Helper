@@ -38,9 +38,7 @@ def helper_shortcut_specs() -> list[tuple[Path, str]]:
     programs_dir = _programs_dir()
     if programs_dir is not None:
         specs.append((programs_dir / "Helper.lnk", "--dashboard"))
-        specs.append((programs_dir / "Helper Chat.lnk", "--chat"))
     specs.append((Path.home() / "Desktop" / "Helper.lnk", "--dashboard"))
-    specs.append((Path.home() / "Desktop" / "Helper Chat.lnk", "--chat"))
     return specs
 
 
@@ -62,8 +60,8 @@ def _stale_shortcut_paths() -> list[Path]:
     stale: list[Path] = []
     programs_dir = _programs_dir()
     if programs_dir is not None:
-        stale.append(programs_dir / "Helper Dashboard.lnk")
-    stale.append(Path.home() / "Desktop" / "Helper Dashboard.lnk")
+        stale.extend(programs_dir / name for name in ("Helper Dashboard.lnk", "Helper Chat.lnk"))
+    stale.extend(Path.home() / "Desktop" / name for name in ("Helper Dashboard.lnk", "Helper Chat.lnk"))
     return stale
 
 

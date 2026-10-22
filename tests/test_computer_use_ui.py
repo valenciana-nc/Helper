@@ -7,16 +7,19 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import QObject, QPoint, QRect, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QPushButton
+from PyQt6.QtWidgets import QApplication, QPushButton, QSystemTrayIcon
 
 from engine_bridge import EngineRunner
 from helper_engine.types import RunReport, RunStatus
-from ui_computer_use import BANNER_TEXT, BANNER_TOP, ComputerUseManager, ComputerUseWindow, paint_computer_use_frame
+from ui_computer_use import (
+    ANIMATION_INTERVAL_MS, BANNER_TEXT, BANNER_TOP, PULSE_SECONDS,
+    ComputerUseManager, ComputerUseWindow, aura_pulse, paint_computer_use_frame,
+)
 from ui_ghost_cursor import paint_control_pointer
 
 
@@ -43,29 +46,56 @@ class FakeApp(QObject):
         return list(self.monitors)
 
 
+def render_frame(seconds=0.0):
+    image = QImage(1280, 800, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    paint_computer_use_frame(painter, QRectF(image.rect()), seconds)
+    painter.end()
+    return image
+
+
 class ComputerUseUITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.qt = QApplication.instance() or QApplication([])
 
     @contextmanager
-    def desktop(self):
+    def desktop(self, startup_surface="background"):
         import main
         from conversation_store import ConversationStore
         with (TemporaryDirectory() as folder,
               patch.object(main, "ensure_windows_shortcuts", return_value=[]),
               patch.object(main.HelplerDesktopApp, "_setup_tray"),
               patch.object(main.HelplerDesktopApp, "_initialize_backend")):
-            app = main.HelplerDesktopApp(self.qt, "ctrl+shift+space", startup_surface="background")
+            app = main.HelplerDesktopApp(self.qt, "ctrl+shift+space", startup_surface=startup_surface)
             app._conversation_store = ConversationStore(Path(folder) / "conversations.json")
             try:
                 yield app
             finally:
                 app.shutdown()
-                for widget in (app._widget, app._chat_window, app._dashboard, app._status_pill):
+                for widget in (app._widget, app._dashboard, app._status_pill):
                     widget.close()
                     widget.deleteLater()
                 self.qt.processEvents()
+
+    def test_foreground_startup_opens_dashboard_without_a_welcome_chat_window(self):
+        with self.desktop("dashboard") as app:
+            self.qt.processEvents()
+            self.assertTrue(app._dashboard.isVisible())
+            self.assertFalse(hasattr(app, "_chat_window"))
+            self.assertTrue(app._widget.isVisible())
+
+    def test_tray_opens_dashboard_and_restores_it_from_minimized(self):
+        with self.desktop() as app:
+            app._handle_tray_activated(QSystemTrayIcon.ActivationReason.Trigger)
+            self.assertTrue(app._dashboard.isVisible())
+            app._dashboard.showMinimized()
+            self.qt.processEvents()
+            app._toggle_dashboard()
+            self.qt.processEvents()
+            self.assertTrue(app._dashboard.isVisible())
+            self.assertFalse(app._dashboard.isMinimized())
 
     def test_chat_icon_and_lava_sphere_open_the_same_input(self):
         with self.desktop() as app:
@@ -87,16 +117,19 @@ class ComputerUseUITests(unittest.TestCase):
                     app._start_goal("Open a song in my browser")
                 start.assert_called_once_with("Open a song in my browser", mode="active", speak=False)
                 self.assertFalse(app._computer_use.active)
-                self.assertFalse(any(b.text() in {"Help", "Act"} for b in app._chat_window.findChildren(QPushButton)))
+                self.assertFalse(any(b.text() in {"Help", "Act"} for b in app._widget.findChildren(QPushButton)))
 
     def test_escape_and_late_events_cannot_restore_the_frame(self):
         with self.desktop() as app:
             app._on_computer_use_changed(True)
             self.assertTrue(app._computer_use.active)
-            app._toggle_chat_window_if_visible()
+            self.assertTrue(app._computer_use._timer.isActive())
+            app._on_escape_pressed()
             self.assertFalse(app._computer_use.active)
+            self.assertFalse(app._computer_use._timer.isActive())
             app._on_computer_use_changed(True)
             self.assertFalse(app._computer_use.active)
+            self.assertFalse(app._computer_use._timer.isActive())
 
     def test_frame_is_never_shown_for_an_answer_or_guided_help(self):
         runner = EngineRunner()
@@ -197,7 +230,7 @@ class ComputerUseUITests(unittest.TestCase):
             manager.close()
         self.assertEqual(manager._windows, [])
 
-    def test_screen_center_remains_fully_transparent_with_soft_lavender_edges(self):
+    def test_screen_center_remains_fully_transparent_with_soft_purple_edges(self):
         image = QImage(1280, 800, QImage.Format.Format_ARGB32_Premultiplied)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
@@ -205,11 +238,13 @@ class ComputerUseUITests(unittest.TestCase):
         painter.end()
         self.assertEqual(image.pixelColor(640, 400).alpha(), 0)
         self.assertEqual(image.pixelColor(400, 400).alpha(), 0)
-        edge = image.pixelColor(1, 400)
-        self.assertGreater(edge.alpha(), 0)
-        self.assertLess(edge.alpha(), 100)
-        self.assertGreater(edge.blue(), edge.green() + 20)
-        self.assertGreater(edge.red(), edge.green() + 20)
+        for x, y in ((1, 400), (1278, 400), (400, 1), (400, 798)):
+            with self.subTest(edge=(x, y)):
+                edge = image.pixelColor(x, y)
+                self.assertGreater(edge.alpha(), 0)
+                self.assertLess(edge.alpha(), 100)
+                self.assertGreater(edge.red(), edge.green() + 20)
+                self.assertGreater(edge.blue(), edge.green() + 20)
         self.assertNotEqual(image.pixelColor(640, 20), QColor(Qt.GlobalColor.transparent))
 
     def test_aura_fades_inward_without_a_hard_perimeter(self):
@@ -226,10 +261,111 @@ class ComputerUseUITests(unittest.TestCase):
         self.assertEqual(BANNER_TEXT, "Helper is using your computer  ·  Esc to cancel")
         banner = image.pixelColor(640, int(BANNER_TOP + 2))
         self.assertEqual(banner.alpha(), 255)
-        self.assertGreater(banner.blue(), banner.green() + 30)
         self.assertGreater(banner.red(), banner.green() + 30)
+        self.assertGreater(banner.blue(), banner.green() + 60)
 
-    def test_small_pointer_has_a_fading_halo_and_dark_fill(self):
+    def test_aura_breathes_smoothly_from_rest_to_peak_and_back(self):
+        self.assertAlmostEqual(aura_pulse(0), 0)
+        self.assertAlmostEqual(aura_pulse(PULSE_SECONDS / 4), .5)
+        self.assertAlmostEqual(aura_pulse(PULSE_SECONDS / 2), 1)
+        self.assertAlmostEqual(aura_pulse(PULSE_SECONDS), 0)
+        rising = [aura_pulse(PULSE_SECONDS * step / 20) for step in range(11)]
+        falling = [aura_pulse(PULSE_SECONDS * step / 20) for step in range(10, 21)]
+        self.assertEqual(rising, sorted(rising))
+        self.assertEqual(falling, sorted(falling, reverse=True))
+        self.assertAlmostEqual(aura_pulse(PULSE_SECONDS - .001), aura_pulse(PULSE_SECONDS + .001))
+        self.assertAlmostEqual(aura_pulse(-1), 0)
+
+    def test_peak_is_wider_brighter_and_more_purple_without_tinting_center(self):
+        rest, peak = render_frame(), render_frame(PULSE_SECONDS / 2)
+        for x, y in ((1, 400), (1278, 400), (400, 1), (400, 798)):
+            with self.subTest(edge=(x, y)):
+                low, high = rest.pixelColor(x, y), peak.pixelColor(x, y)
+                self.assertGreater(high.alpha(), low.alpha() * 1.6)
+                self.assertGreater(high.blue() - high.green(), low.blue() - low.green())
+        for x, y in ((96, 400), (1184, 400), (400, 96), (400, 704)):
+            with self.subTest(expansion=(x, y)):
+                self.assertEqual(rest.pixelColor(x, y).alpha(), 0)
+                self.assertGreater(peak.pixelColor(x, y).alpha(), 0)
+        self.assertLess(peak.pixelColor(0, 0).alpha(), 180)
+        for seconds in (0, PULSE_SECONDS / 4, PULSE_SECONDS / 2, PULSE_SECONDS * .75, PULSE_SECONDS):
+            with self.subTest(seconds=seconds):
+                image = render_frame(seconds)
+                self.assertEqual(image.pixelColor(640, 400).alpha(), 0)
+                self.assertEqual(image.pixelColor(400, 400).alpha(), 0)
+        self.assertEqual(rest, render_frame(PULSE_SECONDS))
+
+    def test_banner_is_purple_with_white_text_and_a_breathing_outer_halo(self):
+        rest, peak = render_frame(), render_frame(PULSE_SECONDS / 2)
+        for image in (rest, peak):
+            color = image.pixelColor(640, int(BANNER_TOP + 2))
+            self.assertEqual(color.alpha(), 255)
+            self.assertGreater(color.red(), color.green() + 30)
+            self.assertGreater(color.blue(), color.green() + 60)
+            white_pixels = sum(image.pixelColor(x, y) == QColor("white")
+                               for y in range(45, 65) for x in range(400, 880))
+            self.assertGreater(white_pixels, 20)
+            self.assertGreater(image.pixelColor(640, int(BANNER_TOP - 4)).alpha(),
+                               image.pixelColor(200, int(BANNER_TOP - 4)).alpha())
+        # At the peak the banner halo extends past the resting halo's outer limit.
+        y = int(BANNER_TOP - 12)
+        self.assertEqual(rest.pixelColor(640, y).alpha(), rest.pixelColor(200, y).alpha())
+        self.assertGreater(peak.pixelColor(640, y).alpha(), peak.pixelColor(200, y).alpha())
+
+    def test_animation_timer_runs_only_while_active_and_restarts_at_rest(self):
+        manager = ComputerUseManager(FakeApp([Screen(QRect(0, 0, 1280, 800))]))
+        try:
+            self.assertFalse(manager._timer.isActive())
+            self.assertEqual(manager._timer.interval(), ANIMATION_INTERVAL_MS)
+            manager.set_active(True)
+            self.assertTrue(manager._timer.isActive())
+            self.assertLess(manager._windows[0]._animation_seconds, .1)
+            QTest.qWait(ANIMATION_INTERVAL_MS * 3)
+            self.assertGreater(manager._windows[0]._animation_seconds, 0)
+            manager._windows[0].set_animation_time(PULSE_SECONDS / 2)
+            manager.set_active(False)
+            self.assertFalse(manager._timer.isActive())
+            self.assertEqual(manager._windows[0]._animation_seconds, 0)
+            manager._advance_animation()  # A queued tick after Escape must remain harmless.
+            self.assertEqual(manager._windows[0]._animation_seconds, 0)
+            manager.set_active(True)
+            self.assertLess(manager._windows[0]._animation_seconds, .1)
+        finally:
+            manager.close()
+        self.assertFalse(manager._timer.isActive())
+
+    def test_one_clock_keeps_monitors_in_phase_without_restarting_on_hotplug(self):
+        app = FakeApp([Screen(QRect(0, 0, 1280, 800))])
+        manager = ComputerUseManager(app)
+        try:
+            manager.set_active(True)
+            clock = Mock()
+            clock.elapsed.return_value = round(PULSE_SECONDS * 500)
+            manager._clock = clock
+            manager._advance_animation()
+            app.monitors.append(Screen(QRect(-1920, -200, 1920, 1080)))
+            app.screenAdded.emit(app.monitors[-1])
+            self.assertEqual(len(manager._windows), 2)
+            self.assertEqual([window._animation_seconds for window in manager._windows], [PULSE_SECONDS / 2] * 2)
+            clock.start.assert_not_called()
+            self.assertTrue(manager._timer.isActive())
+        finally:
+            manager.close()
+
+    def test_animation_repaints_edges_and_banner_but_not_desktop_center(self):
+        window = ComputerUseWindow(Screen(QRect(-1280, 0, 1280, 800)))
+        try:
+            self.assertFalse(window._animated_region.contains(QPoint(640, 400)))
+            for point in (QPoint(120, 400), QPoint(1160, 400), QPoint(400, 120), QPoint(640, 38)):
+                self.assertTrue(window._animated_region.contains(point))
+            with patch.object(window, "update") as update:
+                window.set_animation_time(PULSE_SECONDS / 2)
+            update.assert_called_once_with(window._animated_region)
+        finally:
+            window.close()
+            window.deleteLater()
+
+    def test_small_pointer_has_a_fading_purple_halo_and_dark_fill(self):
         image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
@@ -239,11 +375,16 @@ class ComputerUseUITests(unittest.TestCase):
         halo = image.pixelColor(66, 46)
         self.assertGreater(halo.alpha(), 0)
         self.assertLess(halo.alpha(), 100)
-        self.assertGreater(halo.blue(), halo.green() + 20)
         self.assertGreater(halo.red(), halo.green() + 20)
+        self.assertGreater(halo.blue(), halo.green() + 20)
+        alphas = [image.pixelColor(x, 46).alpha() for x in (59, 66, 75, 82)]
+        self.assertEqual(alphas, sorted(alphas, reverse=True))
+        self.assertEqual(alphas[-1], 0)
         body = image.pixelColor(45, 45)
         self.assertEqual(body.alpha(), 255)
         self.assertLess(body.lightness(), 80)
+        self.assertEqual(body.red(), body.green())
+        self.assertEqual(body.blue(), body.green())
 
     def test_active_control_uses_only_the_glowing_pointer(self):
         with self.desktop() as app:

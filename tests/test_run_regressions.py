@@ -142,9 +142,11 @@ class DispatchRegressions(unittest.TestCase):
         def stale(*_):
             raise StaleObservation("scene moved")
         driver = FakeDriver(validate=stale)
-        report = agent(ScriptModel([act(click()), lambda obs: parse_decision(
-            response(kind="ask", observation_id=obs.id, message="Please open the target.", action=None))]), driver).run_goal(
-                "Play", mode="active", on_event=lambda name, data: events.append((name, data)))
+        def question(obs):
+            return parse_decision(response(kind="ask", observation_id=obs.id,
+                                           message="The target is unavailable; please open it.", action=None))
+        report = agent(ScriptModel([act(click()), question, question]), driver).run_goal(
+            "Play", mode="active", on_event=lambda name, data: events.append((name, data)))
         self.assertEqual(report.status, RunStatus.NEEDS_INPUT)
         self.assertNotIn("action_start", [name for name, _ in events])
         self.assertTrue(any(data.get("reason") == "stale_target" for _, data in events))
@@ -253,7 +255,7 @@ class DesktopLifecycleRegressions(unittest.TestCase):
                 yield app
             finally:
                 app.shutdown()
-                for widget in (app._widget, app._chat_window, app._dashboard, app._status_pill):
+                for widget in (app._widget, app._dashboard, app._status_pill):
                     widget.close()
                     widget.deleteLater()
                 self.qt.processEvents()
@@ -299,7 +301,7 @@ class DesktopLifecycleRegressions(unittest.TestCase):
     def test_escape_stops_the_retained_speech_streamer(self):
         with self.desktop() as app:
             app._tts = Mock()
-            app._toggle_chat_window_if_visible()
+            app._on_escape_pressed()
             app._tts.stop.assert_called_once()
             self.assertTrue(app._engine_abort.is_set())
 

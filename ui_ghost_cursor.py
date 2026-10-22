@@ -13,7 +13,7 @@ CURSOR_AURA_RADIUS = 36.0
 
 
 def paint_control_pointer(painter: QPainter, x: float, y: float) -> None:
-    """Small dark-violet pointer, white outline and a diffuse lavender halo."""
+    """Paint a black pointer with a white outline and soft purple halo."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     center = QPointF(x + 5, y + 6)
@@ -38,7 +38,7 @@ def paint_control_pointer(painter: QPainter, x: float, y: float) -> None:
     painter.translate(0, -1)
     painter.setPen(QPen(QColor(255, 255, 255), 1.8, Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    painter.setBrush(QColor(31, 20, 45))
+    painter.setBrush(QColor(17, 17, 17))
     painter.drawPath(pointer)
     painter.restore()
 

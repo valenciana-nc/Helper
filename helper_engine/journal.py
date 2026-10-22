@@ -25,7 +25,7 @@ class JsonJournal:
     def __call__(self, name: str, payload: dict) -> None:
         allowed = {"run_id", "step", "status", "route", "effect", "outcome", "seconds", "reason", "kind", "mode", "surface",
                    "observations", "model_calls", "actions", "verified_actions", "stale_decisions",
-                   "rejected_actions", "screenshot_bytes", "model_seconds", "elapsed_seconds", "routes"}
+                   "rejected_actions", "clarification_reviews", "screenshot_bytes", "model_seconds", "elapsed_seconds", "routes"}
         record = {"event": name, "time": time.time(),
                   **{key: value for key, value in payload.items() if key in allowed}}
         with self._lock:
