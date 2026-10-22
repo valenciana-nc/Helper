@@ -3,7 +3,7 @@
 Validated with Python 3.12 in the repository virtual environment. The full suite,
 including the isolated browser fixture and native UIA fixture, passed:
 
-- 273 passed, 161 subtests passed in 132.02 seconds, with adapter tests collected first.
+- 283 passed, 183 subtests passed in 246.78 seconds, with adapter tests collected first.
 - Ruff passed; compileall completed; `pip check` reported no broken requirements.
 - Git whitespace checks passed after the final cleanup.
 
@@ -80,5 +80,20 @@ regions, and stopping/resetting animation on idle/Escape/close. Synthetic restin
 peak, cycle, and animated GIF previews were rendered and inspected; private
 references and previews remain outside version control.
 
-Reproduce with the commands in `README.md`. Browser executable location is an
-environment-specific test setting and is not hardcoded into production code.
+The shorter README uses a fresh 8-bit purple web thumbnail and a self-contained
+SVG of the action loop and separate completion check. Its local links and artwork
+are tested; GitHub's Markdown API rendered the overview, and light/dark browser
+previews were checked for image loading and diagram text overflow. CLI/browser/
+configuration details are retained in `USAGE.md`. Private screenshots and rendered
+previews were not added to the repository.
+
+Progress regressions verify neutral question startup, real capture/model/verify
+stage timing, the action description at dispatch, no premature finish claim, and
+Escape at a newly emitted stage preventing the operation. The normal action path
+still makes the same number of model calls. Initial screen collection for ordinary
+questions remains explicit in the documentation; it is not represented as a
+screen-free chat feature or a model-reasoning stream.
+
+Reproduce with the commands in `USAGE.md` and `TESTING.md`. Browser executable
+location is an environment-specific test setting and is not hardcoded into
+production code.

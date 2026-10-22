@@ -183,6 +183,15 @@ instructions. It is not an independent external benchmark judge. Partial UIA/DOM
 snapshots cannot prove an element is absent. Pixel changes detect possible
 progress; they never establish success by themselves.
 
+Activity is reported by runtime events, not invented model narration. Observation
+and model-call start events fire before the corresponding work. The desktop uses
+neutral initial progress, the selected action at dispatch, follow-up screen checks,
+next-decision progress, and final verification while it is actually in flight. A
+proposed finish message is not displayed as a completed result before verification.
+These stage labels are not a model-reasoning transcript and add no model calls.
+The current loop still takes an initial screen observation for ordinary questions;
+changing the status label does not create a screen-free chat path.
+
 The screenshot-byte metric tracks source PNG bytes submitted for calls. It does
 not claim exact billable image tokens, which vary by model and provider.
 

@@ -28,8 +28,10 @@ Help/Act selector. The dashboard is the sole main window: normal launches and
 tray activation open it directly. The separate welcome/chat window is removed;
 conversation transcripts remain available in the dashboard.
 
-The README PNG and multi-size Windows ICO are generated from the same violet
-orb painter with `python tools/build_brand_assets.py`. The app's window/tray
+The logo PNG, 8-bit web thumbnail in `assets/readme/helper-orb-purple.png`, and
+multi-size Windows ICO are generated from the same violet orb painter with
+`python tools/build_brand_assets.py`. The README uses a separate web asset URL
+instead of reusing the old blue logo URL. The app's window/tray
 icons and desktop shortcut load that ICO, keeping the branding consistent.
 Only the dashboard-facing Helper shortcut is retained; obsolete Chat shortcuts
 are removed when Helper refreshes its shortcuts.
@@ -66,6 +68,12 @@ once the engine starts an active computer action, stays visible through outcome
 checks, and hides on completion, error, Escape, or shutdown. Per-monitor windows
 never accept focus or pointer input and request Windows capture exclusion. They
 follow display geometry changes without animating over the model's evidence.
+
+The existing status pill reports runtime stages and the selected action, not a
+fixed "reading the app" opener or a stream of model reasoning. Observation and
+verification labels begin with the actual operations; an actor's proposed finish
+message is withheld until the separate completion check passes. No extra
+explanation overlay, arrows, or model calls are added.
 
 Chat and saved transcripts use selectable text with word-boundary wrapping and
 fallback wrapping for long paths and URLs. The composer stays outside the scroll

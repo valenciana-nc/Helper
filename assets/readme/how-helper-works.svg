@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="380" viewBox="0 0 1040 380" role="img" aria-labelledby="title description">
+  <title id="title">How Helper performs a computer task</title>
+  <desc id="description">Your request enters an observation-driven loop: observe the current screen and controls, choose one model decision, validate the target and required approval, then execute one Windows or browser action. Record its result and take a fresh observation before the next decision. A finish decision uses a separate whole-goal verifier before the final report. Ordinary questions and genuine blockers return text without computer input.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#555555" />
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="1038" height="378" rx="14" fill="#ffffff" stroke="#dddddd" />
+  <g font-family="Segoe UI, Arial, sans-serif" fill="#111111">
+    <g id="request">
+      <rect x="36" y="30" width="180" height="58" rx="8" fill="#111111" />
+      <text x="126" y="65" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="600">Your request</text>
+    </g>
+    <g fill="none" stroke="#555555" stroke-width="2.4" marker-end="url(#arrow)">
+      <path d="M 126 88 V 140" />
+      <path d="M 216 190 H 290" />
+      <path d="M 472 190 H 546" />
+      <path d="M 728 190 H 802" />
+      <path id="finish-path" d="M 382 142 V 60 H 546" />
+      <path d="M 728 60 H 802" />
+      <path id="feedback-loop" d="M 894 238 V 302 H 126 V 240" />
+    </g>
+    <text x="459" y="49" text-anchor="middle" font-size="16" fill="#555555">Finish</text>
+    <text x="765" y="46" text-anchor="middle" font-size="14" fill="#555555">verified</text>
+    <g id="observe">
+      <rect x="36" y="142" width="180" height="96" rx="8" fill="#f7f7f7" stroke="#cccccc" />
+      <text x="126" y="176" text-anchor="middle" font-size="21" font-weight="600">1. Observe</text>
+      <text x="126" y="201" text-anchor="middle" font-size="16" fill="#555555">Current screenshot</text>
+      <text x="126" y="222" text-anchor="middle" font-size="16" fill="#555555">and visible controls</text>
+    </g>
+    <g id="decide">
+      <rect x="292" y="142" width="180" height="96" rx="8" fill="#f7f7f7" stroke="#cccccc" />
+      <text x="382" y="176" text-anchor="middle" font-size="21" font-weight="600">2. Decide</text>
+      <text x="382" y="201" text-anchor="middle" font-size="16" fill="#555555">The model chooses</text>
+      <text x="382" y="222" text-anchor="middle" font-size="16" fill="#555555">one next step</text>
+    </g>
+    <g id="validate">
+      <rect x="548" y="142" width="180" height="96" rx="8" fill="#f7f7f7" stroke="#cccccc" />
+      <text x="638" y="176" text-anchor="middle" font-size="21" font-weight="600">3. Validate</text>
+      <text x="638" y="201" text-anchor="middle" font-size="16" fill="#555555">Fresh target checks</text>
+      <text x="638" y="222" text-anchor="middle" font-size="16" fill="#555555">and required approval</text>
+    </g>
+    <g id="act">
+      <rect x="804" y="142" width="180" height="96" rx="8" fill="#f7f7f7" stroke="#cccccc" />
+      <text x="894" y="176" text-anchor="middle" font-size="21" font-weight="600">4. Act</text>
+      <text x="894" y="201" text-anchor="middle" font-size="16" fill="#555555">Windows or browser</text>
+      <text x="894" y="222" text-anchor="middle" font-size="16" fill="#555555">One action, not a batch</text>
+    </g>
+    <g id="verify">
+      <rect x="548" y="16" width="180" height="88" rx="8" fill="#ffffff" stroke="#aaaaaa" />
+      <text x="638" y="43" text-anchor="middle" font-size="19" font-weight="600">Verify whole goal</text>
+      <text x="638" y="65" text-anchor="middle" font-size="14" fill="#555555">Fresh screen + check</text>
+      <text x="638" y="86" text-anchor="middle" font-size="14" fill="#555555">Unproven? Keep working.</text>
+    </g>
+    <g id="report">
+      <rect x="804" y="16" width="180" height="88" rx="8" fill="#111111" />
+      <text x="894" y="54" text-anchor="middle" font-size="20" font-weight="600" fill="#ffffff">Final report</text>
+      <text x="894" y="78" text-anchor="middle" font-size="15" fill="#dddddd">Evidence checked</text>
+    </g>
+    <rect x="304" y="287" width="420" height="29" fill="#ffffff" />
+    <text x="514" y="308" text-anchor="middle" font-size="18" font-weight="600">Check the result, then observe again</text>
+    <text x="520" y="354" text-anchor="middle" font-size="16" fill="#555555">Ordinary question? Answer. Essential blocker? Ask. Neither dispatches computer input.</text>
+  </g>
+</svg>

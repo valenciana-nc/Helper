@@ -128,9 +128,9 @@ class FinalReplyVisibilityTests(unittest.TestCase):
             self.assertEqual(app._status_pill.text(), reply)
             self.assertTrue(app._reply_hide_timer.isActive())
 
-            app._on_chat_status_changed("Looking at the current app...")
+            app._on_chat_status_changed("Thinking…")
             self.assertFalse(app._reply_hide_timer.isActive())
-            self.assertEqual(app._status_pill.text(), "Looking at the current app...")
+            self.assertEqual(app._status_pill.text(), "Thinking…")
         finally:
             app.shutdown()
             for widget in (app._widget, app._dashboard, app._status_pill):
