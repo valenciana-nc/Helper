@@ -59,3 +59,32 @@ def test_audio_callback_only_keeps_frames_while_recording():
     recorder._on_audio(samples, 4, None, None)
     samples[:] = 0
     assert np.all(recorder._chunks[0] == 1)
+
+
+def test_start_recording_failure_closes_stream_without_publishing(monkeypatch):
+    stream = Mock()
+    stream.start.side_effect = RuntimeError("device busy")
+    fake_sd = Mock()
+    fake_sd.InputStream.return_value = stream
+    monkeypatch.setattr(audio_recorder, "sd", fake_sd)
+    recorder = AudioRecorder()
+    with pytest.raises(RuntimeError, match="device busy"):
+        recorder.start_recording()
+    stream.close.assert_called_once()
+    assert recorder._stream is None
+    assert not recorder._recording
+
+
+def test_finalize_stream_closes_even_when_stop_raises():
+    recorder = AudioRecorder()
+    stream = Mock()
+    stream.stop.side_effect = RuntimeError("device unplugged")
+    recorder._stream = stream
+    recorder._recording = True
+
+    recorder.cancel_recording()  # must not propagate: hotkey thread safety
+
+    stream.stop.assert_called_once()
+    stream.close.assert_called_once()
+    assert recorder._stream is None
+    assert not recorder._recording

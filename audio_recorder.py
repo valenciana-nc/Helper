@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import io
+import logging
 import threading
 import wave
 from dataclasses import dataclass
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 try:
     import sounddevice as sd
@@ -68,14 +71,22 @@ class AudioRecorder:
             if self._recording:
                 return
             self._chunks = []
-            self._stream = sd.InputStream(
+            stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=self._channels,
                 dtype="int16",
                 blocksize=self._blocksize,
                 callback=self._on_audio,
             )
-            self._stream.start()
+            try:
+                stream.start()
+            except Exception:
+                # A half-started stream must never be published to self._stream:
+                # the next cancel/stop would call stop() on a stream that never
+                # started, and the native PortAudio handle would leak.
+                stream.close()
+                raise
+            self._stream = stream
             self._recording = True
 
     def cancel_recording(self) -> None:
@@ -128,5 +139,13 @@ class AudioRecorder:
             self._stream = None
             self._recording = False
         if stream is not None:
-            stream.stop()
-            stream.close()
+            try:
+                stream.stop()
+            except Exception:
+                # A failing stop (e.g. device unplugged mid-recording) must not
+                # skip close(), and must not propagate: cancel_recording() runs
+                # on the pynput hotkey thread, where an exception kills the
+                # listener and the hotkey goes dead for the rest of the session.
+                log.exception("Stopping the audio stream failed; closing it anyway")
+            finally:
+                stream.close()
