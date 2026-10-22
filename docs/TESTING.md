@@ -40,7 +40,7 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
 
 ## What "green" means
 
-The verified Windows adapter-first run passed 266 tests and 161 subtests.
+The verified Windows adapter-first run passed 273 tests and 161 subtests.
 Default-order runs also encountered order-sensitive browser screenshot timeouts;
 see `VALIDATION.md` for the results and caveat. The focused computer-use/theme/
 geometry checks passed 31 tests and 113 subtests.

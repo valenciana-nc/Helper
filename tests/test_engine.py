@@ -342,6 +342,26 @@ class EvidenceTests(unittest.TestCase):
         outcome, _ = evaluate((Predicate("text_contains", value="hunter2"),), obs)
         self.assertEqual(outcome, Outcome.UNCERTAIN)
 
+    def test_none_predicate_fields_behave_like_empty_strings(self):
+        # JSON-shaped payloads can carry None for name/role/value; the
+        # guards in helper_engine/verification.py must degrade to the
+        # empty-string behavior, never raise AttributeError.
+        obs = frame()
+        cases = [
+            Predicate("exists", None),
+            Predicate("exists", "Name", role=None),
+            Predicate("text_contains", value=None),
+        ]
+        empties = [
+            Predicate("exists", ""),
+            Predicate("exists", "Name", role=""),
+            Predicate("text_contains", value=""),
+        ]
+        for pred, empty in zip(cases, empties):
+            outcome_none, _ = evaluate((pred,), obs)
+            outcome_empty, _ = evaluate((empty,), obs)
+            self.assertEqual(outcome_none, outcome_empty)
+
 
 class SignatureTests(unittest.TestCase):
     def test_enabled_state_change_alters_signature(self):

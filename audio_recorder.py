@@ -7,7 +7,15 @@ import wave
 from dataclasses import dataclass
 
 import numpy as np
-import sounddevice as sd
+
+try:
+    import sounddevice as sd
+except (ImportError, OSError):
+    # PortAudio may be missing on headless/CI Linux machines. Audio capture is
+    # then unavailable, but the module must still import so the rest of the
+    # app (and the test suite) can load; start_recording() raises a clear
+    # error instead of a bare OSError at import time.
+    sd = None
 
 from config import (
     AUDIO_BLOCKSIZE,
@@ -52,6 +60,10 @@ class AudioRecorder:
         self._recording = False
 
     def start_recording(self) -> None:
+        if sd is None:
+            raise RuntimeError(
+                "Audio capture is unavailable: PortAudio is not installed."
+            )
         with self._lock:
             if self._recording:
                 return

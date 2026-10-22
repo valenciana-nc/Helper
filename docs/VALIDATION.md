@@ -3,11 +3,15 @@
 Validated with Python 3.12 in the repository virtual environment. The full suite,
 including the isolated browser fixture and native UIA fixture, passed:
 
-- 266 passed, 161 subtests passed in 137.91 seconds, with adapter tests collected first.
+- 273 passed, 161 subtests passed in 132.02 seconds, with adapter tests collected first.
 - Ruff passed; compileall completed; `pip check` reported no broken requirements.
 - Git whitespace checks passed after the final cleanup.
 
-Validation caveat: two default-order runs hit the browser fixture's existing
+The merged run includes the upstream missing-PortAudio fallback, 16 kHz voice
+resampling restoration, and new provider/verification regressions. It used the
+updated pins: Pillow 12.3.0, requests 2.34.2, and sounddevice 0.5.6.
+
+Validation caveat: two earlier default-order runs hit the browser fixture's existing
 3-second screenshot timeout (three failures, then two failures). All three browser
 checks passed alone, the combined computer-use/theme/adapter run passed (39 tests,
 116 subtests; native fixture not enabled in that run), and the adapter-first full

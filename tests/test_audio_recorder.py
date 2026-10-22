@@ -7,7 +7,16 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
+import audio_recorder
 from audio_recorder import AudioRecorder
+
+
+def test_start_recording_without_portaudio_raises_clear_error(monkeypatch):
+    monkeypatch.setattr(audio_recorder, "sd", None)
+    recorder = AudioRecorder()
+    with pytest.raises(RuntimeError, match="PortAudio"):
+        recorder.start_recording()
+    assert not recorder._recording
 
 
 def test_recorder_trims_silence_and_returns_wav():
