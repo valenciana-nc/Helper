@@ -34,13 +34,10 @@ The purple edge aura, banner, and cursor halo appear during active computer use.
 
 ### What the activity text means
 
-The status surface reports execution stages, not a transcript of model reasoning:
-
-- **Thinking…** while preparing the request and waiting for its first decision.
-- The model's short decision message, then the selected action description at dispatch.
-- **Checking the current screen…** while taking a follow-up observation during computer use.
-- **Choosing the next action…** while waiting for the next decision after an action.
-- **Verifying the full result…** during the separate final-goal check.
+Only the initial label changes: **Thinking…** replaces the fixed “Looking at the
+current app…” opener. The existing action/status display and execution behavior
+stay as before. There is no added step-by-step narration, reasoning stream, or
+extra model call.
 
 The current loop collects a screen observation before every decision, including
 ordinary questions. An ordinary answer does not dispatch computer input, but it

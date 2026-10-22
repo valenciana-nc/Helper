@@ -1,7 +1,12 @@
 # Validation
 
-Validated with Python 3.12 in the repository virtual environment. The full suite,
-including the isolated browser fixture and native UIA fixture, passed:
+Validated with Python 3.12 in the repository virtual environment. The narrowed
+initial-status-only correction passed 125 focused tests and 43 subtests in 35.40
+seconds. A source-parity check confirmed the runtime matches the prior version
+exactly and the bridge differs only in its initial label.
+
+The last full-suite run before that scope correction, including the isolated
+browser fixture and native UIA fixture, passed:
 
 - 283 passed, 183 subtests passed in 246.78 seconds, with adapter tests collected first.
 - Ruff passed; compileall completed; `pip check` reported no broken requirements.
@@ -87,12 +92,12 @@ previews were checked for image loading and diagram text overflow. CLI/browser/
 configuration details are retained in `USAGE.md`. Private screenshots and rendered
 previews were not added to the repository.
 
-Progress regressions verify neutral question startup, real capture/model/verify
-stage timing, the action description at dispatch, no premature finish claim, and
-Escape at a newly emitted stage preventing the operation. The normal action path
-still makes the same number of model calls. Initial screen collection for ordinary
-questions remains explicit in the documentation; it is not represented as a
-screen-free chat feature or a model-reasoning stream.
+The status correction is limited to the initial label: “Thinking…” replaces the
+fixed “Looking at the current app…” opener. The added phase events/narration were
+removed, restoring the prior runtime and all subsequent status behavior. Focused
+regressions cover that narrow scope and the unchanged normal model-call count.
+Initial screen collection for ordinary questions remains documented; this is not
+a screen-free chat feature or a model-reasoning stream.
 
 Reproduce with the commands in `USAGE.md` and `TESTING.md`. Browser executable
 location is an environment-specific test setting and is not hardcoded into

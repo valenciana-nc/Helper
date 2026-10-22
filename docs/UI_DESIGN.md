@@ -69,11 +69,10 @@ checks, and hides on completion, error, Escape, or shutdown. Per-monitor windows
 never accept focus or pointer input and request Windows capture exclusion. They
 follow display geometry changes without animating over the model's evidence.
 
-The existing status pill reports runtime stages and the selected action, not a
-fixed "reading the app" opener or a stream of model reasoning. Observation and
-verification labels begin with the actual operations; an actor's proposed finish
-message is withheld until the separate completion check passes. No extra
-explanation overlay, arrows, or model calls are added.
+Only the initial status-pill label changes to “Thinking…” instead of the fixed
+“Looking at the current app…” opener. Existing action/status presentation stays
+unchanged. No new step narration, reasoning stream, explanation overlay, arrows,
+or model calls are added.
 
 Chat and saved transcripts use selectable text with word-boundary wrapping and
 fallback wrapping for long paths and URLs. The composer stays outside the scroll

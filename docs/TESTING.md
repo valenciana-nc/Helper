@@ -16,9 +16,8 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
 - `tests/test_agent_autonomy.py` — act-first clarification review, budget/cancellation
   boundaries, in-memory follow-ups, preserved progress/uncertain effects, full-goal
   verification, and harmless-search versus consequential-action policy checks.
-- `tests/test_engine_progress.py` — real operation-stage status timing, neutral
-  question startup, withholding unverified completion claims, and cancellation
-  from progress callbacks without added model calls.
+- `tests/test_engine_progress.py` — initial-label-only correction, unchanged
+  subsequent status behavior, and no added runtime phase events/model calls.
 - `tests/test_readme.py` — compact overview, resolving documentation links, purple
   web artwork, and a self-contained action-loop/verification SVG.
 - `tests/test_engine_adapters.py` — Qt bridge, Windows UIA worker, browser/Hybrid
@@ -45,7 +44,10 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
 
 ## What "green" means
 
-The verified Windows adapter-first run passed 283 tests and 183 subtests.
+The last Windows adapter-first full run before narrowing the status change passed
+283 tests and 183 subtests. The initial-label-only correction then passed 125
+focused tests and 43 subtests; source parity confirms no other execution or
+presentation changes remain.
 Default-order runs also encountered order-sensitive browser screenshot timeouts;
 see `VALIDATION.md` for the results and caveat. The focused computer-use/theme/
 geometry checks passed 31 tests and 113 subtests.

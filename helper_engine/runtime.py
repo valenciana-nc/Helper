@@ -124,8 +124,6 @@ class Agent:
 
         def observe():
             checkpoint()
-            emit("observation_started", {})
-            checkpoint()
             obs = self.driver.observe()
             checkpoint()
             metrics.observations += 1
@@ -133,12 +131,10 @@ class Agent:
                 raise RuntimeError("No usable screenshot; refusing to act on a placeholder.")
             return obs
 
-        def call_model(fn, obs, *, purpose="decision"):
+        def call_model(fn, obs):
             checkpoint()
             if metrics.model_calls >= self.limits.max_model_calls:
                 raise TimeoutError("The run reached its model-call budget.")
-            emit("model_call_started", {"kind": purpose})
-            checkpoint()
             metrics.model_calls += 1
             metrics.screenshot_bytes += len(obs.png)
             began = time.monotonic()
@@ -243,7 +239,7 @@ class Agent:
                     # The verifier checks the reply the user will receive, not only the screen.
                     context["proposed_reply"] = decision.message
                     try:
-                        ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs, purpose="verification")
+                        ok, evidence = call_model(lambda: self.model.verify_goal(goal, obs, context), obs)
                     finally:
                         context.pop("proposed_reply", None)
                     emit("goal_verification", {"status": "passed" if ok else "unproven", "message": evidence})

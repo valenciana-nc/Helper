@@ -157,18 +157,8 @@ class EngineRunner(QObject):
             self._set_computer_use(False)
             self.state.emit("thinking")
             self.status.emit("Thinking…")
-        elif name == "observation_started":
-            if self._computer_use_active:
-                self.status.emit("Checking the current screen…")
-        elif name == "model_call_started":
-            if payload.get("kind") == "verification":
-                self.status.emit("Verifying the full result…")
-            else:
-                self.status.emit("Choosing the next action…" if self._computer_use_active else "Thinking…")
         elif name == "decision":
-            # A proposed finish message is not a verified result yet.
-            self.status.emit("Preparing the final check…" if payload.get("kind") == "finish"
-                             else payload.get("message") or "Choosing the next step…")
+            self.status.emit(payload.get("message") or "Checking the next step…")
         elif name == "action_start":
             if self._mode == "active" and not self._should_abort():
                 self._set_computer_use(True)
@@ -180,7 +170,9 @@ class EngineRunner(QObject):
             self.status.emit("Working through the task with the information available…")
         elif name == "guided":
             self.message.emit(payload.get("message") or "Follow the highlighted step.")
+        elif name == "action_result":
+            self.status.emit("Checking the result…")
         elif name == "goal_verification":
-            self.status.emit("Result verified." if payload.get("status") == "passed" else "Result not yet verified.")
+            self.status.emit("Checking the complete goal…")
         elif name == "finished":
             self._set_computer_use(False)
