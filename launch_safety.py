@@ -73,7 +73,10 @@ def launch_target(target: str, *, allowed_commands: frozenset[str] | None = None
     if any(char in value for char in _SHELL_METACHARACTERS):
         raise LaunchError("Launch target contains shell metacharacters.")
 
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise LaunchError("Launch target is not a valid URL.") from exc
     if value.lower() == "about:blank":
         if not webbrowser.open(value, new=0, autoraise=True):
             raise LaunchError("The default browser declined the blank page.")

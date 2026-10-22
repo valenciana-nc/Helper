@@ -180,7 +180,10 @@ class BrowserDriver:
             raise StaleObservation(f"Target no longer valid: {exc}") from exc
         try:
             if action.kind == "open":
-                parsed = urlsplit(action.text)
+                try:
+                    parsed = urlsplit(action.text)
+                except ValueError:
+                    return Execution(Effect.REJECTED, "dom", "That launch target is not a valid URL.")
                 if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                     return Execution(Effect.REJECTED, "dom", "Browser navigation requires an http(s) URL.")
                 self._page.goto(action.text, wait_until="domcontentloaded", timeout=15000)

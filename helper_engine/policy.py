@@ -40,7 +40,11 @@ def confirmation_reason(action: Action, obs: Observation) -> str:
         if keys & {"delete", "del"}:
             return "This key may delete the selected item."
     if action.kind == "open":
-        parsed = urlsplit(action.text)
+        try:
+            parsed = urlsplit(action.text)
+        except ValueError:
+            # Unparseable, not risky: the driver rejects it without side effects.
+            return ""
         if parsed.scheme and parsed.scheme.casefold() not in {"http", "https", "ms-settings"}:
             return "This launch target uses a non-web protocol."
     return ""

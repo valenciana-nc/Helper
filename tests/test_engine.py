@@ -484,6 +484,53 @@ class PolicyTests(unittest.TestCase):
         action = Action("click", Target("u1"), "", (), 0, None, (), False, "Open settings")
         self.assertEqual(confirmation_reason(action, obs), "")
 
+    def test_malformed_open_url_is_not_run_fatal(self):
+        # urlsplit raises ValueError on inputs like http://[::1; the policy
+        # gate must not turn that into a run-killing exception.
+        from helper_engine.policy import confirmation_reason
+        obs = frame()
+        action = Action("open", None, text="http://[::1")
+        self.assertEqual(confirmation_reason(action, obs), "")
+
+    def test_non_web_open_scheme_needs_confirmation(self):
+        from helper_engine.policy import confirmation_reason
+        obs = frame()
+        action = Action("open", None, text="ftp://example.com/x")
+        self.assertTrue(confirmation_reason(action, obs))
+
+
+class OpenTargetTests(unittest.TestCase):
+    def test_windows_open_rejects_unparseable_url(self):
+        from unittest.mock import Mock
+        from helper_engine.windows import WindowsDriver
+        driver = WindowsDriver(uia=Mock())
+        result = driver.execute(Action("open", None, text="http://[::1"), frame())
+        self.assertEqual(result.effect, Effect.REJECTED)
+        self.assertEqual(result.route, "launch")
+
+    def test_windows_open_rejects_refused_launch(self):
+        from unittest.mock import Mock, patch
+        from helper_engine.windows import WindowsDriver
+        from launch_safety import LaunchError
+        driver = WindowsDriver(uia=Mock())
+        with patch("launch_safety.launch_target", side_effect=LaunchError("nope")):
+            result = driver.execute(Action("open", None, text="https://example.com"), frame())
+        self.assertEqual(result.effect, Effect.REJECTED)
+        self.assertEqual(result.route, "launch")
+
+    def test_browser_open_rejects_unparseable_url(self):
+        from unittest.mock import Mock
+        from helper_engine.browser import BrowserDriver
+        driver = BrowserDriver(page=Mock())
+        result = driver.execute(Action("open", None, text="http://[::1"), frame())
+        self.assertEqual(result.effect, Effect.REJECTED)
+        self.assertEqual(result.route, "dom")
+
+    def test_launch_target_raises_launch_error_for_unparseable_url(self):
+        from launch_safety import LaunchError, launch_target
+        with self.assertRaises(LaunchError):
+            launch_target("http://[::1")
+
 
 class PerceptionTests(unittest.TestCase):
     def test_corrupt_images_report_max_difference(self):

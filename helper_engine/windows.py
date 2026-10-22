@@ -173,13 +173,21 @@ class WindowsDriver:
                 return Execution(Effect.REJECTED, "uia", "Native target unavailable; observe again.")
             # Only an explicit pre-dispatch unsupported response permits a fallback.
         if action.kind == "open":
-            from launch_safety import HELP_LAUNCH_COMMANDS, launch_target
+            from launch_safety import HELP_LAUNCH_COMMANDS, LaunchError, launch_target
             value = action.text.strip()
-            parsed = urlsplit(value)
+            try:
+                parsed = urlsplit(value)
+            except ValueError:
+                return Execution(Effect.REJECTED, "launch", "That launch target is not a valid URL.")
             if value.casefold() not in HELP_LAUNCH_COMMANDS and parsed.scheme.casefold() not in {
                     "http", "https", "ms-settings"}:
                 return Execution(Effect.REJECTED, "launch", "Choose an approved app name or http(s)/Settings URL.")
-            launch_target(value, allowed_commands=HELP_LAUNCH_COMMANDS)
+            try:
+                launch_target(value, allowed_commands=HELP_LAUNCH_COMMANDS)
+            except (LaunchError, OSError) as exc:
+                # A refused launch never takes effect; it must not be recorded
+                # as UNKNOWN, which would warn against retrying a safe action.
+                return Execution(Effect.REJECTED, "launch", f"Could not launch the target: {exc}")
             return Execution(Effect.APPLIED, "launch")
         self._focus()
         import pyautogui
