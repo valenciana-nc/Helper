@@ -403,6 +403,12 @@ class SignatureTests(unittest.TestCase):
     def test_identical_observations_share_signature(self):
         self.assertEqual(frame().signature, frame().signature)
 
+    def test_signature_is_memoized_per_observation(self):
+        obs = frame()
+        first = obs.signature
+        self.assertIn("signature", obs.__dict__)
+        self.assertEqual(obs.signature, first)
+
     def test_negative_monitor_origin_and_scaled_screenshot(self):
         obs = frame(origin=-1920, scale=0.5)
         rect = obs.screen_box((500, 500, 100, 100))

@@ -6,6 +6,7 @@ import math
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import cached_property
 
 
 class ProtocolError(ValueError):
@@ -133,8 +134,13 @@ class Observation:
             max(0, min(self.height, bottom)),
         )
 
-    @property
+    @cached_property
     def signature(self) -> str:
+        # Memoized: a pure function of the frozen fields, but each access
+        # costs a repr + sha256 over the whole element list. The runtime reads
+        # before.signature on every wait-loop poll (up to ~257x per help-mode
+        # step) even though that observation never changes, so recomputing it
+        # every time is pure waste.
         # Include the full element state: a button becoming enabled, a field
         # gaining focus, or a checkbox toggling must all change the signature,
         # or the runtime's no-progress detection will miss the state change.
