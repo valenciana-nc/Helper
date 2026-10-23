@@ -549,6 +549,46 @@ class PerceptionTests(unittest.TestCase):
         self.assertEqual(image_difference(png, png, box=(50, 50, 10, 10)), 1.0)
         self.assertEqual(image_difference(png, png, box=(0, 0)), 1.0)
 
+    def test_repeated_comparisons_reuse_decoded_images(self):
+        from helper_engine.perception import _decoded_rgb, image_difference
+        _decoded_rgb.cache_clear()
+        png = frame().png
+        try:
+            self.assertEqual(image_difference(png, png), 0.0)
+            info = _decoded_rgb.cache_info()
+            self.assertGreater(info.misses, 0)
+            self.assertEqual(image_difference(png, png), 0.0)
+            self.assertGreater(_decoded_rgb.cache_info().hits, info.hits)
+        finally:
+            _decoded_rgb.cache_clear()
+
+    def test_decode_cache_is_bounded(self):
+        import io
+        from PIL import Image
+        from helper_engine.perception import _decoded_rgb, image_difference
+        _decoded_rgb.cache_clear()
+        try:
+            pngs = []
+            for i in range(10):
+                out = io.BytesIO()
+                Image.new("RGB", (64, 64), (i * 25 % 256, 0, 0)).save(out, "PNG")
+                pngs.append(out.getvalue())
+            for png in pngs:
+                image_difference(png, png)
+            self.assertLessEqual(_decoded_rgb.cache_info().currsize, 4)
+        finally:
+            _decoded_rgb.cache_clear()
+
+    def test_corrupt_images_are_not_cached(self):
+        from helper_engine.perception import _decoded_rgb, image_difference
+        _decoded_rgb.cache_clear()
+        try:
+            self.assertEqual(image_difference(b"not an image", b"also not"), 1.0)
+            self.assertEqual(image_difference(b"not an image", b"also not"), 1.0)
+            self.assertEqual(_decoded_rgb.cache_info().currsize, 0)
+        finally:
+            _decoded_rgb.cache_clear()
+
 
 class BootstrapTests(unittest.TestCase):
     def test_invalid_page_index_raises_clear_error(self):

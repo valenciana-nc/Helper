@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
@@ -25,21 +26,38 @@ def target_rect(action: Action, observation: Observation) -> Rect | None:
     return observation.screen_box(target.box)
 
 
+@lru_cache(maxsize=4)
+def _decoded_rgb(png: bytes):
+    """Decode PNG bytes to a fully-loaded RGB image, memoizing recent results.
+
+    The runtime compares the same screenshot bytes repeatedly (help-mode wait
+    loops poll every 0.35s against one reference frame; each step also runs a
+    no-progress and a post-action comparison). Re-decoding a full screenshot
+    costs tens of milliseconds, so the last few decodes are retained. The
+    cache is bounded (4 entries) so long runs cannot grow memory, and corrupt
+    input raises instead of caching -- lru_cache never stores exceptions, so
+    invalid images keep the caller's existing "treat as fully different"
+    behavior. Callers must treat the returned image as read-only; crop/resize
+    already return new images.
+    """
+    with Image.open(io.BytesIO(png)) as source:
+        return source.convert("RGB")
+
+
 def image_difference(first: bytes, second: bytes, *, box=None) -> float:
     """Normalized mean pixel difference; invalid images cannot prove freshness."""
     try:
-        with Image.open(io.BytesIO(first)) as a, Image.open(io.BytesIO(second)) as b:
-            a, b = a.convert("RGB"), b.convert("RGB")
-            if a.size != b.size:
+        a, b = _decoded_rgb(first), _decoded_rgb(second)
+        if a.size != b.size:
+            return 1.0
+        if box is not None:
+            left, top, right, bottom = box
+            if right <= left or bottom <= top:
                 return 1.0
-            if box is not None:
-                left, top, right, bottom = box
-                if right <= left or bottom <= top:
-                    return 1.0
-                a, b = a.crop(box), b.crop(box)
-            a = a.resize((96, 64))
-            b = b.resize((96, 64))
-            return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
+            a, b = a.crop(box), b.crop(box)
+        a = a.resize((96, 64))
+        b = b.resize((96, 64))
+        return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
     except Exception:
         # A corrupt screenshot must never crash the run; treat as fully different
         # so the runtime re-observes instead of trusting stale pixels.
