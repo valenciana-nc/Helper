@@ -362,6 +362,28 @@ class EvidenceTests(unittest.TestCase):
             outcome_empty, _ = evaluate((empty,), obs)
             self.assertEqual(outcome_none, outcome_empty)
 
+    def test_text_blob_is_built_once_per_evaluate(self):
+        from unittest.mock import patch
+        from helper_engine import verification
+        obs = frame()
+        preds = tuple(Predicate("text_contains", value="Name") for _ in range(3))
+        with patch.object(verification, "_text_blob", wraps=verification._text_blob) as spy:
+            outcome, _ = verification.evaluate(preds, obs)
+        self.assertEqual(outcome, Outcome.ACHIEVED)
+        self.assertEqual(spy.call_count, 1)
+
+    def test_text_blob_matches_per_predicate_results(self):
+        # Case-insensitive match across visible text, names, and values;
+        # password values stay out of the haystack.
+        from dataclasses import replace
+        from helper_engine.verification import _text_blob
+        obs = frame(value="Alice")
+        blob = _text_blob(obs)
+        self.assertIn("alice", blob)
+        self.assertIn("name", blob)
+        secret = replace(obs.elements[0], password=True, value="hunter2")
+        self.assertNotIn("hunter2", _text_blob(replace(obs, elements=(secret,))))
+
 
 class SignatureTests(unittest.TestCase):
     def test_enabled_state_change_alters_signature(self):
