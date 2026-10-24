@@ -69,11 +69,10 @@ ALIASES = {
 }
 
 CHAT_TAP_THRESHOLD_SEC = 0.3
-CONFIRMATION_TIMEOUT_SEC = 120.0
 APP_ICON_PATH = ROOT / "assets" / "helper_logo.ico"
 CONVERSATIONS_PATH = ROOT / "data" / "conversations.json"
 
-def helper_app_icon(app: QApplication) -> QIcon:
+def helper_app_icon() -> QIcon:
     """Use the same violet artwork as the desktop shortcut and README."""
     return QIcon(str(APP_ICON_PATH))
 
@@ -117,7 +116,7 @@ class HelplerDesktopApp(QObject):
         self._hotkey = {normalize_key_name(part) for part in hotkey.split("+") if part}
         self._widget = FloatingCircle()
         self._widget.set_state(FloatingCircle.IDLE)
-        self._app_icon = helper_app_icon(self._app)
+        self._app_icon = helper_app_icon()
         self._app.setWindowIcon(self._app_icon)
         shortcuts = ensure_windows_shortcuts()
         if shortcuts:
@@ -854,7 +853,7 @@ def _startup_surface(argv: list[str]) -> str:
 def _show_fatal_dialog(log_path: Path, exc_text: str) -> None:
     app = QApplication.instance() or QApplication(sys.argv)
     box = QMessageBox()
-    box.setWindowIcon(helper_app_icon(app))
+    box.setWindowIcon(helper_app_icon())
     box.setIcon(QMessageBox.Icon.Critical)
     box.setWindowTitle("Helper failed to start")
     stripped = exc_text.strip()

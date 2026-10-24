@@ -387,7 +387,7 @@ class DesktopWindowTests(unittest.TestCase):
     def test_helper_logo_icon_is_loadable(self) -> None:
         app = _qt_app()
         self.assertTrue(main.APP_ICON_PATH.exists())
-        self.assertFalse(main.helper_app_icon(app).isNull())
+        self.assertFalse(main.helper_app_icon().isNull())
 
     def test_all_foreground_launches_open_the_dashboard(self) -> None:
         for flags in ([], ["--dashboard"], ["--app"], ["--chat"]):
