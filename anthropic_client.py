@@ -15,11 +15,13 @@ from typing import Any
 
 import requests
 
+import oauth_anthropic
 from openai_client import (
     BadProviderResponse,
     CONNECT_TIMEOUT_SEC,
     READ_TIMEOUT_SEC,
     MAX_RETRIES,
+    NotSignedIn,
     RETRYABLE_STATUS_CODES,
     AuthExpired,
     ChatResult,
@@ -33,6 +35,10 @@ log = logging.getLogger("helper.anthropic")
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+# Pi's subscription transport requires Claude Code compatibility (not API-key auth).
+CLAUDE_CODE_VERSION = "2.1.280"
+OAUTH_BETAS = "claude-code-20250219,oauth-2025-04-20"
+OAUTH_SYSTEM_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude."
 
 # Sampling parameters were removed from these model families; sending
 # `temperature` returns HTTP 400. Matched by prefix so dated and future
@@ -58,7 +64,10 @@ class AnthropicProvider:
         self,
         api_key: str,
         session: requests.Session | None = None,
+        *,
+        subscription: bool = False,
     ) -> None:
+        self._subscription = subscription
         self._api_key = api_key
         self._session = session or requests.Session()
 
@@ -81,7 +90,14 @@ class AnthropicProvider:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return _parse_messages(self._post(body))
+        payload = self._post(body)
+        if self._subscription and (not isinstance(payload, dict) or payload.get("stop_reason") in {
+                "max_tokens", "refusal", "tool_use", "pause_turn"}):
+            raise BadProviderResponse("Claude did not return a complete answer. Please try again.")
+        result = _parse_messages(payload)
+        if self._subscription and not result.text:
+            raise BadProviderResponse("Claude returned no answer (the request may have been refused).")
+        return result
 
     # ------------------------------------------------------------------
     # Internals.
@@ -102,7 +118,11 @@ class AnthropicProvider:
             "max_tokens": max(1, int(max_tokens or 4096)),
             "messages": translated,
         }
-        if system_text:
+        if self._subscription:
+            body["system"] = [{"type": "text", "text": OAUTH_SYSTEM_PREFIX}]
+            if system_text:
+                body["system"].append({"type": "text", "text": system_text})
+        elif system_text:
             body["system"] = system_text
         if temperature is not None and model_accepts_temperature(model):
             # Anthropic's valid range is 0-1 (the shared HELPER_TEMPERATURE
@@ -110,22 +130,36 @@ class AnthropicProvider:
             body["temperature"] = min(1.0, max(0.0, float(temperature)))
         return body
 
+    def _headers(self, *, force_refresh: bool = False) -> dict[str, str]:
+        headers = {"anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
+        if not self._subscription:
+            return {**headers, "x-api-key": self._api_key}
+        try:
+            access = oauth_anthropic.get_access_token(force_refresh=force_refresh)
+        except oauth_anthropic.NotSignedIn as exc:
+            raise NotSignedIn(str(exc)) from exc
+        except oauth_anthropic.LoginError as exc:
+            raise AuthExpired(str(exc)) from exc
+        return {**headers, "Authorization": f"Bearer {access}", "anthropic-beta": OAUTH_BETAS,
+                "accept": "application/json", "anthropic-dangerous-direct-browser-access": "true",
+                "user-agent": f"claude-cli/{CLAUDE_CODE_VERSION}", "x-app": "cli"}
+
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
-        headers = {
-            "x-api-key": self._api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-            "content-type": "application/json",
-        }
         last_error: ProviderError | None = None
         retried_without_temperature = False
+        refreshed_after_401 = False
+        refresh_requested = False
 
         for attempt in range(MAX_RETRIES + 1):
+            headers = self._headers(force_refresh=refresh_requested)
+            refresh_requested = False
             try:
                 resp = self._session.post(
                     ANTHROPIC_URL,
                     headers=headers,
                     data=json.dumps(body),
                     timeout=(CONNECT_TIMEOUT_SEC, READ_TIMEOUT_SEC),
+                    allow_redirects=False,
                 )
             except requests.Timeout:
                 last_error = ProviderUnavailable("Anthropic request timed out.")
@@ -140,14 +174,23 @@ class AnthropicProvider:
                             "Anthropic returned non-JSON response."
                         ) from exc
 
+                if self._subscription and resp.status_code == 401:
+                    if not refreshed_after_401 and attempt < MAX_RETRIES:
+                        refreshed_after_401 = True
+                        refresh_requested = True
+                        continue
+                    raise AuthExpired("Claude rejected your sign-in. Please sign in again in Account.")
+                if self._subscription and resp.status_code == 403:
+                    raise ProviderError("Claude subscription access denied. Anthropic may restrict this client or model.")
                 if resp.status_code in {401, 403}:
                     raise AuthExpired(
                         "Anthropic rejected the key (HTTP "
                         f"{resp.status_code}). Check HELPER_ANTHROPIC_API_KEY."
                     )
 
-                detail = _redact((resp.text or "")[:400])
-                message = f"Anthropic failed: HTTP {resp.status_code}: {detail}"
+                detail = "" if self._subscription else _redact((resp.text or "")[:400])
+                message = (f"Claude subscription request failed (HTTP {resp.status_code}). Check account/model access."
+                           if self._subscription else f"Anthropic failed: HTTP {resp.status_code}: {detail}")
                 if resp.status_code == 429:
                     last_error = RateLimited(message)
                 elif resp.status_code in RETRYABLE_STATUS_CODES:

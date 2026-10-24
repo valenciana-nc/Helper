@@ -246,8 +246,10 @@ API_MODEL = env_value("HELPER_API_MODEL", "").strip()
 
 PROVIDER = env_value("HELPER_PROVIDER", "codex").strip().lower() or "codex"
 ANTHROPIC_API_KEY = env_value("HELPER_ANTHROPIC_API_KEY", "").strip()
+ANTHROPIC_AUTH_MODE = env_value("HELPER_ANTHROPIC_AUTH_MODE", "auto").strip().lower()
 GEMINI_API_KEY = env_value("HELPER_GEMINI_API_KEY", "").strip()
 XAI_API_KEY = env_value("HELPER_XAI_API_KEY", "").strip()
+XAI_AUTH_MODE = env_value("HELPER_XAI_AUTH_MODE", "auto").strip().lower()
 
 
 TEMPERATURE = _float_env("HELPER_TEMPERATURE", 0.7, lo=0.0, hi=2.0)
@@ -295,10 +297,30 @@ def effective_provider() -> str:
     return "openai_compat" if provider == "codex" and custom_api_enabled() else provider
 
 
+def xai_auth_mode() -> str:
+    """Keep existing API-key setups; explicit subscription selection takes precedence."""
+    if XAI_AUTH_MODE in {"oauth", "api_key"}:
+        return XAI_AUTH_MODE
+    return "api_key" if XAI_API_KEY else "oauth"
+
+
+def anthropic_auth_mode() -> str:
+    """Use only the selected Claude connection; preserve existing API-key setups."""
+    if ANTHROPIC_AUTH_MODE in {"oauth", "api_key"}:
+        return ANTHROPIC_AUTH_MODE
+    return "api_key" if ANTHROPIC_API_KEY else "oauth"
+
+
 def provider_key_configured(provider: str) -> bool:
-    """Report configured API credentials, not a verified account sign-in."""
+    """Report locally stored credentials, not verified model access."""
     if provider == "openai_compat":
         return custom_api_enabled()
+    if provider == "xai" and xai_auth_mode() == "oauth":
+        import oauth_xai
+        return oauth_xai.is_signed_in()
+    if provider == "anthropic" and anthropic_auth_mode() == "oauth":
+        import oauth_anthropic
+        return oauth_anthropic.is_signed_in()
     return bool({"anthropic": ANTHROPIC_API_KEY, "gemini": GEMINI_API_KEY, "xai": XAI_API_KEY}.get(provider))
 
 

@@ -1,14 +1,18 @@
-"""Official-console links and explicit API-key connections for Claude and Grok."""
+"""Provider API-key cards and native Claude/Grok subscription sign-in."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+import threading
+from types import ModuleType
 import webbrowser
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 import config
+import oauth_anthropic
+import oauth_xai
 import theme
 
 
@@ -47,6 +51,7 @@ class ProviderAccountCard(QFrame):
             f"Sign in on the official {account.name} API console, create an API key, and paste it below. "
             "Helper uses that key—not your chat subscription. API usage is billed separately."
         )
+        self.description = description
         description.setWordWrap(True)
         description.setFont(theme.font(9))
         description.setStyleSheet(theme.inline("color: {text_muted}", "border: none"))
@@ -144,3 +149,288 @@ class ProviderAccountCard(QFrame):
             self.status_label.setText("The API key or model contains invalid whitespace.")
             return
         self.save_requested.emit(self.account.provider, key, model, restart)
+
+
+class _GrokLoginWorker(QObject):
+    device_ready = pyqtSignal(str, str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cancel = threading.Event()
+
+    def run(self) -> None:
+        try:
+            oauth_xai.login(lambda device: self.device_ready.emit(device.user_code, device.verification_uri), self.cancel)
+        except oauth_xai.LoginError as exc:
+            self.finished.emit(False, str(exc))
+        except Exception:
+            self.finished.emit(False, "Grok sign-in failed. Please try again.")
+        else:
+            self.finished.emit(True, "")
+
+
+class _ClaudeLoginWorker(QObject):
+    auth_ready = pyqtSignal(str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, method: str) -> None:
+        super().__init__()
+        self.method = method
+        self.cancel = threading.Event()
+        self.handle: oauth_anthropic.LoginHandle | None = None
+
+    def run(self) -> None:
+        ok, message = False, ""
+        try:
+            self.handle = oauth_anthropic.start_login(self.cancel, method=self.method)
+            self.auth_ready.emit(self.handle.auth_url)
+            self.handle.wait()
+            ok = True
+        except oauth_anthropic.LoginError as exc:
+            message = str(exc)
+        except Exception:
+            message = "Claude sign-in failed. Please try again."
+        finally:
+            if self.handle is not None:
+                self.handle.close()
+            self.handle = None
+        self.finished.emit(ok, message)
+
+
+class SubscriptionAccountCard(ProviderAccountCard):
+    subscription_use_requested = pyqtSignal(str)
+    auth: ModuleType
+    login_description: str
+    console_label: str
+    sign_in_hint: str
+
+    def __init__(self, account: ProviderAccount, saved_key: str, model: str) -> None:
+        super().__init__(account, saved_key, model)
+        self._login_worker: _GrokLoginWorker | _ClaudeLoginWorker | None = None
+        self.description.setText(self.login_description)
+        self.api_console_button = self.sign_in_button
+        self.api_console_button.setText(self.console_label)
+        section = QFrame()
+        section.setStyleSheet("border: none; background: transparent;")
+        layout = QVBoxLayout(section)
+        self._oauth_layout = layout
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.oauth_status_label = QLabel("")
+        self.oauth_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.oauth_status_label.setWordWrap(True)
+        layout.addWidget(self.oauth_status_label)
+        self.device_code_label = QLabel("")
+        self.device_code_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.device_code_label.setWordWrap(True)
+        self.device_code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.device_code_label.hide()
+        layout.addWidget(self.device_code_label)
+        actions = QHBoxLayout()
+        self.sign_in_button = self._button(f"Sign in with {account.name}", primary=True)
+        self.sign_in_button.setToolTip(self.sign_in_hint)
+        self.sign_in_button.clicked.connect(self._start_subscription_login)
+        actions.addWidget(self.sign_in_button)
+        self.cancel_login_button = self._button("Cancel sign-in")
+        self.cancel_login_button.clicked.connect(self.cancel_login)
+        self.cancel_login_button.hide()
+        actions.addWidget(self.cancel_login_button)
+        self.oauth_sign_out_button = self._button(f"Sign out of {account.name}")
+        self.oauth_sign_out_button.clicked.connect(self._sign_out_subscription)
+        actions.addWidget(self.oauth_sign_out_button)
+        layout.addLayout(actions)
+        self.use_subscription_button = self._button("Use subscription and restart", primary=True)
+        self.use_subscription_button.clicked.connect(self._use_subscription)
+        layout.addWidget(self.use_subscription_button)
+        self.layout().insertWidget(2, section)
+        self.refresh_subscription()
+
+    def refresh_subscription(self) -> None:
+        connected = self.auth.is_signed_in()
+        self.use_subscription_button.setEnabled(connected and self._login_worker is None)
+        self.oauth_sign_out_button.setVisible(connected)
+        if self._login_worker is None:
+            name = self.account.name
+            self.sign_in_button.setText(f"Re-authenticate {name}" if connected else f"Sign in with {name}")
+            self.oauth_status_label.setText(
+                f"{name} subscription sign-in saved. Use subscription and restart to apply."
+                if connected else f"Not signed in to {name}."
+            )
+
+    def _start_subscription_login(self) -> None:
+        if self._login_worker is not None:
+            return
+        worker = self._create_login_worker()
+        self._login_worker = worker
+        self._connect_login_worker(worker)
+        worker.finished.connect(self._on_subscription_login_finished)
+        self.sign_in_button.setEnabled(False)
+        self.use_subscription_button.setEnabled(False)
+        self.cancel_login_button.setEnabled(True)
+        self.cancel_login_button.show()
+        self.device_code_label.clear()
+        self.device_code_label.hide()
+        self.oauth_status_label.setText(f"Starting {self.account.name} sign-in…")
+        self._set_login_active(True)
+        # A daemon worker keeps Qt responsive and cannot hold app shutdown open.
+        threading.Thread(target=worker.run, name=f"helper-{self.account.provider}-login", daemon=True).start()
+
+    def _create_login_worker(self) -> _GrokLoginWorker | _ClaudeLoginWorker:
+        raise NotImplementedError
+
+    def _connect_login_worker(self, worker) -> None:
+        raise NotImplementedError
+
+    def _set_login_active(self, active: bool) -> None:
+        pass
+
+    def cancel_login(self) -> None:
+        if self._login_worker is not None:
+            self._login_worker.cancel.set()
+            self.cancel_login_button.setEnabled(False)
+            self.oauth_status_label.setText(f"Cancelling {self.account.name} sign-in…")
+
+    def _on_subscription_login_finished(self, ok: bool, message: str) -> None:
+        self._login_worker = None
+        self.cancel_login_button.hide()
+        self.sign_in_button.setEnabled(True)
+        self.device_code_label.clear()
+        self.device_code_label.hide()
+        self._set_login_active(False)
+        self.refresh_subscription()
+        if not ok:
+            self.oauth_status_label.setText(message)
+
+    def _sign_out_subscription(self) -> None:
+        self.cancel_login()
+        try:
+            self.auth.sign_out()
+        except self.auth.LoginError as exc:
+            self.oauth_status_label.setText(str(exc))
+            return
+        self.refresh_subscription()
+        self.oauth_status_label.setText(f"Signed out of {self.account.name}. Your API key and other sign-ins are unchanged.")
+
+    def _use_subscription(self) -> None:
+        if not self.auth.is_signed_in():
+            self.oauth_status_label.setText(f"Sign in with {self.account.name} first.")
+            return
+        model = self.model_input.currentText().strip()
+        if not model or any(c in model for c in "\r\n"):
+            self.oauth_status_label.setText(f"Enter a valid {self.account.name} model first.")
+            return
+        self.subscription_use_requested.emit(model)
+
+
+class GrokAccountCard(SubscriptionAccountCard):
+    auth = oauth_xai
+    login_description = (
+        "Connect an eligible SuperGrok or X Premium subscription with a browser approval code. "
+        "Or use an xAI API key below (separate API billing). Model access and limits depend on your account."
+    )
+    console_label = "Open xAI API console"
+    sign_in_hint = "Approve a device code on xAI's site using your Grok/X subscription."
+
+    def _create_login_worker(self) -> _GrokLoginWorker:
+        return _GrokLoginWorker()
+
+    def _connect_login_worker(self, worker: _GrokLoginWorker) -> None:
+        worker.device_ready.connect(self._on_device_ready)
+
+    def _on_device_ready(self, code: str, uri: str) -> None:
+        if self._login_worker is None or self._login_worker.cancel.is_set():
+            return
+        self.device_code_label.setText(f"Approval code: {code}\n{uri}")
+        self.device_code_label.show()
+        try:
+            opened = webbrowser.open(uri, new=2)
+        except Exception:
+            opened = False
+        self.oauth_status_label.setText(
+            "Approve this code in your browser. Waiting for xAI…" if opened
+            else "Could not open your browser. Open the address below and enter the approval code."
+        )
+
+
+class ClaudeAccountCard(SubscriptionAccountCard):
+    auth = oauth_anthropic
+    login_description = (
+        "Sign in with an eligible Claude Pro/Max account using browser approval or a copied code. "
+        "Uses Pi's Claude Code OAuth compatibility flow; Anthropic may restrict third-party access. "
+        "An Anthropic API key below remains a separate, billed alternative."
+    )
+    console_label = "Open Anthropic API console"
+    sign_in_hint = "Sign in on claude.ai using the Claude Pro/Max OAuth flow."
+
+    def __init__(self, account: ProviderAccount, saved_key: str, model: str) -> None:
+        super().__init__(account, saved_key, model)
+        method_row = QHBoxLayout()
+        method_row.addWidget(QLabel("Login method"))
+        self.login_method_input = QComboBox()
+        self.login_method_input.setStyleSheet(theme.qss(theme.INPUT_QSS))
+        self.login_method_input.addItem("Browser callback", "browser")
+        self.login_method_input.addItem("Copy code (manual)", "copy_code")
+        method_row.addWidget(self.login_method_input, 1)
+        self._oauth_layout.insertLayout(0, method_row)
+        self.manual_frame = QFrame()
+        manual_layout = QVBoxLayout(self.manual_frame)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+        hint = QLabel("If needed, paste the final redirect URL or the code Claude shows (code#state).")
+        hint.setWordWrap(True)
+        manual_layout.addWidget(hint)
+        entry = QHBoxLayout()
+        self.authorization_input = QLineEdit()
+        self.authorization_input.setStyleSheet(theme.qss(theme.INPUT_QSS))
+        self.authorization_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.authorization_input.setPlaceholderText("Paste authorization code / final redirect URL")
+        self.authorization_input.setAccessibleName("Claude authorization code or redirect URL")
+        self.authorization_input.returnPressed.connect(self._submit_authorization)
+        entry.addWidget(self.authorization_input, 1)
+        self.submit_code_button = self._button("Submit code")
+        self.submit_code_button.clicked.connect(self._submit_authorization)
+        entry.addWidget(self.submit_code_button)
+        manual_layout.addLayout(entry)
+        self.manual_frame.hide()
+        self._oauth_layout.insertWidget(self._oauth_layout.count() - 1, self.manual_frame)
+
+    def _create_login_worker(self) -> _ClaudeLoginWorker:
+        return _ClaudeLoginWorker(self.login_method_input.currentData())
+
+    def _connect_login_worker(self, worker: _ClaudeLoginWorker) -> None:
+        worker.auth_ready.connect(self._on_auth_url)
+
+    def _set_login_active(self, active: bool) -> None:
+        self.login_method_input.setEnabled(not active)
+        self.manual_frame.setVisible(active)
+        self.submit_code_button.setEnabled(False)
+        self.authorization_input.clear()
+
+    def _on_auth_url(self, url: str) -> None:
+        if self._login_worker is None or self._login_worker.cancel.is_set():
+            return
+        self.device_code_label.setText(url)
+        self.device_code_label.show()
+        self.submit_code_button.setEnabled(True)
+        try:
+            opened = webbrowser.open(url, new=2)
+        except Exception:
+            opened = False
+        self.oauth_status_label.setText(
+            "Complete Claude sign-in in your browser. Waiting for callback or pasted code…" if opened
+            else "Could not open your browser. Open the address below, sign in, then paste the final URL/code."
+        )
+
+    def _submit_authorization(self) -> None:
+        worker = self._login_worker
+        handle = worker.handle if isinstance(worker, _ClaudeLoginWorker) else None
+        if handle is None:
+            self.oauth_status_label.setText("Start Claude sign-in first, then wait for the browser address.")
+            return
+        try:
+            handle.submit_authorization(self.authorization_input.text())
+        except oauth_anthropic.LoginError as exc:
+            self.oauth_status_label.setText(str(exc))
+            return
+        self.authorization_input.clear()
+        self.submit_code_button.setEnabled(False)
+        self.oauth_status_label.setText("Authorization received. Finishing Claude sign-in…")

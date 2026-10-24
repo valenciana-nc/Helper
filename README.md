@@ -47,7 +47,8 @@ py -3.12 -m venv .venv
 | Provider | Connection |
 |---|---|
 | ChatGPT / Codex | **Sign in with ChatGPT** in Account. |
-| Claude / Grok | Add an Anthropic / xAI **API key**, then **Use and restart**. Chat subscriptions are not API access. |
+| Grok | **Sign in with Grok**, approve the browser code, then **Use subscription and restart**. An xAI API key is also supported. |
+| Claude | **Sign in with Claude** for Pro/Max OAuth, then **Use subscription and restart**. API keys remain an alternative; Anthropic may restrict third-party access. |
 | Gemini / OpenAI-compatible | Configure the provider and credentials in Settings. |
 
 API usage may be billed separately. Voice has its own local-model/OpenAI requirements.

@@ -38,10 +38,14 @@ are removed when Helper refreshes its shortcuts.
 
 The sidebar contains Conversations, Settings, and Account; the Status page and
 embedded log viewer are removed. Account places matching Claude and Grok cards
-directly below ChatGPT. Their buttons open official API-console sign-in pages;
-API keys remain masked, API billing is explicit, and browser sign-in alone is
-never displayed as a connected Helper account. Saving selects the provider and
-model, while restart applies it to the running engine.
+directly below ChatGPT. Both cards support native subscription sign-in,
+cancellation, sign-out, and **Use subscription and restart**. Grok shows a browser
+approval code. Claude offers a browser callback or copy-code login, with a masked
+manual authorization input that clears on submission/completion. Claude's card
+also states the third-party OAuth compatibility limitation. Separate API-console
+buttons remain available; keys stay masked and separate billing is explicit.
+Opening an API console alone never marks an account connected. Saving selects
+the provider and model; restarting applies it to the running engine.
 
 `ui_computer_use.py` draws a diffuse purple aura fading smoothly inward from all
 four screen edges, without a solid stroke or rounded frame. The reference is a

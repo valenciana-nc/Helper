@@ -53,19 +53,34 @@ Consequential-action approval checks are heuristics, **not a security sandbox**.
 | Provider | Setup |
 |---|---|
 | ChatGPT / Codex | Use **Sign in with ChatGPT** in Account. No API key is needed for this model connection. |
-| Claude | Sign in on Anthropic's official API console, create an API key, paste it in the Claude card, choose a model, then **Use and restart**. |
-| Grok | Do the same with an xAI API key in the Grok card. |
+| Claude | **Sign in with Claude**, approve in the browser (or paste the displayed code), choose a model, then **Use subscription and restart**. An Anthropic API key is an alternative. |
+| Grok | Click **Sign in with Grok**, approve the displayed code on xAI's site, choose a model, then **Use subscription and restart**. An xAI API key is an alternative. |
 | Gemini | Select Gemini in Settings and supply its API key. |
 | OpenAI-compatible | Set the endpoint, API key, and model in Settings. |
 
-Claude/Grok console buttons only open a browser. They are **not subscription OAuth**
-and do not connect Helper by themselves. API billing is separate from chat
-subscriptions. Saved keys are not automatically validated. **Save** persists
-settings; restarting applies a changed provider to the running engine.
+Grok sign-in uses native device-code OAuth for eligible **SuperGrok / X Premium**
+accounts. The Grok card shows the code and official verification address, including
+when the browser cannot open automatically. You can cancel while waiting. Model
+access and usage limits are determined by xAI; sign-in does not guarantee access
+to every model. See [Grok authentication](GROK_AUTH.md) for protocol and routing details.
 
-Credentials are stored locally (`.env` for API settings; ChatGPT authentication
-uses its token store). Treat `.env`, saved transcripts, and shared screenshots as
-private. Do not commit credentials, conversation data, or run artifacts.
+Claude sign-in implements Pi's **Claude Pro/Max** OAuth flow with PKCE, a local
+browser callback, and a **Copy code (manual)** option. If the callback does not
+arrive, paste the final redirect URL in the card. This uses Claude Code's public
+OAuth client and compatibility request format, not a separately registered Helper
+integration. Anthropic may restrict third-party use. See [Claude authentication](CLAUDE_AUTH.md).
+
+**Open Anthropic API console** and **Open xAI API console** only open their API
+consoles; they do not connect Helper by themselves. API-key billing is separate
+from subscriptions. Saved API keys are not automatically validated. **Save**
+persists settings; restarting applies a changed provider to the running engine.
+Using an API-key card explicitly selects API billing instead of subscription
+access. Signing out of Claude or Grok leaves other accounts and saved API keys unchanged.
+
+Credentials are stored locally (`.env` for API settings; Claude/Grok OAuth tokens
+use separate system credential-manager entries and refresh automatically;
+ChatGPT uses its own token store). Treat `.env`, saved transcripts, and shared screenshots as private.
+Do not commit credentials, conversation data, or run artifacts.
 
 ## Voice
 

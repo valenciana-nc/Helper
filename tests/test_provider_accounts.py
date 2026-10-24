@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import io
 import json
 from pathlib import Path
+import time
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import Mock, patch
@@ -30,7 +31,9 @@ class ProviderAccountTests(unittest.TestCase):
     def dashboard(self, values=None, snapshot=None):
         with (TemporaryDirectory() as folder,
               patch("oauth_codex.is_signed_in", return_value=False),
-              patch("oauth_codex.account_email", return_value=None)):
+              patch("oauth_codex.account_email", return_value=None),
+              patch("oauth_xai.is_signed_in", return_value=False),
+              patch("oauth_anthropic.is_signed_in", return_value=False)):
             path = Path(folder) / ".env"
             if values:
                 write_env(path, values)
@@ -61,7 +64,8 @@ class ProviderAccountTests(unittest.TestCase):
             for card in window._provider_account_cards.values():
                 card.key_input.setText("fixture-private-key")
                 with patch("ui_provider_accounts.webbrowser.open", return_value=True) as browser:
-                    card.sign_in_button.click()
+                    button = getattr(card, "api_console_button", card.sign_in_button)
+                    button.click()
                 browser.assert_called_once_with(card.account.console_url, new=2)
                 self.assertNotIn("fixture-private-key", browser.call_args.args[0])
                 self.assertIn("paste an API key", card.status_label.text())
@@ -71,7 +75,7 @@ class ProviderAccountTests(unittest.TestCase):
         with self.dashboard() as (window, path, restart):
             card = window._provider_account_cards["xai"]
             with patch("ui_provider_accounts.webbrowser.open", side_effect=OSError("browser unavailable")):
-                card.sign_in_button.click()
+                card.api_console_button.click()
             self.assertIn("Could not open", card.status_label.text())
             self.assertFalse(path.exists())
             restart.assert_not_called()
@@ -161,6 +165,115 @@ class ProviderAccountTests(unittest.TestCase):
             self.assertEqual(read_env(path)["HELPER_XAI_API_KEY"], "fixture-xai")
             self.assertEqual(card.key_input.text(), "fixture-xai")
 
+    def test_grok_native_login_shows_code_and_browser_fallback_without_saving_settings(self):
+        with self.dashboard() as (window, path, restart):
+            card = window._provider_account_cards["xai"]
+            with patch("ui_provider_accounts.threading.Thread") as thread:
+                card.sign_in_button.click()
+                card.sign_in_button.click()  # Duplicate admission is blocked.
+            self.assertEqual(thread.call_count, 1)
+            self.assertFalse(card.sign_in_button.isEnabled())
+            worker = card._login_worker
+            with patch("ui_provider_accounts.webbrowser.open", return_value=False) as browser:
+                card._on_device_ready("ABCD-1234", "https://accounts.x.ai/oauth2/device")
+            browser.assert_called_once_with("https://accounts.x.ai/oauth2/device", new=2)
+            self.assertIn("ABCD-1234", card.device_code_label.text())
+            self.assertIn("Could not open", card.oauth_status_label.text())
+            self.assertFalse(path.exists())
+            card.cancel_login_button.click()
+            self.assertTrue(worker.cancel.is_set())
+            card._on_subscription_login_finished(False, "Grok sign-in cancelled.")
+            self.assertTrue(card.sign_in_button.isEnabled())
+            self.assertTrue(card.device_code_label.isHidden())
+            self.assertIn("cancelled", card.oauth_status_label.text())
+            restart.assert_not_called()
+
+    def test_native_login_worker_delivers_browser_and_completion_events_to_qt(self):
+        from oauth_xai import DeviceCode
+        def login(on_device, cancel):
+            on_device(DeviceCode("private", "ABCD-1234", "https://accounts.x.ai/oauth2/device", 900, 5))
+        with self.dashboard() as (window, path, restart):
+            card = window._provider_account_cards["xai"]
+            with (patch("oauth_xai.login", side_effect=login) as auth,
+                  patch("oauth_xai.is_signed_in", return_value=True),
+                  patch("ui_provider_accounts.webbrowser.open", return_value=True) as browser):
+                card.sign_in_button.click()
+                deadline = time.monotonic() + 2
+                while card._login_worker is not None and time.monotonic() < deadline:
+                    self.qt.processEvents()
+                    time.sleep(0.01)
+                self.qt.processEvents()
+                self.assertIsNone(card._login_worker)
+                self.assertTrue(card.use_subscription_button.isEnabled())
+            auth.assert_called_once()
+            browser.assert_called_once_with("https://accounts.x.ai/oauth2/device", new=2)
+            self.assertFalse(path.exists())
+            restart.assert_not_called()
+
+    def test_grok_subscription_selection_preserves_api_key_other_settings_and_drafts(self):
+        values = {"HELPER_XAI_API_KEY": "fixture-api", "UNRELATED": "keep", "HELPER_PROVIDER": "codex"}
+        with self.dashboard(values) as (window, path, restart):
+            card = window._provider_account_cards["xai"]
+            window._field_widgets["HELPER_HOTKEY"].setText("ctrl+alt+p")
+            card.model_input.setCurrentText("grok-subscription-model")
+            with patch("oauth_xai.is_signed_in", return_value=True):
+                card._on_subscription_login_finished(True, "")
+                card.use_subscription_button.click()
+                self.assertIsNone(window._validate_settings({}))
+            saved = read_env(path)
+            self.assertEqual(saved["HELPER_XAI_AUTH_MODE"], "oauth")
+            self.assertEqual(saved["HELPER_PROVIDER"], "xai")
+            self.assertEqual(saved["HELPER_AGENT_MODEL"], "grok-subscription-model")
+            self.assertEqual(saved["HELPER_REASONING_MODEL"], "grok-subscription-model")
+            self.assertEqual(saved["HELPER_XAI_API_KEY"], "fixture-api")
+            self.assertEqual(saved["UNRELATED"], "keep")
+            self.assertNotIn("HELPER_HOTKEY", saved)
+            self.assertEqual(window._field_widgets["HELPER_HOTKEY"].text(), "ctrl+alt+p")
+            restart.assert_called_once()
+
+    def test_subscription_save_failure_and_missing_login_do_not_restart(self):
+        with self.dashboard({"HELPER_PROVIDER": "codex"}) as (window, path, restart):
+            self.assertFalse(window._use_grok_subscription("grok-4.7"))
+            with (patch("oauth_xai.is_signed_in", return_value=True),
+                  patch("ui_dashboard.write_env", side_effect=OSError("disk full"))):
+                self.assertFalse(window._use_grok_subscription("grok-4.7"))
+            self.assertEqual(read_env(path)["HELPER_PROVIDER"], "codex")
+            restart.assert_not_called()
+
+    def test_api_key_save_explicitly_selects_api_billing_not_existing_subscription(self):
+        with self.dashboard({"HELPER_XAI_AUTH_MODE": "oauth"}) as (window, path, _):
+            card = window._provider_account_cards["xai"]
+            card.key_input.setText("fixture-api")
+            card.save_button.click()
+            self.assertEqual(read_env(path)["HELPER_XAI_AUTH_MODE"], "api_key")
+            self.assertFalse(window._grok_uses_subscription())
+
+    def test_grok_sign_out_is_separate_from_chatgpt_and_api_key(self):
+        with self.dashboard({"HELPER_XAI_API_KEY": "fixture-api"}) as (window, path, _):
+            card = window._provider_account_cards["xai"]
+            with patch("oauth_xai.sign_out") as sign_out, patch("oauth_codex.sign_out") as codex_out:
+                card._sign_out_subscription()
+            sign_out.assert_called_once()
+            codex_out.assert_not_called()
+            self.assertEqual(read_env(path)["HELPER_XAI_API_KEY"], "fixture-api")
+
+    def test_closing_dashboard_cancels_pending_grok_login(self):
+        with self.dashboard() as (window, _, _):
+            card = window._provider_account_cards["xai"]
+            with patch("ui_provider_accounts.threading.Thread"):
+                card.sign_in_button.click()
+            worker = card._login_worker
+            window.close()
+            self.assertTrue(worker.cancel.is_set())
+            card._on_subscription_login_finished(False, "Cancelled")
+
+    def test_sidebar_reports_subscription_instead_of_an_api_key(self):
+        with self.dashboard(snapshot={"provider": "xai", "provider_connected": True,
+                                      "provider_auth_mode": "oauth"}) as (window, _, _):
+            self.assertIn("Subscription", window._sidebar_foot_pill.text())
+            self.assertIn("configured", window._sidebar_foot_pill.text())
+            self.assertNotIn("API key", window._sidebar_foot_pill.text())
+
     def test_sidebar_reports_grok_key_instead_of_missing_chatgpt_sign_in(self):
         with self.dashboard(snapshot={"provider": "xai", "provider_connected": True}) as (window, _, _):
             self.assertIn("Grok", window._sidebar_foot_pill.text())
@@ -172,7 +285,10 @@ class GrokRoutingTests(unittest.TestCase):
     def test_missing_claude_or_grok_key_does_not_fall_back_to_codex(self):
         for provider in ("anthropic", "xai"):
             with (self.subTest(provider=provider), patch.object(config, "PROVIDER", provider),
-                  patch.object(config, "ANTHROPIC_API_KEY", ""), patch.object(config, "XAI_API_KEY", "")):
+                  patch.object(config, "ANTHROPIC_API_KEY", ""), patch.object(config, "XAI_API_KEY", ""),
+                  patch.object(config, "XAI_AUTH_MODE", "auto"), patch("oauth_xai.is_signed_in", return_value=False),
+                  patch.object(config, "ANTHROPIC_AUTH_MODE", "auto"),
+                  patch("oauth_anthropic.is_signed_in", return_value=False)):
                 with self.assertRaises(NotSignedIn):
                     make_openai_client()
 
@@ -194,6 +310,7 @@ class GrokRoutingTests(unittest.TestCase):
                 result._content = json.dumps({"choices": [{"message": {"content": decision}}]}).encode()
                 return result
         with (patch.object(config, "PROVIDER", "xai"), patch.object(config, "XAI_API_KEY", "fixture-xai"),
+              patch.object(config, "XAI_AUTH_MODE", "api_key"),
               patch.object(config, "API_MODEL", "unrelated-custom-model"),
               patch("openai_client.requests.Session", return_value=Session())):
             client = make_openai_client()

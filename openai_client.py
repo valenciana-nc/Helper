@@ -312,27 +312,27 @@ def _to_responses_input(messages: list[dict[str, Any]], system_prompt: str | Non
     return out
 
 
-def _parse_response(payload: dict[str, Any]) -> ChatResult:
+def _parse_response(payload: dict[str, Any], *, provider_name: str = "ChatGPT/Codex") -> ChatResult:
     if not isinstance(payload, dict):
-        raise BadProviderResponse("ChatGPT/Codex returned a non-object response.")
+        raise BadProviderResponse(f"{provider_name} returned a non-object response.")
 
     output = payload.get("output") or []
     if not isinstance(output, list):
-        raise BadProviderResponse("ChatGPT/Codex response output was not a list.")
+        raise BadProviderResponse(f"{provider_name} response output was not a list.")
 
     text_chunks: list[str] = []
 
     for item in output:
         if not isinstance(item, dict):
-            raise BadProviderResponse("ChatGPT/Codex response contained an invalid output item.")
+            raise BadProviderResponse(f"{provider_name} response contained an invalid output item.")
         item_type = item.get("type")
         if item_type == "message":
             content_items = item.get("content") or []
             if not isinstance(content_items, list):
-                raise BadProviderResponse("ChatGPT/Codex message content was not a list.")
+                raise BadProviderResponse(f"{provider_name} message content was not a list.")
             for content in content_items:
                 if not isinstance(content, dict):
-                    raise BadProviderResponse("ChatGPT/Codex message contained an invalid content item.")
+                    raise BadProviderResponse(f"{provider_name} message contained an invalid content item.")
                 text = content.get("text")
                 if content.get("type") in ("output_text", "text") and isinstance(text, str) and text:
                     text_chunks.append(text)
@@ -631,9 +631,9 @@ def make_openai_client(
     Dispatch:
       - codex          -> Codex OAuth path via OpenAIClient defaults
       - openai_compat  -> ChatCompletionsProvider on any /v1 endpoint
-      - anthropic      -> AnthropicProvider
+      - anthropic      -> AnthropicProvider with subscription OAuth or API key
       - gemini         -> GeminiProvider
-      - xai            -> ChatCompletionsProvider on xAI's fixed API endpoint
+      - xai            -> native subscription Responses API or xAI API-key chat
 
     For backwards-compat: if HELPER_PROVIDER is unset but HELPER_API_BASE_URL +
     HELPER_API_KEY are both set, behave as if openai_compat were selected.
@@ -646,12 +646,18 @@ def make_openai_client(
     provider_name = config.effective_provider()
 
     if provider_name == "xai":
-        if not config.XAI_API_KEY:
-            raise NotSignedIn("Connect Grok with an xAI API key in Dashboard → Account.")
-        return OpenAIClient(
-            optional_api_key=optional_api_key,
-            custom_provider=ChatCompletionsProvider("https://api.x.ai/v1", config.XAI_API_KEY),
-        )
+        if config.xai_auth_mode() == "oauth":
+            import oauth_xai
+            from xai_client import XaiSubscriptionProvider
+
+            if not oauth_xai.is_signed_in():
+                raise NotSignedIn("Sign in with Grok or connect an xAI API key in Dashboard → Account.")
+            provider = XaiSubscriptionProvider()
+        else:
+            if not config.XAI_API_KEY:
+                raise NotSignedIn("Connect Grok with an xAI API key in Dashboard → Account.")
+            provider = ChatCompletionsProvider("https://api.x.ai/v1", config.XAI_API_KEY)
+        return OpenAIClient(optional_api_key=optional_api_key, custom_provider=provider)
 
     if provider_name == "openai_compat":
         if not config.custom_api_enabled():
@@ -671,20 +677,21 @@ def make_openai_client(
             )
 
     if provider_name == "anthropic":
-        if not config.ANTHROPIC_API_KEY:
-            raise NotSignedIn("Connect Claude with an Anthropic API key in Dashboard → Account.")
-        else:
-            from anthropic_client import AnthropicProvider
+        import oauth_anthropic
+        from anthropic_client import AnthropicProvider
 
-            log.info("Chat provider: anthropic")
-            return OpenAIClient(
-                optional_api_key=optional_api_key,
-                custom_provider=AnthropicProvider(config.ANTHROPIC_API_KEY),
-                # NB: API_MODEL belongs to the openai_compat provider only.
-                # A stale HELPER_API_MODEL must not override the model the
-                # user picked for Anthropic.
-                custom_model=None,
-            )
+        subscription = config.anthropic_auth_mode() == "oauth"
+        if subscription and not oauth_anthropic.is_signed_in():
+            raise NotSignedIn("Sign in with Claude or connect an Anthropic API key in Dashboard → Account.")
+        if not subscription and not config.ANTHROPIC_API_KEY:
+            raise NotSignedIn("Connect Claude with an Anthropic API key in Dashboard → Account.")
+        log.info("Chat provider: anthropic (%s)", "subscription" if subscription else "API key")
+        return OpenAIClient(
+            optional_api_key=optional_api_key,
+            custom_provider=AnthropicProvider(config.ANTHROPIC_API_KEY if not subscription else "", subscription=subscription),
+            # A stale HELPER_API_MODEL belongs only to openai_compat.
+            custom_model=None,
+        )
 
     if provider_name == "gemini":
         if not config.GEMINI_API_KEY:

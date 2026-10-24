@@ -31,11 +31,15 @@ from PyQt6.QtWidgets import (
 )
 
 import oauth_codex
+import oauth_anthropic
+import oauth_xai
 import config
 import theme
 from ui_lava import LavaOrb
 from ui_messages import MessageBubble
-from ui_provider_accounts import PROVIDER_ACCOUNTS, ProviderAccountCard
+from ui_provider_accounts import (
+    PROVIDER_ACCOUNTS, ClaudeAccountCard, GrokAccountCard, ProviderAccountCard, SubscriptionAccountCard,
+)
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
 from model_catalogue import ModelCatalogue, load_codex_catalogue, refresh_codex_catalogue
@@ -928,6 +932,19 @@ class DashboardWindow(QWidget):
                 return data
         return "codex"
 
+    def _provider_uses_subscription(self, provider: str) -> bool:
+        prefix = "XAI" if provider == "xai" else "ANTHROPIC"
+        try:
+            mode = read_env(self._env_path).get(f"HELPER_{prefix}_AUTH_MODE", "auto").strip().lower()
+        except OSError:
+            mode = config.XAI_AUTH_MODE if provider == "xai" else config.ANTHROPIC_AUTH_MODE
+        if mode in {"oauth", "api_key"}:
+            return mode == "oauth"
+        return not bool(self._field_value(f"HELPER_{prefix}_API_KEY"))
+
+    def _grok_uses_subscription(self) -> bool:
+        return self._provider_uses_subscription("xai")
+
     def _refresh_provider_dependents(self) -> None:
         provider_key = self._current_provider_key()
         models = config.PROVIDER_MODELS.get(provider_key, [])
@@ -989,7 +1006,11 @@ class DashboardWindow(QWidget):
             else:
                 self._set_pill(self._provider_pill, "Base URL + key required", "warning")
         elif provider_key == "anthropic":
-            if self._field_value("HELPER_ANTHROPIC_API_KEY"):
+            if self._provider_uses_subscription("anthropic"):
+                signed_in = oauth_anthropic.is_signed_in()
+                self._set_pill(self._provider_pill, "Claude signed in" if signed_in else "Claude sign-in required",
+                               "success" if signed_in else "warning")
+            elif self._field_value("HELPER_ANTHROPIC_API_KEY"):
                 self._set_pill(self._provider_pill, "Ready", "success")
             else:
                 self._set_pill(self._provider_pill, "API key required", "warning")
@@ -999,7 +1020,11 @@ class DashboardWindow(QWidget):
             else:
                 self._set_pill(self._provider_pill, "API key required", "warning")
         elif provider_key == "xai":
-            if self._field_value("HELPER_XAI_API_KEY"):
+            if self._grok_uses_subscription():
+                signed_in = oauth_xai.is_signed_in()
+                self._set_pill(self._provider_pill, "Grok signed in" if signed_in else "Grok sign-in required",
+                               "success" if signed_in else "warning")
+            elif self._field_value("HELPER_XAI_API_KEY"):
                 self._set_pill(self._provider_pill, "API key supplied", "success")
             else:
                 self._set_pill(self._provider_pill, "API key required", "warning")
@@ -1530,13 +1555,19 @@ class DashboardWindow(QWidget):
             if base_error:
                 return base_error
         elif provider == "anthropic":
-            if not self._field_value("HELPER_ANTHROPIC_API_KEY"):
+            if self._provider_uses_subscription("anthropic"):
+                if not oauth_anthropic.is_signed_in():
+                    return "Claude needs a subscription sign-in or Anthropic API key in Account"
+            elif not self._field_value("HELPER_ANTHROPIC_API_KEY"):
                 return "Anthropic provider needs an API key"
         elif provider == "gemini":
             if not self._field_value("HELPER_GEMINI_API_KEY"):
                 return "Gemini provider needs an API key"
         elif provider == "xai":
-            if not self._field_value("HELPER_XAI_API_KEY"):
+            if self._grok_uses_subscription():
+                if not oauth_xai.is_signed_in():
+                    return "Grok needs a subscription sign-in or xAI API key in Account"
+            elif not self._field_value("HELPER_XAI_API_KEY"):
                 return "Grok provider needs an xAI API key"
 
         # Generation bounds (clamped on read in config.py, but flag here too).
@@ -1576,9 +1607,11 @@ class DashboardWindow(QWidget):
         if provider != "codex":
             ready = bool(snapshot.get("provider_connected"))
             label = config.PROVIDER_LABELS.get(provider, str(provider))
-            self._set_pill(self._sidebar_foot_pill,
-                           f"{label} · API key {'configured' if ready else 'required'}",
-                           "success" if ready else "warning")
+            if provider in {"xai", "anthropic"} and snapshot.get("provider_auth_mode") == "oauth":
+                status = "Subscription sign-in configured" if ready else "Subscription sign-in required"
+            else:
+                status = f"API key {'configured' if ready else 'required'}"
+            self._set_pill(self._sidebar_foot_pill, f"{label} · {status}", "success" if ready else "warning")
         elif snapshot.get("signed_in"):
             if self._cached_account_email is None:
                 self._cached_account_email = oauth_codex.account_email() or "ChatGPT"
@@ -1655,7 +1688,11 @@ class DashboardWindow(QWidget):
         for account in PROVIDER_ACCOUNTS:
             model = (env_values.get("HELPER_AGENT_MODEL") if env_values.get("HELPER_PROVIDER") == account.provider
                      else None) or config.resolve_provider_model("HELPER_AGENT_MODEL", {"HELPER_PROVIDER": account.provider})
-            card = ProviderAccountCard(account, env_values.get(account.key_setting, ""), model)
+            card_type = GrokAccountCard if account.provider == "xai" else ClaudeAccountCard
+            card = card_type(account, env_values.get(account.key_setting, ""), model)
+            if isinstance(card, SubscriptionAccountCard):
+                card.subscription_use_requested.connect(
+                    lambda model, provider=account.provider: self._use_provider_subscription(provider, model))
             card.save_requested.connect(self._save_provider_account)
             card.remove_requested.connect(self._remove_provider_account)
             self._provider_account_cards[account.provider] = card
@@ -1766,6 +1803,9 @@ class DashboardWindow(QWidget):
             return False
         updates = {card.account.key_setting: key, "HELPER_PROVIDER": provider,
                    "HELPER_AGENT_MODEL": model, "HELPER_REASONING_MODEL": model}
+        if provider in {"xai", "anthropic"}:
+            prefix = "XAI" if provider == "xai" else "ANTHROPIC"
+            updates[f"HELPER_{prefix}_AUTH_MODE"] = "api_key"
         try:
             write_env(self._env_path, updates)
         except Exception as exc:
@@ -1777,6 +1817,28 @@ class DashboardWindow(QWidget):
         card.status_label.setText(f"API key saved; {card.account.name} selected. Restart to apply. Key not validated.")
         if restart:
             self._restart_callback()
+        return True
+
+    def _use_grok_subscription(self, model: str) -> bool:
+        return self._use_provider_subscription("xai", model)
+
+    def _use_provider_subscription(self, provider: str, model: str) -> bool:
+        card = self._provider_account_cards[provider]
+        auth = oauth_xai if provider == "xai" else oauth_anthropic
+        if not auth.is_signed_in() or not model.strip() or any(c in model for c in "\r\n"):
+            card.oauth_status_label.setText(f"Sign in with {card.account.name} and select a valid model first.")
+            return False
+        prefix = "XAI" if provider == "xai" else "ANTHROPIC"
+        updates = {"HELPER_PROVIDER": provider, f"HELPER_{prefix}_AUTH_MODE": "oauth",
+                   "HELPER_AGENT_MODEL": model, "HELPER_REASONING_MODEL": model}
+        try:
+            write_env(self._env_path, updates)
+        except Exception as exc:
+            log.error("Could not select %s subscription (%s)", provider, type(exc).__name__)
+            card.oauth_status_label.setText("Could not save. No provider change was applied.")
+            return False
+        self._sync_saved_account_settings(updates)
+        self._restart_callback()
         return True
 
     def _remove_provider_account(self, provider: str) -> bool:
@@ -1940,6 +2002,8 @@ class DashboardWindow(QWidget):
         if values is not None:
             for card in self._provider_account_cards.values():
                 card.refresh_saved_key(values.get(card.account.key_setting, ""))
+                if isinstance(card, SubscriptionAccountCard):
+                    card.refresh_subscription()
         signed_in = oauth_codex.is_signed_in()
         if signed_in:
             email = oauth_codex.account_email() or "unknown account"
@@ -2128,8 +2192,14 @@ class DashboardWindow(QWidget):
             return
         super().keyPressEvent(event)
 
+    def cancel_pending_sign_ins(self) -> None:
+        for card in self._provider_account_cards.values():
+            if isinstance(card, SubscriptionAccountCard):
+                card.cancel_login()
+
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         self._status_timer.stop()
+        self.cancel_pending_sign_ins()
         event.accept()
         self.closed.emit()
 

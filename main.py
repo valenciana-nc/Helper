@@ -302,6 +302,7 @@ class HelplerDesktopApp(QObject):
         if self._shutting_down:
             return
         self._shutting_down = True
+        self._dashboard.cancel_pending_sign_ins()
         self._engine_abort.set()
         self._stop_speech()
         self._reply_hide_timer.stop()
@@ -453,6 +454,8 @@ class HelplerDesktopApp(QObject):
         return {
             "provider": provider,
             "provider_connected": connected,
+            "provider_auth_mode": (config.xai_auth_mode() if provider == "xai" else
+                                   config.anthropic_auth_mode() if provider == "anthropic" else None),
             "backend_ready": self._backend_ready,
             "backend_initializing": self._backend_initializing,
             "backend_error": self._backend_error,
