@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import urlsplit
-from model_catalogue import load_codex_catalogue
+from model_catalogue import load_provider_catalogue
 
 APP_NAME = "Helper"
 ROOT = Path(__file__).parent
@@ -259,17 +259,13 @@ _theme_raw = env_value("HELPER_THEME", "light").strip().lower()
 THEME = "dark" if _theme_raw == "dark" else "light"
 
 
-# Codex choices follow the installed catalogue, with current offline suggestions.
-# Other providers retain their own editable model menus.
+# Public snapshots provide offline choices; live account refresh can narrow/extend them.
+# Listed models do not imply subscription or endpoint access.
 PROVIDER_MODELS: dict[str, list[str]] = {
-    "codex": [model.id for model in load_codex_catalogue().models],
+    "codex": [model.id for model in load_provider_catalogue("codex").models],
     "openai_compat": [],
-    "xai": [GROK_MODEL_DEFAULT, "grok-4.3"],
-    "anthropic": [
-        "claude-opus-4-8",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5",
-    ],
+    "xai": [model.id for model in load_provider_catalogue("xai").models],
+    "anthropic": [model.id for model in load_provider_catalogue("anthropic").models],
     "gemini": [
         "gemini-2.5-pro",
         "gemini-2.5-flash",

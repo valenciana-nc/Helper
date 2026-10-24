@@ -42,7 +42,9 @@ from ui_provider_accounts import (
 )
 from conversation_store import StoredConversation, StoredMessage
 from env_io import read_env, write_env
-from model_catalogue import ModelCatalogue, load_codex_catalogue, refresh_codex_catalogue
+from model_catalogue import (
+    CATALOGUE_PROVIDERS, ModelCatalogue, load_codex_catalogue, load_provider_catalogue, refresh_provider_catalogue,
+)
 
 log = logging.getLogger("helper.dashboard")
 
@@ -450,7 +452,8 @@ class DashboardWindow(QWidget):
         self._auth_changed_callback = auth_changed_callback
         self._conversations_provider = conversations_provider
         self._schema = _default_schema()
-        self._codex_catalogue = load_codex_catalogue()
+        self._model_catalogues = {provider: load_provider_catalogue(provider) for provider in CATALOGUE_PROVIDERS}
+        self._codex_catalogue = self._model_catalogues['codex']
         self._catalogue_loading = False
         self._catalogue_generation = 0
         self.catalogue_refreshed.connect(self._on_catalogue_refreshed)
@@ -948,6 +951,7 @@ class DashboardWindow(QWidget):
     def _refresh_provider_dependents(self) -> None:
         provider_key = self._current_provider_key()
         models = config.PROVIDER_MODELS.get(provider_key, [])
+        catalogue = self._model_catalogues.get(provider_key)
 
         # Repopulate model combos for both agent + reasoning fields.
         for model_key in ("HELPER_AGENT_MODEL", "HELPER_REASONING_MODEL"):
@@ -957,8 +961,8 @@ class DashboardWindow(QWidget):
             current_text = self._widget_value(combo)
             combo.blockSignals(True)
             combo.clear()
-            if provider_key == 'codex':
-                for model in self._codex_catalogue.models:
+            if catalogue is not None:
+                for model in catalogue.models:
                     if model_key == 'HELPER_AGENT_MODEL' and not model.image_input:
                         continue
                     combo.addItem(model.label, model.id)
@@ -1033,57 +1037,81 @@ class DashboardWindow(QWidget):
 
     def _update_model_catalogue_hint(self) -> None:
         provider_key = self._current_provider_key()
+        catalogue = self._model_catalogues.get(provider_key)
         if hasattr(self, '_model_catalogue_hint'):
-            self._refresh_models_button.setEnabled(provider_key == 'codex' and not self._catalogue_loading)
-            self._model_catalogue_hint.setVisible(provider_key == 'codex')
-            if provider_key == 'codex':
-                text = self._codex_catalogue.source + '.'
-                if self._codex_catalogue.warning:
-                    text += ' ' + self._codex_catalogue.warning
-                ids = {model.id for model in self._codex_catalogue.models}
+            self._refresh_models_button.setEnabled(catalogue is not None and not self._catalogue_loading)
+            self._model_catalogue_hint.setVisible(catalogue is not None)
+            if catalogue is not None:
+                text = f'{catalogue.source}. {len(catalogue.models)} chat models. Access depends on your account and endpoint.'
+                if catalogue.warning:
+                    text += ' ' + catalogue.warning
+                ids = {model.id for model in catalogue.models}
                 saved = {self._field_value(key) for key in ('HELPER_AGENT_MODEL', 'HELPER_REASONING_MODEL')}
                 missing = sorted(value for value in saved if value and value not in ids)
                 if missing:
-                    text += ' Not in this catalogue: ' + ', '.join(missing) + '. Choose a listed model or enter a custom ID.'
+                    text += ' Not in this catalogue: ' + ', '.join(missing) + '. Custom IDs are preserved.'
                 self._model_catalogue_hint.setText(text)
+        for card in self._provider_account_cards.values():
+            card.refresh_models_button.setEnabled(not self._catalogue_loading)
 
-    def _refresh_models(self) -> None:
-        if self._catalogue_loading:
+    def _refresh_models(self, provider: str | None = None) -> None:
+        provider = provider if isinstance(provider, str) else self._current_provider_key()
+        if self._catalogue_loading or provider not in self._model_catalogues:
             return
         self._catalogue_loading = True
-        self._refresh_models_button.setEnabled(False)
         self._refresh_models_button.setText('Refreshing…')
+        self._update_model_catalogue_hint()
         self._catalogue_generation += 1
         generation = self._catalogue_generation
-        previous = self._codex_catalogue
+        previous = self._model_catalogues[provider]
+        try:
+            # Refresh uses the saved, explicitly selected connection, never unsaved credential drafts.
+            values = read_env(self._env_path)
+        except OSError:
+            values = None
 
         def load() -> None:
             try:
-                result = refresh_codex_catalogue()
+                if values is None:
+                    raise OSError('settings unavailable')
+                prefix = 'XAI' if provider == 'xai' else 'ANTHROPIC'
+                credentials = {} if provider == 'codex' else {
+                    'api_key': values.get(f'HELPER_{prefix}_API_KEY', ''),
+                    'auth_mode': values.get(f'HELPER_{prefix}_AUTH_MODE', 'auto'),
+                }
+                result = refresh_provider_catalogue(provider, fallback=previous, **credentials)
             except Exception:
-                log.exception('Model catalogue refresh failed')
+                log.warning('Model catalogue refresh failed for %s', provider)
                 result = ModelCatalogue(previous.models, previous.source,
                                         'Model refresh failed; keeping the previous catalogue.')
             try:
-                self.catalogue_refreshed.emit((generation, result))
+                self.catalogue_refreshed.emit((generation, provider, result))
             except RuntimeError:
                 pass  # Window was destroyed while a bounded background request finished.
 
-        Thread(target=load, name='helper-model-catalogue', daemon=True).start()
+        Thread(target=load, name=f'helper-model-catalogue-{provider}', daemon=True).start()
 
-    def _on_catalogue_refreshed(self, payload: tuple[int, ModelCatalogue]) -> None:
-        generation, catalogue = payload
+    def _on_catalogue_refreshed(self, payload: tuple[int, str, ModelCatalogue]) -> None:
+        generation, provider, catalogue = payload
         if generation != self._catalogue_generation:
             return
         self._catalogue_loading = False
-        self._codex_catalogue = catalogue
+        self._model_catalogues[provider] = catalogue
+        self._codex_catalogue = self._model_catalogues['codex']
+        card = self._provider_account_cards.get(provider)
+        if card is not None:
+            card.set_model_catalogue(catalogue)
         self._refresh_models_button.setText('Refresh models')
         self._refresh_provider_dependents()
 
-    def _invalidate_model_catalogue(self) -> None:
+    def _invalidate_model_catalogue(self, provider: str = 'codex') -> None:
         self._catalogue_generation += 1
         self._catalogue_loading = False
-        self._codex_catalogue = load_codex_catalogue()
+        self._model_catalogues[provider] = load_provider_catalogue(provider)
+        self._codex_catalogue = self._model_catalogues['codex']
+        card = self._provider_account_cards.get(provider)
+        if card is not None:
+            card.set_model_catalogue(self._model_catalogues[provider])
         self._refresh_models_button.setText('Refresh models')
         self._refresh_provider_dependents()
 
@@ -1193,6 +1221,7 @@ class DashboardWindow(QWidget):
             self._refresh_models_button.clicked.connect(self._refresh_models)
             heading_row.addWidget(self._refresh_models_button)
             self._model_catalogue_hint = QLabel()
+            self._model_catalogue_hint.setTextFormat(Qt.TextFormat.PlainText)
             self._model_catalogue_hint.setWordWrap(True)
             self._model_catalogue_hint.setFont(theme.font(9))
             self._model_catalogue_hint.setStyleSheet(theme.inline('color: {text_muted}', 'background: transparent', 'border: none'))
@@ -1533,6 +1562,9 @@ class DashboardWindow(QWidget):
         self._last_save_ok = True
         for env_key in updates:
             self._original_values[env_key] = updates[env_key]
+        for provider, prefix in (('xai', 'XAI'), ('anthropic', 'ANTHROPIC')):
+            if f'HELPER_{prefix}_API_KEY' in updates:
+                self._invalidate_model_catalogue(provider)
 
         message = f"Saved {len(updates)} change{'s' if len(updates) != 1 else ''}"
         kind = "success"
@@ -1695,6 +1727,9 @@ class DashboardWindow(QWidget):
                     lambda model, provider=account.provider: self._use_provider_subscription(provider, model))
             card.save_requested.connect(self._save_provider_account)
             card.remove_requested.connect(self._remove_provider_account)
+            card.refresh_models_requested.connect(self._refresh_models)
+            card.credentials_changed.connect(self._invalidate_model_catalogue)
+            card.set_model_catalogue(self._model_catalogues[account.provider])
             self._provider_account_cards[account.provider] = card
             layout.addWidget(card)
         current_key = env_values.get("OPENAI_API_KEY", "")
@@ -1814,6 +1849,7 @@ class DashboardWindow(QWidget):
             return False
         self._sync_saved_account_settings(updates)
         card.refresh_saved_key(key)
+        self._invalidate_model_catalogue(provider)
         card.status_label.setText(f"API key saved; {card.account.name} selected. Restart to apply. Key not validated.")
         if restart:
             self._restart_callback()
@@ -1838,6 +1874,7 @@ class DashboardWindow(QWidget):
             card.oauth_status_label.setText("Could not save. No provider change was applied.")
             return False
         self._sync_saved_account_settings(updates)
+        self._invalidate_model_catalogue(provider)
         self._restart_callback()
         return True
 
@@ -1854,6 +1891,7 @@ class DashboardWindow(QWidget):
         card.show_key_button.setChecked(False)
         card.refresh_saved_key("")
         self._sync_saved_account_settings(updates)
+        self._invalidate_model_catalogue(provider)
         card.status_label.setText("API key removed. Restart to disconnect the running provider.")
         return True
 
@@ -2036,7 +2074,7 @@ class DashboardWindow(QWidget):
     def _on_sign_in_finished(self, ok: bool, message: str) -> None:
         if ok:
             self._invalidate_model_catalogue()
-            self._refresh_models()
+            self._refresh_models('codex')
             self._account_status_label.setText("Signed in. Helper is ready.")
             if self._auth_changed_callback is not None:
                 self._auth_changed_callback(True)
@@ -2085,6 +2123,7 @@ class DashboardWindow(QWidget):
         if not self._catalogue_loading and self._codex_catalogue.source != 'Signed-in account catalogue':
             latest = load_codex_catalogue()
             self._codex_catalogue = ModelCatalogue(latest.models, latest.source, self._codex_catalogue.warning)
+            self._model_catalogues['codex'] = self._codex_catalogue
         self._reload_from_env()
         if self.isMinimized():
             self.showNormal()

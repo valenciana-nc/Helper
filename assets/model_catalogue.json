@@ -1,0 +1,369 @@
+{
+  "checked_on": "2026-10-23",
+  "sources": [
+    "https://models.dev/api.json",
+    "https://developers.openai.com/api/docs/models",
+    "https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference",
+    "https://docs.x.ai/developers/models",
+    "https://docs.x.ai/developers/rest-api-reference/inference/models",
+    "https://platform.claude.com/docs/en/about-claude/models/overview"
+  ],
+  "providers": {
+    "codex": [
+      {
+        "id": "gpt-6.1-sol",
+        "label": "GPT-6.1 Sol",
+        "image_input": true
+      },
+      {
+        "id": "gpt-6-sol",
+        "label": "GPT-6 Sol",
+        "image_input": true
+      },
+      {
+        "id": "gpt-6-luna",
+        "label": "GPT-6 Luna",
+        "image_input": true
+      },
+      {
+        "id": "gpt-6-astra",
+        "label": "GPT-6 Astra",
+        "image_input": true
+      },
+      {
+        "id": "gpt-daybreak-red-latest",
+        "label": "Daybreak Red",
+        "image_input": true
+      },
+      {
+        "id": "gpt-daybreak-blue-latest",
+        "label": "Daybreak Blue",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "label": "GPT-5.6 Terra",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "label": "GPT-5.6 Sol",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "label": "GPT-5.6 Luna",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.6",
+        "label": "GPT-5.6",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.5-pro",
+        "label": "GPT-5.5 Pro",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.5",
+        "label": "GPT-5.5",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.4-nano",
+        "label": "GPT-5.4 nano",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.4-mini",
+        "label": "GPT-5.4 mini",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.4-pro",
+        "label": "GPT-5.4 Pro",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.4",
+        "label": "GPT-5.4",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.3-codex-spark",
+        "label": "GPT-5.3 Codex Spark",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.3-codex",
+        "label": "GPT-5.3 Codex",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.2-pro",
+        "label": "GPT-5.2 Pro",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.2",
+        "label": "GPT-5.2",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.1",
+        "label": "GPT-5.1",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5-pro",
+        "label": "GPT-5 Pro",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5-nano",
+        "label": "GPT-5 Nano",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5-mini",
+        "label": "GPT-5 Mini",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5",
+        "label": "GPT-5",
+        "image_input": true
+      },
+      {
+        "id": "o3-pro",
+        "label": "o3-pro",
+        "image_input": true
+      },
+      {
+        "id": "o4-mini",
+        "label": "o4-mini (legacy)",
+        "image_input": true
+      },
+      {
+        "id": "o3",
+        "label": "o3",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4.1-nano",
+        "label": "GPT-4.1 nano (legacy)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4.1-mini",
+        "label": "GPT-4.1 mini",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4.1",
+        "label": "GPT-4.1",
+        "image_input": true
+      },
+      {
+        "id": "o1-pro",
+        "label": "o1-pro (legacy)",
+        "image_input": true
+      },
+      {
+        "id": "o3-mini",
+        "label": "o3-mini (legacy)",
+        "image_input": false
+      },
+      {
+        "id": "o1",
+        "label": "o1 (legacy)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4o-2024-11-20",
+        "label": "GPT-4o (2024-11-20)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4o-2024-08-06",
+        "label": "GPT-4o (2024-08-06)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4o-mini",
+        "label": "GPT-4o mini",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4o-2024-05-13",
+        "label": "GPT-4o (2024-05-13) (legacy)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-4o",
+        "label": "GPT-4o",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.6-cyber",
+        "label": "GPT-5.6 Cyber (restricted access)",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.2-codex",
+        "label": "GPT-5.2 Codex",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.1-codex-max",
+        "label": "GPT-5.1 Codex Max",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.1-codex",
+        "label": "GPT-5.1 Codex",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5.1-codex-mini",
+        "label": "GPT-5.1 Codex Mini",
+        "image_input": true
+      },
+      {
+        "id": "gpt-5-codex",
+        "label": "GPT-5 Codex",
+        "image_input": true
+      }
+    ],
+    "xai": [
+      {
+        "id": "grok-4.7",
+        "label": "Grok 4.7",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.6",
+        "label": "Grok 4.6",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.5",
+        "label": "Grok 4.5",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.3",
+        "label": "Grok 4.3",
+        "image_input": true
+      },
+      {
+        "id": "grok-build-0.1",
+        "label": "Grok Build 0.1",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.20-multi-agent-0309",
+        "label": "Grok 4.20 Multi-Agent",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.20-0309-reasoning",
+        "label": "Grok 4.20 (Reasoning)",
+        "image_input": true
+      },
+      {
+        "id": "grok-4.20-0309-non-reasoning",
+        "label": "Grok 4.20 (Non-Reasoning)",
+        "image_input": true
+      }
+    ],
+    "anthropic": [
+      {
+        "id": "claude-haiku-5-5",
+        "label": "Claude Haiku 5.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-sonnet-5-5",
+        "label": "Claude Sonnet 5.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-5-5",
+        "label": "Claude Opus 5.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-fable-5-1",
+        "label": "Claude Fable 5.1",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-5",
+        "label": "Claude Opus 5",
+        "image_input": true
+      },
+      {
+        "id": "claude-sonnet-5",
+        "label": "Claude Sonnet 5",
+        "image_input": true
+      },
+      {
+        "id": "claude-fable-5",
+        "label": "Claude Fable 5",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-4-8",
+        "label": "Claude Opus 4.8",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-4-7",
+        "label": "Claude Opus 4.7",
+        "image_input": true
+      },
+      {
+        "id": "claude-sonnet-4-6",
+        "label": "Claude Sonnet 4.6",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-4-6",
+        "label": "Claude Opus 4.6",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-4-5-20251101",
+        "label": "Claude Opus 4.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-opus-4-5",
+        "label": "Claude Opus 4.5 (latest)",
+        "image_input": true
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "label": "Claude Haiku 4.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-haiku-4-5",
+        "label": "Claude Haiku 4.5 (latest)",
+        "image_input": true
+      },
+      {
+        "id": "claude-sonnet-4-5-20250929",
+        "label": "Claude Sonnet 4.5",
+        "image_input": true
+      },
+      {
+        "id": "claude-sonnet-4-5",
+        "label": "Claude Sonnet 4.5 (latest)",
+        "image_input": true
+      }
+    ]
+  }
+}

@@ -82,6 +82,16 @@ use separate system credential-manager entries and refresh automatically;
 ChatGPT uses its own token store). Treat `.env`, saved transcripts, and shared screenshots as private.
 Do not commit credentials, conversation data, or run artifacts.
 
+## Model choices
+
+Settings → **Providers & models** now includes the expanded OpenAI, Grok, and
+Claude chat catalogues. **Refresh models** fetches the saved connection's current
+account list; Claude/Grok also have a refresh button in Account. Refreshing does
+not run inference or change a selected model. Public suggestions do not guarantee
+subscription/endpoint access. Computer-use choices require known image support;
+text-only models remain available for reasoning. Custom IDs and saved defaults
+are preserved. See [model catalogues and sources](MODEL_CATALOGUE.md).
+
 ## Voice
 
 Recording requires a working microphone and PortAudio/sounddevice. If PortAudio

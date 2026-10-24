@@ -20,6 +20,9 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
   subsequent status behavior, and no added runtime phase events/model calls.
 - `tests/test_readme.py` — compact overview, resolving documentation links, purple
   web artwork, and a self-contained action-loop/verification SVG.
+- `tests/test_model_catalogue.py` — dated provider snapshots, account-only refresh,
+  exact model IDs, modalities, aliases, Claude pagination, failure fallback,
+  stale-result rejection, and synchronized Settings/Account model menus.
 - `tests/test_engine_adapters.py` — Qt bridge, Windows UIA worker, browser/Hybrid
   drivers (headless Chromium fixture where available).
 - `tests/test_engine_provider_contract.py` — provider message translation
@@ -52,6 +55,15 @@ xvfb-run -a env QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q -
   `BootstrapTests`, `LimitsTests`, `RouterTests`).
 
 ## What "green" means
+
+For the 2026-10-23 provider model-catalogue update, **122 focused tests and 192
+subtests passed**, covering catalogues, account cards, provider routing, core UI,
+theme, engine serialization, and README links. Changed Python files passed Ruff
+and compilation. The default-order full suite collected 370 tests but exceeded
+the 360-second timeout without a final result; no full-suite pass is claimed.
+Repository-wide Ruff also reports an existing `E402` in `audio_recorder.py:23`,
+outside this update. Model-list HTTP and credentials are faked in tests; no live
+account inference or entitlement check was performed.
 
 After native Claude and Grok sign-in were added, the default-order Windows run
 passed **334 tests and 262 subtests**, with **4 skipped** (`QT_QPA_PLATFORM=offscreen`).

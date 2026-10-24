@@ -11,6 +11,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 import config
+from model_catalogue import ModelCatalogue, load_provider_catalogue
 import oauth_anthropic
 import oauth_xai
 import theme
@@ -33,6 +34,8 @@ PROVIDER_ACCOUNTS = (
 class ProviderAccountCard(QFrame):
     save_requested = pyqtSignal(str, str, str, bool)
     remove_requested = pyqtSignal(str)
+    refresh_models_requested = pyqtSignal(str)
+    credentials_changed = pyqtSignal(str)
 
     def __init__(self, account: ProviderAccount, saved_key: str, model: str) -> None:
         super().__init__()
@@ -85,8 +88,20 @@ class ProviderAccountCard(QFrame):
         self.model_input.addItems(config.PROVIDER_MODELS[account.provider])
         self.model_input.setCurrentText(model)
         self.model_input.setAccessibleName(f"{account.name} model")
-        form.addRow("Model", self.model_input)
+        model_row = QHBoxLayout()
+        model_row.addWidget(self.model_input, 1)
+        self.refresh_models_button = self._button("Refresh models")
+        self.refresh_models_button.clicked.connect(lambda: self.refresh_models_requested.emit(account.provider))
+        model_row.addWidget(self.refresh_models_button)
+        form.addRow("Model", model_row)
         layout.addLayout(form)
+        self.model_catalogue_hint = QLabel()
+        self.model_catalogue_hint.setTextFormat(Qt.TextFormat.PlainText)
+        self.model_catalogue_hint.setWordWrap(True)
+        self.model_catalogue_hint.setFont(theme.font(9))
+        self.model_catalogue_hint.setStyleSheet(theme.inline('color: {text_muted}', 'border: none'))
+        layout.addWidget(self.model_catalogue_hint)
+        self.set_model_catalogue(load_provider_catalogue(account.provider))
 
         self.status_label = QLabel("API key saved (not validated)." if saved_key else "Not connected to Helper.")
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -114,6 +129,25 @@ class ProviderAccountCard(QFrame):
         button.setStyleSheet(theme.qss(theme.BUTTON_QSS if primary else theme.GHOST_BUTTON_QSS))
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         return button
+
+    def set_model_catalogue(self, catalogue: ModelCatalogue) -> None:
+        """The card selects a computer-use model: list vision models, preserve custom drafts."""
+        draft = self.model_input.currentText()
+        blocked = self.model_input.blockSignals(True)
+        try:
+            self.model_input.clear()
+            for model in catalogue.models:
+                if not model.image_input:
+                    continue
+                self.model_input.addItem(model.id)
+                self.model_input.setItemData(self.model_input.count() - 1, model.label, Qt.ItemDataRole.ToolTipRole)
+            self.model_input.setCurrentText(draft)
+        finally:
+            self.model_input.blockSignals(blocked)
+        text = f'{catalogue.source}. {self.model_input.count()} image-capable models. Access depends on your account.'
+        if catalogue.warning:
+            text += ' ' + catalogue.warning
+        self.model_catalogue_hint.setText(text)
 
     def refresh_saved_key(self, value: str) -> None:
         """Reflect external settings saves without overwriting an unsaved key draft."""
@@ -300,6 +334,8 @@ class SubscriptionAccountCard(ProviderAccountCard):
         self.refresh_subscription()
         if not ok:
             self.oauth_status_label.setText(message)
+        else:
+            self.credentials_changed.emit(self.account.provider)
 
     def _sign_out_subscription(self) -> None:
         self.cancel_login()
@@ -310,6 +346,7 @@ class SubscriptionAccountCard(ProviderAccountCard):
             return
         self.refresh_subscription()
         self.oauth_status_label.setText(f"Signed out of {self.account.name}. Your API key and other sign-ins are unchanged.")
+        self.credentials_changed.emit(self.account.provider)
 
     def _use_subscription(self) -> None:
         if not self.auth.is_signed_in():
