@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cached_property
@@ -99,7 +98,6 @@ class Observation:
     url: str = ""
     text: str = ""
     warnings: tuple[str, ...] = ()
-    captured_at: float = field(default_factory=time.monotonic)
 
     def __post_init__(self) -> None:
         if self.width < 1 or self.height < 1 or not math.isfinite(self.scale) or self.scale <= 0:
@@ -244,7 +242,3 @@ class RunReport:
     @property
     def done(self) -> list[str]:
         return [r.id for r in self.receipts if r.outcome == Outcome.ACHIEVED]
-
-    @property
-    def failed(self) -> list[str]:
-        return [r.id for r in self.receipts if r.outcome != Outcome.ACHIEVED]
