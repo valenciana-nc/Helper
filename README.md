@@ -1,6 +1,6 @@
 <div align="center">
   <img src="assets/readme/helper-orb-purple.png" alt="Helper’s purple orb" width="112" height="112" />
-  <h1>Helper</h1>
+  <h1></h1>
   <p><strong>Ask a question. Give your Windows PC a task.</strong></p>
   <p>A floating assistant with chat, voice, and observation-driven computer use.</p>
   <p><a href="#get-started">Get started</a> · <a href="#how-it-works">How it works</a> · <a href="docs/USAGE.md">Usage guide</a></p>
