@@ -151,6 +151,19 @@ class Agent:
                 checkpoint()
                 time.sleep(min(0.04, max(0, stop - time.monotonic())))
 
+        def handle_stale(exc, *, scene_changed: bool):
+            """Record one stale-target rejection; the caller re-observes and retries.
+
+            Help mode tells the model the scene changed and to re-ground;
+            active mode reports the shorter form. Both paths share the
+            metric, the event, and the re-observe-and-continue recovery.
+            """
+            metrics.stale_decisions += 1
+            context["feedback"] = (
+                f"Nothing executed. Scene changed: {exc}. Re-ground on this new observation."
+                if scene_changed else f"Nothing executed: {exc}.")
+            emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
+
         emit("started", {"mode": mode})
         try:
             obs = observe()
@@ -299,9 +312,7 @@ class Agent:
                     try:
                         self.driver.validate(action, obs)
                     except StaleObservation as exc:
-                        metrics.stale_decisions += 1
-                        context["feedback"] = f"Nothing executed. Scene changed: {exc}. Re-ground on this new observation."
-                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
+                        handle_stale(exc, scene_changed=True)
                         obs = observe()
                         continue
                 rect = target_rect(action, obs)
@@ -337,9 +348,7 @@ class Agent:
                         # Consent dialogs and a slow model can both change the scene.
                         self.driver.validate(action, obs)
                     except StaleObservation as exc:
-                        metrics.stale_decisions += 1
-                        context["feedback"] = f"Nothing executed: {exc}."
-                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
+                        handle_stale(exc, scene_changed=False)
                         obs = observe()
                         continue
                     except Exception as exc:
@@ -354,9 +363,7 @@ class Agent:
                     try:
                         execution = self.driver.execute(action, obs)
                     except StaleObservation as exc:
-                        metrics.stale_decisions += 1
-                        context["feedback"] = f"Nothing executed: {exc}."
-                        emit("decision_rejected", {"step": step, "status": "stale", "reason": "stale_target"})
+                        handle_stale(exc, scene_changed=False)
                         obs = observe()
                         continue
                     except Exception as exc:
