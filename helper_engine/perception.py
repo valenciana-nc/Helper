@@ -6,10 +6,10 @@ from functools import lru_cache
 
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
-from .types import Action, Observation, ProtocolError, Rect
+from .types import Action, Observation, ProtocolError, Rect, StaleObservation
 
 
-__all__ = ["target_rect", "image_difference", "annotated_png"]
+__all__ = ["target_rect", "target_rect_or_stale", "image_difference", "annotated_png"]
 
 
 def target_rect(action: Action, observation: Observation) -> Rect | None:
@@ -24,6 +24,21 @@ def target_rect(action: Action, observation: Observation) -> Rect | None:
     if target.box is None:
         raise ProtocolError("Missing target geometry")
     return observation.screen_box(target.box)
+
+
+def target_rect_or_stale(action: Action, observation: Observation) -> Rect | None:
+    """Resolve the action's target rect for a driver about to dispatch input.
+
+    An invalid target means the scene moved since the decision, not an
+    ambiguous side effect, so it is a stale observation rather than a
+    protocol error: the runtime re-observes instead of recording an
+    UNKNOWN effect. Both drivers share this rule, so it lives here rather
+    than as a repeated try/except at each dispatch site.
+    """
+    try:
+        return target_rect(action, observation)
+    except ProtocolError as exc:
+        raise StaleObservation(f"Target no longer valid: {exc}") from exc
 
 
 @lru_cache(maxsize=4)

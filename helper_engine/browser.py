@@ -5,8 +5,7 @@ import io
 import uuid
 from urllib.parse import urlsplit
 
-from .perception import image_difference, target_rect
-from .protocol import ProtocolError
+from .perception import image_difference, target_rect_or_stale
 from .types import Effect, Element, Execution, Observation, Rect, StaleObservation
 
 
@@ -152,10 +151,7 @@ class BrowserDriver:
     def _validate_current(self, action, observation):
         if self._page.is_closed() or observation.id != self._current_id or self._page.url != self._url:
             raise StaleObservation("The selected tab navigated or its observation expired")
-        try:
-            rect = target_rect(action, observation)
-        except ProtocolError as exc:
-            raise StaleObservation(f"Target no longer valid: {exc}") from exc
+        rect = target_rect_or_stale(action, observation)
         if action.target and action.target.element_id:
             handle = self._handles.get(action.target.element_id)
             if handle is None or not handle.is_visible() or not handle.is_enabled():
@@ -174,10 +170,7 @@ class BrowserDriver:
 
     def execute(self, action, observation):
         handle = self._handles.get(action.target.element_id) if action.target else None
-        try:
-            rect = target_rect(action, observation)
-        except ProtocolError as exc:
-            raise StaleObservation(f"Target no longer valid: {exc}") from exc
+        rect = target_rect_or_stale(action, observation)
         try:
             if action.kind == "open":
                 try:

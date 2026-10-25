@@ -9,8 +9,7 @@ import uuid
 from ctypes import wintypes
 from urllib.parse import urlsplit
 
-from .perception import image_difference, target_rect
-from .protocol import ProtocolError
+from .perception import image_difference, target_rect_or_stale
 from .types import Effect, Element, Execution, Observation, Rect, StaleObservation
 from .uia_worker import UiaClient
 
@@ -128,12 +127,7 @@ class WindowsDriver:
         """Reject the action if the scene changed since the decision's observation."""
         if observation.id != self._current_id or str(int(self._scope())) != observation.scope:
             raise StaleObservation("The foreground window or observation changed")
-        try:
-            rect = target_rect(action, observation)
-        except ProtocolError as exc:
-            # Target vanished/disabled since the decision: stale scene, not an
-            # ambiguous side effect. Must not become Effect.UNKNOWN.
-            raise StaleObservation(f"Target no longer valid: {exc}") from exc
+        rect = target_rect_or_stale(action, observation)
         if action.target and action.target.element_id:
             try:
                 result = self.uia.request("validate", token=observation.id, element_id=action.target.element_id)
@@ -193,10 +187,7 @@ class WindowsDriver:
         import pyautogui
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0
-        try:
-            rect = target_rect(action, observation)
-        except ProtocolError as exc:
-            raise StaleObservation(f"Target no longer valid: {exc}") from exc
+        rect = target_rect_or_stale(action, observation)
         if action.kind in {"click", "double_click", "right_click"}:
             x, y = rect.center
             pyautogui.click(x, y, clicks=2 if action.kind == "double_click" else 1,
