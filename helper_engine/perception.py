@@ -59,6 +59,13 @@ def _decoded_rgb(png: bytes):
         return source.convert("RGB")
 
 
+# Mean pixel difference above which a driver's fresh capture counts as a
+# changed action region, so the decision's target is stale. Both drivers
+# validate against this one bar; the runtime's no-progress (0.025) and
+# post-action (0.04) bars are different checks and stay local to runtime.py.
+STALE_REGION_THRESHOLD = 0.07
+
+
 def image_difference(first: bytes, second: bytes, *, box=None) -> float:
     """Normalized mean pixel difference; invalid images cannot prove freshness."""
     try:

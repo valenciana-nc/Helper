@@ -9,7 +9,7 @@ import uuid
 from ctypes import wintypes
 from urllib.parse import urlsplit
 
-from .perception import image_difference, target_rect_or_stale
+from .perception import STALE_REGION_THRESHOLD, image_difference, target_rect_or_stale
 from .types import Effect, Element, Execution, Observation, Rect, StaleObservation
 from .uia_worker import UiaClient
 
@@ -142,7 +142,7 @@ class WindowsDriver:
                 observation.width, observation.height, observation.origin_x, observation.origin_y, observation.scale):
             raise StaleObservation("Display geometry changed")
         crop = observation.image_box(rect) if rect else None
-        if image_difference(observation.png, png, box=crop) > 0.07:
+        if image_difference(observation.png, png, box=crop) > STALE_REGION_THRESHOLD:
             raise StaleObservation("The visible action region changed")
 
     def _focus(self):

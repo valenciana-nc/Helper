@@ -5,7 +5,7 @@ import io
 import uuid
 from urllib.parse import urlsplit
 
-from .perception import image_difference, target_rect_or_stale
+from .perception import STALE_REGION_THRESHOLD, image_difference, target_rect_or_stale
 from .types import Effect, Element, Execution, Observation, Rect, StaleObservation
 
 
@@ -165,7 +165,7 @@ class BrowserDriver:
                     ("x", "y", "width", "height"), rect.as_list())):
                 raise StaleObservation("DOM target moved")
         png = self._page.screenshot(type="png", full_page=False, scale="css", timeout=3000)
-        if image_difference(observation.png, png, box=observation.image_box(rect) if rect else None) > 0.07:
+        if image_difference(observation.png, png, box=observation.image_box(rect) if rect else None) > STALE_REGION_THRESHOLD:
             raise StaleObservation("The visible browser action region changed")
 
     def execute(self, action, observation):
