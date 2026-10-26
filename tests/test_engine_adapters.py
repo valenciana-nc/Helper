@@ -39,6 +39,19 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(StaleObservation):
             WindowsDriver(uia=Uia()).execute(Action("click", Target("u1")), frame())
 
+    def test_capture_monitor_falls_back_without_physical_display(self):
+        virtual = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        first = {"left": 1920, "top": 0, "width": 1280, "height": 1024}
+        second = {"left": 0, "top": 1080, "width": 1920, "height": 1080}
+        pick = WindowsDriver._monitor_for_point
+        self.assertIs(pick([virtual, first, second], 2000, 100), first)
+        self.assertIs(pick([virtual, first, second], 9999, 9999), first)
+        # No physical monitor: the virtual all-monitors entry is usable,
+        # and must not crash capture with an IndexError.
+        self.assertIs(pick([virtual], 500, 500), virtual)
+        with self.assertRaises(RuntimeError):
+            pick([], 0, 0)
+
     def test_worker_timeout_terminates_worker(self):
         class Process:
             terminated = False

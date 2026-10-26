@@ -75,6 +75,26 @@ class WindowsDriver:
                     return cursor
         raise RuntimeError("No external visible window is available.")
 
+    @staticmethod
+    def _monitor_for_point(monitors, cx, cy):
+        """Pick the monitor containing a point, with a safe degraded-mode fallback.
+
+        mss lists a virtual all-monitors entry first; a headless or
+        single-virtual-display setup may report no physical monitor at
+        all. Indexing monitors[1] as the default then crashes capture
+        with an IndexError instead of using the virtual display, so
+        fall back to it and fail with a readable error only when mss
+        reports no monitor whatsoever.
+        """
+        if not monitors:
+            raise RuntimeError("No display is available for capture.")
+        physical = monitors[1:]
+        for monitor in physical:
+            if (monitor["left"] <= cx < monitor["left"] + monitor["width"]
+                    and monitor["top"] <= cy < monitor["top"] + monitor["height"]):
+                return monitor
+        return physical[0] if physical else monitors[0]
+
     def _capture(self, hwnd):
         import mss
         from PIL import Image
@@ -83,9 +103,7 @@ class WindowsDriver:
         api.GetWindowRect(hwnd, ctypes.byref(rectangle))
         cx, cy = (rectangle.left + rectangle.right) // 2, (rectangle.top + rectangle.bottom) // 2
         with mss.mss() as capture:
-            monitor = next(
-                (m for m in capture.monitors[1:] if m["left"] <= cx < m["left"] + m["width"]
-                 and m["top"] <= cy < m["top"] + m["height"]), capture.monitors[1])
+            monitor = self._monitor_for_point(capture.monitors, cx, cy)
             raw = capture.grab(monitor)
             image = Image.frombytes("RGB", raw.size, raw.rgb)
         scale = min(1.0, self.max_edge / max(image.size))
