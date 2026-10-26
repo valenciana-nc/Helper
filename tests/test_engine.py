@@ -700,6 +700,22 @@ class RunReportTests(unittest.TestCase):
             self.assertFalse(RunReport("g", status, "m").ok)
 
 
+class CliJournalTests(unittest.TestCase):
+    def test_unwritable_trace_journal_does_not_abort_the_run(self):
+        from unittest.mock import Mock, patch
+        from helper_engine.__main__ import main
+        from helper_engine.types import RunReport
+        agent = Mock()
+        agent.run_goal.return_value = RunReport("Do thing", RunStatus.ANSWERED, "done")
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "blocker"
+            blocker.write_text("not a directory")
+            trace = blocker / "trace.jsonl"
+            with patch("helper_engine.bootstrap.build_agent", return_value=agent):
+                self.assertEqual(main(["Do", "thing", "--trace", str(trace)]), 0)
+        agent.run_goal.assert_called_once()
+
+
 class SummarizeTests(unittest.TestCase):
     def test_boolean_metrics_do_not_skew_means(self):
         import json

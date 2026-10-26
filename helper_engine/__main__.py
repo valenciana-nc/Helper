@@ -25,7 +25,15 @@ def main(argv=None) -> int:
     from .bootstrap import build_agent
     from .journal import JsonJournal
     aborted = Event()
-    journal = JsonJournal(args.trace) if args.trace else None
+    journal = None
+    if args.trace:
+        try:
+            journal = JsonJournal(args.trace)
+        except Exception:
+            # The trace journal is optional, as in the GUI bridge: a bad
+            # --trace path must warn and continue, never abort the run.
+            logging.warning("Could not open trace journal %s; continuing without it",
+                            args.trace, exc_info=True)
 
     def confirm(action, observation, reason):
         if not sys.stdin.isatty():
