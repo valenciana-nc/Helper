@@ -235,6 +235,17 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(report.metrics.stale_decisions, 1)
         self.assertEqual(len(driver.calls), 1)
 
+    def test_help_mode_stale_target_re_grounds_with_scene_changed_feedback(self):
+        def validate(action, obs):
+            if obs.id == "o1":
+                raise StaleObservation("Window moved")
+        driver = FakeDriver([frame(), frame("o2")], validate=validate)
+        model = ScriptModel([act(fill()), act(fill())])
+        report = agent(model, driver).run_goal("Enter Alice", mode="help")
+        self.assertEqual(report.metrics.stale_decisions, 1)
+        self.assertFalse(driver.calls)
+        self.assertIn("Scene changed", model.contexts[1]["feedback"])
+
     def test_timeout_after_click_does_not_replay(self):
         driver = FakeDriver(effect=Effect.UNKNOWN)
         report = agent(ScriptModel([act(click()), act(click())]), driver).run_goal("Click Name", mode="active")
