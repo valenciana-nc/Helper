@@ -45,6 +45,8 @@ class AdapterTests(unittest.TestCase):
         second = {"left": 0, "top": 1080, "width": 1920, "height": 1080}
         pick = WindowsDriver._monitor_for_point
         self.assertIs(pick([virtual, first, second], 2000, 100), first)
+        # A point inside the second physical monitor picks it, not the first.
+        self.assertIs(pick([virtual, first, second], 100, 1100), second)
         self.assertIs(pick([virtual, first, second], 9999, 9999), first)
         # No physical monitor: the virtual all-monitors entry is usable,
         # and must not crash capture with an IndexError.
