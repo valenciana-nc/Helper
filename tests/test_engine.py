@@ -246,6 +246,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(driver.calls)
         self.assertIn("Scene changed", model.contexts[1]["feedback"])
 
+    def test_stale_target_during_execute_retries_without_a_receipt(self):
+        attempts = []
+        def on_execute():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise StaleObservation("Target vanished mid-dispatch")
+        driver = FakeDriver([frame(), frame("o2"), frame("o3", value="Alice")],
+                            on_execute=on_execute)
+        model = ScriptModel([act(fill()), act(fill()), finish])
+        report = agent(model, driver).run_goal("Enter Alice", mode="active")
+        self.assertTrue(report.ok)
+        self.assertEqual(report.metrics.stale_decisions, 1)
+        self.assertEqual(len(driver.calls), 2)
+        # The stale dispatch counts no action and leaves no receipt;
+        # only the successful retry is recorded.
+        self.assertEqual(report.metrics.actions, 1)
+        self.assertEqual(len(report.receipts), 1)
+
     def test_timeout_after_click_does_not_replay(self):
         driver = FakeDriver(effect=Effect.UNKNOWN)
         report = agent(ScriptModel([act(click()), act(click())]), driver).run_goal("Click Name", mode="active")
