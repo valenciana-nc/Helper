@@ -64,6 +64,8 @@ class BrowserDriver:
                     self.endpoint, timeout=5000, no_defaults=True)
                 pages = [page for context in self._browser.contexts for page in context.pages]
                 if self.page_index is None and len(pages) != 1:
+                    if not pages:
+                        raise RuntimeError("No browser tabs are open in the attached browser.")
                     raise RuntimeError("Multiple browser tabs exist. Set HELPER_BROWSER_PAGE_INDEX explicitly.")
                 index = self.page_index if self.page_index is not None else 0
                 if index >= len(pages):

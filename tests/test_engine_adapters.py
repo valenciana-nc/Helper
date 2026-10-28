@@ -110,6 +110,29 @@ class AdapterTests(unittest.TestCase):
         obs = driver.observe()
         self.assertEqual(driver.execute(Action("click", Target("u1")), obs).route, "desktop")
 
+    def test_browser_cdp_reports_zero_tabs_distinctly(self):
+        class FakeBrowser:
+            contexts = [SimpleNamespace(pages=[])]
+        class FakeChromium:
+            def connect_over_cdp(self, *args, **kwargs):
+                return FakeBrowser()
+        class FakePlaywright:
+            def __init__(self):
+                self.chromium = FakeChromium()
+            def start(self):
+                return self
+            def stop(self):
+                pass
+        sync_api = SimpleNamespace(sync_playwright=lambda: FakePlaywright())
+        modules = {"playwright": SimpleNamespace(sync_api=sync_api),
+                   "playwright.sync_api": sync_api}
+        with patch.dict(sys.modules, modules):
+            driver = BrowserDriver(endpoint="http://localhost:9222")
+            with self.assertRaises(RuntimeError) as caught:
+                driver._connect()
+        self.assertEqual(str(caught.exception),
+                         "No browser tabs are open in the attached browser.")
+
     def test_browser_does_not_close_attached_profile(self):
         closed = []
         driver = BrowserDriver(endpoint="http://localhost:9222")
