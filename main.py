@@ -314,7 +314,7 @@ class HelplerDesktopApp(QObject):
             self._audio.cancel_recording()
         self._status_pill.hide()
         self._dashboard.hide()
-        self._ghost_cursor.clear()
+        self._ghost_cursor.close()
         self._widget.hide()
         self._status_pill.hide()
         if self._tray_icon is not None:

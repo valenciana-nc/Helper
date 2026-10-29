@@ -119,6 +119,24 @@ class ComputerUseUITests(unittest.TestCase):
                 self.assertFalse(app._computer_use.active)
                 self.assertFalse(any(b.text() in {"Help", "Act"} for b in app._widget.findChildren(QPushButton)))
 
+    def test_shutdown_releases_ghost_cursor_windows(self):
+        # GhostCursorManager used to have no teardown: its windows stayed
+        # referenced via the QApplication screen-signal connections, so
+        # every desktop construction leaked one top-level window per
+        # screen. Shutdown must schedule them for deletion like the
+        # computer-use manager already does.
+        from PyQt6.QtCore import QEvent
+        from ui_ghost_cursor import _GhostWindow
+
+        def ghost_ids():
+            return {id(w) for w in QApplication.topLevelWidgets() if isinstance(w, _GhostWindow)}
+
+        before = ghost_ids()
+        with self.desktop() as app:
+            self.assertTrue(ghost_ids() - before)
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.assertEqual(ghost_ids(), before)
+
     def test_escape_and_late_events_cannot_restore_the_frame(self):
         with self.desktop() as app:
             app._on_computer_use_changed(True)

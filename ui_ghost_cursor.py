@@ -138,9 +138,13 @@ class GhostCursorManager(QObject):
         self._duration_ms = 0
         self._easing = QEasingCurve(QEasingCurve.Type.OutCubic)
 
+        # Keep the handlers so close() can disconnect them: a fresh lambda
+        # expression is a different object and can never be disconnected.
+        self._screen_added_handler = lambda _screen: self.refresh_windows()
+        self._screen_removed_handler = lambda _screen: self.refresh_windows()
         self.refresh_windows()
-        self._app.screenAdded.connect(lambda _screen: self.refresh_windows())
-        self._app.screenRemoved.connect(lambda _screen: self.refresh_windows())
+        self._app.screenAdded.connect(self._screen_added_handler)
+        self._app.screenRemoved.connect(self._screen_removed_handler)
 
     def refresh_windows(self) -> None:
         existing = self._windows
@@ -174,6 +178,29 @@ class GhostCursorManager(QObject):
         self._current = None
         for window in self._windows:
             window.set_state(None)
+
+    def close(self) -> None:
+        """Release the cursor windows and screen signals (app shutdown).
+
+        clear() only hides the cursor so later runs can reuse the windows;
+        without close(), every HelplerDesktopApp construction leaked one
+        top-level window per screen: the manager itself stayed alive via
+        the QApplication screen-signal connections, which kept its windows
+        referenced forever. ComputerUseManager already had this teardown;
+        the ghost cursor did not.
+        """
+        self._animation_timer.stop()
+        self._current = None
+        for signal, handler in ((self._app.screenAdded, self._screen_added_handler),
+                                (self._app.screenRemoved, self._screen_removed_handler)):
+            try:
+                signal.disconnect(handler)
+            except (RuntimeError, TypeError):
+                pass
+        for window in self._windows:
+            window.close()
+            window.deleteLater()
+        self._windows.clear()
 
     def _tick(self) -> None:
         # Use wall-clock elapsed time, not nominal timer intervals — QTimer
