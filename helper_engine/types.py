@@ -103,8 +103,21 @@ class Observation:
         if self.width < 1 or self.height < 1 or not math.isfinite(self.scale) or self.scale <= 0:
             raise ValueError("Invalid screenshot geometry")
 
+    @cached_property
+    def _element_index(self) -> dict[str, Element]:
+        # First id wins, matching the old linear scan's `next()` semantics.
+        # element() runs several times per step (target resolution, action
+        # fingerprints, policy checks), so a UIA tree of hundreds of controls
+        # made every step an O(n) scan; the index pays O(n) once per
+        # observation. Like signature, this is safe on the frozen dataclass
+        # because replace() builds a fresh object with a fresh cache.
+        index: dict[str, Element] = {}
+        for element in self.elements:
+            index.setdefault(element.id, element)
+        return index
+
     def element(self, element_id: str) -> Element | None:
-        return next((e for e in self.elements if e.id == element_id), None)
+        return self._element_index.get(element_id)
 
     def screen_box(self, normalized: tuple[float, float, float, float]) -> Rect:
         x, y, w, h = normalized
