@@ -146,6 +146,17 @@ class Observation:
         )
 
     @cached_property
+    def search_text(self) -> str:
+        # Casefolded haystack for text_contains checks: visible text plus
+        # control names and non-password values. evaluate() runs on every
+        # help-mode wait-loop poll against the same observation, so building
+        # and casefolding this blob per call was pure redundant work over
+        # identical data; memoizing it here makes repeat polls O(1).
+        return "\n".join([self.text, *(e.name for e in self.elements),
+                          *(e.value for e in self.elements
+                            if e.value is not None and not e.password)]).casefold()
+
+    @cached_property
     def signature(self) -> str:
         # Memoized: a pure function of the frozen fields, but each access
         # costs a repr + sha256 over the whole element list. The runtime reads

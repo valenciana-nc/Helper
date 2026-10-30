@@ -29,9 +29,12 @@ def evaluate(predicates: tuple[Predicate, ...], obs: Observation) -> tuple[Outco
 
 
 def _text_blob(obs: Observation) -> str:
-    """Casefolded haystack for text_contains: visible text plus control names/values."""
-    return "\n".join([obs.text, *(e.name for e in obs.elements),
-                      *(e.value for e in obs.elements if e.value is not None and not e.password)]).casefold()
+    """Casefolded haystack for text_contains: visible text plus control names/values.
+
+    Delegates to the observation's memoized search_text, so the blob is built
+    once per observation no matter how many wait-loop polls evaluate it.
+    """
+    return obs.search_text
 
 
 def _evaluate_one(p: Predicate, obs: Observation, blob: str | None) -> bool | None:
