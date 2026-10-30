@@ -66,6 +66,20 @@ def _decoded_rgb(png: bytes):
 STALE_REGION_THRESHOLD = 0.07
 
 
+def _probe(image):
+    """Downscale to the 96x64 comparison probe, cheaply.
+
+    The default resize filter costs ~20ms per full-HD frame; box-averaging
+    via reduce() plus a BOX resize costs ~2ms and shifts mean-difference
+    values by ~0.0003 on a test pair -- far inside the 0.025-0.07
+    thresholds this feeds. Images smaller than the probe skip reduce().
+    """
+    factor = max(1, min(image.width // 96, image.height // 64))
+    if factor > 1:
+        image = image.reduce(factor)
+    return image.resize((96, 64), Image.Resampling.BOX)
+
+
 def image_difference(first: bytes, second: bytes, *, box=None) -> float:
     """Normalized mean pixel difference; invalid images cannot prove freshness."""
     try:
@@ -77,8 +91,7 @@ def image_difference(first: bytes, second: bytes, *, box=None) -> float:
             if right <= left or bottom <= top:
                 return 1.0
             a, b = a.crop(box), b.crop(box)
-        a = a.resize((96, 64))
-        b = b.resize((96, 64))
+        a, b = _probe(a), _probe(b)
         return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
     except Exception:
         # A corrupt screenshot must never crash the run; treat as fully different
