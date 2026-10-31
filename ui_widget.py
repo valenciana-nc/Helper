@@ -73,7 +73,6 @@ class FloatingCircle(QWidget):
         self._open_target = 0.0
         self._last_window_pos: QPoint | None = None
         self._was_dragging = False
-        self._ripples: list[dict] = []
         self._voice_hold_active = False
         self._hold_timer = QTimer(self)
         self._hold_timer.setSingleShot(True)
@@ -194,12 +193,6 @@ class FloatingCircle(QWidget):
     def toggle_muted(self) -> None:
         self.set_muted(not self.muted)
 
-    def _spawn_ripple(self, point: QPointF) -> None:
-        self._wake_frame_timer()
-        self._ripples.append({'cx': point.x(), 'cy': point.y(), 't': 0.0, 'max_t': 0.7})
-        if len(self._ripples) > 5:
-            self._ripples = self._ripples[-5:]
-
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         self._wake_frame_timer()
         if event.button() == Qt.MouseButton.LeftButton:
@@ -278,7 +271,6 @@ class FloatingCircle(QWidget):
                 if dx or dy:
                     if not self._was_dragging:
                         self._press_target = 0.0
-                        self._ripples.clear()
                         self._hold_timer.stop()
                     self._was_dragging = True
             self._last_window_pos = new_top_left
@@ -320,7 +312,6 @@ class FloatingCircle(QWidget):
         ):
             self._voice_hold_active = True
             self._press_target = 0.0
-            self._ripples.clear()
             self.voice_hold_started.emit()
 
     def moveEvent(self, event) -> None:  # type: ignore[override]
@@ -355,13 +346,8 @@ class FloatingCircle(QWidget):
             self.setFixedSize(self.WIDGET_W_OPEN, self.WIDGET_H)
             self._update_chat_input_geometry()
 
-        for rip in self._ripples:
-            rip['t'] += dt
-        self._ripples = [rip for rip in self._ripples if rip['t'] < rip['max_t']]
-
         animating = (
             self.state != self.IDLE
-            or self._ripples
             or abs(self._press_amt - self._press_target) > 0.005
             or abs(self._hover_amt - self._hover_target) > 0.005
             or abs(self._open_amt - self._open_target) > 0.005
