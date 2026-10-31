@@ -230,8 +230,6 @@ class Receipt:
     id: str
     action: Action
     execution: Execution
-    before_id: str
-    after_id: str = ""
     outcome: Outcome = Outcome.UNCERTAIN
     evidence: str = ""
 

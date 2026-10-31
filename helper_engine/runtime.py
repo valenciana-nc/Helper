@@ -377,14 +377,13 @@ class Agent:
                         metrics.rejected_actions += 1
                     # Record dispatch BEFORE waiting or observing: cancellation/capture failure
                     # after input must retain the fact that a side effect may have occurred.
-                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution, before.id)
+                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution)
                     report.receipts.append(receipt)
                     pause(0.15)
                     obs = observe()
                 if mode == "help":
-                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution, before.id)
+                    receipt = Receipt(f"a{len(report.receipts) + 1}", action, execution)
                     report.receipts.append(receipt)
-                receipt.after_id = obs.id
                 if execution.effect not in {Effect.REJECTED, Effect.UNKNOWN}:
                     receipt.outcome, receipt.evidence = evaluate(action.expect, obs)
                     if preheld and receipt.outcome == Outcome.ACHIEVED:
